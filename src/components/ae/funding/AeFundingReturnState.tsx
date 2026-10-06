@@ -6,10 +6,10 @@ import {
   fundingReturnCopy,
   type FundingReturnPageState,
 } from '@/components/ae/funding/funding-return.contracts'
-import { Button } from '@/components/arc/button/button'
-import buttonStyles from '@/components/arc/button/button.module.css'
+import { AeActionLink } from '@/components/ae/shared/action-link/AeActionLink'
 import { formatDisplayAmount } from '@/modules/money/public'
 import type { FundingReturnViewState } from '@/modules/money/funding-return.view-model'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 
 export type AeFundingReturnStateProps = Readonly<{
   pageState: FundingReturnViewState
@@ -18,13 +18,13 @@ export type AeFundingReturnStateProps = Readonly<{
 }>
 
 const OPEN_CREDIT_ACTION = (
-  <Link to="/owner/credit" className={`${buttonStyles.button} ${buttonStyles.primary} ${buttonStyles.md}`}>
+  <Link to="/owner/credit" className={actionLinkClassName('primary', 'md')}>
     {fundingReturnCopy.openCreditAction}
   </Link>
 )
 
 const OPEN_AGENTS_ACTION = (
-  <Link to="/agent-access" className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}>
+  <Link to="/agent-access" className={actionLinkClassName('secondary', 'md')}>
     {fundingReturnCopy.openAgentsAction}
   </Link>
 )
@@ -48,9 +48,9 @@ function deriveFundingReturnPageState(
       title: 'Funding status unavailable',
       description: 'We could not confirm this payment. Do not start another payment; try checking this same payment again.',
       action: (
-        <Button type="button" size="md" labelLayout="wrap" onClick={() => { void onCheck() }}>
+        <AeActionLink type="button" size="md" labelLayout="wrap" onAction={() => { void onCheck() }}>
           Try again
-        </Button>
+        </AeActionLink>
       ),
     }
   }
@@ -67,16 +67,16 @@ function deriveFundingReturnPageState(
   const amount = formatDisplayAmount(funding.creditAmount)
   const refreshFailed = refresh === 'failed'
   const checkAction = (
-    <Button
+    <AeActionLink
       type="button"
       size="md"
       labelLayout="wrap"
       disabled={refresh === 'checking'}
-      loading={refresh === 'checking'}
-      onClick={() => { void onCheck() }}
+      pending={refresh === 'checking'}
+      onAction={() => { void onCheck() }}
     >
       {refresh === 'checking' ? 'Checking this payment…' : refreshFailed ? 'Try again' : 'Check this payment'}
-    </Button>
+    </AeActionLink>
   )
   switch (funding.state) {
     case 'ready':

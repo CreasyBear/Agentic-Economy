@@ -2,8 +2,8 @@ import { useEffect, useRef } from 'react'
 
 import { CallOutcome } from '@/components/ae/shared/CallOutcome'
 import { QuoteConfirmation } from '@/components/ae/shared/QuoteConfirmation'
-import { Button } from '@/components/arc/button/button'
-import { DecisionPanel } from '@/components/arc/chat/DecisionPanel'
+import { AeActionLink } from '@/components/ae/shared/action-link/AeActionLink'
+import { DecisionPanel } from '@/components/ae/shared/arc-pro/chat/DecisionPanel'
 import type { OwnerChatCard } from '../chat-session.contracts'
 
 export type ChatApprovalCardsProps = Readonly<{
@@ -58,7 +58,7 @@ export function ChatApprovalCards({ cards, problem, onApprove, onDeny, onFreshQu
               <p role="alert" className="text-destructive">{card.reason}</p>
               <p className="break-all font-mono text-xs">Call reference: {callRef}</p>
             </div>
-            <div className="arc-decision-actions"><Button type="button" variant="secondary" labelLayout="wrap" onClick={() => onFreshQuote(callRef)}>Get a fresh Quote</Button></div>
+            <div className="arc-decision-actions"><AeActionLink type="button" variant="secondary" labelLayout="wrap" onAction={() => onFreshQuote(callRef)}>Get a fresh Quote</AeActionLink></div>
           </DecisionPanel>
         )
       })}

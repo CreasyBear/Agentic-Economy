@@ -1,4 +1,4 @@
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { Button } from '@/components/arc/button/button'
 
 import type { HomeDirectoryRecoveryAlertProps } from '../agent-access-home.contracts'
@@ -12,14 +12,11 @@ export function HomeDirectoryRecoveryAlert({
   onRetry,
 }: HomeDirectoryRecoveryAlertProps) {
   return (
-    <Alert className="arc-market arc-agent-recovery">
-      <AlertTitle>{title}</AlertTitle>
-      <AlertDescription>
+    <AeAlert role="alert" tone="info" title={title} className="arc-market arc-agent-recovery">
         <p>{message}</p>
         <Button type="button" variant="secondary" className="arc-agent-inline-action" disabled={loading} onClick={onRetry}>
           {retryLabel}
         </Button>
-      </AlertDescription>
-    </Alert>
+      </AeAlert>
   )
 }

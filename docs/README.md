@@ -42,10 +42,13 @@ implemented behavior; a plan, proposal or dated review does not establish a rele
 awaiting direction; configuration and acceptance are not established.
 
 [ADR 0006](adr/0006-mercator-capability-foundations.md) records the Mercator capability
-baseline and a proposed procurement sequence; runtime work awaits direction.
-The [Plan Quotes RFC](designs/2026-10-05-plan-quotes-rfc.md) is a current design-only
-proposal for multi-Tool purchasing. Its D1–D5 decisions and W0 qualification are
-pending; it is distinct from ADR 0004’s Provider-created service packages.
+baseline and proposed procurement work. The [Mercator maturity register](operations/mercator-maturity-register.md)
+retains MM-001–MM-060 requirements and evidence; accepted Plan decisions in ADR 0006
+and its linked RFC take precedence over the dated baseline.
+The [Plan Quotes RFC](designs/2026-10-05-plan-quotes-rfc.md) records the accepted
+D1–D5 contract for multi-Tool purchasing, implemented in #362. Release evidence
+establishes deployed behavior; the RFC remains distinct from ADR 0004’s
+Provider-created service packages.
 
 [Research](../research/README.md) distinguishes active managed-agent qualification
 from dated comparisons and experiments. [Strategy](strategy) supports the thesis.

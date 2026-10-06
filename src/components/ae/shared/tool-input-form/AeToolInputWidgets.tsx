@@ -14,7 +14,7 @@ import {
 } from '@rjsf/utils'
 import type { BaseInputTemplateProps, WidgetProps } from '@rjsf/utils'
 
-import { Checkbox } from '@/components/arc/checkbox/checkbox'
+import { Checkbox } from '@/components/ae/shared/base-ui/checkbox/checkbox'
 import { Input } from '@/components/arc/input/input'
 import { Textarea } from '@/components/arc/textarea/textarea'
 
@@ -25,6 +25,7 @@ export function AeToolBaseInputTemplate({
   required,
   readonly,
   disabled,
+  hideLabel,
   type,
   value,
   onChange,
@@ -79,8 +80,7 @@ export function AeToolBaseInputTemplate({
         onFocus={handleFocus}
         aria-invalid={rawErrors.length > 0 ? true : undefined}
         aria-describedby={ariaDescribedByIds(id, !!schema.examples)}
-        label={label}
-        labelMode="external"
+        label={hideLabel ? '' : `${label}${required ? '*' : ''}`}
       />
       {options.allowClearTextInputs && !readonly && !disabled && value && (
         <ClearButton onClick={handleClear} registry={registry} />
@@ -100,6 +100,7 @@ export function AeToolTextareaWidget({
   disabled,
   autofocus,
   readonly,
+  hideLabel,
   onBlur,
   onFocus,
   onChange,
@@ -129,8 +130,7 @@ export function AeToolTextareaWidget({
         onFocus={handleFocus}
         aria-describedby={ariaDescribedByIds(id)}
         className={className}
-        label={label}
-        labelMode="external"
+        label={hideLabel ? '' : `${label}${required ? '*' : ''}`}
       />
     </div>
   )

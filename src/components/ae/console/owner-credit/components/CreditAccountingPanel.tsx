@@ -16,7 +16,7 @@ import {
 } from '@/components/ae/console/owner-credit-format'
 import { SearchField } from '@/components/arc/search-field/search-field'
 import { Button as ArcButton } from '@/components/arc/button/button'
-import { Drawer, DrawerContent, DrawerTrigger } from '@/components/arc/drawer/Drawer'
+import { Drawer, DrawerContent, DrawerTrigger } from '@/components/ae/shared/base-ui/drawer/drawer'
 import { timestampIso } from '@/lib/ui/format-time'
 import type { MoneyDocumentView } from '@/lib/server/money-documents.functions'
 import type {

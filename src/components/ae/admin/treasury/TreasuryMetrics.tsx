@@ -2,14 +2,14 @@ import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeInlineState } from '@/components/ae/feedback/AeInlineState'
 import { AeOperatorSortableHeader, AeRecordTable } from '@/components/ae/operator/AeOperatorDataTable'
 import { Badge } from '@/components/arc/badge/badge'
-import { MetricsOverview, MetricsPanel } from '@/components/arc/blocks/metrics-dashboard/metrics-dashboard'
-import { UsageMeter } from '@/components/arc/usage-meter/usage-meter'
-import buttonStyles from '@/components/arc/button/button.module.css'
+import { MetricsOverview, MetricsPanel } from '@/components/ae/shared/arc-pro/metrics-dashboard/metrics-dashboard'
+import { AeApproximateQuotaMeter } from '@/components/ae/shared/usage-meter/AeApproximateQuotaMeter'
 import type { ColumnDef } from '@tanstack/react-table'
 import { formatCount, formatRelativeTime, formatTimestamp } from '@/lib/ui/format-time'
 import type { AdminTreasuryView, TreasuryCheck } from '@/modules/money/treasury-report'
 import { sumTreasuryUnits, treasuryMoney, treasuryRatios } from './treasury-view-model'
 import Decimal from 'decimal.js'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 
 const unavailable = (label: string) => <AeInlineState state="unavailable" label={`${label} unavailable`} description="Waiting for a complete source read." />
 function SourceTime({ label, at }: { label: string; at: number }) {
@@ -42,7 +42,7 @@ function BookedRefills({ deposits, environment }: { deposits: readonly BookedRef
           <p className="mt-intra break-all text-xs" title={row.original.transactionRef}>{row.original.transactionRef}</p>
           {hash === null ? null : <p className="mt-intra break-all text-xs" title={hash}>{hash}</p>}
           {hash !== null && /^0x[0-9a-fA-F]{64}$/.test(hash) ? <a
-            className={`${buttonStyles.button} ${buttonStyles.ghost} ${buttonStyles.sm} mt-intra`} target="_blank" rel="noopener noreferrer"
+            className={`${actionLinkClassName('ghost', 'sm')} mt-intra`} target="_blank" rel="noopener noreferrer"
             href={`https://${environment === 'production' ? 'basescan.org' : 'sepolia.basescan.org'}/tx/${hash}`}
           >View transfer<span className="sr-only"> on {environment === 'production' ? 'Base' : 'Base Sepolia'} (opens a new tab)</span></a> : null}
         </details>
@@ -187,9 +187,16 @@ export function TreasuryMetrics({ view }: { view: AdminTreasuryView }) {
           { label: 'Unresolved signing liability', value: treasuryMoney(spending.liabilityUnits) },
           { label: 'Exposure / rolling limit', value: `${treasuryMoney(sumTreasuryUnits(spending.settledUnits, spending.liabilityUnits))} / ${treasuryMoney(spending.maximumUnits)}` },
         ]} />
-        {exposure === null ? unavailable('Exposure percentage') : <UsageMeter label="Rolling spend exposure against limit" unit="%" limit={100} decimals={1}
-          warnAt={1} freeLabel="Remaining allowance" overLabel="Above rolling limit"
-          limitState={exposure.limitState} segments={[{ id: 'rolling-exposure', label: 'Rolling spend exposure', value: exposure.percentage }]} />}
+        {exposure === null ? unavailable('Exposure percentage') : <>
+          <p className="text-sm">Rolling spend exposure against limit</p>
+          <AeApproximateQuotaMeter
+            label="Rolling spend exposure against limit"
+            density="detailed"
+            percentage={exposure.percentage}
+            limitState={exposure.limitState}
+            summary={`Rolling spend exposure ${exposure.percentage.toFixed(1)}% of the limit. ${exposure.limitState === 'under' ? 'Under the limit.' : exposure.limitState === 'at' ? 'At the limit.' : 'Over the limit.'}`}
+          />
+        </>}
         {exposure === null ? null : <p className="text-xs text-muted-foreground">The percentage is approximate. Exposure and limit amounts above remain exact.</p>}
         <SourceTime label="Rolling window starts" at={spending.windowStartsAt} />
       </div>}

@@ -1,10 +1,9 @@
 import { useRef, useState } from 'react'
 import { useServerFn } from '@tanstack/react-start'
 import { SettingsGroup } from './settings-shell/components/SettingsSections'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { Button } from '@/components/arc/button/button'
 import { Input } from '@/components/arc/input/input'
-import { Label } from '@/components/ui/label'
 import { createPrefixedRandomId } from '@/modules/common/random-id'
 import { bootstrapOwnerAdminServer, readOwnerAdminBootstrapServer, type OwnerAdminBootstrapCommand, type OwnerAdminBootstrapStatus } from '@/modules/security/owner-admin-bootstrap.functions'
 
@@ -65,10 +64,10 @@ export function AeOwnerAdminBootstrap({ initialStatus }: { initialStatus: OwnerA
         : status.kind === 'ineligible' ? <p role="status">Initial setup is no longer available for this account. An Admin owner must review access.</p> : <>
           <p className="text-sm">This gives your signed-in account authority to manage Admin memberships, commercial policies and payment controls. Setup does not enable payments or enroll MFA.</p>
           {status.kind === 'eligible' ? <fieldset disabled={command !== null || busy} className="grid gap-related">
-            <div className="grid gap-intra"><Label htmlFor="admin-bootstrap-reason">Reason for initial setup</Label><Input id="admin-bootstrap-reason" label="Reason for initial setup" labelMode="external" value={reason} maxLength={200} onChange={event => setReason(event.target.value)} /></div>
-            <div className="grid gap-intra"><Label htmlFor="admin-bootstrap-evidence">Authorization evidence reference</Label><Input id="admin-bootstrap-evidence" label="Authorization evidence reference" labelMode="external" value={evidence} maxLength={200} onChange={event => setEvidence(event.target.value)} /><p className="text-xs text-muted-foreground">Use an existing approval, ticket or document reference supporting this authority.</p></div>
+            <Input id="admin-bootstrap-reason" label="Reason for initial setup" value={reason} maxLength={200} onChange={event => setReason(event.target.value)} />
+            <div className="grid gap-intra"><Input id="admin-bootstrap-evidence" label="Authorization evidence reference" value={evidence} maxLength={200} onChange={event => setEvidence(event.target.value)} /><p className="text-xs text-muted-foreground">Use an existing approval, ticket or document reference supporting this authority.</p></div>
           </fieldset> : <p role="status">Current setup eligibility is unavailable. Check status before continuing.</p>}
-          {message === null ? null : <Alert role="status"><AlertDescription>{message}</AlertDescription></Alert>}
+          {message === null ? null : <AeAlert tone="info" title={message} role="status" />}
           <div className="flex flex-wrap gap-intra">
             {status.kind === 'eligible' && (command === null || phase === 'reviewed') ? <Button type="button" disabled={busy} onClick={() => void activate()}>{command === null ? 'Set up Admin owner access' : 'Retry reviewed setup'}</Button> : null}
             {command !== null || status.kind === 'unavailable' ? <Button type="button" variant="secondary" disabled={busy} onClick={() => void checkStatus()}>{phase === 'checking' ? 'Checking access…' : 'Check setup status'}</Button> : null}

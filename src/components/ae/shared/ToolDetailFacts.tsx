@@ -1,4 +1,4 @@
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/arc/button/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import type { ToolObjectView } from './object-family.contracts'
 import { ToolFacts } from './ToolFacts'
@@ -31,7 +31,7 @@ export function ToolDetailFacts({ view, primary, chatHref, cliCommand, onCopyCli
         <CardContent className="flex flex-wrap items-center gap-2">
           <Button type="button" className="min-h-touch h-auto min-w-0 max-w-full whitespace-normal text-center" onClick={primary.onSelect}>{primary.label}</Button>
           {chatHref === undefined ? null : <a href={chatHref} className="min-h-touch content-center px-3 text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2">Try in chat (may charge after approval)</a>}
-          {cliCommand === undefined || onCopyCli === undefined ? null : <Button type="button" variant="outline" className="min-h-touch h-auto min-w-0 max-w-full whitespace-normal text-center" onClick={onCopyCli}>Copy CLI command</Button>}
+          {cliCommand === undefined || onCopyCli === undefined ? null : <Button type="button" variant="secondary" className="min-h-touch h-auto min-w-0 max-w-full whitespace-normal text-center" onClick={onCopyCli}>Copy CLI command</Button>}
         </CardContent>
       </Card>
       {hideTechnicalRefs ? null : <details className="min-w-0 border-t border-border pt-related">

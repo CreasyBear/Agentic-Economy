@@ -6,12 +6,11 @@ import { api } from '../../../../../convex/_generated/api'
 import { AdminActionSheet } from '@/components/ae/admin/actions/AdminActionSheet'
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
-import { PageHeader } from '@/components/arc/blocks/page-header/page-header'
+import { AeRecordPageHeader as PageHeader } from '@/components/ae/shared/record-page-header/AeRecordPageHeader'
 import { AePageState } from '@/components/ae/layout/AePageState'
 import { OperatorRouteNotFoundRecovery } from '@/components/ae/layout/AeRouteNotFound'
 import { Button } from '@/components/arc/button/button'
-import { Badge } from '@/components/ui/badge'
-import { aeStatusToneVariants } from '@/lib/ui/status-presentation'
+import { Badge } from '@/components/arc/badge/badge'
 import { ADMIN_ACTION_PERMISSION } from '@/lib/operator/admin-console/contracts'
 import { providerPayoutLabel, providerStatusLabel, providerStatusPresentation } from '@/lib/operator/admin-console/status-adapter'
 import { canAdminRolePerformAction } from '@/modules/security/public'
@@ -86,11 +85,11 @@ export function AdminProviderObjectPage(props: AdminProviderObjectPageProps) {
         ]}
         actions={(
           <>
-            <Badge variant={status === null ? 'outline' : aeStatusToneVariants[status.tone]}>
+            <Badge tone={status === null ? 'neutral' : status.tone}>
               {status === null ? providerStatusLabel(view.publicStatus) : status.label}
             </Badge>
             {suppressedAt === null ? null : (
-              <Badge variant="outline">
+              <Badge tone="neutral">
                 {PROVIDER_OBJECT_COPY.suppressedSince} <time dateTime={suppressedAt.iso}>{suppressedAt.label}</time>
               </Badge>
             )}

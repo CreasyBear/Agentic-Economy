@@ -1,5 +1,5 @@
 import type { AdminCommandRequest } from '../actions/actions.contracts'
-import { SettingsPageGroup } from '@/components/arc/blocks/settings-page/settings-page'
+import { SettingsPageGroup } from '@/components/ae/shared/arc-pro/settings-page/settings-page'
 import { SortableDataTable } from '@/components/arc/sortable-data-table/sortable-data-table'
 import { formatPerthTimestamp } from '@/lib/ui/format-time'
 import { POLICY_LABELS, policyDecimal } from './commercial-policy-form'
@@ -30,7 +30,6 @@ function TermsTable({ terms, caption }: { terms: readonly Term[]; caption: strin
       { key: 'label', label: 'Term', width: '45%', sortable: false },
       { key: 'value', label: 'Recorded value', width: '55%', sortable: false, render: (_value, row) => <span className="break-all whitespace-normal">{row.value}</span> },
     ]}
-    animateRows={false}
   />
 }
 export function CommercialPolicyControlReview({ control }: { control: ReviewControl }) {

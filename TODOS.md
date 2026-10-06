@@ -22,22 +22,34 @@ prove external Customer traction, paid chat, a joint restore of those purchases
 or indefinite provider availability. Screening remains explicitly deferred under
 the approved alpha policy.
 
-## Mercator capability foundation
+## Mercator maturity
 
-Owner: delegated foundation reviewer for preparation; Joel owns runtime direction.
 Reuse [#256](https://github.com/CreasyBear/Agentic-Economy/issues/256). The
-[verified baseline, engineering review and ordered slices](docs/adr/0006-mercator-capability-foundations.md)
-own this proposal; [the foundation guide](docs/foundations.md) describes current
-actors, setup, Tool Calls and recovery. No separate register or paid execution.
+[Mercator maturity register](docs/operations/mercator-maturity-register.md) owns
+stable items **MM-001–MM-060**, current coverage, dependencies, success criteria,
+end conditions and references. [ADR 0006](docs/adr/0006-mercator-capability-foundations.md)
+retains the dated investigation and proposed architecture;
+[foundations.md](docs/foundations.md) explains the current product contract.
 
-State: **prepared; runtime awaiting-direction**. F1 docs/contracts → F2 one
-conventional asynchronous Tool → F3 bounded multi-Tool procurement → F4
-partial/selective results and financial readback → F5 entitled supply and actual
-persona/client acceptance. Each slice retains evidence, ownership, dependencies
-and acceptance in ADR 0006. Existing #196/#185/#187 and ADR 0004 are linked;
-retired engine issues are not reactivated. Literal payment rails, incentives and
-embedded-client parity remain explicit decisions. Next runtime slice is F2 after
-bounded direction; no payments, permissions, secrets or deployment are implied.
+Register preparation is complete; **capability parity remains open**. Existing
+source/local/recorded sub-proof is retained; no item closes without its named
+end condition. MM-001–MM-056 are baseline/foundation requirements; MM-057–MM-060
+are separately requested reuse-integration criteria, not inferred Mercator features.
+The dated sequence covers F1 docs/contracts, F2 maintained SDK qualification and
+one conventional async Tool, F3 bounded procurement graphs, F4 partial/selected/artifact
+results, and F5 entitled supply and actual task/client/persona acceptance. Plans
+landed separately in #362 under the accepted RFC; F2 is not their prerequisite.
+Exact rails, incentives, direct wallet
+and embedded surfaces remain required/open for unqualified literal parity.
+
+Next preparation slice: **MM-057** maintained SDK/counterparty qualification.
+Next runtime slice after bounded direction: **MM-022**, projecting the supported
+Provider SDK onto current Calls/Workpool with MM-021/MM-023–MM-026 recovery.
+No custom job engine is proposed. MCP Events/core streams/Tasks are distinct
+client-qualified integrations; see the ADR reuse-fit matrix. Joel owns direction; responsible areas are named per
+item. No payment, permission, secret, subscription, publication or deployment
+change is implied. Existing #196/#185/#187 and ADR 0004 retain relevant intent;
+retired engine tickets stay retired. Datadog remains separately owned below.
 
 ## Datadog workstream
 

@@ -2,7 +2,12 @@
   "compilerOptions": {
     "target": "ES2022",
     "useDefineForClassFields": true,
-    "lib": ["DOM", "DOM.Iterable", "DOM.AsyncIterable", "ES2024"],
+    "lib": [
+      "DOM",
+      "DOM.Iterable",
+      "DOM.AsyncIterable",
+      "ES2024"
+    ],
     "allowJs": false,
     "skipLibCheck": true,
     "esModuleInterop": true,
@@ -22,15 +27,29 @@
     "allowImportingTsExtensions": true,
     "jsx": "react-jsx",
     "paths": {
-      "@/routes/owner.*": ["./src/routes/_operator/owner.*"],
-      "@/routes/admin.*": ["./src/routes/_operator/admin.*"],
+      "@/routes/owner.*": [
+        "./src/routes/_operator/owner.*"
+      ],
+      "@/routes/admin.*": [
+        "./src/routes/_operator/admin.*"
+      ],
       "@/routes/developers.discovery": [
         "./src/routes/_operator/developers.discovery"
       ],
-      "@/*": ["./src/*"],
-      "~/*": ["./src/*"]
+      "next/image": [
+        "./src/lib/arc/next-image.tsx"
+      ],
+      "@/*": [
+        "./src/*"
+      ],
+      "~/*": [
+        "./src/*"
+      ]
     },
-    "types": ["vite/client", "node"]
+    "types": [
+      "vite/client",
+      "node"
+    ]
   },
   "include": [
     "src/**/*.ts",
@@ -55,6 +74,13 @@
   "exclude": [
     "node_modules",
     "dist",
-    "convex/_generated"
+    "convex/_generated",
+    "src/components/arc/**/*",
+    "src/lib/arc/**/*"
+  ],
+  "references": [
+    {
+      "path": "./tsconfig.arc.json"
+    }
   ]
 }

@@ -4,16 +4,16 @@ import { useMemo } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 import { ArrowUpRightIcon } from 'lucide-react'
 
-import { Badge } from '@/components/ui/badge'
-import buttonStyles from '@/components/arc/button/button.module.css'
+import { Badge } from '@/components/arc/badge/badge'
 import {
   AeOperatorSortableHeader,
   AeRecordTable,
 } from '@/components/ae/operator/AeOperatorDataTable'
-import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
+import { AeEmptyState } from '@/components/ae/shared/empty-state/AeEmptyState'
 import { formatDisplayAmount } from '@/modules/money/public'
 import { projectCallSummaryPurchaseStatus } from '@/modules/capability-execution/call-receipt-view'
 import { formatUtcTimestamp } from '@/lib/ui/format-time'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import type {
   AgentActivityView,
   AgentUsageSummary,
@@ -28,19 +28,19 @@ export type AeAgentCallHistoryTableProps = Readonly<{
 
 function purchaseStatusBadgeVariant(
   kind: 'delivered' | 'failed' | 'pending' | 'refunded' | 'uncertain',
-): 'success' | 'destructive' | 'warning' | 'outline' {
+): 'success' | 'danger' | 'warning' | 'neutral' {
   switch (kind) {
     case 'delivered':
       return 'success'
     case 'failed':
-      return 'destructive'
+      return 'danger'
     case 'refunded':
-      return 'outline'
+      return 'neutral'
     case 'uncertain':
     case 'pending':
       return 'warning'
     default:
-      return 'outline'
+      return 'neutral'
   }
 }
 
@@ -110,7 +110,7 @@ export function AeAgentCallHistoryTable({
         cell: ({ row }) => {
           const status = projectCallSummaryPurchaseStatus(row.original)
           return (
-            <Badge variant={purchaseStatusBadgeVariant(status.kind)}>
+            <Badge tone={purchaseStatusBadgeVariant(status.kind)}>
               {status.label}
             </Badge>
           )
@@ -139,7 +139,7 @@ export function AeAgentCallHistoryTable({
         cell: ({ row }) => (
           <a
             href={`/calls/${encodeURIComponent(row.original.callRef)}`}
-            className={`${buttonStyles.button} ${buttonStyles.ghost} ${buttonStyles.sm}`}
+            className={actionLinkClassName('ghost', 'sm')}
             aria-label={`View call receipt ${row.original.callRef}`}
           >
             <span>Receipt</span>

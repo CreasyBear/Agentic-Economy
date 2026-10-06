@@ -1,5 +1,5 @@
 import { AeSupplierOnboardingWizard } from '@/components/ae/supply/supplier-onboarding-wizard/AeSupplierOnboardingWizard'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { Button } from '@/components/arc/button/button'
 import type { WorkspaceInventoryGateProps } from '../provider-workspace.contracts'
 
@@ -16,21 +16,15 @@ export function WorkspaceInventoryGate(props: WorkspaceInventoryGateProps) {
   }
   if (props.kind === 'conflict') {
     return (
-      <Alert variant="destructive">
-        <AlertTitle>Provider identity needs attention</AlertTitle>
-        <AlertDescription>AE found conflicting provider ownership and will not select one automatically.</AlertDescription>
-      </Alert>
+      <AeAlert tone="danger" title="Provider identity needs attention">AE found conflicting provider ownership and will not select one automatically.</AeAlert>
     )
   }
   return (
-    <Alert variant="destructive" className="arc-market">
-      <AlertTitle>Tools could not be loaded</AlertTitle>
-      <AlertDescription className="flex flex-wrap items-center gap-3">
+    <AeAlert tone="danger" title="Tools could not be loaded" className="arc-market"><div className="flex flex-wrap items-center gap-3">
         <span>Nothing was charged.</span>
         <Button type="button" variant="secondary" size="md" disabled={props.refreshPending} onClick={props.onRefresh}>
           {props.refreshPending ? 'Trying again…' : 'Try again'}
         </Button>
-      </AlertDescription>
-    </Alert>
+      </div></AeAlert>
   )
 }

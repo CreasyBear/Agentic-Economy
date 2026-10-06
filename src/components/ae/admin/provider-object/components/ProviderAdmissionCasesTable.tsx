@@ -46,9 +46,7 @@ export function ProviderAdmissionCasesTable({ rows }: ProviderAdmissionCasesTabl
         columns={columns}
         rows={[...rows]}
         rowKey="caseRef"
-        animateRows={false}
         caption={PROVIDER_OBJECT_COPY.admissionCasesTitle}
-        ariaLabel={PROVIDER_OBJECT_COPY.admissionCasesTitle}
         emptyMessage={PROVIDER_OBJECT_COPY.noAdmissionCases}
       />
     </section>

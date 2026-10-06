@@ -5,9 +5,8 @@ import { useEffect, useRef, useState } from 'react'
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { AeOperatorPage, useOperatorShellChrome } from '@/components/ae/layout/AeOperatorPage'
 import { AePageState } from '@/components/ae/layout/AePageState'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { Button } from '@/components/arc/button/button'
-import buttonStyles from '@/components/arc/button/button.module.css'
 import { operatorForbiddenCopy } from '@/components/ae/layout/route-error.contracts'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { attemptViteStaleChunkReload, isViteStaleChunkError } from '@/lib/observability/stale-chunk-reload'
@@ -17,6 +16,7 @@ import {
   type OperatorSurface,
 } from '@/lib/operator/operator-context'
 import { operatorRoleForPath } from '@/lib/operator/roles'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import './RouteRecoveryComposition.css'
 
 function RouteErrorState({ error, operator }: { error: unknown; operator: boolean }) {
@@ -69,7 +69,7 @@ function RouteErrorState({ error, operator }: { error: unknown; operator: boolea
           </Button>
           <Link
             to="/status"
-            className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}
+            className={actionLinkClassName('secondary', 'md')}
           >
             Check system status
           </Link>
@@ -95,10 +95,8 @@ function RouteErrorState({ error, operator }: { error: unknown; operator: boolea
 
   const operatorRole = operatorRoleForPath(pathname) ?? 'owner'
   const body = (
-    <Alert variant="destructive" className="arc-market arc-recovery-alert">
-      {parentShell === null ? null : <AlertTitle>Couldn’t load this page</AlertTitle>}
-      <AlertDescription>
-        <p>{recoveryCopy}</p>
+    <AeAlert tone="danger" title={parentShell === null ? recoveryCopy : 'Couldn’t load this page'} className="arc-market arc-recovery-alert">
+        {parentShell === null ? null : <p>{recoveryCopy}</p>}
         {correlationRef === undefined
           ? null
           : <AeCopyReference label="support reference" value={correlationRef} />}
@@ -128,13 +126,12 @@ function RouteErrorState({ error, operator }: { error: unknown; operator: boolea
           </Button>
           <Link
             to="/status"
-            className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}
+            className={actionLinkClassName('secondary', 'md')}
           >
             Check system status
           </Link>
         </div>
-      </AlertDescription>
-    </Alert>
+    </AeAlert>
   )
 
   if (parentShell !== null) return body
@@ -194,10 +191,10 @@ function OperatorForbiddenActions({ surface }: OperatorRouteForbiddenProps) {
   const copy = operatorForbiddenCopy[surface]
   return (
     <div className="arc-market arc-recovery-action-row">
-      <Link to="/support" className={`${buttonStyles.button} ${buttonStyles.primary} ${buttonStyles.md}`}>
+      <Link to="/support" className={actionLinkClassName('primary', 'md')}>
         {copy.supportAction}
       </Link>
-      <Link to="/market" className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}>
+      <Link to="/market" className={actionLinkClassName('secondary', 'md')}>
         {copy.marketAction}
       </Link>
       <SignOutButton redirectUrl="/">

@@ -1,5 +1,5 @@
 import { Button } from '@/components/arc/button/button'
-import { DecisionPanel } from '@/components/arc/chat/DecisionPanel'
+import { DecisionPanel } from '@/components/ae/shared/arc-pro/chat/DecisionPanel'
 import { MessageScrollerItem } from '@/components/ui/message-scroller'
 
 export function UnansweredQuestion({

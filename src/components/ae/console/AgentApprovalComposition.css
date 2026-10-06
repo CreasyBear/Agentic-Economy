@@ -102,52 +102,6 @@
   grid-template-columns: minmax(0, 1fr);
 }
 
-.arc-agent-approvals [data-slot="alert"] {
-  grid-template-columns: minmax(0, 1fr);
-  min-width: 0;
-  gap: var(--space-2);
-  border-color: var(--border);
-  border-radius: var(--radius-control);
-  padding: var(--space-3);
-  background: var(--surface);
-  color: var(--foreground);
-}
-
-.arc-agent-approvals [data-slot="alert-title"] {
-  display: block;
-  grid-column: 1;
-  min-height: 0;
-  margin: 0;
-  overflow: visible;
-  color: var(--foreground);
-  font-size: var(--text-sm);
-  font-weight: 500;
-  line-height: var(--leading-body);
-  letter-spacing: 0;
-  text-overflow: clip;
-  -webkit-line-clamp: unset;
-  line-clamp: unset;
-  overflow-wrap: anywhere;
-}
-
-.arc-agent-approvals [data-slot="alert-description"] {
-  display: grid;
-  grid-column: 1;
-  justify-items: start;
-  min-width: 0;
-  gap: var(--space-3);
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-  line-height: 1.55;
-}
-
-.arc-agent-approvals [data-slot="alert-description"] p {
-  min-width: 0;
-  margin: 0;
-  overflow-wrap: anywhere;
-  text-wrap: pretty;
-}
-
 .arc-agent-approvals__actions {
   display: grid;
   min-width: 0;

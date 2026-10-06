@@ -17,7 +17,7 @@ export interface AccordionProps {
   size?: "md" | "lg";
 }
 
-/** Height follows the content without overshooting; closed panels immediately leave focus navigation and the accessibility tree. */
+/** Height follows the content on a spring that never overshoots; closed panels leave the accessibility tree once they finish collapsing. */
 const panelOpen: TargetAndTransition = { height: "auto", opacity: 1, visibility: "visible" };
 const panelClosed: TargetAndTransition = { height: 0, opacity: 0, transitionEnd: { visibility: "hidden" } };
 /** The answer settles down into place with a brief focus pull as the panel opens. */
@@ -35,6 +35,7 @@ const contentMotion: Variants = {
 const panelStill: Variants = { open: { ...panelOpen, transition: { duration: 0 } }, closed: { ...panelClosed, transition: { duration: 0 } } };
 const contentStill: Variants = { open: { ...contentOpen, transition: { duration: 0 } }, closed: { ...contentClosed, transition: { duration: 0 } } };
 
+// arc-patch: Closed panels leave focus navigation and the accessibility tree immediately.
 export function Accordion({ items, defaultOpen = 0, size = "md" }: AccordionProps) {
   const initialValue = defaultOpen >= 0 && defaultOpen < items.length ? String(defaultOpen) : "";
   const [openValue, setOpenValue] = useState(initialValue);

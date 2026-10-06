@@ -3,7 +3,7 @@ import { useQuery } from 'convex/react'
 import { api } from '../../../../../convex/_generated/api'
 import { AdminActionSheet } from '../actions/AdminActionSheet'
 import { AeSection } from '@/components/ae/layout/AeSection'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { Button } from '@/components/arc/button/button'
 import { Input } from '@/components/arc/input/input'
 import { Label } from '@/components/ui/label'
@@ -59,7 +59,7 @@ export function CommercialPolicyActions({ environment }: { environment: Commerci
   if (environment !== 'production') return <AeSection title="Commercial policy" description="Sandbox uses the declared deterministic policy fixture. Production terms are managed in the production environment." />
   return <AeSection title="Commercial policy" description="An Admin owner approves one policy family at a time, with supporting evidence and a validity period.">
     {summary === undefined ? <p role="status">Loading approval records…</p>
-      : summary.kind === 'refused' ? <Alert role="alert" variant="destructive"><AlertDescription>Approval records are unavailable: {summary.code}. Review Audit or retry.</AlertDescription></Alert>
+      : summary.kind === 'refused' ? <AeAlert tone="danger" role="alert" title={`Approval records are unavailable: ${summary.code}. Review Audit or retry.`} />
         : <CommercialPolicyTable summary={summary} selectedFamily={family} locked={draft !== null || review !== null} onSelect={selected => {
           setFamily(selected)
           setError(null)
@@ -76,9 +76,9 @@ export function CommercialPolicyActions({ environment }: { environment: Commerci
           if (value !== undefined) { setFamily(value); setError(null) }
         }}>{COMMERCIAL_POLICY_FAMILIES.map(value => <option key={value} value={value}>{POLICY_LABELS[value]}</option>)}</select>
       </div>
-      {preparation === undefined ? <p role="status">Loading current policy…</p> : ready === null ? <Alert role="status"><AlertDescription>Policy preparation requires an Admin owner in the declared payment environment.</AlertDescription></Alert> : <>
+      {preparation === undefined ? <p role="status">Loading current policy…</p> : ready === null ? <AeAlert tone="info" title="Policy preparation requires an Admin owner in the declared payment environment." role="status" /> : <>
         <p className="text-sm">Environment: {ready.environment}. {ready.requiresSecondApproval ? 'A different Admin owner must approve this change.' : 'An Admin owner can approve this change.'}</p>
-        {ready.conflict ? <Alert role="alert" variant="destructive"><AlertDescription>Multiple active policies conflict. Changes are unavailable until the conflict is resolved.</AlertDescription></Alert> : null}
+        {ready.conflict ? <AeAlert tone="danger" title="Multiple active policies conflict. Changes are unavailable until the conflict is resolved." role="alert" /> : null}
         {current === null ? <p>No approved policy is recorded for this family.</p> : <details><summary className="cursor-pointer">Recorded policy: {current.lifecycle}, revision {current.revision}</summary>
           <div className="mt-3 grid gap-related"><p className="break-all text-sm">{current.policyRef}</p><p className="text-sm">Effective {formatPerthTimestamp(current.effectiveAt)} · expires {formatPerthTimestamp(current.expiresAt)} Perth time</p><CommercialPolicyControlReview control={current.control} /><p className="break-all text-sm">Evidence: {current.evidenceRef}</p><p className="break-all text-sm">Approved by: {current.approvedByPrincipalRef}</p></div>
         </details>}
@@ -95,7 +95,7 @@ export function CommercialPolicyActions({ environment }: { environment: Commerci
           </div><p className="text-xs text-muted-foreground">Enter dates in your browser’s local time. Final review shows Perth time.</p>
           {family === 'operations' || family === 'treasury_custody' ? <details><summary className="cursor-pointer text-sm">Server technical requirements (read only)</summary><dl className="mt-2 grid gap-intra text-sm">{Object.entries(draft.preparation.requirements).map(([key, value]) => <div key={key}><dt>{key}</dt><dd className="break-all">{value}</dd></div>)}</dl><p className="mt-2 text-sm">These required versions do not prove operational readiness.</p></details> : null}
           <p className="text-xs text-muted-foreground">Suggested amounts and recovery times are editable targets. Confirm operational controls only with actual evidence.</p>
-          {error === null ? null : <Alert role="alert" variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+          {error === null ? null : <AeAlert tone="danger" title={error} role="alert" />}
           <div className="flex gap-intra"><Button type="submit">Review policy</Button><Button type="button" variant="secondary" onClick={() => { setDraft(null); setError(null) }}>Cancel editing</Button></div>
         </fieldset>
       </form>}
@@ -108,7 +108,7 @@ export function CommercialPolicyActions({ environment }: { environment: Commerci
   </AeSection>
 }
 function TextField({ name, label, value, onChange, type = 'text', hint }: { name: string; label: string; value: string; onChange: (value: string) => void; type?: 'text' | 'datetime-local'; hint?: string }) {
-  return <div className="grid gap-intra"><Label htmlFor={`policy-${name}`}>{label}</Label><Input label={label} labelMode="external" id={`policy-${name}`} value={value} onChange={event => onChange(event.target.value)} type={type} inputMode={type === 'text' ? 'decimal' : undefined} autoComplete="off" {...(hint === undefined ? {} : { 'aria-describedby': `policy-${name}-hint` })} />{hint === undefined ? null : <p id={`policy-${name}-hint`} className="text-xs text-muted-foreground">{hint}</p>}</div>
+  return <div className="grid gap-intra"><Input label={label} id={`policy-${name}`} value={value} onChange={event => onChange(event.target.value)} type={type} inputMode={type === 'text' ? 'decimal' : undefined} autoComplete="off" {...(hint === undefined ? {} : { 'aria-describedby': `policy-${name}-hint` })} />{hint === undefined ? null : <p id={`policy-${name}-hint`} className="text-xs text-muted-foreground">{hint}</p>}</div>
 }
 function PolicyBusinessFields({ family, fields, change }: { family: CommercialPolicyFamily; fields: PolicyFields; change: <K extends keyof PolicyFields>(key: K, value: PolicyFields[K]) => void }) {
   const text = (name: keyof Pick<PolicyFields, 'serviceFeeTax' | 'callTax' | 'minimumFunding' | 'maximumFunding' | 'fundingIncrement' | 'customerMaximum' | 'retentionDays' | 'minimumBuffer' | 'rpoMinutes' | 'rtoMinutes' | 'serviceFee' | 'pricingMargin' | 'commitmentSeconds' | 'reportsPerDay'>, label: string, hint?: string) => <TextField name={name} label={label} value={fields[name]} onChange={value => change(name, value)} {...(hint === undefined ? {} : { hint })} />

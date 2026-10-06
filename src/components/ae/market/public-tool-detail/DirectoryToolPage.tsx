@@ -6,13 +6,13 @@ import { AePageState } from '@/components/ae/layout/AePageState'
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
 import { ToolFacts } from '@/components/ae/shared/ToolFacts'
 import { alternativeToolSearchHref, projectToolObject } from '@/components/ae/shared/listing-family.view-model'
-import { ProductDetail, type DetailSlide } from '@/components/arc/market/ProductDetail'
-import buttonStyles from '@/components/arc/button/button.module.css'
+import { ProductDetail, type DetailSlide } from '@/components/ae/shared/arc-pro/market/ProductDetail'
 import { directoryTitle } from '@/modules/market/directory-card.view-model'
 import type { X402DirectoryCatalogueResource } from '@/modules/market/x402-directory-catalogue'
 import { projectDirectoryListing } from '@/modules/registry/public'
 import type { ReferenceRate } from '@/modules/money/public'
 import { TOOL_UNAVAILABLE_COPY } from './public-tool-detail.contracts'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 
 export type DirectoryToolPageProps = Readonly<{ metadata: X402DirectoryCatalogueResource; providerHost: string; slug: string; referenceRate?: ReferenceRate }>
 
@@ -24,7 +24,7 @@ export function DirectoryToolPage({ metadata, providerHost, slug, referenceRate 
   if (metadata.kind !== 'found' && metadata.kind !== 'found_upstream') {
     const reason = metadata.kind === 'not_found' ? 'resource_not_found' : metadata.reason === 'query_invalid' ? 'query_invalid' : 'source_unavailable'
     const copy = TOOL_UNAVAILABLE_COPY[reason]
-    return <AePageState tone="warning" title={copy.title} description={`${copy.cause} ${copy.nextStep}`} action={<Link to={copy.action.to} className={`${buttonStyles.button} ${buttonStyles.primary} ${buttonStyles.md} min-h-touch`}>{copy.action.label}</Link>} />
+    return <AePageState tone="warning" title={copy.title} description={`${copy.cause} ${copy.nextStep}`} action={<Link to={copy.action.to} className={`${actionLinkClassName('primary', 'md')} min-h-touch`}>{copy.action.label}</Link>} />
   }
   const entry = metadata.item.entry
   const listing = projectDirectoryListing({ ...entry, title: directoryTitle(entry) })

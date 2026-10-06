@@ -1,6 +1,5 @@
 import { Link } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
-import arcButton from '@/components/arc/button/button.module.css'
 
 import type { AgentDetail } from '@/modules/agent-access/agent-operator-view-model'
 import type { AgentSpendingLimitsReadResult, AgentSpendingLimitsResult } from '@/modules/agent-access/spending-policy-update'
@@ -21,6 +20,7 @@ import {
 } from '../agent-operator-console-model'
 import type { AgentRecordSheetProps } from './agent-operator-console.contracts'
 import type { UseAgentLifecycleDialogResult } from './agent-operator-console.contracts'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 
 type BuildParams = Readonly<{
   selected: AgentDetail | undefined
@@ -83,7 +83,7 @@ export function buildAgentRecordSheetProps({
     ),
     technicalFacts: selected === undefined ? [] : technicalAgentFacts(selected),
     credentialHistory: selected === undefined ? null : (
-      <Link to="/owner/settings/agent-keys" className={`${arcButton.button} ${arcButton.ghost} ${arcButton.md}`}>
+      <Link to="/owner/settings/agent-keys" className={actionLinkClassName('ghost', 'md')}>
         Manage Agent keys and credential history
       </Link>
     ),

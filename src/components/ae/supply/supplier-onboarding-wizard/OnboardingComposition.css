@@ -46,25 +46,6 @@
   min-width: 0;
 }
 
-.arc-market.arc-provider-setup-shell .arc-provider-setup-diagnostic [data-slot="alert-title"] {
-  display: block;
-  min-height: 0;
-  overflow: visible;
-  overflow-wrap: anywhere;
-  -webkit-line-clamp: unset;
-  line-clamp: unset;
-  font-size: var(--text-sm);
-}
-
-.arc-market.arc-provider-setup-shell .arc-provider-setup-diagnostic [data-slot="alert-description"] {
-  display: grid;
-  min-width: 0;
-  gap: var(--space-1);
-  overflow-wrap: anywhere;
-  font-size: var(--text-sm);
-  line-height: 1.5;
-}
-
 .arc-provider-setup-steps {
   min-width: 0;
   border-bottom: 1px solid var(--border-subtle);
@@ -86,24 +67,6 @@
   width: 16px;
   height: 16px;
   color: var(--accent);
-}
-
-.arc-market.arc-provider-setup-first .arc-provider-setup-notice > [data-slot="alert-title"] {
-  display: block;
-  min-height: 0;
-  overflow: visible;
-  overflow-wrap: anywhere;
-  -webkit-line-clamp: unset;
-  line-clamp: unset;
-  font-size: var(--text-sm);
-  font-weight: 500;
-}
-
-.arc-market.arc-provider-setup-first .arc-provider-setup-notice > [data-slot="alert-description"] {
-  min-width: 0;
-  font-size: var(--text-sm);
-  line-height: 1.5;
-  overflow-wrap: anywhere;
 }
 
 .arc-market.arc-provider-setup-empty {

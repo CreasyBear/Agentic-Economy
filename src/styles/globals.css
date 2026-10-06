@@ -5,6 +5,7 @@
  * used by shadcn and product components; surfaces do not invent
  * their own palettes, type scales, radii, or elevation systems.
  */
+@layer arc-foundation;
 @layer reset, theme, base, clerk, components, utilities;
 
 @import "./base.css" layer(base);

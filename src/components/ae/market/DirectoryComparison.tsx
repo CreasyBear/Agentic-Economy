@@ -1,6 +1,7 @@
 import { Link } from '@tanstack/react-router'
 import { ArrowUpRightIcon } from 'lucide-react'
-import { ComparisonTable, type ComparisonRow, type ComparisonSection } from '@/components/arc/market/ComparisonTable'
+import { AeComparisonTable } from '@/components/ae/shared/comparison-table/AeComparisonTable'
+import type { ComparisonRow, ComparisonSection } from '@/components/ae/shared/comparison-table/comparison-table.contracts'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { toDirectoryToolCardModel } from '@/modules/market/directory-card.view-model'
 import { directoryProviderKey, directorySlugBase } from '@/modules/market/x402-directory-index'
@@ -49,7 +50,7 @@ export function DirectoryComparison({ entries, open, onOpenChange, onCloseAutoFo
         <DialogDescription>Provider-listed prices and source activity. A Quote confirms the buyer&apos;s AUD price.</DialogDescription>
       </DialogHeader>
       <div className="min-h-0 overflow-y-auto overscroll-contain">
-        {entries.length < 2 ? <p role="status" className="py-6 text-sm">Fewer than two selected Tools are available. Close comparison and choose another Tool.</p> : <ComparisonTable columns={columns} sections={sections} />}
+        {entries.length < 2 ? <p role="status" className="py-6 text-sm">Fewer than two selected Tools are available. Close comparison and choose another Tool.</p> : <AeComparisonTable columns={columns} sections={sections} />}
       </div>
     </DialogContent>
   </Dialog>

@@ -1,7 +1,7 @@
 import { Link } from '@tanstack/react-router'
 
 import { AeSection } from '@/components/ae/layout/AeSection'
-import styles from '@/components/arc/button/button.module.css'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import {
   ADMIN_OVERVIEW_COPY,
   type AdminOverviewExceptionRow,
@@ -40,7 +40,7 @@ export function OldestExceptions({ rows, unavailable }: OldestExceptionsProps) {
         ) : null}
         <Link
           to="/admin/exceptions"
-          className={`arc-market ${styles.button} ${styles.secondary} ${styles.md} arc-overview-record-action`}
+          className={`arc-market ${actionLinkClassName('secondary', 'md')} arc-overview-record-action`}
         >
           {ADMIN_OVERVIEW_COPY.viewAll}
         </Link>

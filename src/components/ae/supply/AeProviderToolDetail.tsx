@@ -6,12 +6,12 @@ import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { AePriceUpdateModal } from './price-update-modal/AePriceUpdateModal'
 import { Button as ArcButton } from '@/components/arc/button/button'
-import buttonStyles from '@/components/arc/button/button.module.css'
-import { DecisionPanel } from '@/components/arc/chat/DecisionPanel'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
+import { DecisionPanel } from '@/components/ae/shared/arc-pro/chat/DecisionPanel'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
+import { Badge } from '@/components/arc/badge/badge'
 import { formatTimestamp } from '@/lib/ui/format-time'
 import { getStatusPresentation } from '@/lib/ui/status-presentation'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import {
   providerToolReasonPresentation,
   type ProviderToolStatus,
@@ -77,7 +77,7 @@ export function AeProviderToolDetail({
       <DecisionPanel aria-labelledby="provider-tool-state" className="arc-provider-tool-state">
         <div className="arc-provider-tool-state-heading">
           <h2 id="provider-tool-state" className="arc-provider-tool-state-title">{status.state}</h2>
-          <Badge className="arc-provider-tool-availability" variant={status.routeability.available ? 'default' : 'outline'}>
+          <Badge className="arc-provider-tool-availability" tone={status.routeability.available ? 'info' : 'neutral'}>
             {status.routeability.available ? 'Available to buyers' : 'Not available to buyers'}
           </Badge>
         </div>
@@ -85,16 +85,10 @@ export function AeProviderToolDetail({
           ? 'This saved Tool has no resumable source. Start another Tool or contact Help with its Tool reference.'
           : stateDescription(status)}</p>
         {firstReason === undefined ? null : (
-          <Alert variant="destructive">
-            <AlertTitle>{firstReason.title}</AlertTitle>
-            <AlertDescription>{firstReason.description}</AlertDescription>
-          </Alert>
+          <AeAlert tone="danger" title={firstReason.title}>{firstReason.description}</AeAlert>
         )}
         {feedback === undefined ? null : (
-          <Alert variant={feedback.kind === 'refused' ? 'destructive' : 'default'} aria-live="polite">
-            <AlertTitle>{feedback.kind === 'applied' ? 'Tool updated' : 'Tool unchanged'}</AlertTitle>
-            <AlertDescription>{feedback.message}</AlertDescription>
-          </Alert>
+          <AeAlert role="alert" tone={feedback.kind === 'refused' ? 'danger' : 'info'} title={feedback.kind === 'applied' ? 'Tool updated' : 'Tool unchanged'} aria-live="polite">{feedback.message}</AeAlert>
         )}
         <PrimaryAction
           status={status}
@@ -208,7 +202,7 @@ function PrimaryAction({
     return (
       <a
         href={status.ownerHandoff.cta}
-        className={[buttonStyles.button, buttonStyles.primary, buttonStyles.md, 'arc-provider-tool-action'].join(' ')}
+        className={[actionLinkClassName('primary', 'md'), 'arc-provider-tool-action'].join(' ')}
       >
         {status.ownerHandoff.ctaLabel}
       </a>
@@ -219,7 +213,7 @@ function PrimaryAction({
       return (
         <a
           href={resumeHref ?? '/owner/operations/new'}
-          className={[buttonStyles.button, buttonStyles.primary, buttonStyles.md, 'arc-provider-tool-action'].join(' ')}
+          className={[actionLinkClassName('primary', 'md'), 'arc-provider-tool-action'].join(' ')}
         >
           {resumeHref === undefined ? 'Add another Tool' : 'Continue setup'}
         </a>

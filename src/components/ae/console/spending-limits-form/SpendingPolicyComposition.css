@@ -113,10 +113,6 @@
   text-decoration: none;
 }
 
-.arc-spending-policy [data-slot="badge"] {
-  font-size: var(--text-sm);
-}
-
 @media (max-width: 479px) {
   .arc-market.arc-spending-policy {
     padding: var(--space-4);
@@ -133,5 +129,4 @@
 
 /* Real failure facts remain supplied by the policy controller. */
 .arc-market.arc-spending-policy-diagnostic { min-width: 0; padding: var(--space-4); border-radius: var(--radius-control); background: var(--surface); color: var(--foreground); font-family: var(--font-body); font-size: var(--text-sm); line-height: 1.55; }
-.arc-market.arc-spending-policy-diagnostic [data-slot="alert-title"] { display: block; overflow: visible; -webkit-line-clamp: unset; font-size: var(--text-sm); font-weight: 500; line-height: 1.55; white-space: normal; overflow-wrap: anywhere; }
 .arc-market.arc-spending-policy-diagnostic .arc-spending-policy-diagnostic-body { min-width: 0; gap: var(--space-2); font-size: var(--text-sm); line-height: 1.55; overflow-wrap: anywhere; }

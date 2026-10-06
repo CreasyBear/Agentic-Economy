@@ -1,5 +1,5 @@
 import { useId } from 'react'
-import { Stepper } from '@/components/arc/stepper/stepper'
+import { AeStatusStepper } from '@/components/ae/shared/status-stepper/AeStatusStepper'
 import type { CallReceiptStageView } from '@/modules/capability-execution/call-receipt-view'
 
 import { machineLabel } from './call-receipt-format'
@@ -24,11 +24,9 @@ export function CallReceiptTimeline({ stages }: Readonly<{ stages: readonly Call
         <h2 id={headingId} className="arc-call-heading">What happened</h2>
         <p className="arc-call-context">Recorded progress for this exact call. A pending stage is not claimed as complete.</p>
       </div>
-      <Stepper
+      <AeStatusStepper
         steps={steps}
         current={current}
-        orientation="vertical"
-        details="all"
         label="Recorded call stages"
         completeLabel="Recorded call stages complete"
         announceLabel="Recorded progress for this exact call"

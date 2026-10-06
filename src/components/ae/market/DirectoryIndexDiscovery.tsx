@@ -1,8 +1,8 @@
 import { Link } from '@tanstack/react-router'
 import { ArrowUpRight } from 'lucide-react'
 
-import { ProductListingShelf } from '@/components/arc/market/ProductListing'
-import { ProviderListingCard } from '@/components/arc/market/ProviderListing'
+import { ProductListingShelf } from '@/components/ae/shared/arc-pro/market/ProductListing'
+import { ProviderListingCard } from '@/components/ae/shared/arc-pro/market/ProviderListing'
 import type { X402DirectoryCatalogueOverview } from '@/modules/market/x402-directory-catalogue'
 import { toDirectoryToolCardModel } from '@/modules/market/directory-card.view-model'
 import type { SavedDirectoryTool } from '@/modules/market/saved-tools.contracts'

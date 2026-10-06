@@ -1,5 +1,5 @@
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
-import { Badge } from '@/components/ui/badge'
+import { Badge } from '@/components/arc/badge/badge'
 
 import type { StatusCheckListProps } from '../system-status.contracts'
 import '../../StatusComposition.css'
@@ -21,7 +21,7 @@ export function StatusCheckList({ checks, isChecking }: StatusCheckListProps) {
                 </div>
               )}
             </div>
-            <Badge variant={check.badgeVariant}>{check.badgeLabel}</Badge>
+            <Badge tone={check.badgeVariant}>{check.badgeLabel}</Badge>
           </li>
         ))}
       </ul>

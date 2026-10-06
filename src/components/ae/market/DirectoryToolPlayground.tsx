@@ -3,12 +3,12 @@ import { BracesIcon, FileJsonIcon } from 'lucide-react'
 
 import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
 import { CodeBlock, CodeBlockActions, CodeBlockCopyButton, CodeBlockHeader, CodeBlockTitle } from '@/components/ai-elements/code-block'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
+import { Badge } from '@/components/arc/badge/badge'
 import { Button } from '@/components/arc/button/button'
-import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty'
+import { AeEmptyState } from '@/components/ae/shared/empty-state/AeEmptyState'
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/arc/tabs/Tabs'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ae/shared/base-ui/tabs/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
 import { AeToolInputForm } from '../shared/tool-input-form/AeToolInputForm'
@@ -62,28 +62,28 @@ function PlaygroundEditor({ entry, toolRef, inputSchemaJson, inputExampleJson }:
           {initialValue !== undefined ? <Button type="button" variant="secondary" size="sm" onClick={() => setInputText(initialText)}>Load example</Button> : null}
         </div>
         <p className="text-sm text-muted-foreground">{canonical ? 'Prepare the request your agent will send.' : 'Explore the input published by this Provider.'}</p>
-        <Tabs animateContent={false} value={mode === 'form' && (!formAvailable || value === undefined) ? 'json' : mode} onValueChange={setMode}>
+        <Tabs value={mode === 'form' && (!formAvailable || value === undefined) ? 'json' : mode} onValueChange={setMode}>
           <TabsList aria-label="Input format">
             <TabsTrigger value="form" disabled={!formAvailable || value === undefined}>Form</TabsTrigger>
             <TabsTrigger value="json">JSON</TabsTrigger>
             {schema ? <TabsTrigger value="schema">Schema</TabsTrigger> : null}
           </TabsList>
           <TabsContent value="form" className="pt-4">
-            {formAvailable && schema && value !== undefined ? <ToolInputFormBoundary fallback={<div className="grid gap-4"><Alert><AlertDescription>This schema needs the JSON editor.</AlertDescription></Alert>{jsonEditor}</div>}>
+            {formAvailable && schema && value !== undefined ? <ToolInputFormBoundary fallback={<div className="grid gap-4"><AeAlert tone="info" title="This schema needs the JSON editor." role="alert" />{jsonEditor}</div>}>
               <AeToolInputForm idPrefix={`${id}-form`} schema={schema} value={value} onChange={next => setInputText(JSON.stringify(next, null, 2) ?? '')} />
             </ToolInputFormBoundary> : jsonEditor}
           </TabsContent>
           <TabsContent value="json" className="pt-4">{jsonEditor}</TabsContent>
           {schema ? <TabsContent value="schema" className="pt-4"><JsonExample title={canonical ? 'Tool input schema' : 'Provider request schema'} code={JSON.stringify(schema, null, 2)} /></TabsContent> : null}
         </Tabs>
-        {errors.length > 0 ? <Alert id={errorId}><AlertDescription><ul className="list-inside list-disc">{errors.slice(0, 4).map((error, index) => <li key={`${index}:${error}`}>{error}</li>)}</ul></AlertDescription></Alert> : null}
+        {errors.length > 0 ? <AeAlert tone="danger" role="alert" id={errorId} title={errors.length === 1 ? 'Fix this input before running' : 'Fix these inputs before running'}><ul className="list-inside list-disc">{errors.slice(0, 4).map((error, index) => <li key={`${index}:${error}`}>{error}</li>)}</ul></AeAlert> : null}
         {!formAvailable ? <p className="text-sm text-muted-foreground">{schema ? 'Use JSON for this schema’s input structure.' : entry.input?.schemaOmitted ? 'The full input schema is too large to display here.' : 'This Provider has not published an input schema.'}</p> : null}
       </section>
       <section className="grid min-w-0 content-start gap-4" aria-labelledby={`${id}-output`}>
-        <div className="flex flex-wrap items-center justify-between gap-3"><h3 id={`${id}-output`} className="text-lg font-medium">Output</h3><Badge variant="secondary">Provider example</Badge></div>
+        <div className="flex flex-wrap items-center justify-between gap-3"><h3 id={`${id}-output`} className="text-lg font-medium">Output</h3><Badge tone="neutral">Provider example</Badge></div>
         <p className="text-sm text-muted-foreground">Published sample output. Editing the input does not generate a new result.</p>
         {outputExample !== undefined ? <JsonExample title="Example response" code={JSON.stringify(outputExample, null, 2)} />
-          : <Empty className="min-h-72 border"><EmptyHeader><EmptyMedia variant="icon"><FileJsonIcon /></EmptyMedia><EmptyTitle>No output example</EmptyTitle><EmptyDescription>{entry.output?.exampleOmitted ? 'The published example is too large to display here.' : 'The Provider has not included a sample response.'}</EmptyDescription></EmptyHeader></Empty>}
+          : <AeEmptyState icon={<FileJsonIcon />} title="No output example" titleAs="p" description={entry.output?.exampleOmitted ? 'The published example is too large to display here.' : 'The Provider has not included a sample response.'} />}
         {entry.output?.schemaJson ? <details><summary className="cursor-pointer text-sm font-medium">View output schema</summary><div className="pt-3"><JsonExample title="Provider output schema" code={entry.output.schemaJson} /></div></details> : null}
       </section>
     </div>

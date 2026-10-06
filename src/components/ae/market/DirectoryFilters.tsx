@@ -2,9 +2,10 @@
 // MIT licence and upstream attribution: docs/licenses/spree-storefront.txt.
 import { useId, useRef, useState, type FormEvent } from 'react'
 import { SlidersHorizontal } from 'lucide-react'
+import { AeActionLink } from '@/components/ae/shared/action-link/AeActionLink'
 import { Button } from '@/components/arc/button/button'
 import { Input } from '@/components/arc/input/input'
-import { Drawer, DrawerContent, DrawerTrigger } from '@/components/arc/drawer/Drawer'
+import { Drawer, DrawerContent, DrawerTrigger } from '@/components/ae/shared/base-ui/drawer/drawer'
 import { x402DirectoryFilterSchema, type X402DirectoryFilters } from '@/modules/market/x402-directory'
 
 type Props = { search: X402DirectoryFilters; onApply: (filters: X402DirectoryFilters) => void }
@@ -72,8 +73,8 @@ function FilterForm({ search, onApply }: Props) {
     {error === undefined ? null : <p id={`${id}-error`} role="alert" className="mt-4 text-sm text-destructive">{error}</p>}
     </div>
     <div className="flex items-stretch gap-3 border-t pt-6">
-      <Button labelLayout="wrap" type="button" variant="secondary" className="min-h-touch flex-1" onClick={() => { setNetwork(''); setProvider(''); setPrice(''); setError(undefined); setInvalidField(undefined) }}>Clear filters</Button>
-      <Button labelLayout="wrap" type="submit" className="min-h-touch flex-1">Show results</Button>
+      <AeActionLink labelLayout="wrap" type="button" variant="secondary" className="min-h-touch flex-1" onAction={() => { setNetwork(''); setProvider(''); setPrice(''); setError(undefined); setInvalidField(undefined) }}>Clear filters</AeActionLink>
+      <Button type="submit" className="min-h-touch flex-1 whitespace-normal">Show results</Button>
     </div>
   </form>
 }

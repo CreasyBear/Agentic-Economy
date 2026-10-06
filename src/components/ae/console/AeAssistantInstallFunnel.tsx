@@ -5,7 +5,7 @@ import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import { Button } from '@/components/arc/button/button'
-import { MultiStepForm } from '@/components/arc/blocks/multi-step-form/multi-step-form'
+import { MultiStepForm } from '@/components/ae/shared/arc-pro/multi-step-form/multi-step-form'
 import { useClientMounted } from '@/hooks/use-client-mounted'
 import {
   NATIVE_MCP_CLIENTS,

@@ -1,4 +1,3 @@
-/* Arc registry source retrieved 2026-10-04; upstream SHA-256: a612091b83e217f2762d14e40515dff8e80f240103906a7ecfaabf0ba1bee2d7. */
 "use client";
 
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
@@ -10,7 +9,7 @@ import styles from "./filter-toolbar.module.css";
 
 export interface FilterChip { id: string; label: string; value?: string; }
 /** One value a field can take. `hint` sits at the end of the row, for example a count. */
-export interface FilterOption { value: string; label?: string | undefined; hint?: string | number; icon?: ReactNode; }
+export interface FilterOption { value: string; label?: string; hint?: string | number; icon?: ReactNode; }
 export interface FilterField { id: string; label: string; icon?: ReactNode; options: (string | FilterOption)[]; }
 export interface FilterMenuProps {
   fields: FilterField[];
@@ -18,18 +17,18 @@ export interface FilterMenuProps {
   onSelect: (filter: FilterChip, field: FilterField) => void;
   /** Applied filters. Each field shows its current value and the value step marks it. */
   active?: FilterChip[];
-  label?: string | undefined;
+  label?: string;
   /** The trigger edge the panel lines up with. It flips or shifts when the viewport, or a clipping ancestor, has no room. */
-  align?: "start" | "end" | undefined;
+  align?: "start" | "end";
 }
 export interface FilterToolbarProps {
   filters: FilterChip[];
   onRemove: (id: string) => void;
   onClearAll?: () => void;
   children?: ReactNode;
-  label?: string | undefined;
+  label?: string;
   /** Adds an Add filter trigger that morphs into a two step field and value menu. */
-  addFilter?: { fields: FilterField[]; onAdd: (filter: FilterChip, field: FilterField) => void; label?: string | undefined; align?: "start" | "end" };
+  addFilter?: { fields: FilterField[]; onAdd: (filter: FilterChip, field: FilterField) => void; label?: string; align?: "start" | "end" };
 }
 
 const enter = { duration: motionTokens.duration.standard, ease: [...motionTokens.ease.enter] as const };
@@ -58,7 +57,7 @@ function MorphText({ text }: { text: string }) {
     let last: string | null = null;
     // The observer reports the layout size, so an entering chip's scale never shrinks the measurement.
     const observer = new ResizeObserver(([entry]) => {
-      const next = Math.ceil(entry?.borderBoxSize?.[0]?.inlineSize ?? node.offsetWidth), changed = last !== null && last !== node.textContent;
+      const next = Math.ceil(entry.borderBoxSize?.[0]?.inlineSize ?? node.offsetWidth), changed = last !== null && last !== node.textContent;
       last = node.textContent;
       // Only a new value morphs; the first measure and font swaps settle at once.
       if (changed && !reduced) animate(width as MotionValue<number>, next, motionTokens.spring.morph); else width.jump(next);
@@ -68,7 +67,7 @@ function MorphText({ text }: { text: string }) {
   }, [reduced, width]);
   return <motion.span className={styles.morphText} style={{ width }}>
     <span ref={measure} className={styles.measure} aria-hidden="true">{text}</span>
-    <AnimatePresence mode="popLayout" initial={false}><FilterSlot key={text} className={styles.morphValue} {...textMotion(reduced)}>{text}</FilterSlot></AnimatePresence>
+    <AnimatePresence mode="popLayout" initial={false}><motion.span key={text} className={styles.morphValue} {...textMotion(reduced)}>{text}</motion.span></AnimatePresence>
   </motion.span>;
 }
 
@@ -181,12 +180,13 @@ function MenuList({ rows, labelledBy, onChoose, onBack, onLeave, radio }: { rows
     // The highlight fades where it is; it keeps its place so the fade is visible.
     if (!list.current?.contains(event.relatedTarget as Node | null)) setHighlight(previous => previous && { ...previous, glide: false, ring: false, shown: false });
   }
-  return <div ref={list} className={styles.list} role="menu" aria-labelledby={labelledBy} aria-hidden={!present} inert={!present} data-current={present ? "" : undefined} onKeyDown={onKeyDown} onFocus={onFocus} onBlur={onBlur}
+  // arc-patch: Keep outgoing menu-step controls out of the accessibility tree and keyboard order.
+  return <div ref={list} className={styles.list} role="menu" aria-labelledby={labelledBy} aria-hidden={!present || undefined} inert={!present || undefined} data-current={present ? "" : undefined} onKeyDown={onKeyDown} onFocus={onFocus} onBlur={onBlur}
     onPointerLeave={() => { if (pointer.current && list.current?.contains(document.activeElement)) onLeave(); }}>
     <motion.span className={styles.highlight} data-ring={highlight?.ring || undefined} aria-hidden="true" initial={false} animate={highlight ? { y: highlight.top, height: highlight.height, opacity: highlight.shown ? 1 : 0 } : { opacity: 0 }}
       transition={{ default: highlight?.glide ? motionTokens.spring.snappy : still, opacity: { duration: reduced ? 0 : .08 } }} />
     {rows.map((row, index) => <button key={row.key} type="button" className={styles.item} role={radio ? "menuitemradio" : "menuitem"} aria-checked={radio ? !!row.checked : undefined}
-      tabIndex={present && index === current ? 0 : -1} data-row={row.key} data-text={row.label}
+      tabIndex={index === current ? 0 : -1} data-row={row.key} data-text={row.label}
       onPointerMove={event => { pointer.current = true; if (document.activeElement !== event.currentTarget) event.currentTarget.focus({ preventScroll: true }); }}
       onClick={(event: MouseEvent<HTMLButtonElement>) => onChoose(row, event.detail === 0)}>
       {row.icon ? <span className={styles.itemIcon} aria-hidden="true">{row.icon}</span> : null}
@@ -367,7 +367,7 @@ export function FilterMenu({ fields, onSelect, active = [], label = "Add filter"
       </motion.span>
     </button>
     <motion.div className={styles.surface} style={{ left, width, height }}>
-      <motion.div ref={panel} id={panelId} className={styles.panel} role="dialog" aria-labelledby={titleId} aria-hidden={!open} tabIndex={-1} inert={!open} style={{ x: panelX }} onKeyDown={onPanelKeyDown}>
+      <motion.div ref={panel} id={panelId} className={styles.panel} role="dialog" aria-labelledby={titleId} tabIndex={-1} inert={!open} style={{ x: panelX }} onKeyDown={onPanelKeyDown}>
         <motion.div style={contentStyle}>
           <div className={styles.head}>
             <AnimatePresence initial={false}>
@@ -377,7 +377,7 @@ export function FilterMenu({ fields, onSelect, active = [], label = "Add filter"
                 transition={reduced ? fade : { ...motionTokens.spring.snappy, opacity: enter }}><ChevronLeft size={16} strokeWidth={1.8} aria-hidden="true" /></PresentBackButton> : null}
             </AnimatePresence>
             <span className={styles.title} id={titleId}>
-              <AnimatePresence mode="popLayout" initial={false}><FilterSlot key={field?.id ?? "fields"} className={styles.titleText} {...textMotion(reduced)}>{field ? field.label : label}</FilterSlot></AnimatePresence>
+              <AnimatePresence mode="popLayout" initial={false}><motion.span key={field?.id ?? "fields"} className={styles.titleText} {...textMotion(reduced)}>{field ? field.label : label}</motion.span></AnimatePresence>
             </span>
           </div>
           <div className={styles.stage}>
@@ -394,16 +394,16 @@ export function FilterMenu({ fields, onSelect, active = [], label = "Add filter"
     </motion.div>
   </div>;
 }
-
-/** Exit clones keep their stock motion while leaving the keyboard and accessibility tree. */
+// arc-patch: Keep exiting chip and Clear all controls out of the accessibility tree and keyboard order.
 function FilterSlot(props: HTMLMotionProps<"span">) {
-  const present = useIsPresent();
-  return <motion.span {...props} aria-hidden={present ? props["aria-hidden"] : true} inert={!present} />;
+  const present = useIsPresent()
+  return <motion.span aria-hidden={present ? undefined : true} inert={!present || undefined} {...props} />
 }
 
+// arc-patch: Prevent the outgoing Back control from remaining exposed or tabbable during its exit.
 function PresentBackButton(props: HTMLMotionProps<"button">) {
-  const present = useIsPresent();
-  return <motion.button {...props} aria-hidden={present ? props["aria-hidden"] : true} tabIndex={present ? props.tabIndex : -1} disabled={present ? props.disabled : true} />;
+  const present = useIsPresent()
+  return <motion.button aria-hidden={!present || undefined} tabIndex={present ? undefined : -1} {...props} />
 }
 
 export function FilterToolbar({ filters, onRemove, onClearAll, children, label = "Active filters", addFilter }: FilterToolbarProps) {
@@ -424,8 +424,8 @@ export function FilterToolbar({ filters, onRemove, onClearAll, children, label =
     if (index === null || !node) return;
     pendingFocus.current = null;
     const next = filters[Math.min(index, filters.length - 1)];
-    const target = next ? Array.from(node.querySelectorAll<HTMLElement>("[data-chip-remove]")).find(button => button.dataset.chipRemove === next.id) : node.querySelector<HTMLElement>("[data-filter-trigger]");
-    (target ?? node).focus({ preventScroll: true });
+    const target = next ? node.querySelector<HTMLElement>(`[data-chip-remove="${CSS.escape(next.id)}"]`) : node.querySelector<HTMLElement>("[data-filter-trigger]");
+    target?.focus({ preventScroll: true });
   }, [filters]);
   const still = { duration: 0 };
   // Each chip sits in a slot whose width grows or collapses, so the chips beside it, the toolbar, and its
@@ -446,7 +446,7 @@ export function FilterToolbar({ filters, onRemove, onClearAll, children, label =
   const text = reduced ? { ...textMotion(true), initial: false as const } : textMotion(false);
   // The note waits for the leaving chips to fade before it rises in.
   const emptyText = reduced ? text : { ...text, transition: { ...enter, delay: motionTokens.duration.instant * .75 } };
-  return <div ref={root} className={styles.toolbar} role="group" aria-label={label} tabIndex={-1}>
+  return <div ref={root} className={styles.toolbar} role="group" aria-label={label}>
     <motion.div className={styles.frame} style={{ height: frameHeight }}>
       <div ref={list} className={styles.chips}>
         <AnimatePresence initial={false}>
@@ -459,7 +459,7 @@ export function FilterToolbar({ filters, onRemove, onClearAll, children, label =
       </div>
     </motion.div>
     <div className={styles.actions}>
-      {addFilter ? <FilterMenu fields={addFilter.fields} onSelect={addFilter.onAdd} active={filters} {...(addFilter.label === undefined ? {} : { label: addFilter.label })} {...(addFilter.align === undefined ? {} : { align: addFilter.align })} /> : null}
+      {addFilter ? <FilterMenu fields={addFilter.fields} onSelect={addFilter.onAdd} active={filters} label={addFilter.label} align={addFilter.align} /> : null}
       {children}
       <AnimatePresence initial={false}>
         {filters.length > 0 ? <FilterSlot key="clear" className={styles.slot} {...slot(12)}><button className={styles.clear} type="button" onClick={() => { pendingFocus.current = -1; onClearAll?.(); }}><motion.span className={styles.clearText} {...text}>Clear all</motion.span></button></FilterSlot> : null}

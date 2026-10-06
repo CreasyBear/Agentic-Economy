@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router'
 
-import buttonStyles from '@/components/arc/button/button.module.css'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 
 export function AddToolAction({
   variant = 'default',
@@ -8,7 +8,7 @@ export function AddToolAction({
   return (
     <Link
       to="/owner/operations/new"
-      className={['arc-market', buttonStyles.button, variant === 'outline' ? buttonStyles.secondary : buttonStyles.primary, buttonStyles.md, 'w-fit'].join(' ')}
+      className={['arc-market', actionLinkClassName(variant === 'outline' ? 'secondary' : 'primary', 'md'), 'w-fit'].join(' ')}
     >
       Add Tool
     </Link>

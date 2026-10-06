@@ -1,8 +1,8 @@
 import { Link } from '@tanstack/react-router'
-import { Alert } from '@/components/arc/alert/alert'
+import { AeAlert as Alert } from '@/components/ae/shared/alert/AeAlert'
 import { Button } from '@/components/arc/button/button'
 import { Input } from '@/components/arc/input/input'
-import { Select } from '@/components/arc/select/select'
+import { Select } from '@/components/ae/shared/base-ui/select/select'
 import { Textarea } from '@/components/arc/textarea/textarea'
 import '../CorrectionComposition.css'
 

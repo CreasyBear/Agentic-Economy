@@ -1,16 +1,13 @@
 import { AeSection } from '@/components/ae/layout/AeSection'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
+import { Badge } from '@/components/arc/badge/badge'
+import { Button } from '@/components/arc/button/button'
 
 import { JsonPayloadEditor } from './components/JsonPayloadEditor'
 import { PlaygroundResponsePane } from './components/PlaygroundResponsePane'
 import type { AeToolTestPlaygroundProps } from './tool-test-playground.contracts'
-import { TACTILE } from './tool-test-playground.contracts'
 import { mapHttpStatus } from './tool-test-payload'
 import { useToolTestPlayground } from './useToolTestPlayground'
 
-export { TACTILE } from './tool-test-playground.contracts'
 export type { AeToolTestPlaygroundProps } from './tool-test-playground.contracts'
 
 export function AeToolTestPlayground({
@@ -62,10 +59,10 @@ export function AeToolTestPlayground({
         <div className="flex flex-wrap items-center gap-3">
           <Button
             type="button"
-            variant="outline"
+            variant="secondary"
             onClick={handleSend}
             disabled={isRunning}
-            className={cn('min-h-touch', TACTILE)}
+            className="min-h-touch"
           >
             {isRunning ? 'Rechecking…' : 'Recheck source'}
           </Button>
@@ -73,11 +70,11 @@ export function AeToolTestPlayground({
             {response ? (
               <>
                 {response.status >= 200 && response.status < 300 ? (
-                  <Badge variant="success">{response.status} OK</Badge>
+                  <Badge tone="success">{response.status} OK</Badge>
                 ) : (
-                  <Badge variant="destructive">{mapHttpStatus(response.status)}</Badge>
+                  <Badge tone="danger">{mapHttpStatus(response.status)}</Badge>
                 )}
-                <Badge variant="outline" className="font-mono tabular-nums">
+                <Badge tone="neutral" className="font-mono tabular-nums">
                   ⚡ {response.latencyMs}ms
                 </Badge>
               </>

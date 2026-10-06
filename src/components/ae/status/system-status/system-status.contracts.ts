@@ -14,7 +14,7 @@ export type StatusCheckView = Readonly<{
     | typeof aeStatusPresentation.operational.label
     | typeof aeStatusPresentation.degraded.label
     | 'Checking'
-  badgeVariant: 'success' | 'destructive' | 'secondary'
+  badgeVariant: 'success' | 'danger' | 'neutral'
   requestRef?: string
 }>
 
@@ -92,7 +92,7 @@ export function projectStatusChecks(
         detail: '',
         badgeLabel: 'Checking',
         checkedAtLabel: '',
-        badgeVariant: 'secondary',
+        badgeVariant: 'neutral',
       }
     }
     return {
@@ -102,7 +102,7 @@ export function projectStatusChecks(
       detail: outcome.detail,
       checkedAtLabel: `${statusCheckTimeLabel} ${relativeCheckedAt}`,
       badgeLabel: getStatusPresentation(outcome.state === 'operational' ? 'operational' : 'degraded').label,
-      badgeVariant: outcome.state === 'operational' ? 'success' : 'destructive',
+      badgeVariant: outcome.state === 'operational' ? 'success' : 'danger',
       ...(outcome.requestRef === undefined ? {} : { requestRef: outcome.requestRef }),
     }
   })

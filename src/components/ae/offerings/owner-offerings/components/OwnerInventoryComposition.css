@@ -53,17 +53,6 @@
   gap: var(--space-2);
 }
 
-.arc-market.arc-owner-inventory-status [data-slot='badge'] {
-  min-width: 0;
-  max-width: 100%;
-  flex-shrink: 1;
-  overflow: visible;
-  font-size: var(--text-sm);
-  line-height: var(--leading-body);
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
-
 .arc-market .arc-owner-inventory-blocker {
   min-width: 0;
   color: var(--text-secondary);
@@ -74,33 +63,6 @@
 
 .arc-market.arc-owner-inventory-gate {
   min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.arc-market.arc-owner-inventory-gate [data-slot='alert-title'] {
-  display: block;
-  min-width: 0;
-  overflow: visible;
-  color: var(--foreground);
-  font-size: var(--text-sm);
-  line-height: var(--leading-body);
-  text-overflow: clip;
-  white-space: normal;
-  overflow-wrap: anywhere;
-  -webkit-line-clamp: unset;
-  line-clamp: unset;
-}
-
-.arc-market.arc-owner-inventory-gate [data-slot='alert-description'] {
-  min-width: 0;
-  font-size: var(--text-sm);
-  line-height: var(--leading-body);
-  overflow-wrap: anywhere;
-}
-
-.arc-market.arc-owner-inventory-gate [data-slot='alert-description'] p {
-  min-width: 0;
-  line-height: var(--leading-body);
   overflow-wrap: anywhere;
 }
 

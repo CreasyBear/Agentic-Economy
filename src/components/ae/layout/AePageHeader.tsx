@@ -1,9 +1,9 @@
-/* Semantic binding to the installed Arc PageHeader record region.
- * Its source provenance and bounded ports live with the Arc component.
- * Existing title focus, region IDs and factual slots remain authoritative. */
+/* Shared public-page wrapper around the AE-owned record-header presentation.
+ * AE continues to own route semantics, IDs, focus and factual slots.
+ * Arc's demonstration block is not rendered because it has no public props. */
 import { useEffect, useId, type ReactNode } from 'react'
 
-import { PageHeader } from '@/components/arc/blocks/page-header/page-header'
+import { AeRecordPageHeader as PageHeader } from '@/components/ae/shared/record-page-header/AeRecordPageHeader'
 
 type AePageHeaderProps = {
   eyebrow?: string

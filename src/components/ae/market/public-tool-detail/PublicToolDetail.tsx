@@ -8,13 +8,13 @@ import { AeToolInputDisclosure, AeToolTechnicalContract } from '@/components/ae/
 import { AeToolLatencyChart } from '@/components/ae/market/tool-detail/AeToolLatencyChart'
 import { ToolFacts } from '@/components/ae/shared/ToolFacts'
 import { alternativeToolSearchHref, projectToolObject } from '@/components/ae/shared/listing-family.view-model'
-import { ProductDetail, type DetailSlide } from '@/components/arc/market/ProductDetail'
-import buttonStyles from '@/components/arc/button/button.module.css'
+import { ProductDetail, type DetailSlide } from '@/components/ae/shared/arc-pro/market/ProductDetail'
 import { REASON_COPY, REASON_COPY_FALLBACK } from '@/content/reason-copy'
 import { projectAdmittedListing } from '@/modules/registry/public'
 import { formatToolDuration } from '@/modules/registry/tool-latency'
 import type { PublicToolDetailProps, ToolUnavailablePresentation, ToolUnavailableProps } from './public-tool-detail.contracts'
 import { TOOL_UNAVAILABLE_COPY } from './public-tool-detail.contracts'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 
 export type { PublicToolDetailProps } from './public-tool-detail.contracts'
 
@@ -38,9 +38,9 @@ export function PublicToolDetail({ result }: PublicToolDetailProps) {
   if (result.kind !== 'found') {
     const presentation = toolUnavailablePresentation(result)
     if (result.kind === 'source_unavailable') {
-      return <AePageState tone={presentation.tone} title={presentation.title} description={presentation.description} action={<span className="flex flex-wrap gap-3"><Link to="/tools/$toolRef" params={{ toolRef: result.toolRef }} reloadDocument className={`${buttonStyles.button} ${buttonStyles.primary} ${buttonStyles.md} min-h-touch`}>Try again</Link><Link to="/market" className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md} min-h-touch`}>Browse Market</Link></span>} />
+      return <AePageState tone={presentation.tone} title={presentation.title} description={presentation.description} action={<span className="flex flex-wrap gap-3"><Link to="/tools/$toolRef" params={{ toolRef: result.toolRef }} reloadDocument className={`${actionLinkClassName('primary', 'md')} min-h-touch`}>Try again</Link><Link to="/market" className={`${actionLinkClassName('secondary', 'md')} min-h-touch`}>Browse Market</Link></span>} />
     }
-    return <AePageState tone={presentation.tone} title={presentation.title} description={presentation.description} action={<Link to={presentation.action.to} className={`${buttonStyles.button} ${buttonStyles.primary} ${buttonStyles.md} min-h-touch`}>{presentation.action.label}</Link>} />
+    return <AePageState tone={presentation.tone} title={presentation.title} description={presentation.description} action={<Link to={presentation.action.to} className={`${actionLinkClassName('primary', 'md')} min-h-touch`}>{presentation.action.label}</Link>} />
   }
   const tool = result.tool
   const latency = result.evidence?.toolRef === tool.toolRef ? result.evidence.latency : undefined

@@ -1,16 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import { Link } from '@tanstack/react-router'
-import buttonStyles from '@/components/arc/button/button.module.css'
 
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AlphaLearningNotice } from '@/components/ae/shared/AlphaLearningNotice'
 import { AeSettingsStack } from '@/components/ae/layout/AeSection'
-import { MultiStepForm } from '@/components/arc/blocks/multi-step-form/multi-step-form'
-import type { CompletedFormStep, FormStep } from '@/components/arc/blocks/multi-step-form/multi-step-form'
-import { SettingsPageGroup, SettingsPageRow } from '@/components/arc/blocks/settings-page/settings-page'
+import { MultiStepForm } from '@/components/ae/shared/arc-pro/multi-step-form/multi-step-form'
+import type { CompletedFormStep, FormStep } from '@/components/ae/shared/arc-pro/multi-step-form/multi-step-form'
+import { SettingsPageGroup, SettingsPageRow } from '@/components/ae/shared/arc-pro/settings-page/settings-page'
 import { Button } from '@/components/arc/button/button'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import type { AgentAccessAuthorizeFormDetails, ConsentLocator } from '@/modules/agent-access/consent.contracts'
 
 import { AuthorityModeRadioGroup } from './components/AuthorityModeRadioGroup'
@@ -21,6 +20,7 @@ import { ConsentOutcomeView } from './components/ConsentOutcomeView'
 import { ConsentRequestFacts } from './components/ConsentRequestFacts'
 import { ConsentToolAccessFieldset } from './components/ConsentToolAccessFieldset'
 import { useAgentConsentDecision } from './useAgentConsentDecision'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import './ConsentComposition.css'
 
 export type AeAgentAccessAuthorizeFormProps = Readonly<{
@@ -97,10 +97,7 @@ function ConsentReviewChoices({ vm, connectionSummary, replacementReasonSummary,
       </SettingsPageGroup>
       {vm.accessProfile === 'market' ? <AlphaLearningNotice /> : null}
       {vm.accessProfile === 'provider' ? (
-        <Alert>
-          <AlertTitle>Provider management</AlertTitle>
-          <AlertDescription>May inspect lifecycle and earnings, publish, recheck, withdraw, and republish your Tools. It cannot spend buyer credit or manage unrelated account settings.</AlertDescription>
-        </Alert>
+        <AeAlert role="alert" tone="info" title="Provider management">May inspect lifecycle and earnings, publish, recheck, withdraw, and republish your Tools. It cannot spend buyer credit or manage unrelated account settings.</AeAlert>
       ) : null}
     </>
   )
@@ -398,7 +395,7 @@ function AeAgentAccessAuthorizeFormLifetime({ locator, oauthState, details }: Ae
           />
         )}
         <Link to="/agent-access" search={{ grantRef: vm.grantRef, ...(oauthState === undefined ? {} : { state: oauthState }) }}
-          target="_blank" rel="noopener" className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}>
+          target="_blank" rel="noopener" className={actionLinkClassName('secondary', 'md')}>
           Follow live onboarding
         </Link>
       </AeSettingsStack>

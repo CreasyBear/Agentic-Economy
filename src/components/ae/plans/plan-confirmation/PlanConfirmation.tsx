@@ -1,6 +1,6 @@
 import { useId } from 'react'
-import { Button } from '@/components/arc/button/button'
-import { DecisionPanel } from '@/components/arc/chat/DecisionPanel'
+import { AeActionLink } from '@/components/ae/shared/action-link/AeActionLink'
+import { DecisionPanel } from '@/components/ae/shared/arc-pro/chat/DecisionPanel'
 import { formatUtcTimestamp } from '@/lib/ui/format-time'
 import type { PlanConfirmationView } from '@/modules/capability-execution/plan.view-model'
 import { PlanDataFlowDisclosures } from './components/PlanDataFlowDisclosures'
@@ -56,23 +56,21 @@ export function PlanConfirmation({ view, pending = false, onApprove, onDeny }: P
         </p>
       </div>
       <div className="arc-decision-actions" aria-busy={pending}>
-        <Button
-          type="button"
+        <AeActionLink
           labelLayout="wrap"
           disabled={pending || view.expired}
-          onClick={() => onApprove(view.planRef, view.totalAudUnits)}
+          onAction={() => onApprove(view.planRef, view.totalAudUnits)}
         >
           {pending ? 'Approving Plan…' : view.expired ? 'Quote expired' : 'Approve Plan'}
-        </Button>
-        <Button
-          type="button"
+        </AeActionLink>
+        <AeActionLink
           variant="secondary"
           labelLayout="wrap"
           disabled={pending}
-          onClick={() => onDeny(view.planRef)}
+          onAction={() => onDeny(view.planRef)}
         >
           Decline Plan
-        </Button>
+        </AeActionLink>
       </div>
     </DecisionPanel>
   )

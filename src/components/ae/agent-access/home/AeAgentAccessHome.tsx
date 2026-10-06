@@ -5,7 +5,6 @@ import { AeAgentOperatorConsole } from '@/components/ae/console/agent-operator-c
 import { AeAssistantInstallFunnel } from '@/components/ae/console/AeAssistantInstallFunnel'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { Button } from '@/components/arc/button/button'
-import arcButton from '@/components/arc/button/button.module.css'
 
 import type { AeAgentAccessHomeProps, AeAgentAccessHomeView } from './agent-access-home.contracts'
 import { HomeAddAnotherAgent } from './components/HomeAddAnotherAgent'
@@ -15,6 +14,7 @@ import { HomeLifecycleIssueAlert } from './components/HomeLifecycleIssueAlert'
 import { HomeResumeToolSection } from './components/HomeResumeToolSection'
 import { HomeOnboardingRequestSection } from './components/HomeOnboardingRequestSection'
 import { useAeAgentAccessHome, type AgentConnectionStep } from './useAeAgentAccessHome'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import './AgentHomeComposition.css'
 
 export function AeAgentAccessHome(props: AeAgentAccessHomeProps) {
@@ -85,7 +85,7 @@ export function AeAgentAccessHome(props: AeAgentAccessHomeProps) {
                 <p>Already approved access? Select the Agent you connected to continue.</p>
                 {directory.items.map(agent => <Link key={agent.principalRef} to="/agent-access"
                   search={{ caller: agent.principalRef, ...(search.resumeTool === undefined ? {} : { resumeTool: search.resumeTool }) }}
-                  title={agent.principalRef} className={`${arcButton.button} ${arcButton.secondary} ${arcButton.md} arc-agent-choice-link`}>
+                  title={agent.principalRef} className={`${actionLinkClassName('secondary', 'md')} arc-agent-choice-link`}>
                   <span>{agent.displayName}</span><span>{agent.environment === 'production' ? 'Production' : 'Sandbox'} · {agent.connectorDisplayNames.join(', ') || 'Client not recorded'} · {agent.principalRef.slice(-8)}</span>
                 </Link>)}
                 <Button type="button" variant="ghost" onClick={() => moveSetup('closed')}>Close setup</Button>

@@ -1,4 +1,3 @@
-/* Upstream: https://uiarc.dev/r/input.json; registry path: registry/components/input/input.tsx; upstream content SHA-256: cae629a315ef8cf999d8b5a987d800e55847f5ae2f317bc389b263bbcdea0da5; retrieved: 2026-10-03. */
 "use client";
 
 import { forwardRef, useEffect, useId, useRef, useState } from "react";
@@ -9,8 +8,6 @@ import styles from "./input.module.css";
 
 export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label: string;
-  /** Local port: external mode keeps an associated RJSF/Settings label or ARIA name caller-owned. */
-  labelMode?: "internal" | "external";
   description?: string;
   error?: string;
 }
@@ -27,7 +24,7 @@ const isNumber = (word: string) => /^\d[\d.,/:]*%?$/.test(word);
 function RollingNumber({ word }: { word: string }) {
   const reduced = useReducedMotion();
   const [shown, setShown] = useState({ word, direction: 1 });
-  if (shown.word !== word) setShown({ word, direction: Number.parseFloat(word.replace(/,/g, "")) < Number.parseFloat(shown.word.replace(/,/g, "")) ? -1 : 1 });
+  if (shown.word !== word) setShown({ word, direction: parseFloat(word.replace(/,/g, "")) < parseFloat(shown.word.replace(/,/g, "")) ? -1 : 1 });
   const characters = word.split("");
   const transition = reduced ? { duration: 0 } : { y: motionTokens.spring.snappy, width: motionTokens.spring.morph, opacity: { duration: motionTokens.duration.fast }, filter: { duration: motionTokens.duration.fast } };
   return <AnimatePresence initial={false}>{characters.map((character, index) => <motion.span key={characters.length - index} className={styles.column} initial={{ width: 0, opacity: 0 }} animate={{ width: "auto", opacity: 1 }} exit={{ width: 0, opacity: 0 }} transition={transition}>
@@ -46,19 +43,19 @@ function MotionText({ text }: { text: string }) {
 }
 
 /** Helper and error copy: the row opens its height on a spring, then the words settle in. */
-function FieldMessage({ id, text, className, alert }: { id?: string | undefined; text?: string | undefined; className: string | undefined; alert?: boolean | undefined }) {
+function FieldMessage({ id, text, className, alert }: { id?: string; text?: string; className: string; alert?: boolean }) {
   return <AnimatePresence initial={false}>{text ? <MessageRow key="message" id={id} text={text} className={className} alert={alert} /> : null}</AnimatePresence>;
 }
 
 /** The row tracks the measured copy, so a longer message that wraps opens its next line instead of snapping. */
-function MessageRow({ id, text, className, alert }: { id?: string | undefined; text: string; className: string | undefined; alert?: boolean | undefined }) {
+function MessageRow({ id, text, className, alert }: { id?: string; text: string; className: string; alert?: boolean }) {
   const reduced = useReducedMotion();
   const copyRef = useRef<HTMLSpanElement>(null);
   const [height, setHeight] = useState<number | "auto">("auto");
   useEffect(() => {
     const node = copyRef.current;
     if (!node || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(([entry]) => setHeight(entry?.borderBoxSize?.[0]?.blockSize ?? node.offsetHeight));
+    const observer = new ResizeObserver(([entry]) => setHeight(entry.borderBoxSize?.[0]?.blockSize ?? node.offsetHeight));
     observer.observe(node);
     return () => observer.disconnect();
   }, []);
@@ -70,7 +67,7 @@ function MessageRow({ id, text, className, alert }: { id?: string | undefined; t
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
-  { label, labelMode = "internal", description, error, id, className, ...props }, ref,
+  { label, description, error, id, className, ...props }, ref,
 ) {
   const generatedId = useId();
   const controlId = id ?? generatedId;
@@ -78,7 +75,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   const errorId = error ? `${controlId}-error` : undefined;
   const describedBy = [props["aria-describedby"], hintId, errorId].filter(Boolean).join(" ") || undefined;
   return <div className={styles.field}>
-    {labelMode === "internal" ? <label className={styles.label} htmlFor={controlId}>{label}</label> : null}
+    <label className={styles.label} htmlFor={controlId}>{label}</label>
     <input {...props} id={controlId} ref={ref} className={[styles.input, className].filter(Boolean).join(" ")} aria-invalid={error ? true : props["aria-invalid"]} aria-describedby={describedBy}/>
     <FieldMessage id={hintId} text={description} className={styles.description} />
     <FieldMessage id={errorId} text={error} className={styles.error} alert />

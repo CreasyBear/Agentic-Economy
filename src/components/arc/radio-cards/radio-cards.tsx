@@ -1,5 +1,3 @@
-// Arc registry source: registry/components/radio-cards/radio-cards.tsx; upstream SHA-256: 42ee5f16c802c61f1d18cff383f74d488a940a586be74bdf53e342474290134f
-// AE adaptation: narrow indexed options and use a fixed measurement tuple for strict indexed access.
 "use client";
 
 import { forwardRef, useCallback, useId, useImperativeHandle, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
@@ -67,7 +65,7 @@ export const RadioCards = forwardRef<HTMLDivElement, RadioCardsProps>(function R
   const [internal, setInternal] = useState<string | null>(defaultValue);
   const selected = value !== undefined ? value : internal;
   const selectedIndex = options.findIndex(option => option.value === selected);
-  const usable = (option: RadioCardOption | undefined) => option !== undefined && !disabled && !option.disabled;
+  const usable = (option: RadioCardOption) => !disabled && !option.disabled;
   const tabStop = selectedIndex >= 0 && usable(options[selectedIndex]) ? selectedIndex : options.findIndex(usable);
 
   const select = (next: string) => {
@@ -82,7 +80,7 @@ export const RadioCards = forwardRef<HTMLDivElement, RadioCardsProps>(function R
   const place = useCallback((spring: boolean) => {
     const node = selectedIndex < 0 ? null : rootRef.current?.querySelector<HTMLElement>(`[data-card="${selectedIndex}"]`);
     if (!node) { o.set(0); placed.current = false; return; }
-    const box = [node.offsetLeft, node.offsetTop, node.offsetWidth, node.offsetHeight] as const;
+    const box = [node.offsetLeft, node.offsetTop, node.offsetWidth, node.offsetHeight];
     if (!spring || !placed.current || reduced) {
       x.jump(box[0]); y.jump(box[1]); w.jump(box[2]); h.jump(box[3]);
       if (!placed.current && !reduced && spring) { o.jump(0); animate(o, 1, { duration: motionTokens.duration.fast, ease: standard }); } else o.jump(1);
@@ -109,8 +107,7 @@ export const RadioCards = forwardRef<HTMLDivElement, RadioCardsProps>(function R
     const step = event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : event.key === "ArrowLeft" || event.key === "ArrowUp" ? -1 : 0;
     if (event.key === " " || event.key === "Enter") {
       event.preventDefault();
-      const option = options[index];
-      if (option && usable(option)) select(option.value);
+      if (usable(options[index])) select(options[index].value);
       return;
     }
     if (!step && event.key !== "Home" && event.key !== "End") return;
@@ -121,8 +118,7 @@ export const RadioCards = forwardRef<HTMLDivElement, RadioCardsProps>(function R
     const dir = event.key === "Home" ? 1 : event.key === "End" ? -1 : step * rtl;
     for (let tries = 0; tries < count; tries++) {
       at = (at + dir + count) % count;
-      const option = options[at];
-      if (option && usable(option)) { cards()[at]?.focus(); select(option.value); return; }
+      if (usable(options[at])) { cards()[at]?.focus(); select(options[at].value); return; }
     }
   };
 

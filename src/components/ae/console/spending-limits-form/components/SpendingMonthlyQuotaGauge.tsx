@@ -1,4 +1,4 @@
-import { UsageMeter } from '@/components/arc/usage-meter/usage-meter'
+import { AeApproximateQuotaMeter } from '@/components/ae/shared/usage-meter/AeApproximateQuotaMeter'
 
 import type { SpendingMonthlyQuotaGaugeProps } from '../spending-limits-form.contracts'
 import '../SpendingReadoutComposition.css'
@@ -19,13 +19,10 @@ export function SpendingMonthlyQuotaGauge({
       {approachingCopy !== undefined ? (
         <p className="arc-spending-quota-warning">{approachingCopy}</p>
       ) : null}
-      {limitState === undefined ? null : <UsageMeter
-        compact
+      {limitState === undefined ? null : <AeApproximateQuotaMeter
         label="Monthly settled spend"
         summary={`${progressAriaLabel}. ${limitState === 'under' ? 'Under the limit.' : limitState === 'at' ? 'At the limit.' : 'Over the limit.'}`}
-        segments={[{ id: 'settled', label: 'Settled spend', value: progressValue }]}
-        limit={100}
-        decimals={1}
+        percentage={progressValue}
         limitState={limitState}
       />}
     </div>

@@ -1,14 +1,14 @@
 "use client";
 
 import { useId, useLayoutEffect, useRef, useState } from "react";
-import type { KeyboardEvent, ReactNode } from "react";
+import type { ComponentPropsWithoutRef, CSSProperties, KeyboardEvent, ReactNode } from "react";
 import { AnimatePresence, animate, motion, useMotionValue, useReducedMotion } from "motion/react";
-import type { HTMLMotionProps, MotionStyle, Transition, Variants } from "motion/react";
+import type { Transition, Variants } from "motion/react";
 import { ChevronDown as NavArrowDown } from "lucide-react";
 import { motionTokens } from "../lib/motion-tokens";
 import styles from "./expandable-card.module.css";
 
-export interface ExpandableCardProps extends Omit<HTMLMotionProps<"article">, "title" | "children" | "onAnimationStart" | "onAnimationEnd" | "onAnimationIteration" | "onDrag" | "onDragStart" | "onDragEnd" | "onDragOver" | "onDragLeave" | "onDragEnter" | "onDragExit" | "onDrop"> {
+export interface ExpandableCardProps extends Omit<ComponentPropsWithoutRef<"article">, "title" | "children" | "onAnimationStart" | "onAnimationEnd" | "onAnimationIteration" | "onDrag" | "onDragStart" | "onDragEnd" | "onDragOver" | "onDragLeave" | "onDragEnter" | "onDragExit" | "onDrop"> {
   title: string;
   description?: string;
   children: ReactNode;
@@ -45,7 +45,7 @@ function RollingText({ text, reduced }: { text: string; reduced: boolean }) {
   return <span className={styles.roll}>
     <span className={styles.srOnly}>{text}</span>
     <span aria-hidden="true"><AnimatePresence mode="popLayout" initial={false}>
-      {text.split(/(\s+)/).map((word, index) => <motion.span key={`${index}:${word}`} className={styles.word} variants={wordMotion} initial={false} animate="center" {...(reduced ? {} : { exit: "exit" })}>{word}</motion.span>)}
+      {text.split(/(\s+)/).map((word, index) => <motion.span key={`${index}:${word}`} className={styles.word} variants={wordMotion} initial={reduced ? false : "enter"} animate="center" exit={reduced ? undefined : "exit"}>{word}</motion.span>)}
     </AnimatePresence></span>
   </span>;
 }
@@ -89,7 +89,7 @@ export function ExpandableCard({ title, description, children, defaultExpanded =
   }, [boxWidth, boxWidthValue]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Caps for the first paint, before the room is measured.
-  const capVars = { "--expandable-card-width": width ? `${width}px` : undefined, "--expandable-card-expanded-width": openCap ? `${openCap}px` : undefined } satisfies MotionStyle & Record<`--${string}`, string | undefined>;
+  const capVars = { "--expandable-card-width": width ? `${width}px` : undefined, "--expandable-card-expanded-width": openCap ? `${openCap}px` : undefined } as CSSProperties;
 
   const toggle = (next: boolean) => {
     const now = performance.now();
@@ -120,7 +120,7 @@ export function ExpandableCard({ title, description, children, defaultExpanded =
       </button>
       {/* The panel stays mounted so a second click mid-animation reverses from where it is; inert keeps closed details out of reach. */}
       <motion.div id={panelId} className={styles.panel} inert={!expanded} initial={false} animate={{ height: expanded ? "auto" : 0 }} transition={reduceMotion ? still : boxTransition(expanded, hold)}>
-        <motion.div className={styles.panelInner} style={innerWidth === undefined ? {} : { width: Math.max(0, innerWidth - 2) }} initial={false} animate={{ opacity: expanded ? 1 : 0 }} transition={reduceMotion ? still : contentTransition(expanded)}>{children}</motion.div>
+        <motion.div className={styles.panelInner} style={innerWidth === undefined ? undefined : { width: innerWidth - 2 }} initial={false} animate={{ opacity: expanded ? 1 : 0 }} transition={reduceMotion ? still : contentTransition(expanded)}>{children}</motion.div>
       </motion.div>
     </motion.article>
   </div>;

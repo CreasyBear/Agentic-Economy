@@ -1,4 +1,3 @@
-/* Arc registry source retrieved 2026-10-04; upstream SHA-256: eb999d768a6c88a881b5605da4ec8c70eae199729598361575bd504f7825a580. */
 "use client";
 
 import { animate, AnimatePresence, motion, useIsPresent, useReducedMotion } from "motion/react";
@@ -50,12 +49,13 @@ function AutoHeight({ children, reduceMotion }: { children: ReactNode; reduceMot
   }, []);
   return <motion.div className={styles.autoHeight} initial={false} animate={{ height }} transition={reduceMotion ? { duration: 0 } : motionTokens.spring.smooth}><div ref={innerRef}>{children}</div></motion.div>;
 }
-
+// arc-patch: Keep exiting popover content inert and hidden from assistive technology.
 function PresentPopover(props: HTMLMotionProps<"div">) {
   const present = useIsPresent();
   return <motion.div {...props} aria-hidden={present ? props["aria-hidden"] : true} inert={present ? props.inert : true} />;
 }
 
+// arc-patch: Keep an exiting clear action out of keyboard and assistive-technology navigation.
 function PresentClearButton(props: HTMLMotionProps<"button">) {
   const present = useIsPresent();
   return <motion.button
@@ -90,6 +90,7 @@ export const Combobox = forwardRef<HTMLInputElement, ComboboxProps>(function Com
   const hintId = description ? `${controlId}-description` : undefined;
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  // arc-patch: Retain listbox refs for all valid string values, including object-prototype keys.
   const optionRefs = useRef(new Map<string, HTMLDivElement | null>());
   const reduceMotion = useReducedMotion();
   const [uncontrolledValue, setUncontrolledValue] = useState(defaultValue);
@@ -187,6 +188,7 @@ export const Combobox = forwardRef<HTMLInputElement, ComboboxProps>(function Com
       }
       if (!enabledIndices.length) return;
       const currentPosition = enabledIndices.indexOf(activeIndex);
+      // arc-patch: ArrowUp from no active option starts at the final enabled option.
       const nextPosition = currentPosition < 0
         ? event.key === "ArrowDown" ? 0 : enabledIndices.length - 1
         : event.key === "ArrowDown"
@@ -204,6 +206,7 @@ export const Combobox = forwardRef<HTMLInputElement, ComboboxProps>(function Com
     }
     if (event.key === "Escape" && open) {
       event.preventDefault();
+      // arc-patch: Keep Escape on the combobox before an enclosing overlay handles it.
       event.stopPropagation();
       setOpen(false);
       setQuery("");

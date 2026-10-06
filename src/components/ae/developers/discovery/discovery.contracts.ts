@@ -1,6 +1,6 @@
 import { getStatusPresentation } from '@/lib/ui/status-presentation'
 
-export type DeveloperDiscoveryBadgeVariant = 'outline' | 'info' | 'success' | 'warning' | 'destructive'
+export type DeveloperDiscoveryBadgeVariant = 'neutral' | 'info' | 'success' | 'warning' | 'danger'
 
 export type DeveloperDiscoveryRow = Readonly<{
   id: string

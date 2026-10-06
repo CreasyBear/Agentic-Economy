@@ -3,13 +3,12 @@ import { createContext, useContext } from 'react'
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
 import { AeToolPrice } from '@/components/ae/market/AeToolPrice'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { Button } from '@/components/arc/button/button'
-import buttonStyles from '@/components/arc/button/button.module.css'
-import { DecisionPanel } from '@/components/arc/chat/DecisionPanel'
-import { ProductListing } from '@/components/arc/market/ProductListing'
-import { ComparisonTable as ArcComparisonTable } from '@/components/arc/market/ComparisonTable'
-import { Badge } from '@/components/ui/badge'
+import { DecisionPanel } from '@/components/ae/shared/arc-pro/chat/DecisionPanel'
+import { ProductListing } from '@/components/ae/shared/arc-pro/market/ProductListing'
+import { AeComparisonTable } from '@/components/ae/shared/comparison-table/AeComparisonTable'
+import { Badge } from '@/components/arc/badge/badge'
 import { Spinner } from '@/components/ui/spinner'
 import { formatUtcTimestamp } from '@/lib/ui/format-time'
 import {
@@ -34,9 +33,10 @@ import type { SearchNextProps, ToolCardProps as ToolCardBaseProps } from './pres
 import type { RunIntent } from '@/modules/chat/run-request'
 import { readChatRecoveryReason } from './recovery/recovery.view-model'
 import type { ChatRecoveryReason } from './recovery/recovery.contracts'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import './ToolResultComposition.css'
 
-const secondaryLink = `${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.sm}`
+const secondaryLink = `${actionLinkClassName('secondary', 'sm')}`
 
 type ToolCardProps = ToolCardBaseProps & Readonly<{
   onAddCredit?: ((shortfall?: { units: string; exponent: number }, run?: RunIntent) => void) | undefined
@@ -144,7 +144,7 @@ function CompareTable({ choices }: { choices: readonly ToolChoiceRow[] }) {
       }]
       : []),
   ]
-  return <ArcComparisonTable
+  return <AeComparisonTable
     title="Tool comparison"
     description="Compare the supplied Tool facts. Inspect a Tool for its full contract."
     columns={columns}
@@ -201,9 +201,9 @@ function cardBody(projection: ToolCardProjection, onAddCredit?: ToolCardProps['o
       return null
     case 'status': {
       if (projection.state === 'attention') {
-        return <Alert><AlertDescription>{projection.summary}
+        return <AeAlert tone="info" role="alert" title={projection.summary}>
           {projection.planRef === undefined ? null : <Link to="/plans/$planRef" params={{ planRef: projection.planRef }} className="mt-2 block underline">Review Plan</Link>}
-        </AlertDescription></Alert>
+        </AeAlert>
       }
       const funding = projection.funding
       const reason = safeRecoveryReason(projection.recoveryReason, 'tool_unavailable')
@@ -237,14 +237,11 @@ function cardBody(projection: ToolCardProjection, onAddCredit?: ToolCardProps['o
                 ? {} : { onAddCredit: () => onAddCredit() })}
             />
           ) : (
-            <Alert variant="default">
-              <AlertTitle>{executeStateTitle(projection.state)}</AlertTitle>
-              <AlertDescription>{projection.summary}</AlertDescription>
-            </Alert>
+            <AeAlert role="alert" tone="info" title={executeStateTitle(projection.state)}>{projection.summary}</AeAlert>
           )}
           {projection.state === 'completed' && projection.paid !== undefined && projection.callRef !== undefined && reportOwner != null
             ? <PaidCallReportControl key={projection.callRef} callRef={projection.callRef} paidLabel={projection.paid} onPosted={reportOwner.onPosted} />
-            : projection.paid === undefined ? null : <Badge variant="secondary">{projection.paid}</Badge>}
+            : projection.paid === undefined ? null : <Badge tone="neutral">{projection.paid}</Badge>}
           {projection.state === 'completed' && projection.callRef !== undefined && reportOwner != null
             ? <CallFeedbackControl key={projection.callRef} callRef={projection.callRef} /> : null}
         </div>
@@ -290,7 +287,7 @@ const STATUS_VARIANT = {
   pending: 'info',
   attention: 'warning',
   refused: 'warning',
-  error: 'destructive',
+  error: 'danger',
 } as const
 
 /** Requires: a current typed Tool projection; actions and reporting callbacks are caller-owned.
@@ -314,7 +311,7 @@ export function ToolCard({ projection, onContinueSearch, onRepeatSearch, signedT
     <DecisionPanel data-tool-card={projection.toolId} className="arc-tool-result">
       <header className="arc-tool-result-header">
         <h3>{projection.title}</h3>
-        <Badge variant={STATUS_VARIANT[state]}>{chatToolStatus[state]}</Badge>
+        <Badge tone={STATUS_VARIANT[state]}>{chatToolStatus[state]}</Badge>
       </header>
       <div className="arc-tool-result-body">
         {cardBody(projection, onAddCredit, reportOwner)}

@@ -1,12 +1,11 @@
 'use client'
 
-import { AlertCircleIcon, CheckIcon, ShieldAlertIcon } from 'lucide-react'
+import { CheckIcon, ShieldAlertIcon } from 'lucide-react'
 
 import { SpendingLimitInputs } from '@/components/ae/shared/SpendingLimitInputs'
 import { Button } from '@/components/arc/button/button'
-import buttonStyles from '@/components/arc/button/button.module.css'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
+import { Badge } from '@/components/arc/badge/badge'
 import type { AgentDetail } from '@/modules/agent-access/agent-operator-view-model'
 import type {
   AgentSpendingLimitsReadResult,
@@ -21,6 +20,7 @@ import { SpendingPauseToggle } from './components/SpendingPauseToggle'
 import { SpendingPolicyDiagnosticSlot } from './components/SpendingPolicyDiagnosticSlot'
 import { SpendingPresetSelector } from './components/SpendingPresetSelector'
 import { useAgentSpendingLimits } from './useAgentSpendingLimits'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import './SpendingPolicyComposition.css'
 
 export type AeAgentSpendingLimitsFormProps = Readonly<{
@@ -53,19 +53,19 @@ export function AeAgentSpendingLimitsForm({
         <div className="arc-spending-policy-heading">
           <span className="arc-spending-policy-title">Spending policy</span>
           {loading ? (
-            <Badge variant="outline">Refreshing</Badge>
+            <Badge tone="neutral">Refreshing</Badge>
           ) : policy.kind === 'known' && view.isPaused ? (
-            <Badge variant="warning" className="gap-1">
+            <Badge tone="warning" className="gap-1">
               <ShieldAlertIcon className="size-3" />
               {getStatusPresentation('paused').label}
             </Badge>
           ) : policy.kind === 'known' ? (
-            <Badge variant="success" className="gap-1">
+            <Badge tone="success" className="gap-1">
               <CheckIcon className="size-3" />
               {getStatusPresentation('active').label}
             </Badge>
           ) : (
-            <Badge variant="outline">{policy.kind === 'expired' ? getStatusPresentation('expired').label : policy.kind === 'unset' ? 'Unset' : getStatusPresentation('unavailable').label}</Badge>
+            <Badge tone="neutral">{policy.kind === 'expired' ? getStatusPresentation('expired').label : policy.kind === 'unset' ? 'Unset' : getStatusPresentation('unavailable').label}</Badge>
           )}
         </div>
         <div className="arc-spending-policy-header-actions">
@@ -95,7 +95,7 @@ export function AeAgentSpendingLimitsForm({
       ) : policy.kind === 'expired' ? (
         <div className="arc-spending-policy-renewal" role="status">
           <span className="arc-spending-policy-hint">Agent authority expired. Renew the connection to set new spending limits.</span>
-          <a href="/agent-access" className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md} arc-spending-policy-renew`}>Renew connection</a>
+          <a href="/agent-access" className={`${actionLinkClassName('secondary', 'md')} arc-spending-policy-renew`}>Renew connection</a>
         </div>
       ) : policy.kind === 'unset' ? (
         <p className="arc-spending-policy-hint">No spending policy set.</p>
@@ -109,14 +109,9 @@ export function AeAgentSpendingLimitsForm({
         <>
           <div className="arc-spending-policy-pause-notice">
             {view.isPaused ? (
-              <Alert className="border-warning-ring bg-warning-subtle py-2 text-warning-foreground">
-                <AlertCircleIcon className="size-4" />
-                <AlertDescription className="arc-spending-policy-hint">
-                  This agent is paused. New paid Calls will be refused. In-flight Calls are not cancelled.
-                  {' '}
-                  A$0.00 new spend authorized until you resume.
-                </AlertDescription>
-              </Alert>
+              <AeAlert tone="warning" role="alert" title="This agent is paused.">
+                <span className="arc-spending-policy-hint">New paid Calls will be refused. In-flight Calls are not cancelled. A$0.00 new spend authorized until you resume.</span>
+              </AeAlert>
             ) : null}
           </div>
 

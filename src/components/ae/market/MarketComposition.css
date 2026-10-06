@@ -4,8 +4,6 @@
 .arc-market-navigation { padding: 14px 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
 .arc-comparison-tray { margin-top: var(--space-8); display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--border-strong); border-radius: var(--radius-panel); background: var(--surface); }
 .arc-comparison-tray > span:first-child { font-variant-numeric: tabular-nums; font-size: var(--text-sm); color: var(--accent-strong); }
-.arc-comparison-tray [data-slot="badge"] { max-width: min(100%, 310px); height: auto; min-height: 44px; padding: 0 0 0 var(--space-3); overflow-wrap: anywhere; white-space: normal; }
-.arc-comparison-tray [data-slot="badge"] button { flex-shrink: 0; padding-inline: 10px; }
 .arc-market-page button svg { max-width: 20px; max-height: 20px; }
 .arc-comparison-dialog { border-radius: var(--radius-panel); background: var(--background); border-color: var(--border); }
 .arc-market-page a[class*="inline-flex"][class*="rounded"] { min-height: 44px; border-radius: var(--radius-control); font-weight: 500; }

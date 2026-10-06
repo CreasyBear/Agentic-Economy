@@ -3,8 +3,8 @@ import { useEffect, useRef, useState } from 'react'
 import { FileCode2Icon } from 'lucide-react'
 
 import { Button } from '@/components/arc/button/button'
-import { Drawer, DrawerContent, DrawerTrigger } from '@/components/arc/drawer/Drawer'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/arc/tabs/Tabs'
+import { Drawer, DrawerContent, DrawerTrigger } from '@/components/ae/shared/base-ui/drawer/drawer'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ae/shared/base-ui/tabs/tabs'
 import type { PublicToolDescriptor } from '@/modules/capability-supply/public'
 import {
   type MarketListingEvidenceProjection,

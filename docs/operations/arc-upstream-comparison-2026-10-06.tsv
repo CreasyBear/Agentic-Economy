@@ -1,0 +1,34 @@
+id	status	local_reference	upstream	difference
+accordion	ADAPTED-LOCALLY	src/components/arc/accordion/accordion.tsx:1	https://uiarc.dev/r/accordion.json	Closed panel made inert and focus-visible outline added.
+alert	ADAPTED-LOCALLY	src/components/arc/alert/alert.tsx:1	https://uiarc.dev/r/alert.json	Optional-property typing, observer guard, caller role, focus style.
+arc-foundation	ADAPTED-LOCALLY	src/components/arc/motion-tokens.ts:1	https://uiarc.dev/r/arc-foundation.json	Tokens scoped to .arc-market/dark; motion-token files add provenance.
+badge	ADAPTED-LOCALLY	src/components/arc/badge/badge.module.css:1	https://uiarc.dev/r/badge.json	Observer guard; local OKLCH color mixing.
+button	ADAPTED-LOCALLY	src/components/arc/button/button.module.css:1	https://uiarc.dev/r/button.json	AE label layout, narrow wrapping, focus and typed Motion props; upstream CSS hash changed.
+checkbox	ADAPTED-LOCALLY	src/components/arc/checkbox/checkbox.module.css:1	https://uiarc.dev/r/checkbox.json	Base UI replaces Radix; AE union states, merged descriptions and touch geometry.
+chip-group	ADAPTED-LOCALLY	src/components/arc/chip-group/chip-group.module.css:1	https://uiarc.dev/r/chip-group.json	Lifecycle/prop handling, long labels, focus and touch geometry.
+combobox	ADAPTED-LOCALLY	src/components/arc/combobox/combobox.module.css:1	https://uiarc.dev/r/combobox.json	Popover exit lifecycle, typing and clear-button touch sizing.
+comparison-table	ADAPTED-LOCALLY	src/components/arc/market/ComparisonTable.tsx:1	https://uiarc.dev/r/comparison-table.json	Market matrix shortened to authorized Tool facts; upstream sample data omitted.
+copy-button	ADAPTED-LOCALLY	src/components/arc/copy-button/copy-button.module.css:1	https://uiarc.dev/r/copy-button.json	Local span lacks upstream layoutRoot motion wrapper added 2026-10-03.
+donut-chart	ADAPTED-LOCALLY	src/components/arc/donut-chart/donut-chart.module.css:1	https://uiarc.dev/r/donut-chart.json	AE chart/legend styling and behavior; upstream now animates joining/leaving rows.
+drawer	ADAPTED-LOCALLY	src/components/arc/drawer/Drawer.tsx:1	https://uiarc.dev/r/drawer.json	Base UI adaptation replaces Radix; overlay and drawer geometry changed.
+empty-state	ADAPTED-LOCALLY	src/components/arc/empty-state/empty-state.tsx:1	https://uiarc.dev/r/empty-state.json	ResizeObserver entry guard for strict typing.
+empty-states	ADAPTED-LOCALLY	src/components/arc/empty-states/empty-states-art.ts:1	https://uiarc.dev/r/empty-states.json	Only static inbox SVG projection remains; full block not installed.
+expandable-card	ADAPTED-LOCALLY	src/components/arc/expandable-card/expandable-card.tsx:1	https://uiarc.dev/r/expandable-card.json	Motion prop typing and card size/word rendering.
+faq-section	ADAPTED-LOCALLY	src/components/arc/blocks/faq-section/faq-section.tsx:1	https://uiarc.dev/r/faq-section.json	Heading/ID/continuation ports and keyboard/touch affordances.
+filter-toolbar	ADAPTED-LOCALLY	src/components/arc/filter-toolbar/filter-toolbar.module.css:1	https://uiarc.dev/r/filter-toolbar.json	Optional typing, action handling and keyboard/touch layout.
+hero-section	ADAPTED-LOCALLY	src/components/arc/blocks/hero-section/hero-content.module.css:1	https://uiarc.dev/r/hero-section.json	Content/action ports retained; hero shell and ten variant/support files absent.
+input	ADAPTED-LOCALLY	src/components/arc/input/input.tsx:1	https://uiarc.dev/r/input.json	External-label port, strict typing and number parsing.
+line-chart	ADAPTED-LOCALLY	src/components/arc/line-chart/line-chart.tsx:1	https://uiarc.dev/r/line-chart.json	Exact formatted value and integer tick support; local palette/styling.
+page-header	ADAPTED-LOCALLY	src/components/arc/blocks/page-header/page-header.module.css:1	https://uiarc.dev/r/page-header.json	Full upstream shell replaced by lean record heading/breadcrumb.
+radio-cards	ADAPTED-LOCALLY	src/components/arc/radio-cards/radio-cards.tsx:1	https://uiarc.dev/r/radio-cards.json	Indexed option safety and readonly measured tuple.
+search-field	ADAPTED-LOCALLY	src/components/arc/search-field/search-field.module.css:1	https://uiarc.dev/r/search-field.json	Clear button/accessibility and focus shell locally reworked.
+segmented-control	ADAPTED-LOCALLY	src/components/arc/segmented-control/segmented-control.module.css:1	https://uiarc.dev/r/segmented-control.json	Selection scrolling, control size and keyboard focus.
+select	ADAPTED-LOCALLY	src/components/arc/select/select.module.css:1	https://uiarc.dev/r/select.json	Base UI instead of Radix; popup/keyboard CSS reworked.
+site-footer	ADAPTED-LOCALLY	src/components/arc/blocks/site-footer/site-footer.tsx:1	https://uiarc.dev/r/site-footer.json	AE router/copyright/leading content ports; responsive columns.
+skeleton	ADAPTED-LOCALLY	src/components/arc/skeleton/skeleton.module.css:1	https://uiarc.dev/r/skeleton.json	Optional typing, observer guard and source provenance.
+slot-text	ADAPTED-LOCALLY	src/components/arc/slot-text/slot-text.tsx:1	https://uiarc.dev/r/slot-text.json	Indexed reel character fallback/strict access.
+sortable-data-table	ADAPTED-LOCALLY	src/components/arc/sortable-data-table/sortable-data-table.module.css:1	https://uiarc.dev/r/sortable-data-table.json	AE exact sort/headers plus sticky columns and touch sizing.
+stepper	ADAPTED-LOCALLY	src/components/arc/stepper/stepper.module.css:1	https://uiarc.dev/r/stepper.json	Caller-owned exact status and accessible labels; local touch/OKLCH styles.
+tabs	ADAPTED-LOCALLY	src/components/arc/tabs/tabs.module.css:1	https://uiarc.dev/r/tabs.json	Base UI in place of Radix, memoized state and label geometry.
+textarea	ADAPTED-LOCALLY	src/components/arc/textarea/textarea.module.css:1	https://uiarc.dev/r/textarea.json	External label and optional typing; numeric parsing.
+usage-meter	ADAPTED-LOCALLY	src/components/arc/usage-meter/usage-meter.tsx:1	https://uiarc.dev/r/usage-meter.json	Caller-owned limit state and compact presentation.

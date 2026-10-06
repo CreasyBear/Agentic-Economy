@@ -7,7 +7,7 @@ import { ToolPanelActions } from './components/ToolPanelActions'
 import { ToolPanelForm } from './components/ToolPanelForm'
 import { ToolPanelHeader } from './components/ToolPanelHeader'
 import { ToolPanelSkeleton } from './ToolPanelSkeleton'
-import { DecisionPanel } from '@/components/arc/chat/DecisionPanel'
+import { DecisionPanel } from '@/components/ae/shared/arc-pro/chat/DecisionPanel'
 
 export function ToolPanel(props: ToolPanelProps) {
   const { view, setInputText, run, runAgain } = useToolPanel(props)

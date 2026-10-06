@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router'
-import { BillingHistory } from '@/components/arc/blocks/billing-overview/billing-overview'
-import { MetricsSummary } from '@/components/arc/blocks/metrics-dashboard/metrics-dashboard'
+import { BillingHistory } from '@/components/ae/shared/arc-pro/billing-overview/billing-overview'
+import { MetricsSummary } from '@/components/ae/shared/arc-pro/metrics-dashboard/metrics-dashboard'
 import { monthlyDraftPeriod, type MonthlyDraftSnapshot } from '@/modules/capability-execution/monthly-usage-draft'
 import { summarizeProviderUnits, providerUnitLabel, providerUnitQuantity, validProviderObservation } from '@/modules/capability-execution/provider-service-units'
 import type { ActivityReturnScope } from '@/lib/call-recovery/activity-return-scope'

@@ -1,9 +1,6 @@
 'use client'
 
-/* Arc sortable-data-table authored table, sort tint and mobile fold.
- * Upstream TSX SHA-256 6115bc78d39abb4a3494e94f31259c93535b53fd5ebd1936c4cda2a95bb17241.
- * Requires stable caller rows/IDs and controlled selection/sort/filter contracts.
- * Ensures native table semantics and unchanged TanStack/RovingFocus callbacks.
+/* AE-owned table renderer preserves stable row IDs, TanStack sorting and selection, and operator action focus.
  * Invariant: filtered-empty recovery never changes sorting, row identity or authority.
  * On violation: existing loading, empty and non-selectable states remain explicit. */
 
@@ -27,11 +24,12 @@ import { type ReactElement, type ReactNode, useCallback, useEffect, useMemo, use
 
 import { AeViewBar } from '@/components/ae/data/AeViewBar'
 import { Button } from '@/components/arc/button/button'
-import buttonStyles from '@/components/arc/button/button.module.css'
-import { SortableDataTable, SortableDataTableHeader, type DataColumn } from '@/components/arc/sortable-data-table/sortable-data-table'
+import { AeSortableDataTable, AeSortableDataTableHeader } from '@/components/ae/shared/sortable-data-table/AeSortableDataTable'
+import type { AeDataColumn } from '@/components/ae/shared/sortable-data-table/sortable-data-table.contracts'
 import './RecordTable.css'
-import { Checkbox } from '@/components/arc/checkbox/checkbox'
+import { Checkbox } from '@/components/ae/shared/base-ui/checkbox/checkbox'
 import { useFirstLoadPending } from '@/components/ui/data-state'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 
 
 export type AeRecordTableSelection<TData> = Readonly<{
@@ -248,12 +246,12 @@ export function AeRecordTable<TData>({
     return () => window.cancelAnimationFrame(frame)
   }, [rowActionFocus?.currentId, rowActionFocus?.restore, visibleRowKey])
 
-  // The existing engine owns filtering, exact comparators and guarded selection.
-  // Arc owns the complete table hierarchy; only typed cells/header callbacks cross.
-  type ArcRecordRow = { id: string; record: Row<TData> }
-  const arcRows: ArcRecordRow[] = visibleRows.map(record => ({ id: record.id, record }))
+  // TanStack owns filtering, exact comparators and guarded selection.
+  // The shared AE renderer owns the table hierarchy and receives typed cell/header projections.
+  type OperatorTableRow = { id: string; record: Row<TData> }
+  const tableRows: OperatorTableRow[] = visibleRows.map(record => ({ id: record.id, record }))
   const leafHeaders = table.getFlatHeaders().filter(header => header.subHeaders.length === 0)
-  const arcColumns: DataColumn<ArcRecordRow>[] = leafColumns.map(column => {
+  const tableColumns: AeDataColumn<OperatorTableRow>[] = leafColumns.map(column => {
     const header = leafHeaders.find(item => item.column.id === column.id)
     const meta = column.columnDef.meta as { label?: string; numeric?: boolean; truncate?: boolean } | undefined
     const values = visibleRows.map(row => row.getValue(column.id))
@@ -295,9 +293,9 @@ export function AeRecordTable<TData>({
         />
       ) : null}
       <div className="min-w-0">
-        <SortableDataTable
-          rows={arcRows}
-          columns={arcColumns}
+        <AeSortableDataTable
+          rows={tableRows}
+          columns={tableColumns}
           rowKey="id"
           caption={caption}
           manualSorting
@@ -354,7 +352,7 @@ function RecordTableAction<TData>({
         to={action.getHref(row.original)}
         aria-label={accessibleLabel}
         data-ae-row-action-id={row.id}
-        className={`${buttonStyles.button} ${buttonStyles.ghost} ${buttonStyles.sm} arc-record-action`}
+        className={`${actionLinkClassName('ghost', 'sm')} arc-record-action`}
       >
         {label}
       </Link>
@@ -393,7 +391,6 @@ function SelectionCheckbox({
   return (
     <div className="arc-record-selection-hit">
       <Checkbox
-        compact
         checked={checked}
         disabled={disabled}
         onCheckedChange={(value) => onCheckedChange(value === true)}
@@ -464,5 +461,5 @@ export function AeOperatorSortableHeader({
   label: string
   column: { toggleSorting: (desc?: boolean) => void; getIsSorted: () => false | 'asc' | 'desc' }
 }) {
-  return <SortableDataTableHeader label={label} direction={column.getIsSorted()} onSort={() => column.toggleSorting(column.getIsSorted() === 'asc')} />
+  return <AeSortableDataTableHeader label={label} direction={column.getIsSorted()} onSort={() => column.toggleSorting(column.getIsSorted() === 'asc')} />
 }

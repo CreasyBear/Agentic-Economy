@@ -1,4 +1,3 @@
-/* Actual Arc source retrieved 2026-10-03. SHA-256: 962feea51f6aa61b373acaabe0227f6237e470770ca03dd1f1d022d5f7c9d8d1 */
 "use client";
 
 import { useState } from "react";
@@ -62,14 +61,18 @@ function useGlyphs(text: string) {
   return glyphs;
 }
 
-/** The label cell already reserves its widest state, so the row stays put and only the letters move. */
+/**
+ * The label cell already reserves its widest state, so the row stays put and only the letters move. It is a layout root:
+ * the letters measure their glide inside the label only, so when the button itself moves (a page entering, a panel
+ * sliding, a list reflowing) they ride along instead of flying in from where the button used to be.
+ */
 function MorphText({ text, reduced }: { text: string; reduced: boolean }) {
   const glyphs = useGlyphs(text);
-  return <span className={styles.glyphs}>
+  return <motion.span className={styles.glyphs} layoutRoot>
     <AnimatePresence mode="popLayout" initial={false}>
       {glyphs.map(glyph => <motion.span key={glyph.id} className={styles.glyph} layout={reduced ? false : "position"} layoutDependency={text} initial={reduced ? fadeIn : glyphIn} animate={rest} exit={reduced ? fadeOut : glyphOut} transition={reduced ? instant : { ...enter, delay: Math.min(glyph.order * .02, .12), layout: settle }}>{glyph.char}</motion.span>)}
     </AnimatePresence>
-  </span>;
+  </motion.span>;
 }
 
 export function CopyButton({ value, label = "Copy", className, iconOnly = false, variant = "outline", disabled, onCopied }: CopyButtonProps) {

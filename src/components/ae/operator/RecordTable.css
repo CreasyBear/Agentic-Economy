@@ -1,8 +1,8 @@
-/* AE controls and viewbar refinements around Arc's shared table presentation. */
+/* AE controls and viewbar refinements around the shared record table. */
 .arc-record-root { display: grid; min-width: 0; gap: var(--space-4); }
 
 .arc-record-action { min-height: 32px; max-width: 100%; }
-.arc-record-selection-hit { display: flex; width: 32px; height: 32px; min-width: 32px; min-height: 32px; align-items: center; justify-content: center; }
+.arc-record-selection-hit { display: flex; width: 44px; height: 44px; min-width: 44px; min-height: 44px; align-items: center; justify-content: center; }
 
 .arc-record-footer { min-height: 44px; padding: var(--space-3) var(--space-4); border-top: 1px solid var(--border); color: var(--text-secondary); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
 .arc-record-viewbar { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-4); padding: var(--space-3) var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--surface); }
@@ -11,11 +11,9 @@
 
 @media (max-width: 620px) {
   .arc-record-action { min-height: 44px; }
-  .arc-record-selection-hit { width: 44px; height: 44px; min-width: 44px; min-height: 44px; }
   .arc-record-viewbar { gap: var(--space-3); padding: var(--space-3); }
 }
 
 @media (pointer: coarse), (hover: none) {
   .arc-record-action { min-height: 44px; }
-  .arc-record-selection-hit { width: 44px; height: 44px; min-width: 44px; min-height: 44px; }
 }

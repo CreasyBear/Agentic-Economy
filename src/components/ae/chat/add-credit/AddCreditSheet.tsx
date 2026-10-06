@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 
-import { Drawer, DrawerContent } from '@/components/arc/drawer/Drawer'
+import { Drawer, DrawerContent } from '@/components/ae/shared/base-ui/drawer/drawer'
 import type { AddCreditSheetProps } from './add-credit.contracts'
 import { suggestedAddCreditAmount } from './add-credit.contracts'
 import { AddCreditPanel } from './components/AddCreditPanel'

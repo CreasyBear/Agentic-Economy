@@ -1,13 +1,13 @@
 import { Link } from '@tanstack/react-router'
 
-import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
+import { AeEmptyState } from '@/components/ae/shared/empty-state/AeEmptyState'
 import { ProviderNameEditor } from '@/components/ae/settings/ProviderNameEditor'
 import { SettingsGroup, SettingsRow } from '@/components/ae/settings/settings-shell/components/SettingsSections'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import type { RenameProviderDisplayNameResult } from '@/lib/server/owner-workspace.functions'
-import buttonStyles from '@/components/arc/button/button.module.css'
 import type { PublicOwnerStatusRouteReadbackResult } from '@/modules/catalog/public'
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 
 export function AeWorkspaceGeneral({
   result,
@@ -45,7 +45,7 @@ export function AeWorkspaceGeneral({
         action={
           <Link
             to="/for-providers"
-            className={`arc-market ${buttonStyles.button} ${buttonStyles.primary} ${buttonStyles.md}`}
+            className={`arc-market ${actionLinkClassName('primary', 'md')}`}
           >
             Review Provider setup
           </Link>
@@ -56,19 +56,16 @@ export function AeWorkspaceGeneral({
 
   if (result.kind === 'unavailable') {
     return (
-        <Alert variant="destructive" className="arc-market">
-        <AlertTitle>Provider identity is unavailable</AlertTitle>
-        <AlertDescription className="flex flex-wrap items-center gap-3">
+        <AeAlert tone="danger" title="Provider identity is unavailable" className="arc-market"><div className="flex flex-wrap items-center gap-3">
           <span>Try again in a moment. If this keeps happening, open Help.</span>
           <Link
             to="/owner/operations"
             hash="provider-identity"
-            className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}
+            className={actionLinkClassName('secondary', 'md')}
           >
             Try again
           </Link>
-        </AlertDescription>
-      </Alert>
+        </div></AeAlert>
     )
   }
 

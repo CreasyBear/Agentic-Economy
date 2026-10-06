@@ -1,7 +1,7 @@
 import { useId } from 'react'
 import { AeFactList } from '@/components/ae/data/AeFactList'
-import { Button } from '@/components/arc/button/button'
-import { DecisionPanel } from '@/components/arc/chat/DecisionPanel'
+import { AeActionLink } from '@/components/ae/shared/action-link/AeActionLink'
+import { DecisionPanel } from '@/components/ae/shared/arc-pro/chat/DecisionPanel'
 import { formatUtcTimestamp } from '@/lib/ui/format-time'
 import { formatCurrencyAmount, formatDisplayAmount } from '@/modules/money/public'
 import type { QuoteConfirmationView } from './object-family.contracts'
@@ -43,11 +43,11 @@ export function QuoteConfirmation({ view, onApprove, onDeny, onFreshQuote }: Quo
       </div>
       <div className="arc-decision-actions">
         {view.expired || priceUnavailable ? (
-          <Button type="button" labelLayout="wrap" onClick={onFreshQuote}>Get a fresh Quote</Button>
+          <AeActionLink type="button" labelLayout="wrap" onAction={onFreshQuote}>Get a fresh Quote</AeActionLink>
         ) : (
-          <Button type="button" labelLayout="wrap" disabled={view.pending} onClick={() => onApprove(view.callRef)}>Approve this Call</Button>
+          <AeActionLink type="button" labelLayout="wrap" disabled={view.pending} onAction={() => onApprove(view.callRef)}>Approve this Call</AeActionLink>
         )}
-        <Button type="button" variant="secondary" labelLayout="wrap" disabled={view.pending} onClick={() => onDeny(view.callRef)}>Not now</Button>
+        <AeActionLink type="button" variant="secondary" labelLayout="wrap" disabled={view.pending} onAction={() => onDeny(view.callRef)}>Not now</AeActionLink>
       </div>
     </DecisionPanel>
   )

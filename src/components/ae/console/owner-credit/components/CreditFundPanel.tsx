@@ -1,9 +1,9 @@
 import { Link } from '@tanstack/react-router'
 import { AeAccountFundingPanel } from '@/components/ae/console/AeCreditTopUpPanel'
-import { BillingOverview } from '@/components/arc/blocks/billing-overview/billing-overview'
+import { BillingOverview } from '@/components/ae/shared/arc-pro/billing-overview/billing-overview'
 import { Button } from '@/components/arc/button/button'
 import { Skeleton } from '@/components/arc/skeleton/skeleton'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { formatDisplayAmount } from '@/modules/money/public'
 
 import type { AeOwnerCreditProps } from '../owner-credit.contracts'
@@ -69,17 +69,14 @@ export function CreditFundPanel({
               <Skeleton lines={3} />
             </div>
           ) : balanceUnavailable ? (
-            <Alert>
-              <AlertTitle>Credit unavailable</AlertTitle>
-              <AlertDescription className="arc-credit-alert__description">
+            <AeAlert role="alert" tone="info" title="Credit unavailable"><div className="arc-credit-alert__description">
                 <span>No balance is being inferred. Refresh to read the authoritative Account balance.</span>
                 {onCreditRefresh === undefined ? null : (
                   <Button type="button" variant="secondary" disabled={balanceLoading} onClick={() => { void onCreditRefresh() }}>
                     {balanceLoading ? 'Refreshing…' : 'Refresh balance'}
                   </Button>
                 )}
-              </AlertDescription>
-            </Alert>
+              </div></AeAlert>
           ) : (
           <>
             {balance === undefined ? <p>Checking…</p> : null}
@@ -106,17 +103,14 @@ export function CreditFundPanel({
                 : 'Available for admitted paid Calls. Agent spending policies still apply.'}
             </p>
             {balanceRefreshUnavailable ? (
-              <Alert className="arc-credit-balance__refresh-alert">
-                <AlertTitle>Balance could not be refreshed</AlertTitle>
-                <AlertDescription className="arc-credit-alert__description">
+              <AeAlert role="alert" tone="info" title="Balance could not be refreshed" className="arc-credit-balance__refresh-alert"><div className="arc-credit-alert__description">
                   <span>The last authoritative balance remains visible; it has not been replaced with an inferred amount.</span>
                   {onCreditRefresh === undefined ? null : (
                     <Button type="button" variant="secondary" disabled={balanceLoading} onClick={() => { void onCreditRefresh() }}>
                       {balanceLoading ? 'Refreshing…' : 'Try balance again'}
                     </Button>
                   )}
-                </AlertDescription>
-              </Alert>
+                </div></AeAlert>
             ) : null}
           </>
         ),

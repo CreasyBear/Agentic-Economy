@@ -1,4 +1,5 @@
-import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field'
+import { Field, FieldDescription, FieldLabel } from '@/components/ui/field'
+import { Textarea } from '@/components/arc/textarea/textarea'
 import './SupplyPublicationComposition.css'
 
 export type TextFieldProps = Readonly<{
@@ -59,5 +60,18 @@ export function TextAreaField({
   disabled = false,
   onChange,
 }: TextAreaFieldProps) {
-  return <Field className="arc-market arc-publication-field"><FieldLabel htmlFor={id}>{label}</FieldLabel><textarea className="arc-publication-textarea" id={id} rows={6} value={value} disabled={disabled} onChange={(event) => onChange(event.currentTarget.value)} /><FieldDescription>{description}</FieldDescription><FieldError /></Field>
+  return (
+    <div className="arc-market">
+      <Textarea
+        id={id}
+        label={label}
+        description={description}
+        rows={6}
+        className="arc-publication-textarea"
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.currentTarget.value)}
+      />
+    </div>
+  )
 }

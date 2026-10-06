@@ -12,9 +12,9 @@ import { Skeleton as ArcSkeleton } from '@/components/arc/skeleton/skeleton'
 import type {
   ProviderWorkspaceIdentityDetailResult, ProviderWorkspacePublicStatusResult,
 } from '@/components/ae/offerings/provider-workspace.functions'
-import buttonStyles from '@/components/arc/button/button.module.css'
 import { renameProviderDisplayNameServer } from '@/lib/server/owner-workspace.functions'
 import type { WorkspaceOrganizationBinding } from '@/lib/server/workspace-profile.functions'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 
 const readWorkspaceOrganizationBinding = makeFunctionReference<
   'query', Record<string, never>, WorkspaceOrganizationBinding
@@ -36,7 +36,7 @@ export function WorkspaceProfileSettings({ identity, status, defaultName }: Work
   const publicPath = catalog?.slug ?? provider?.slug
 
   return <SettingsPage title="Business profile" description="Manage the workspace name your team sees."
-    action={provider ? <Link to="/owner/operations" className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}>View Tools</Link> : undefined}>
+    action={provider ? <Link to="/owner/operations" className={actionLinkClassName('secondary', 'md')}>View Tools</Link> : undefined}>
     <SettingsGroup title="Workspace" description="The name used for your team and receipts; distinct from your public provider name.">
       <SettingsRow label="Workspace name" description="The name members see when working in this workspace.">
         {workspace === undefined ? <div role="status" aria-busy="true" aria-label="Loading workspace name" className="h-10 w-64 max-w-full"><div aria-hidden="true"><ArcSkeleton lines={1} /></div></div>
@@ -72,7 +72,7 @@ export function WorkspaceProfileSettings({ identity, status, defaultName }: Work
         </> : null}
       </> : <SettingsEmptyState title="Provider profile unavailable"
         description="Try again in a moment; your workspace details remain available."
-        action={<Link to="/owner/operations" className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}>Open Tools</Link>} />}
+        action={<Link to="/owner/operations" className={actionLinkClassName('secondary', 'md')}>Open Tools</Link>} />}
     </SettingsGroup>}
     <SettingsDangerZone description="Closing a workspace or transferring ownership affects every member and Tool.">
       <WorkspaceDangerZone />

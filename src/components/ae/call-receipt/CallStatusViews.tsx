@@ -3,8 +3,9 @@ import type { ReactNode } from 'react'
 
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeSection } from '@/components/ae/layout/AeSection'
-import { Badge } from '@/components/ui/badge'
+import { Badge } from '@/components/arc/badge/badge'
 import { Button } from '@/components/arc/button/button'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ae/shared/base-ui/tabs/tabs'
 import { projectCallReceipt, type CallReceiptView } from '@/modules/capability-execution/call-receipt-view'
 
 import type {
@@ -73,7 +74,7 @@ export function CallStatusUnchangedView({
         aria-labelledby="unchanged-receipt-title"
       >
         <div className="flex flex-wrap items-start justify-between gap-intra">
-          <Badge variant="secondary" className="w-fit">No status change</Badge>
+          <Badge tone="neutral" className="w-fit">No status change</Badge>
           <CallReceiptRef value={result.callRef} />
         </div>
         <div className="grid gap-intra">
@@ -112,14 +113,23 @@ export function CallStatusFoundView({
   return (
     <CallReceiptWorkspace {...(returnScope === undefined ? {} : { returnScope })} callRef={result.callRef} {...(receiptTitle === undefined ? {} : { title: receiptTitle })} description={receiptView.issue?.whatHappened ?? receiptView.statusDetail}>
       <CallSummarySection result={result} receiptView={receiptView} />
+      <CallRecoveryPanel result={result} {...(actions === undefined ? {} : { actions })} />
+      {result.result?.kind !== 'completed' ? <CallRequestSection input={result.previousInput} />
+        : result.previousInput === undefined ? <CallOutputSection result={result.result} /> : (
+          <Tabs defaultValue="result" className="arc-receipt-detail-tabs">
+            <TabsList aria-label="Call detail">
+              <TabsTrigger value="result">Result</TabsTrigger>
+              <TabsTrigger value="request">Request</TabsTrigger>
+            </TabsList>
+            <TabsContent value="result"><CallOutputSection result={result.result} /></TabsContent>
+            <TabsContent value="request"><CallRequestSection input={result.previousInput} /></TabsContent>
+          </Tabs>
+        )}
       {result.ownerContext != null && result.result?.kind === 'completed'
         && (receiptView.receipt?.state === 'settled' || receiptView.receipt?.state === 'refunded'
           || receiptView.usage?.chargeState === 'paid' || receiptView.usage?.chargeState === 'refunded')
         ? <PaidCallReportControl key={result.callRef} callRef={result.callRef}
             {...(actions?.onRefresh === undefined ? {} : { onPosted: actions.onRefresh })} /> : null}
-      <CallRecoveryPanel result={result} {...(actions === undefined ? {} : { actions })} />
-      <CallRequestSection input={result.previousInput} />
-      {result.result === undefined ? null : <CallOutputSection result={result.result} />}
       {result.ownerContext != null && result.result?.kind === 'completed'
         ? <CallFeedbackControl key={result.callRef} callRef={result.callRef} /> : null}
       {receiptView.complete ? (
@@ -208,7 +218,7 @@ function CallReceiptBarrierHeader({
   return (
     <>
       <div className="arc-market arc-call-barrier">
-        <Badge variant="warning" className="w-fit">{badgeLabel}</Badge>
+        <Badge tone="warning" className="w-fit">{badgeLabel}</Badge>
         <CallReceiptRef value={callRef} />
         {showRefresh && actions !== undefined ? (
           <CallReceiptRefreshButton actions={actions} labelMode="refresh_status" />

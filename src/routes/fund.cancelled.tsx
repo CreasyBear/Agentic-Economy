@@ -3,7 +3,7 @@ import { Link, createFileRoute } from '@tanstack/react-router'
 import { fundingReturnCopy } from '@/components/ae/funding/funding-return.contracts'
 import { AePageState } from '@/components/ae/layout/AePageState'
 import { RouteError, RoutePending } from '@/components/ae/layout/AeRouteStates'
-import buttonStyles from '@/components/arc/button/button.module.css'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 
 export const Route = createFileRoute('/fund/cancelled')({
   head: () => ({ meta: [
@@ -21,10 +21,10 @@ export const Route = createFileRoute('/fund/cancelled')({
       description={fundingReturnCopy.cancelled.description}
       action={(
         <div className="arc-market arc-recovery-action-row">
-          <Link to="/owner/credit" className={`${buttonStyles.button} ${buttonStyles.primary} ${buttonStyles.md}`}>
+          <Link to="/owner/credit" className={actionLinkClassName('primary', 'md')}>
             {fundingReturnCopy.cancelled.openCreditAction}
           </Link>
-          <Link to="/agent-access" className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}>
+          <Link to="/agent-access" className={actionLinkClassName('secondary', 'md')}>
             {fundingReturnCopy.openAgentsAction}
           </Link>
         </div>

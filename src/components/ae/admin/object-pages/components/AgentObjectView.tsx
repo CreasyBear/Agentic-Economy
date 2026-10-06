@@ -3,11 +3,11 @@ import { Link } from '@tanstack/react-router'
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
-import { PageHeader } from '@/components/arc/blocks/page-header/page-header'
+import { AeRecordPageHeader as PageHeader } from '@/components/ae/shared/record-page-header/AeRecordPageHeader'
 import { AeSection } from '@/components/ae/layout/AeSection'
-import { Badge } from '@/components/ui/badge'
+import { Badge } from '@/components/arc/badge/badge'
 import type { AdminAgentView } from '@/lib/operator/admin-console/views'
-import { aeStatusToneVariants, getStatusPresentation } from '@/lib/ui/status-presentation'
+import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import '../../RecordWorkspaceComposition.css'
 import { ADMIN_OBJECT_PAGE_COPY } from '../object-pages.contracts'
 
@@ -41,7 +41,7 @@ export function AgentObjectView({ view }: AgentObjectViewProps) {
             renderLink: ({ children, ...linkProps }) => <Link to="/admin/search" search={{ kind: 'agent' }} {...linkProps}>{children}</Link> },
           { id: 'record', label: view.ref },
         ]}
-        actions={<Badge variant={aeStatusToneVariants[status.tone]}>{status.label}</Badge>}
+        actions={<Badge tone={status.tone}>{status.label}</Badge>}
         detail={(
           <div className="arc-market arc-admin-object-reference">
             <span>{ADMIN_OBJECT_PAGE_COPY.referenceLabel}</span>

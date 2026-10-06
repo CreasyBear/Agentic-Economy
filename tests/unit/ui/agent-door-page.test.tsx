@@ -36,7 +36,8 @@ describe('agent door page', () => {
 
     expect(screen.getByRole('heading', { level: 1, name: 'Connect your Agent.' })).toBeTruthy()
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
-    expect(screen.getByRole('region', { name: 'Connect your Agent.' }).getAttribute('aria-labelledby')).toBe('agent-hero')
+    const heroRegion = screen.getByRole('region', { name: 'Connect your Agent.' })
+    expect(heroRegion.contains(screen.getByRole('heading', { level: 1, name: 'Connect your Agent.' }))).toBe(true)
     expect(screen.getByRole('region', { name: 'Agent connection' }).getAttribute('id')).toBe('agent-setup')
     expect(screen.getByRole('region', { name: 'Agent connection' }).getAttribute('tabindex')).toBe('-1')
     expect(screen.getByText(AGENT_PAGE.subhead)).toBeTruthy()

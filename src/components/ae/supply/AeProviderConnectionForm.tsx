@@ -3,9 +3,9 @@ import type { FormEvent, RefObject } from 'react'
 
 import { SettingsEmptyState, SettingsRow } from '@/components/ae/settings/settings-shell/components/SettingsSections'
 import { Button } from '@/components/arc/button/button'
-import buttonStyles from '@/components/arc/button/button.module.css'
 import { isAbsoluteHttpsResourceUrl } from '@/lib/operator/supply-compatibility'
 import type { ProviderConnectionInspection } from '@/modules/capability-supply/provider-connection.contracts'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import './ProviderConnectionFormComposition.css'
 
 export type AeProviderConnectionFormProps = Readonly<{
@@ -151,7 +151,7 @@ export function AeProviderConnectionForm({
           action={
             <Link
               to="/owner/operations"
-              className={[buttonStyles.button, buttonStyles.primary, buttonStyles.md].join(' ')}
+              className={actionLinkClassName('primary', 'md')}
             >
               Create provider workspace
             </Link>

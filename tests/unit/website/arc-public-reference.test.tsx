@@ -14,6 +14,7 @@ import { ABOUT } from '@/content/brand-copy'
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({ children, to, className }: { children: ReactNode; to: string; className?: string }) => <a href={to} className={className}>{children}</a>,
+  useRouter: () => ({ navigate: vi.fn(), preloadRoute: vi.fn().mockResolvedValue(undefined) }),
 }))
 
 afterEach(() => { cleanup(); vi.restoreAllMocks() })
@@ -23,7 +24,7 @@ const discovery: DeveloperDiscoveryViewModel = {
   summaryFacts: [{ label: 'Freshness', value: 'Stale' }, { label: 'Published catalogs', value: '2' }, { label: 'Schema version', value: 'developer-discovery:v1' }],
   artifacts: [
     { kind: 'public_catalog_schema', label: 'Public catalog schema', actionLabel: 'Open schema', href: 'https://ae.example/api/discovery/schema', origin: 'https://ae.example', statusLabel: 'Stale', statusVariant: 'warning', checkedLabel: 'Checked 2 hours ago', code: 'never expose private or demo code' },
-    { kind: 'public_catalog_examples', label: 'Public catalog examples', actionLabel: 'Open examples', href: 'https://ae.example/api/discovery/examples', origin: 'https://ae.example', statusLabel: 'Unavailable', statusVariant: 'destructive', checkedLabel: 'Checked just now', code: 'never expose private or demo code' },
+    { kind: 'public_catalog_examples', label: 'Public catalog examples', actionLabel: 'Open examples', href: 'https://ae.example/api/discovery/examples', origin: 'https://ae.example', statusLabel: 'Unavailable', statusVariant: 'danger', checkedLabel: 'Checked just now', code: 'never expose private or demo code' },
   ],
   publicFacts: [{ id: 'example', label: 'Published business', state: 'Public', description: 'Source supplied business context' }],
   routeHealth: [{ id: '/api/businesses', label: 'Business index', state: 'Unavailable', description: '/api/businesses' }],

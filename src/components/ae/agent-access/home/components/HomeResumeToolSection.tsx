@@ -1,17 +1,17 @@
 import { Link } from '@tanstack/react-router'
 import type { ComponentProps } from 'react'
 
-import { AgentRun } from '@/components/arc/blocks/agent-run/agent-run'
+import { AgentRun } from '@/components/ae/shared/arc-pro/agent-run/agent-run'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
 import { Button } from '@/components/arc/button/button'
 import { Stepper } from '@/components/arc/stepper/stepper'
 import type { StepperStep } from '@/components/arc/stepper/stepper'
-import arcButton from '@/components/arc/button/button.module.css'
 import { firstToolInstruction } from '@/modules/agent-access/public'
 import type { AgentFirstUseState } from '@/modules/agent-access/public'
 
 import type { HomeResumeToolSectionProps } from '../agent-access-home.contracts'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import '../AgentHomeComposition.css'
 
 type ObservedCallFirstUse = Extract<AgentFirstUseState, { kind: 'running' | 'awaiting_authority' | 'recover' | 'delivered' | 'recording_result' }>
@@ -51,9 +51,9 @@ function firstUseCopy(firstUse: AgentFirstUseState): Readonly<{
   const observedCall = observedState?.call
   const stepperCurrent = delivered ? 3 : authenticated ? 2 : hasAccess ? 1 : 0
   const stepperSteps: StepperStep[] = [
-    { id: 'access', label: 'Approve access', status: hasAccess ? 'complete' : firstUse.kind === 'unavailable' ? 'error' : 'current', ...(firstUse.kind === 'unavailable' ? { error: 'Current evidence unavailable' } : {}) },
-    { id: 'authenticate', label: 'Authenticate the Agent', status: authenticated ? 'complete' : hasAccess ? 'current' : 'upcoming' },
-    { id: 'result', label: 'Get a Tool result', status: authenticated ? 'current' : 'upcoming' },
+    { id: 'access', label: 'Approve access', ...(firstUse.kind === 'unavailable' ? { error: 'Current evidence unavailable' } : {}) },
+    { id: 'authenticate', label: 'Authenticate the Agent' },
+    { id: 'result', label: 'Get a Tool result' },
   ]
   const currentAccess = access?.kind === 'connection_required' ? 'connection or renewal required' : access?.kind === 'browse_only' ? 'Browse only' : access?.kind === 'unavailable' ? 'unconfirmed' : access?.authenticated ? 'authenticated with the current credential' : 'approved; current credential has not authenticated'
   const callActionLabel = delivered ? 'View Tool result and receipt' : firstUse.kind === 'running' ? 'View live Call' : 'Check existing Call'
@@ -94,15 +94,15 @@ function HomeResumeActions({ copy, onConnect, onCheck, checking, resumeTool }: P
 }>) {
   const { hasAccess, observedCall, callActionLabel, showConnect, showCheck, showBrowse, checkLabel } = copy
   const callAction = observedCall === undefined ? null : <Link to="/calls/$callRef" params={{ callRef: observedCall.callRef }}
-    className={`${arcButton.button} ${arcButton.primary} ${arcButton.md} arc-agent-inline-action`}>{callActionLabel}</Link>
+    className={`${actionLinkClassName('primary', 'md')} arc-agent-inline-action`}>{callActionLabel}</Link>
 
   return <>
     {callAction}
     <div className="arc-agent-connect-actions">
-      {showBrowse && resumeTool === undefined ? <Link to="/market" search={{ view: 'tools' }} className={`${arcButton.button} ${arcButton.primary} ${arcButton.md}`}>Browse Tools</Link> : null}
+      {showBrowse && resumeTool === undefined ? <Link to="/market" search={{ view: 'tools' }} className={actionLinkClassName('primary', 'md')}>Browse Tools</Link> : null}
       {showConnect ? <Button type="button" variant={observedCall === undefined ? 'primary' : 'secondary'} onClick={onConnect}>Connect an Agent</Button> : null}
       {showCheck ? <Button type="button" variant="secondary" onClick={onCheck} disabled={checking}>{checking ? 'Checking…' : checkLabel}</Button> : null}
-      {resumeTool !== undefined && hasAccess ? <Link to="/tools/$toolRef" params={{ toolRef: resumeTool }} className={`${arcButton.button} ${showBrowse ? arcButton.primary : arcButton.secondary} ${arcButton.md}`}>Return to selected Tool</Link> : null}
+      {resumeTool !== undefined && hasAccess ? <Link to="/tools/$toolRef" params={{ toolRef: resumeTool }} className={actionLinkClassName(showBrowse ? 'primary' : 'secondary', 'md')}>Return to selected Tool</Link> : null}
     </div>
   </>
 }
@@ -114,13 +114,13 @@ function HomeResumeChoicesOrStepper({ firstUse, search, resumeTool, observedCall
 }> & Pick<ReturnType<typeof firstUseCopy>, 'observedCall' | 'stepperCurrent' | 'stepperSteps'>) {
   return firstUse.kind === 'choose_call' ? <div className="arc-agent-connect-actions">{firstUse.calls.map(call => <Link key={call.callRef} to="/agent-access"
     search={{ ...search, caller: firstUse.agent.principalRef, callRef: call.callRef }}
-    className={`${arcButton.button} ${arcButton.secondary} ${arcButton.md} arc-agent-choice-link`}>
+    className={`${actionLinkClassName('secondary', 'md')} arc-agent-choice-link`}>
     <span>{call.phase === 'recovery_required' ? 'Needs recovery' : 'In progress'}</span><span>{call.callRef}</span></Link>)}</div>
     : observedCall !== undefined || firstUse.kind === 'browse_only' ? null : firstUse.kind === 'choose_agent' ? (
     <div className="arc-agent-connect-actions">
       {firstUse.agents.map(agent => <Link key={agent.principalRef} to="/agent-access"
         search={{ caller: agent.principalRef, ...(resumeTool === undefined ? {} : { resumeTool }) }}
-        title={agent.principalRef} className={`${arcButton.button} ${arcButton.secondary} ${arcButton.md} arc-agent-choice-link`}>
+        title={agent.principalRef} className={`${actionLinkClassName('secondary', 'md')} arc-agent-choice-link`}>
         <span>{agent.displayName}</span><span>{agent.environment === 'production' ? 'Production' : 'Sandbox'} · {agent.connectorDisplayNames.join(', ') || 'Client not recorded'} · {agent.principalRef.slice(-8)}</span>
       </Link>)}
     </div>

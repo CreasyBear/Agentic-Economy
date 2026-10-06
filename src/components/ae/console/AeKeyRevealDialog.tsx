@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ComponentProps } from 'react'
 import {
-  AlertTriangleIcon,
   CheckIcon,
   CopyIcon,
   DownloadIcon,
@@ -12,11 +11,11 @@ import {
 } from 'lucide-react'
 
 import { Button } from '@/components/arc/button/button'
-import { Drawer, DrawerContent } from '@/components/arc/drawer/Drawer'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Drawer, DrawerContent } from '@/components/ae/shared/base-ui/drawer/drawer'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/arc/tabs/Tabs'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ae/shared/base-ui/tabs/tabs'
 import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
 import { cn } from '@/lib/utils'
 import { degrade } from '@/lib/observability/degrade'
@@ -208,13 +207,9 @@ export function AeKeyRevealDialog({
         </div>
 
         <div data-ae-key-reveal-scroll className="arc-key-reveal-scroll overflow-y-auto">
-          <Alert className="arc-key-warning">
-            <AlertTriangleIcon aria-hidden="true" />
-            <AlertTitle>This secret will never be shown again.</AlertTitle>
-            <AlertDescription>
-              This secret will never be shown again. Store it securely.
-            </AlertDescription>
-          </Alert>
+          <AeAlert role="alert" tone="warning" title="This secret will never be shown again.">
+              Store it securely.
+            </AeAlert>
 
           <div className="arc-key-secret-group">
             <Label className="arc-key-secret-label">Secret key</Label>

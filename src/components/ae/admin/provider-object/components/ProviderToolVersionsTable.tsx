@@ -55,9 +55,7 @@ export function ProviderToolVersionsTable({ rows }: ProviderToolVersionsTablePro
         columns={columns}
         rows={[...rows]}
         rowKey="ref"
-        animateRows={false}
         caption={PROVIDER_OBJECT_COPY.toolVersionsTitle}
-        ariaLabel={PROVIDER_OBJECT_COPY.toolVersionsTitle}
         emptyMessage={PROVIDER_OBJECT_COPY.noToolVersions}
       />
     </section>

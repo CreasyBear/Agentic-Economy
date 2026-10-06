@@ -5,12 +5,12 @@ import { SearchIcon } from 'lucide-react'
 
 import { api } from '../../../../../convex/_generated/api'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
-import { Alert } from '@/components/arc/alert/alert'
+import { AeAlert as Alert } from '@/components/ae/shared/alert/AeAlert'
 import { Badge } from '@/components/arc/badge/badge'
-import { EmptyState } from '@/components/arc/empty-state/empty-state'
+import { AeEmptyState } from '@/components/ae/shared/empty-state/AeEmptyState'
 import { SearchField } from '@/components/arc/search-field/search-field'
 import { SortableDataTable } from '@/components/arc/sortable-data-table/sortable-data-table'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/arc/button/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatPerthTimestamp } from '@/lib/ui/format-time'
 import { AdminSearchNotice } from '../AdminSearchNotice'
@@ -72,11 +72,11 @@ function AccountsList({ search, onSearchChange }: AccountSearchProps) {
         <Skeleton className="h-44 w-full" role="status" aria-label="Loading Accounts" />
       ) : result.results.length === 0 ? (
         <div className="ae-arc rounded-card border border-border bg-card">
-          <EmptyState
+          <AeEmptyState
             icon={<SearchIcon size={24} />}
             title="No Accounts found"
             description={search.length > 0 ? 'Try another name or clear the search.' : 'Accounts will appear here when they are created.'}
-            action={search.length > 0 ? <Button variant="outline" onClick={() => onSearchChange('')}>Clear Account search</Button> : undefined}
+            action={search.length > 0 ? <Button variant="secondary" onClick={() => onSearchChange('')}>Clear Account search</Button> : undefined}
           />
         </div>
       ) : (
@@ -85,7 +85,7 @@ function AccountsList({ search, onSearchChange }: AccountSearchProps) {
             {result.results.length} loaded{result.status === 'Exhausted' ? '' : ' · more Accounts available'}. Sorting applies to loaded Accounts.
           </p>
           <div className="ae-arc min-w-0">
-            <SortableDataTable density="compact"
+            <SortableDataTable
               rows={result.results}
               rowKey="accountRef"
               caption="Loaded Accounts"
@@ -110,7 +110,7 @@ function AccountsList({ search, onSearchChange }: AccountSearchProps) {
         </div>
       )}
       {result.status === 'CanLoadMore' || result.status === 'LoadingMore' ? (
-        <Button className="justify-self-start" variant="outline" disabled={result.status === 'LoadingMore'} onClick={() => result.loadMore(25)}>
+        <Button className="justify-self-start" variant="secondary" disabled={result.status === 'LoadingMore'} onClick={() => result.loadMore(25)}>
           {result.status === 'LoadingMore' ? 'Loading…' : 'Load more Accounts'}
         </Button>
       ) : null}

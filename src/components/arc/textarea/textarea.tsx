@@ -1,11 +1,10 @@
-/* Arc registry: https://uiarc.dev/r/textarea.json; upstream TSX SHA-256: 33adcb6c205dab2120bea33a65c8a156c67c32bb5896349b60f69679a003d251. Strict optional/indexed reads adapted for AE. */
 "use client";
 import { forwardRef, useEffect, useId, useRef, useState } from "react";
 import type { TextareaHTMLAttributes } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { motionTokens } from "../lib/motion-tokens";
 import styles from "./textarea.module.css";
-export interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> { label: string; labelMode?: "internal" | "external"; description?: string; error?: string }
+export interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> { label: string; description?: string; error?: string }
 /* Digits roll up when a number grows and down when it shrinks; `custom` hands the latest direction to digits already leaving. */
 const digit = {
   enter: (direction: number) => ({ opacity: 0, y: `${direction * 0.6}em`, filter: `blur(${motionTokens.blur.subtle}px)` }),
@@ -18,7 +17,7 @@ const isNumber = (word: string) => /^\d[\d.,/:]*%?$/.test(word);
 function RollingNumber({ word }: { word: string }) {
   const reduced = useReducedMotion();
   const [shown, setShown] = useState({ word, direction: 1 });
-  if (shown.word !== word) setShown({ word, direction: Number.parseFloat(word.replace(/,/g, "")) < Number.parseFloat(shown.word.replace(/,/g, "")) ? -1 : 1 });
+  if (shown.word !== word) setShown({ word, direction: parseFloat(word.replace(/,/g, "")) < parseFloat(shown.word.replace(/,/g, "")) ? -1 : 1 });
   const characters = word.split("");
   const transition = reduced ? { duration: 0 } : { y: motionTokens.spring.snappy, width: motionTokens.spring.morph, opacity: { duration: motionTokens.duration.fast }, filter: { duration: motionTokens.duration.fast } };
   return <AnimatePresence initial={false}>{characters.map((character, index) => <motion.span key={characters.length - index} className={styles.column} initial={{ width: 0, opacity: 0 }} animate={{ width: "auto", opacity: 1 }} exit={{ width: 0, opacity: 0 }} transition={transition}>
@@ -37,19 +36,19 @@ function MotionText({ text }: { text: string }) {
 }
 
 /** Helper and error copy: the row opens its height on a spring, then the words settle in. */
-function FieldMessage({ id, text, className, alert }: { id?: string | undefined; text?: string | undefined; className: string | undefined; alert?: boolean | undefined }) {
+function FieldMessage({ id, text, className, alert }: { id?: string; text?: string; className: string; alert?: boolean }) {
   return <AnimatePresence initial={false}>{text ? <MessageRow key="message" id={id} text={text} className={className} alert={alert} /> : null}</AnimatePresence>;
 }
 
 /** The row tracks the measured copy, so a longer message that wraps opens its next line instead of snapping. */
-function MessageRow({ id, text, className, alert }: { id?: string | undefined; text: string; className: string | undefined; alert?: boolean | undefined }) {
+function MessageRow({ id, text, className, alert }: { id?: string; text: string; className: string; alert?: boolean }) {
   const reduced = useReducedMotion();
   const copyRef = useRef<HTMLSpanElement>(null);
   const [height, setHeight] = useState<number | "auto">("auto");
   useEffect(() => {
     const node = copyRef.current;
     if (!node || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(([entry]) => setHeight(entry?.borderBoxSize?.[0]?.blockSize ?? node.offsetHeight));
+    const observer = new ResizeObserver(([entry]) => setHeight(entry.borderBoxSize?.[0]?.blockSize ?? node.offsetHeight));
     observer.observe(node);
     return () => observer.disconnect();
   }, []);
@@ -58,9 +57,8 @@ function MessageRow({ id, text, className, alert }: { id?: string | undefined; t
   </motion.span>;
 }
 
-/** Local external-label port leaves the associated RJSF field label caller-owned; stock mode stays internal. */
-export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function Textarea({ label, labelMode = "internal", description, error, id, className, ...props }, ref) {
+export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function Textarea({ label, description, error, id, className, ...props }, ref) {
   const generatedId = useId(); const controlId = id ?? generatedId;
   const hintId = description ? `${controlId}-description` : undefined; const errorId = error ? `${controlId}-error` : undefined;
-  return <div className={styles.field}>{labelMode === "internal" ? <label htmlFor={controlId}>{label}</label> : null}<textarea {...props} id={controlId} ref={ref} className={[styles.control, className].filter(Boolean).join(" ")} aria-invalid={error ? true : props["aria-invalid"]} aria-describedby={[props["aria-describedby"], hintId, errorId].filter(Boolean).join(" ") || undefined}/><FieldMessage id={hintId} text={description} className={styles.hint} /><FieldMessage id={errorId} text={error} className={styles.error} alert /></div>;
+  return <div className={styles.field}><label htmlFor={controlId}>{label}</label><textarea {...props} id={controlId} ref={ref} className={[styles.control, className].filter(Boolean).join(" ")} aria-invalid={error ? true : props["aria-invalid"]} aria-describedby={[props["aria-describedby"], hintId, errorId].filter(Boolean).join(" ") || undefined}/><FieldMessage id={hintId} text={description} className={styles.hint} /><FieldMessage id={errorId} text={error} className={styles.error} alert /></div>;
 });

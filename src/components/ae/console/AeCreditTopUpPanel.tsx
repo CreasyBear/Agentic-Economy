@@ -1,8 +1,9 @@
 import { useEffect, useRef } from 'react'
 
 import { Button } from '@/components/arc/button/button'
+import { RadioCards } from '@/components/arc/radio-cards/radio-cards'
 import { Skeleton } from '@/components/arc/skeleton/skeleton'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { Spinner } from '@/components/ui/spinner'
 import { toast } from '@/lib/ui/toast'
 import { formatDisplayAmount } from '@/modules/money/public'
@@ -84,19 +85,18 @@ export function AeAccountFundingPanel({
   }, [accountBalance, paymentStatus])
 
   const taxOnServiceFeeBps = constraints?.kind === 'available' ? constraints.taxOnServiceFeeBps : 1000
+  const selectedSuggestedUnits = suggestedPrincipalUnits.find((units) => units === selectedPrincipalUnits)
+  const selectedSuggestedValue = selectedSuggestedUnits === undefined
+    ? null
+    : audInputTextFromUnits(selectedSuggestedUnits)
 
   return (
     <div className="arc-market arc-funding-review">
       {port === undefined || (!constraintsLoading && constraints?.kind !== 'available') ? (
-        <Alert>
-          <AlertTitle>Account funding is unavailable</AlertTitle>
-          <AlertDescription>Funding limits could not be confirmed. No payment was made. Nothing was charged.</AlertDescription>
-        </Alert>
+        <AeAlert role="alert" tone="info" title="Account funding is unavailable">Funding limits could not be confirmed. No payment was made. Nothing was charged.</AeAlert>
       ) : null}
       {errorMessage !== undefined ? (
-        <Alert variant={paymentStatus === 'failed' ? 'destructive' : 'default'}>
-          <AlertTitle>
-            {paymentStatus === 'failed'
+        <AeAlert role="alert" tone={paymentStatus === 'failed' ? 'danger' : 'info'} title={paymentStatus === 'failed'
               ? 'Payment did not complete'
               : session?.evidence.checkoutStatus === 'expired' && paymentStatus !== 'succeeded'
                 ? 'Checkout expired'
@@ -106,17 +106,14 @@ export function AeAccountFundingPanel({
                     ? 'Secure checkout could not be opened'
                     : paymentStatus === 'outcome_unknown'
                       ? 'Payment is still being verified'
-                      : 'Payment status'}
-          </AlertTitle>
-          <AlertDescription>
+                      : 'Payment status'}>
             <span>{errorMessage}</span>
             {quoteRefreshRequired && onRefresh !== undefined ? (
               <Button type="button" variant="secondary" disabled={pending || checking} onClick={() => void refreshFundingQuote()}>
                 Refresh funding quote
               </Button>
             ) : null}
-          </AlertDescription>
-        </Alert>
+          </AeAlert>
       ) : null}
       {checking ? <p className="arc-funding-detail" role="status">Checking payment status…</p> : null}
       {paymentStatus === 'pending' && session?.evidence.checkoutStatus !== 'expired' ? (
@@ -127,20 +124,14 @@ export function AeAccountFundingPanel({
         </p>
       ) : null}
       {paymentStatus === 'outcome_unknown' ? (
-        <Alert>
-          <AlertTitle>Payment is still being verified</AlertTitle>
-          <AlertDescription>
+        <AeAlert role="alert" tone="info" title="Payment is still being verified">
             Do not start another payment. Your balance will not change until confirmation. Choose Refresh payment status.
-          </AlertDescription>
-        </Alert>
+          </AeAlert>
       ) : null}
       {paymentStatus === 'succeeded' ? (
-        <Alert>
-          <AlertTitle>Payment received</AlertTitle>
-          <AlertDescription>
+        <AeAlert role="alert" tone="info" title="Payment received">
             Your payment was confirmed. Credit is available in your balance above and ready for Calls.
-          </AlertDescription>
-        </Alert>
+          </AeAlert>
       ) : null}
       {constraintsLoading && port !== undefined && constraints?.kind !== 'available' ? (
         <div className="arc-funding-loading" role="status" aria-busy="true" aria-label="Loading funding amounts">
@@ -156,33 +147,22 @@ export function AeAccountFundingPanel({
       {session === undefined && recovery === undefined && port !== undefined && constraints?.kind === 'available' ? (
         <div className="arc-funding-form">
           {suggestedPrincipalUnits.length > 0 ? (
-            <fieldset className="arc-funding-amount-options">
-              <legend>Choose a credit amount</legend>
-              <div className="arc-funding-denominations">
-                {suggestedPrincipalUnits.map((units) => {
-                  const selected = selectedPrincipalUnits === units
-                  return (
-                    <Button
-                      key={units.toString()}
-                      type="button"
-                      variant="secondary"
-                      aria-pressed={selected}
-                      disabled={pending || checking}
-                      onClick={() => {
-                        dispatch({
-                          type: 'amount_changed',
-                          amountText: audInputTextFromUnits(units),
-                          valid: true,
-                        })
-                      }}
-                      className="arc-funding-denomination font-mono tabular-nums"
-                    >
-                      +{formatAudUnits(units)}
-                    </Button>
-                  )
-                })}
-              </div>
-            </fieldset>
+            <RadioCards
+              aria-label="Choose a credit amount"
+              className="arc-market arc-funding-denominations"
+              disabled={pending || checking}
+              layout="grid"
+              value={selectedSuggestedValue}
+              onValueChange={(amountText) => dispatch({ type: 'amount_changed', amountText, valid: true })}
+              options={suggestedPrincipalUnits.map((units) => {
+                const amount = formatAudUnits(units)
+                return {
+                  value: audInputTextFromUnits(units),
+                  label: <span className="font-mono tabular-nums">+{amount}</span>,
+                  description: 'Available credit updates after payment is confirmed.',
+                }
+              })}
+            />
           ) : null}
           <div className="arc-funding-custom-amount">
             <label htmlFor="account-funding-amount">Other amount (AUD)</label>

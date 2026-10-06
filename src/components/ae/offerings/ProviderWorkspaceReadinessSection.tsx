@@ -1,10 +1,10 @@
-import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
+import { AeEmptyState } from '@/components/ae/shared/empty-state/AeEmptyState'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeCapabilityList } from '@/components/ae/status/AeCapabilityList'
 import { AeStatusCard } from '@/components/ae/status/AeStatusCard'
-import buttonStyles from '@/components/arc/button/button.module.css'
 import type { OwnerToolsX402ConnectionIntent } from '@/lib/operator/supply-compatibility'
 import { DeferredSection, SecondarySummary } from './ProviderWorkspaceSharedUi'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import type {
   ProviderWorkspaceConnectionsResult,
   ProviderWorkspacePublicStatusResult,
@@ -35,7 +35,7 @@ export function ProviderWorkspaceReadinessSection({
             </div>
           ) : <SecondarySummary result={result} subject="Connections" notApplicableTitle="No connections configured" unavailableTitle="Connections unavailable" />}
         </DeferredSection>
-        <a href={connectionHref} className={[buttonStyles.button, buttonStyles.secondary, buttonStyles.md, 'arc-provider-workspace-manage'].join(' ')}>
+        <a href={connectionHref} className={[actionLinkClassName('secondary', 'md'), 'arc-provider-workspace-manage'].join(' ')}>
           Manage connections
         </a>
       </div>

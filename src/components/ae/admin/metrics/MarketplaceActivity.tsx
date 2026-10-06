@@ -2,9 +2,9 @@ import { useQuery } from 'convex/react'
 import { useState } from 'react'
 
 import { api } from '../../../../../convex/_generated/api'
-import { MetricsDashboard } from '@/components/arc/blocks/marketplace-dashboard/metrics-dashboard'
+import { MetricsDashboard } from '@/components/ae/shared/arc-pro/marketplace-dashboard/metrics-dashboard'
 import { ExpandableCard } from '@/components/arc/expandable-card/expandable-card'
-import { Alert } from '@/components/arc/alert/alert'
+import { AeAlert as Alert } from '@/components/ae/shared/alert/AeAlert'
 import { AePageState } from '@/components/ae/layout/AePageState'
 import type { MarketplaceMetricsRange, MarketplaceMetricsReport } from '@/lib/operator/admin-console/metrics.contracts'
 import { formatCurrencyAmount } from '@/modules/money/public'
@@ -34,7 +34,7 @@ export function MarketplaceActivityView({ report, range, onRangeChange }: Market
   const latestComputedAt = report !== undefined && report.days.length > 0 ? Math.max(...report.days.map(day => day.computedAt)) : null
 
   return (
-    <div className="ae-arc grid min-w-0 gap-related">
+    <div className="ae-arc arc-market grid min-w-0 gap-related">
       <MetricsDashboard
         metrics={marketplaceDashboardMetrics(report, range)}
         range={range}

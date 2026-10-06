@@ -1,5 +1,5 @@
 
-import { aeCanonicalStatusPresentationRows, type AeTone, type AeStatusPresentation } from './status-presentation-rows'
+import { aeCanonicalStatusPresentationRows, type AeStatusPresentation } from './status-presentation-rows'
 
 export const aeStatusValues = [
   'available',
@@ -722,10 +722,3 @@ export function getStatusPresentation(status: AeStatus): AeStatusPresentation {
  * Lives here (not in a component file) so Fast Refresh stays safe and every
  * surface derives its Badge variant from one source.
  */
-export const aeStatusToneVariants = {
-  neutral: 'outline',
-  info: 'info',
-  success: 'success',
-  warning: 'warning',
-  danger: 'destructive',
-} satisfies Record<AeTone, 'outline' | 'info' | 'success' | 'warning' | 'destructive'>

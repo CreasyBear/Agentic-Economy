@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router'
 
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { Button } from '@/components/arc/button/button'
 import { SearchField } from '@/components/arc/search-field/search-field'
 import { Label } from '@/components/ui/label'
@@ -55,10 +55,7 @@ export function ConsentToolAccessFieldset({
       {approvedToolAccess === 'selected_tools' ? (
         <div className="arc-consent-field-group">
           {emptySelection ? (
-            <Alert id="tool-selection-empty" tabIndex={-1} variant="destructive">
-              <AlertTitle>Select at least one Tool</AlertTitle>
-              <AlertDescription>Selected access cannot be empty.</AlertDescription>
-            </Alert>
+            <AeAlert tone="danger" title="Select at least one Tool" id="tool-selection-empty" tabIndex={-1}>Selected access cannot be empty.</AeAlert>
           ) : (
             <ul className="arc-consent-records" aria-label="Approved Tools">
               {approvedToolRefs.map((toolRef) => (

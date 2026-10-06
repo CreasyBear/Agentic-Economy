@@ -3,7 +3,7 @@ import { useMutation } from 'convex/react'
 import { useLayoutEffect, useRef, useState, type FormEvent } from 'react'
 
 import { AeNavigationSafetyBoundary } from '@/components/ae/layout/AeNavigationSafetyBoundary'
-import { SettingsSaveBar } from '@/components/arc/blocks/settings-page/settings-page'
+import { SettingsSaveBar } from '@/components/ae/shared/arc-pro/settings-page/settings-page'
 import { Button } from '@/components/arc/button/button'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { renameWorkspaceServer } from '@/lib/server/workspace-profile.functions'

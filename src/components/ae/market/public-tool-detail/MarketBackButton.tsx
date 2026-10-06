@@ -3,7 +3,7 @@ import { ArrowLeftIcon } from 'lucide-react'
 
 import { useMarketBackNavigation } from '@/components/ae/market/market-return-context'
 import { Button } from '@/components/arc/button/button'
-import buttonStyles from '@/components/arc/button/button.module.css'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import { cn } from '@/lib/utils'
 
 import type { MarketBackButtonProps } from './public-tool-detail.contracts'
@@ -22,7 +22,7 @@ export function MarketBackButton({ label, ...buttonProps }: MarketBackButtonProp
   return (
     <Link
       to="/market"
-      className={cn(buttonStyles.button, buttonStyles[buttonProps.variant ?? 'primary'], buttonStyles.md, buttonProps.className)}
+      className={cn(actionLinkClassName(buttonProps.variant, 'md'), buttonProps.className)}
     >
       <ArrowLeftIcon aria-hidden="true" />
       {label}

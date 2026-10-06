@@ -40,10 +40,10 @@ export type OwnerOfferingSummary = Readonly<{
 
 export type OwnerToolAvailability = 'available' | 'unavailable' | 'unknown'
 
-export type OwnerToolBadgeVariant = 'outline' | 'secondary' | 'success' | 'warning' | 'destructive'
+export type OwnerToolBadgeVariant = 'neutral' | 'info' | 'success' | 'warning' | 'danger'
 
-export function ownerToolProtocolBadgeVariant(protocolLabel: string | undefined): 'outline' | 'secondary' {
-  return protocolLabel === 'MCP' ? 'secondary' : 'outline'
+export function ownerToolProtocolBadgeVariant(protocolLabel: string | undefined): 'neutral' | 'info' {
+  return protocolLabel === 'MCP' ? 'info' : 'neutral'
 }
 
 export function ownerToolAvailabilityPresentation(availability: OwnerToolAvailability | undefined): Readonly<{
@@ -56,7 +56,7 @@ export function ownerToolAvailabilityPresentation(availability: OwnerToolAvailab
     case 'available':
       return { label: getStatusPresentation('operational').label, variant: 'success', hasDot: true }
     case 'unavailable':
-      return { label: getStatusPresentation('degraded').label, variant: 'destructive', hasDot: true }
+      return { label: getStatusPresentation('degraded').label, variant: 'danger', hasDot: true }
     case 'unknown':
       return { label: 'Checking', variant: 'warning', hasDot: false }
     default: {
@@ -85,7 +85,7 @@ export function ownerToolLifecycleVariant(
     || lifecycle === 'Submitted'
     || lifecycle === 'Under review'
   ) {
-    return { label: lifecycle, variant: 'outline' }
+    return { label: lifecycle, variant: 'neutral' }
   }
   if (
     lifecycle === 'Action required'
@@ -95,9 +95,9 @@ export function ownerToolLifecycleVariant(
     return { label: lifecycle, variant: 'warning' }
   }
   if (lifecycle === 'Retired') {
-    return { label: 'Retired', variant: 'secondary' }
+    return { label: 'Retired', variant: 'neutral' }
   }
-  return { label: lifecycle, variant: 'outline' }
+  return { label: lifecycle, variant: 'neutral' }
 }
 
 export function ownerToolProtocolLabel(source: ProviderToolStatus['source'] | undefined): string | undefined {

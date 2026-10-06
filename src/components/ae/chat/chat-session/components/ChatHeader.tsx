@@ -2,9 +2,10 @@
 import { CheckIcon, CopyIcon, MenuIcon, PlusIcon, Share2Icon, UnlinkIcon } from 'lucide-react'
 import { createPortal } from 'react-dom'
 
-import { ArcAiChatHeader } from '@/components/arc/blocks/ai-chat/ai-chat'
+import { ArcAiChatHeader } from '@/components/ae/shared/arc-pro/ai-chat/ai-chat'
+import { AeActionLink } from '@/components/ae/shared/action-link/AeActionLink'
 import { Button } from '@/components/arc/button/button'
-import { Drawer, DrawerContent } from '@/components/arc/drawer/Drawer'
+import { Drawer, DrawerContent } from '@/components/ae/shared/base-ui/drawer/drawer'
 import { Input } from '@/components/arc/input/input'
 import { chatHistory, chatStageDetail, chatStageTitle } from '@/lib/public/chat-ia'
 
@@ -88,13 +89,13 @@ export function ChatHeader({
               {((onEnableSpending !== undefined && !ownerChatEnabled) || threadId !== null) ? (
                 <div className="arc-chat-history-sheet-actions">
                   {onEnableSpending !== undefined && !ownerChatEnabled ? (
-                    <Button type="button" variant="ghost" labelLayout="wrap" className="arc-chat-history-sheet-action" disabled={busy}
-                      onClick={onEnableSpending}>Enable approval-only chat spending</Button>
+                    <AeActionLink type="button" variant="ghost" labelLayout="wrap" className="arc-chat-history-sheet-action" disabled={busy}
+                      onAction={onEnableSpending}>Enable approval-only chat spending</AeActionLink>
                   ) : null}
                   {threadId !== null ? (
                     <>
-                      <Button type="button" variant="ghost" labelLayout="start" className="arc-chat-history-sheet-action" disabled={busy} onClick={onIssueShare}>{shareState === 'active' ? chatHistory.shareGet : chatHistory.shareCreate}</Button>
-                      {shareState === 'active' ? <Button type="button" variant="ghost" labelLayout="start" className="arc-chat-history-sheet-action" disabled={busy} onClick={onRevokeShare}>{chatHistory.shareRevoke}</Button> : null}
+                      <AeActionLink type="button" variant="ghost" labelLayout="start" className="arc-chat-history-sheet-action" disabled={busy} onAction={onIssueShare}>{shareState === 'active' ? chatHistory.shareGet : chatHistory.shareCreate}</AeActionLink>
+                      {shareState === 'active' ? <AeActionLink type="button" variant="ghost" labelLayout="start" className="arc-chat-history-sheet-action" disabled={busy} onAction={onRevokeShare}>{chatHistory.shareRevoke}</AeActionLink> : null}
                     </>
                   ) : null}
                 </div>

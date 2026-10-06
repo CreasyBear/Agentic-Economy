@@ -1,5 +1,5 @@
-/* Footer closing media and brand assets only. Navigation, link groups and responsive footer geometry belong to actual Arc SiteFooter. */
-.arc-market.arc-site-footer { margin-top: auto; width: 100%; box-sizing: border-box; }
+/* AE owns the closing composition and brand assets; pristine Arc SiteFooter owns its link layout. */
+.arc-market.arc-site-footer { display: flex; flex-direction: column; container: site-footer / inline-size; margin-top: auto; width: 100%; box-sizing: border-box; }
 .arc-market .arc-site-footer-closer {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -74,25 +74,9 @@
   object-fit: cover;
 }
 
-.arc-market .arc-site-footer-brand-link {
-  display: inline-flex;
-  max-width: 100%;
-  min-height: 44px;
-  align-items: center;
-  gap: var(--space-2);
-  border-radius: var(--radius-control);
-  color: var(--foreground);
-  font-size: var(--text-sm);
-  font-weight: 500;
-  line-height: 1.4;
-  text-decoration: none;
-  overflow-wrap: anywhere;
-}
-
-.arc-market .arc-site-footer-brand-link:focus-visible {
-  outline: 2px solid var(--ring);
-  outline-offset: 3px;
-}
+.arc-market.arc-site-footer .arc-site-footer-brand-graphic { display: inline-flex; width: 22px; height: 22px; flex: none; align-items: center; }
+.arc-market.arc-site-footer .arc-site-footer-brand-graphic img { width: 100%; height: 100%; object-fit: contain; }
+.arc-market.arc-site-footer :is(a, button):focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
 
 .arc-market .arc-site-footer-brand-mark-dark {
   display: none;

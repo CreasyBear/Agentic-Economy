@@ -3,7 +3,7 @@ import { cleanup, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { CallReceiptTimeline } from '@/components/ae/call-receipt/CallReceiptTimeline'
-import { Stepper } from '@/components/arc/stepper/stepper'
+import { AeStatusStepper } from '@/components/ae/shared/status-stepper/AeStatusStepper'
 import type { CallReceiptStageView } from '@/modules/capability-execution/call-receipt-view'
 
 afterEach(cleanup)
@@ -19,7 +19,7 @@ const stages: readonly CallReceiptStageView[] = [
 
 describe('Recorded Call stages in Arc Stepper', () => {
   it('never declares unresolved explicit stages complete from the fallback index', () => {
-    render(<Stepper
+    render(<AeStatusStepper
       steps={[{ id: 'unobserved', label: 'Unobserved stage', status: 'upcoming', statusLabel: 'Pending observation' }]}
       current={1}
       label="Recorded progress"

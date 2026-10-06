@@ -14,10 +14,10 @@ import type {
 import { AeProviderToolDetail } from '@/components/ae/supply/AeProviderToolDetail'
 import { OWNER_TOOL_DETAIL_COPY } from '@/components/ae/supply/owner-tool-detail.contracts'
 import type { ProviderToolActionOutcome } from '@/modules/capability-supply/provider-tool-actions.contracts'
-import buttonStyles from '@/components/arc/button/button.module.css'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { formatTimestamp } from '@/lib/ui/format-time'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import {
   recheckOwnerCapabilityServer,
   republishOwnerCapabilityServer,
@@ -135,7 +135,7 @@ export function AeOwnerToolDetailPage({ toolRef, identity, status }: AeOwnerTool
           <Link
             to="/tools/$providerHost/$slug"
             params={{ providerHost: identity.slug, slug: status.tool.slug }}
-            className={[buttonStyles.button, buttonStyles.secondary, buttonStyles.md, 'arc-owner-tool-action'].join(' ')}
+            className={[actionLinkClassName('secondary', 'md'), 'arc-owner-tool-action'].join(' ')}
           >
             {OWNER_TOOL_DETAIL_COPY.publicPreviewLabel}
           </Link>
@@ -167,17 +167,14 @@ function UnavailableTool({ toolRef, unavailable }: Readonly<{ toolRef: string; u
       currentPath={`/owner/operations/${encodeURIComponent(toolRef)}`}
     >
       <div className="arc-market arc-owner-tool-unavailable">
-        <Alert variant={unavailable ? 'destructive' : 'default'}>
-          <AlertTitle>{unavailable ? 'Tool status unavailable' : 'Tool not found'}</AlertTitle>
-          <AlertDescription>
+        <AeAlert role="alert" tone={unavailable ? 'danger' : 'info'} title={unavailable ? 'Tool status unavailable' : 'Tool not found'}>
             {unavailable
               ? 'Agentic Economy could not read the canonical lifecycle. No Tool was changed.'
               : 'This Tool is not part of the current Provider workspace.'}
-          </AlertDescription>
-        </Alert>
+          </AeAlert>
         <Link
           to="/owner/operations"
-          className={[buttonStyles.button, buttonStyles.secondary, buttonStyles.md, 'arc-owner-tool-action'].join(' ')}
+          className={[actionLinkClassName('secondary', 'md'), 'arc-owner-tool-action'].join(' ')}
         >
           Return to Tools
         </Link>

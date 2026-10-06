@@ -12,7 +12,7 @@ import {
   type AeRecordTableRowAction,
 } from '@/components/ae/operator/AeOperatorDataTable'
 import { formatCreditAmount } from '@/components/ae/console/owner-credit-format'
-import { Drawer, DrawerContent } from '@/components/arc/drawer/Drawer'
+import { Drawer, DrawerContent } from '@/components/ae/shared/base-ui/drawer/drawer'
 import { formatTimestamp, timestampIso } from '@/lib/ui/format-time'
 import { formatCurrencyAmount } from '@/modules/money/public'
 import type {

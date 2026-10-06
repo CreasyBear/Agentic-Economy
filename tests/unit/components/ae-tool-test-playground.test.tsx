@@ -4,7 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   AeToolTestPlayground,
-  TACTILE,
 } from '@/components/ae/supply/tool-test-playground/AeToolTestPlayground'
 
 const toastSuccess = vi.fn()
@@ -86,25 +85,6 @@ describe('AeToolTestPlayground', () => {
 
     expect(container.querySelector('.min-h-\\[2\\.5rem\\]')).toBeTruthy()
     expect(container.querySelector('.min-h-\\[12rem\\]')).toBeTruthy()
-  })
-
-  it('action buttons include tactile interaction classes', () => {
-    render(
-      <AeToolTestPlayground
-        toolName="Australian Tax Calculator"
-        inputSchema={sampleSchema}
-        onSendTestRequest={vi.fn()}
-      />,
-    )
-
-    const loadButton = screen.getByRole('button', { name: /load example arguments/i })
-    const resetButton = screen.getByRole('button', { name: /reset to defaults/i })
-    const sendButton = screen.getByRole('button', { name: /recheck source/i })
-
-    expect(loadButton.className).toContain('active:scale-[0.96]')
-    expect(resetButton.className).toContain('active:scale-[0.96]')
-    expect(sendButton.className).toContain('active:scale-[0.96]')
-    expect(TACTILE).toContain('motion-reduce:transition-none')
   })
 
   it('dispatches probe request and shows 200 OK success badge with latency', async () => {

@@ -1,7 +1,7 @@
 import type {
   SettingsDangerZoneProps, SettingsEmptyStateProps, SettingsGroupProps, SettingsPageProps, SettingsRowProps,
 } from '../settings-section.contracts'
-import { SettingsPageGroup, SettingsPagePane, SettingsPageRow } from '@/components/arc/blocks/settings-page/settings-page'
+import { SettingsPageGroup, SettingsPagePane, SettingsPageRow } from '@/components/ae/shared/arc-pro/settings-page/settings-page'
 import '../SettingsComposition.css'
 
 /** Every caller is a routed settings page; its pane owns the sole page heading. */

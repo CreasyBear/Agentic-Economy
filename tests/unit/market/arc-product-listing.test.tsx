@@ -7,7 +7,7 @@ import '../../setup/jsdom-platform'
 
 import { DirectoryToolCard } from '@/components/ae/market/DirectoryToolCard'
 import { DirectoryToolList } from '@/components/ae/market/DirectoryToolList'
-import { ProductListingShelf } from '@/components/arc/market/ProductListing'
+import { ProductListingShelf } from '@/components/ae/shared/arc-pro/market/ProductListing'
 import { toDirectoryToolCardModel } from '@/modules/market/directory-card.view-model'
 import type { SavedDirectoryTool } from '@/modules/market/saved-tools.contracts'
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'

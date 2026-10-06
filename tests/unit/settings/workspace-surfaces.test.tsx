@@ -16,6 +16,7 @@ vi.mock('@tanstack/react-router', async () => {
 import { AeWorkspaceGeneral } from '@/components/ae/settings/AeWorkspaceGeneral'
 import { buildPublicOwnerStatusReadback } from '@/modules/catalog/public'
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
+import arcAlertStyles from '@/components/arc/alert/alert.module.css'
 
 const catalog: PublicBusinessCatalogApiV2Dto = {
   schemaVersion: 'public-business-catalog-api:v2', businessId: 'biz_workspace_1', slug: 'quote-works', name: 'Quote Works', category: 'Quotes',
@@ -139,7 +140,7 @@ describe('owner workspace settings surfaces', () => {
   it('renders an unavailable Provider identity as an error alert', () => {
     render(<AeWorkspaceGeneral result={{ kind: 'unavailable', reason: 'source_unavailable', retryable: true }} />)
     const alert = screen.getByRole('alert')
-    expect(alert.getAttribute('data-slot')).toBe('alert')
+    expect(alert.className).toContain(arcAlertStyles.danger)
     expect(alert.textContent).toContain('Provider identity is unavailable')
     expect(screen.getByRole('link', { name: 'Try again' }).getAttribute('href')).toBe(
       '/owner/operations#provider-identity',

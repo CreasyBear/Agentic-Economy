@@ -1,20 +1,20 @@
 import { useMemo, useState } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 
-import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
+import { AeEmptyState } from '@/components/ae/shared/empty-state/AeEmptyState'
+import { AeApproximateQuotaMeter } from '@/components/ae/shared/usage-meter/AeApproximateQuotaMeter'
 import {
   AeOperatorSortableHeader,
   AeRecordTable,
 } from '@/components/ae/operator/AeOperatorDataTable'
-import { Badge } from '@/components/ui/badge'
-import arcButton from '@/components/arc/button/button.module.css'
+import { Badge } from '@/components/arc/badge/badge'
 import SegmentedControl from '@/components/arc/segmented-control/segmented-control'
-import UsageMeter from '@/components/arc/usage-meter/usage-meter'
 import { stagedListPhase, useFirstLoadPending } from '@/components/ui/data-state'
 import { InlineEditField } from '@/components/ui/inline-edit-field'
 import { formatRelativeTime, formatTimestamp, timestampIso } from '@/lib/ui/format-time'
 import { suggestNextAction } from '@/modules/market/suggested-next-action'
 import type { AgentDirectoryItem } from '@/modules/agent-access/agent-operator-view-model'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import {
   agentStatusBadgeVariant,
   agentStatusLabel,
@@ -78,7 +78,7 @@ export function AeAgentDirectoryTable({
                   displayName,
                 ) ?? false}
               />
-              <Badge variant="outline" className="arc-agent-directory-state">{environmentLabel(row.original.environment)}</Badge>
+              <Badge tone="neutral" className="arc-agent-directory-state">{environmentLabel(row.original.environment)}</Badge>
             </div>
             <span className="arc-agent-directory-reference" title={row.original.principalRef}>
               {row.original.principalRef}
@@ -156,12 +156,9 @@ export function AeAgentDirectoryTable({
           return (
             <div className="arc-agent-directory-utilization">
               <span className="arc-agent-directory-money">{spendText}</span>
-              <UsageMeter
-                compact
+              <AeApproximateQuotaMeter
                 label="UTC month utilization"
-                limit={100}
-                decimals={0}
-                segments={[{ id: 'settled', label: 'Settled spend', value: utilization.percent }]}
+                percentage={utilization.percent}
                 limitState={utilization.limitState}
                 summary={`${utilization.percent}% (${spendText}). ${thresholdText}`}
               />
@@ -196,7 +193,7 @@ export function AeAgentDirectoryTable({
         cell: ({ row }) => {
           const status = agentStatusLabel(row.original.status)
           const variant = agentStatusBadgeVariant(row.original.status)
-          return <Badge variant={variant} className="arc-agent-directory-state">{status}</Badge>
+          return <Badge tone={variant} className="arc-agent-directory-state">{status}</Badge>
         },
       },
     ],
@@ -227,7 +224,7 @@ export function AeAgentDirectoryTable({
           action={
             <a
               href={missingAgentNextAction.href}
-              className={`${arcButton.button} ${arcButton.primary} ${arcButton.md}`}
+              className={actionLinkClassName('primary', 'md')}
             >
               {missingAgentNextAction.label}
             </a>

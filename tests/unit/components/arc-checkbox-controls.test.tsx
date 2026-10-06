@@ -3,7 +3,7 @@ import '@testing-library/jest-dom/vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { createRef } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { Checkbox } from '@/components/arc/checkbox/checkbox'
+import { Checkbox } from '@/components/ae/shared/base-ui/checkbox/checkbox'
 
 afterEach(cleanup)
 

@@ -43,7 +43,7 @@ export function ActivityFilterBar({
             options={STATUS_FILTERS.map((status) => ({
               value: status,
               label: statusChipLabel(status),
-              accessory: <span className="font-mono tabular-nums">{statusCounts[status]}</span>,
+              accessory: <> {' '}<span className="font-mono tabular-nums">{statusCounts[status]}</span></>,
             }))}
             value={statusFilter}
             onValueChange={handleStatusChange}

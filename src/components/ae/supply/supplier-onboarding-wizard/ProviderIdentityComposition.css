@@ -53,23 +53,6 @@
   color: var(--foreground);
 }
 
-.arc-market.arc-provider-identity-form .arc-provider-identity-notice > :is([data-slot="alert-title"], [data-slot="alert-description"]) {
-  grid-column: 1;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.arc-market.arc-provider-identity-form .arc-provider-identity-notice > [data-slot="alert-title"] {
-  display: block;
-  overflow: visible;
-  -webkit-line-clamp: unset;
-  margin: 0;
-  font-size: var(--text-sm);
-  font-weight: 500;
-  line-height: var(--leading-body);
-  letter-spacing: normal;
-}
-
 .arc-market.arc-provider-identity-form .arc-provider-identity-notice-description {
   display: block;
 }

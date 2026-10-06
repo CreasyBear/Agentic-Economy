@@ -3,6 +3,7 @@ import '@testing-library/jest-dom/vitest'
 import { cleanup, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import '../../setup/jsdom-platform'
+import { AeApproximateQuotaMeter } from '@/components/ae/shared/usage-meter/AeApproximateQuotaMeter'
 import { UsageMeter } from '@/components/arc/usage-meter/usage-meter'
 import { SpendingMonthlyQuotaGauge } from '@/components/ae/console/spending-limits-form/components/SpendingMonthlyQuotaGauge'
 import { monthlyQuotaGaugeFromFacts } from '@/modules/agent-access/spending-policy.view-model'
@@ -16,8 +17,7 @@ describe('Arc UsageMeter dense allowance presentation', () => {
     ['over', 'over', 'Over the limit.'],
   ] as const)('keeps exact %s state when geometry rounds to 100', (limitState, status, stateText) => {
     const summary = `A$100.00 / A$100.00. ${stateText}`
-    render(<UsageMeter compact label="Monthly allowance" summary={summary} limit={100}
-      segments={[{ id: 'settled', label: 'Settled spend', value: 100 }]} limitState={limitState} />)
+    render(<AeApproximateQuotaMeter label="Monthly allowance" summary={summary} percentage={100} limitState={limitState} />)
     const meter = screen.getByRole('img', { name: summary })
     expect(meter).toHaveAttribute('data-status', status)
     expect(meter).toHaveAttribute('data-density', 'compact')

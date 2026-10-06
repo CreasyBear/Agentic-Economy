@@ -1,25 +1,22 @@
 import { Link } from '@tanstack/react-router'
 
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import buttonStyles from '@/components/arc/button/button.module.css'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { presentConnectionProblem } from '@/modules/agent-access/public'
 
 import type { ConsentOutcomeViewProps } from '../authorize-form.contracts'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import './ConsentEvidenceComposition.css'
 
 function ConnectionProblemAlert({ code, technicalReference }: Readonly<{ code: string; technicalReference?: string }>) {
   const presentation = presentConnectionProblem({ code, ...(technicalReference === undefined ? {} : { instance: technicalReference }) })
   return (
-    <Alert variant="destructive" className="arc-market arc-consent-outcome">
-      <AlertTitle id="consent-outcome-heading" tabIndex={-1}>{presentation.heading}</AlertTitle>
-      <AlertDescription className="arc-consent-outcome-body">
+    <AeAlert id="consent-outcome-heading" tabIndex={-1} tone="danger" title={presentation.heading} className="arc-market arc-consent-outcome"><div className="arc-consent-outcome-body">
         <p>{presentation.outcome}</p>
         <p>{presentation.nextAction}</p>
         {presentation.technicalReference === undefined ? null : (
           <p className="font-mono">Reference: {presentation.technicalReference}</p>
         )}
-      </AlertDescription>
-    </Alert>
+      </div></AeAlert>
   )
 }
 
@@ -33,10 +30,7 @@ export function ConsentOutcomeView({
 }: ConsentOutcomeViewProps) {
   if (phase === 'approved') {
     return (
-      <Alert className="arc-market arc-consent-outcome">
-        <AlertTitle id="consent-outcome-heading" tabIndex={-1}>Access approved for {clientName}</AlertTitle>
-        <AlertDescription className="arc-consent-outcome-body">Return there to continue. Check the Agents page for authenticated access and Tool results.</AlertDescription>
-      </Alert>
+      <AeAlert id="consent-outcome-heading" tabIndex={-1} role="alert" tone="success" title={`Access approved for ${clientName}`} className="arc-market arc-consent-outcome"><div className="arc-consent-outcome-body">Return there to continue. Check the Agents page for authenticated access and Tool results.</div></AeAlert>
     )
   }
   if (phase === 'denied') {
@@ -51,7 +45,7 @@ export function ConsentOutcomeView({
           to="/agent-access/authorize"
           search={authorizeRecoverySearch}
           reloadDocument
-          className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md} arc-consent-outcome-recovery`}
+          className={`${actionLinkClassName('secondary', 'md')} arc-consent-outcome-recovery`}
         >
           Check approval status
         </Link>

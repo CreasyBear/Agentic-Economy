@@ -3,7 +3,6 @@ import { Link } from '@tanstack/react-router'
 
 import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
 import { Button } from '@/components/arc/button/button'
-import buttonStyles from '@/components/arc/button/button.module.css'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import {
   Select,
@@ -21,6 +20,7 @@ import { canRefreshCallStatus } from '@/lib/call-recovery/call-status-refresh'
 import { projectFoundCallPurchaseStatus } from '@/modules/capability-execution/call-receipt-view'
 
 import { CallReceiptStatusFeedback, callReceiptRefreshLabel } from './CallReceiptPrimitives'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import './ReceiptComposition.css'
 
 const RECONCILIATION_RESOLUTIONS = [
@@ -122,7 +122,7 @@ function RecoveryPrimaryActions({
           <Link
             to="/support"
             search={{ callRef }}
-            className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}
+            className={actionLinkClassName('secondary', 'md')}
           >
             Get help with this Call
           </Link>

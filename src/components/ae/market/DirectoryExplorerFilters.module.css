@@ -1,0 +1,94 @@
+.filterTrigger {
+  display: inline-flex;
+  min-height: var(--control-height-md);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  padding-inline: var(--space-3);
+  color: var(--foreground);
+  background: var(--surface);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard);
+}
+
+.filterTrigger:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-muted);
+}
+
+.filterTrigger:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .filterTrigger {
+    transition: none;
+  }
+}
+
+.facetTargets :global([role="option"]) {
+  min-height: var(--control-height-md);
+}
+
+.facetTargets :global(button[aria-label="Clear selection"]) {
+  min-height: var(--control-height-md);
+  min-width: var(--control-height-md);
+}
+.payerChoiceTarget {
+  min-width: 0;
+  max-width: 32rem;
+}
+
+.payerChoiceTarget:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
+  border-radius: var(--radius-control);
+}
+
+.advancedFilterTrigger {
+  display: flex;
+  width: 100%;
+  min-height: var(--control-height-md);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  border: 0;
+  border-radius: var(--radius-control);
+  padding-inline: var(--space-2);
+  background: transparent;
+  color: var(--foreground);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: var(--leading-body);
+  letter-spacing: var(--tracking-body);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-standard);
+}
+
+.advancedFilterTrigger:hover {
+  background: var(--surface-muted);
+}
+
+.advancedFilterTrigger:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.facetTargets :global(button[aria-pressed]),
+.categoryChips :global(button[aria-pressed]) {
+  min-height: var(--control-height-md);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .advancedFilterTrigger {
+    transition: none;
+  }
+}

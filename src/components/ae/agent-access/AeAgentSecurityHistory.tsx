@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useServerFn } from '@tanstack/react-start'
 
 import { AeSecurityHistoryTable } from '@/components/ae/settings/AeSecurityHistoryTable'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { Button } from '@/components/arc/button/button'
 import { readAgentSecurityHistoryServer } from '@/modules/security/account-security.functions'
 import {
@@ -78,15 +78,12 @@ function AgentSecurityHistoryFrame({ principalRef }: Readonly<{ principalRef: st
 
   if (result.kind === 'unavailable') {
     return (
-      <Alert variant="destructive" className="arc-market arc-agent-recovery">
-        <AlertTitle>Agent history unavailable</AlertTitle>
-        <AlertDescription>
+      <AeAlert tone="danger" title="Agent history unavailable" className="arc-market arc-agent-recovery">
           <p>No newer Agent state is being claimed. Credential and connection state above remains authoritative.</p>
           <Button type="button" variant="secondary" disabled={loading} onClick={() => setRetryGeneration((current) => current + 1)}>
             {loading ? 'Trying again…' : 'Try again'}
           </Button>
-        </AlertDescription>
-      </Alert>
+        </AeAlert>
     )
   }
 

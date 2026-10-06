@@ -1,6 +1,5 @@
 import '@/components/ae/shared/ProviderCatalogueComposition.css'
 import { Link, useLocation } from '@tanstack/react-router'
-import arcButtonStyles from '@/components/arc/button/button.module.css'
 import { cn } from '@/lib/utils'
 import { Skeleton } from '@/components/arc/skeleton/skeleton'
 
@@ -9,6 +8,7 @@ import { AePageState } from '@/components/ae/layout/AePageState'
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
 
 import type { AePublicBusinessProps } from './public-business.contracts'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 
 export function AePublicBusiness({ routeData, backFrom, backThreadId }: AePublicBusinessProps) {
   if (routeData.kind === 'unavailable') {
@@ -43,8 +43,8 @@ function PublicBusinessUnavailable() {
       description="The provider catalogue source is unavailable right now. Try again in a moment."
       action={
         <div className="arc-provider-actions">
-          <a href={pathname} className={cn(arcButtonStyles.button, arcButtonStyles.primary, arcButtonStyles.md, 'min-h-touch')}>Try again</a>
-          <Link to="/market" className={cn(arcButtonStyles.button, arcButtonStyles.secondary, arcButtonStyles.md, 'min-h-touch')}>Browse Tools</Link>
+          <a href={pathname} className={cn(actionLinkClassName('primary', 'md'), 'min-h-touch')}>Try again</a>
+          <Link to="/market" className={cn(actionLinkClassName('secondary', 'md'), 'min-h-touch')}>Browse Tools</Link>
         </div>
       }
     />
@@ -84,8 +84,8 @@ export function ProviderListingError() {
       description="Try again, or return to the catalogue."
       action={
         <div className="arc-provider-actions">
-          <a href={pathname} className={cn(arcButtonStyles.button, arcButtonStyles.primary, arcButtonStyles.md, 'min-h-touch')}>Try again</a>
-          <Link to="/market" className={cn(arcButtonStyles.button, arcButtonStyles.secondary, arcButtonStyles.md, 'min-h-touch')}>Browse Tools</Link>
+          <a href={pathname} className={cn(actionLinkClassName('primary', 'md'), 'min-h-touch')}>Try again</a>
+          <Link to="/market" className={cn(actionLinkClassName('secondary', 'md'), 'min-h-touch')}>Browse Tools</Link>
         </div>
       }
     />

@@ -8,11 +8,11 @@ import {
   AeOperatorSortableHeader,
   AeRecordTable,
 } from '@/components/ae/operator/AeOperatorDataTable'
-import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
+import { AeEmptyState } from '@/components/ae/shared/empty-state/AeEmptyState'
 import { AeFactList } from '@/components/ae/data/AeFactList'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { Button as ArcButton } from '@/components/arc/button/button'
-import { Drawer, DrawerContent } from '@/components/arc/drawer/Drawer'
+import { Drawer, DrawerContent } from '@/components/ae/shared/base-ui/drawer/drawer'
 import { Skeleton } from '@/components/arc/skeleton/skeleton'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { formatTimestamp } from '@/lib/ui/format-time'
@@ -98,15 +98,12 @@ function UnavailableAccountHistory({
     )
   }
   return (
-    <Alert>
-      <AlertTitle>Credit history unavailable</AlertTitle>
-      <AlertDescription className="flex flex-wrap items-center gap-3">
+    <AeAlert role="alert" tone="info" title="Credit history unavailable"><div className="flex flex-wrap items-center gap-3">
         <span>Known Account balance remains visible. No missing transaction or amount is being inferred.</span>
         {onRefresh === undefined ? null : (
           <ArcButton type="button" variant="secondary" aria-busy={loading} onClick={() => { void onRefresh() }}>Try again</ArcButton>
         )}
-      </AlertDescription>
-    </Alert>
+      </div></AeAlert>
   )
 }
 
@@ -142,17 +139,14 @@ function HistoryRefreshWarning({
 }: Readonly<{ visible: boolean; loading: boolean; onRefresh?: () => void | Promise<void> }>) {
   if (!visible) return null
   return (
-    <Alert>
-      <AlertTitle>Credit history could not be refreshed</AlertTitle>
-      <AlertDescription className="flex flex-wrap items-center gap-3">
+    <AeAlert role="alert" tone="info" title="Credit history could not be refreshed"><div className="flex flex-wrap items-center gap-3">
         <span>The last booked transactions remain visible. No later transaction or amount is being inferred.</span>
         {onRefresh === undefined ? null : (
           <ArcButton type="button" variant="secondary" disabled={loading} aria-busy={loading} onClick={() => { void onRefresh() }}>
             {loading ? 'Trying again…' : 'Try again'}
           </ArcButton>
         )}
-      </AlertDescription>
-    </Alert>
+      </div></AeAlert>
   )
 }
 
@@ -259,10 +253,7 @@ function AvailableAccountHistoryView({
   return (
     <div className="arc-credit-history-stack">
       {state.coverage === 'partial' ? (
-        <Alert>
-          <AlertTitle>Some transaction attribution is incomplete</AlertTitle>
-          <AlertDescription>Known booked transactions remain visible. Reversal netting or attribution may be incomplete, so these effects are not presented as a reconciliation to the balance above.</AlertDescription>
-        </Alert>
+        <AeAlert role="alert" tone="info" title="Some transaction attribution is incomplete">Known booked transactions remain visible. Reversal netting or attribution may be incomplete, so these effects are not presented as a reconciliation to the balance above.</AeAlert>
       ) : null}
       <p className="text-sm text-muted-foreground">
         Ordered by recorded transaction sequence, not effective date.
@@ -299,10 +290,7 @@ function AvailableAccountHistoryView({
         )}
       </Drawer>
       {state.status === 'failed' ? (
-        <Alert>
-          <AlertTitle>More history could not be loaded</AlertTitle>
-          <AlertDescription>Existing transactions remain visible. Retry continues from the same Account cursor.</AlertDescription>
-        </Alert>
+        <AeAlert role="alert" tone="info" title="More history could not be loaded">Existing transactions remain visible. Retry continues from the same Account cursor.</AeAlert>
       ) : null}
       {state.cursor === undefined ? null : port === undefined ? (
         <p className="text-sm text-muted-foreground">More booked transactions exist, but continuation is unavailable on this surface.</p>

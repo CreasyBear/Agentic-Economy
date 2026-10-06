@@ -1,7 +1,7 @@
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
 import { AePageHeader } from '@/components/ae/layout/AePageHeader'
-import buttonStyles from '@/components/arc/button/button.module.css'
 import { FileQuestionIcon } from 'lucide-react'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import './RouteRecoveryComposition.css'
 
 export function AeNotFound() {
@@ -15,8 +15,8 @@ export function AeNotFound() {
           description="The address moved, expired, or was never published. Search the catalog, or add a Tool."
           actions={(
             <>
-              <a href="/market" className={`${buttonStyles.button} ${buttonStyles.primary} ${buttonStyles.md}`}>Browse Tools</a>
-              <a href="/for-providers" className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}>Add Tool</a>
+              <a href="/market" className={actionLinkClassName('primary', 'md')}>Browse Tools</a>
+              <a href="/for-providers" className={actionLinkClassName('secondary', 'md')}>Add Tool</a>
             </>
           )}
         />

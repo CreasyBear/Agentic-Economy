@@ -1,9 +1,6 @@
 import type { Rule4Diagnostic } from '@/lib/ui/diagnostic'
 import type { ToolTestResponse } from '@/modules/capability-supply/tool-test.contracts'
 
-export const TACTILE =
-  'enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
-
 export const SYNTAX_DIAGNOSTIC: Rule4Diagnostic = {
   whatHappened: 'Invalid JSON format.',
   financialImpact: 'A$0.00 affected — dry run probe blocked.',

@@ -1,5 +1,5 @@
-import { Badge } from '@/components/ui/badge'
-import { aeStatusToneVariants, getStatusPresentation, type AeStatus } from '@/lib/ui/status-presentation'
+import { Badge } from '@/components/arc/badge/badge'
+import { getStatusPresentation, type AeStatus } from '@/lib/ui/status-presentation'
 import './StatusComposition.css'
 
 type AeStatusBadgeAudience = 'public' | 'operator'
@@ -21,7 +21,7 @@ export function AeStatusBadge({ status, audience = 'public', density = 'default'
 
   return (
     <span className="arc-market arc-status-badge" data-audience={presentation.audience} data-priority={presentation.priority} data-publicness={presentation.publicness} data-tone={presentation.tone}>
-      <Badge variant={aeStatusToneVariants[presentation.tone]}>{label}</Badge>
+      <Badge tone={presentation.tone}>{label}</Badge>
       {density === 'cell' ? null : (
         <span data-slot="status-description">{presentation.description}</span>
       )}

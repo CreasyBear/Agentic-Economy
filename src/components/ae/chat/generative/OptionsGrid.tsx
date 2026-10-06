@@ -1,7 +1,7 @@
 import type { OptionsGridProps } from './generative.contracts'
 import { OptionCard } from './OptionCard'
-import { ProductListing } from '@/components/arc/market/ProductListing'
-import '@/components/arc/chat/Options.css'
+import { ProductListing } from '@/components/ae/shared/arc-pro/market/ProductListing'
+import '@/components/ae/shared/arc-pro/chat/Options.css'
 
 export function OptionsGrid({ view, onSelect, onCompare, onReview, openToolRef, panelId, readOnly = false }: OptionsGridProps) {
   if (view.options.length === 0) return null

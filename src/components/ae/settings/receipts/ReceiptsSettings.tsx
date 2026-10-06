@@ -5,10 +5,9 @@ import { Download, ExternalLink } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
 
 import { SettingsEmptyState, SettingsPage } from '@/components/ae/settings/settings-shell/components/SettingsSections'
-import { UsageBillingInvoices, type UsageBillingInvoice } from '@/components/arc/blocks/usage-billing/usage-billing'
+import { UsageBillingInvoices, type UsageBillingInvoice } from '@/components/ae/shared/arc-pro/usage-billing/usage-billing'
 import { Button } from '@/components/arc/button/button'
 import { Skeleton } from '@/components/arc/skeleton/skeleton'
-import buttonStyles from '@/components/arc/button/button.module.css'
 import {
   downloadCsv, downloadJson, EXPORT_ERROR_IMPACT, EXPORT_ERROR_WHAT,
   formatExportSuccessToast, generateInvoicesCsv, toExportDocument,
@@ -18,6 +17,7 @@ import { toast } from '@/lib/ui/toast'
 import type { AeInvoiceHistoryRow, AeInvoiceHistoryTaxInvoice, InvoiceDownloadOptions } from '@/modules/money/invoice-history.view-model'
 
 import { receiptDisplay, receiptExportRow, taxDocumentStatusMessage } from './receipts.view-model'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import './ReceiptsComposition.css'
 
 export type ReceiptsSettingsProps = Readonly<{
@@ -159,7 +159,7 @@ export function ReceiptsSettings({
       </div> : rows.length === 0 && !invoiceHistoryHasMore && !invoiceHistoryLoadingMore ? <SettingsEmptyState
         title="No top-up receipts yet"
         description="When you add credit, your payment receipts and eligible tax invoices will appear here."
-        action={<Link to="/owner/credit" className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}>Add credit</Link>}
+        action={<Link to="/owner/credit" className={actionLinkClassName('secondary', 'md')}>Add credit</Link>}
         /> : null}
       </>}
       continuation={(invoiceHistoryHasMore || invoiceHistoryLoadingMore) ? <div className="arc-receipt-pagination">

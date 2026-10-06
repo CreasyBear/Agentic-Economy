@@ -45,7 +45,7 @@ export type ActivityStatusFilter = 'all' | 'completed' | 'refused' | 'outcome_un
 export type ActivityDateRangeFilter = 'all' | 'month' | 'today' | '7d' | '30d'
 
 export type ActivityBadgeView = Readonly<{
-  variant: 'secondary' | 'outline'
+  variant: 'success' | 'neutral'
   label: string
   warning?: boolean
 }>

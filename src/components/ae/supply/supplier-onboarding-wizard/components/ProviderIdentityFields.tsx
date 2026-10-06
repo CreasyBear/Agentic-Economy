@@ -2,7 +2,7 @@ import { ArrowRightIcon } from 'lucide-react'
 import { useEffect } from 'react'
 
 import { Button } from '@/components/arc/button/button'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
 
 import type { ProviderIdentityFieldsProps } from '../supplier-onboarding-wizard.contracts'
@@ -41,12 +41,9 @@ export function ProviderIdentityFields({
 
   return (
     <form onSubmit={(e) => void onSubmit(e)} className="arc-market arc-provider-identity-form">
-      <Alert className="arc-provider-identity-notice">
-        <AlertTitle>Step 1: Business Profile & Tax Facts</AlertTitle>
-        <AlertDescription className="arc-provider-identity-notice-description">
+      <AeAlert role="alert" tone="info" title="Step 1: Business Profile & Tax Facts" className="arc-provider-identity-notice"><div className="arc-provider-identity-notice-description">
           Define your public supplier brand and verify your Australian tax registration for invoice compliance.
-        </AlertDescription>
-      </Alert>
+        </div></AeAlert>
 
       <FieldGroup className="arc-provider-identity-fields">
         <Field className="arc-provider-identity-field" data-invalid={invalidField === 'name' || undefined}>

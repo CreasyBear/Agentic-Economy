@@ -1,4 +1,4 @@
-import { Stepper } from '@/components/arc/stepper/stepper'
+import { AeStatusStepper } from '@/components/ae/shared/status-stepper/AeStatusStepper'
 import type { PlanStageView } from '@/modules/capability-execution/plan.view-model'
 
 export type PlanStageColumnsProps = Readonly<{
@@ -12,16 +12,15 @@ export function PlanStageColumns({ stages }: PlanStageColumnsProps) {
       {stages.length === 0 ? (
         <p className="text-sm text-muted-foreground">No execution stages are available.</p>
       ) : (
-        <Stepper
+        <AeStatusStepper
           steps={stages.map((stage) => ({
             id: `stage-${stage.index + 1}`,
             label: stage.label,
             description: stage.description,
-            status: 'upcoming',
+            status: 'upcoming' as const,
             statusLabel: 'Planned; not started',
           }))}
           current={0}
-          details="all"
           label="Planned Plan stages"
           announceLabel="Plan has not started"
         />

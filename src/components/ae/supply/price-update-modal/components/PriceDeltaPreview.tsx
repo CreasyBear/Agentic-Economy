@@ -1,6 +1,6 @@
 import { ArrowRight } from 'lucide-react'
 
-import { Badge } from '@/components/ui/badge'
+import { Badge } from '@/components/arc/badge/badge'
 
 import type { PriceDeltaPreviewProps } from '../price-update-modal.contracts'
 import { GstSplitBreakdown } from './GstSplitBreakdown'
@@ -22,7 +22,7 @@ export function PriceDeltaPreview({
         <ArrowRight className="size-3.5 text-muted-foreground" aria-hidden />
         <span className="text-muted-foreground">New Price:</span>
         <span className="font-mono tabular-nums">{formattedNew}</span>
-        <Badge variant="outline" className="font-mono tabular-nums text-xs">
+        <Badge tone="neutral" className="font-mono tabular-nums text-xs">
           {deltaText}
         </Badge>
       </div>

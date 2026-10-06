@@ -3,7 +3,7 @@ import { useServerFn } from '@tanstack/react-start'
 
 import { SettingsGroup } from '@/components/ae/settings/settings-shell/components/SettingsSections'
 import { AeSecurityHistoryTable } from '@/components/ae/settings/AeSecurityHistoryTable'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { Button } from '@/components/arc/button/button'
 import {
   readAccountSecurityHistoryServer,
@@ -82,9 +82,7 @@ export function AeAccountSecurityHistory({ initialResult }: AeAccountSecurityHis
       description="Observed session, Agent, connection and account actions. Filter or load older events below."
     >
       {result.kind === 'unavailable' ? (
-        <Alert variant="destructive" className="arc-market">
-          <AlertTitle>Security history is temporarily unavailable.</AlertTitle>
-          <AlertDescription className="grid gap-1">
+        <AeAlert tone="danger" title="Security history is temporarily unavailable." className="arc-market"><div className="grid gap-1">
             <p>
               <strong>What happened:</strong> Security history is temporarily unavailable.
             </p>
@@ -105,8 +103,7 @@ export function AeAccountSecurityHistory({ initialResult }: AeAccountSecurityHis
             >
               {loading ? 'Trying again…' : 'Try again'}
             </Button>
-          </AlertDescription>
-        </Alert>
+          </div></AeAlert>
       ) : (
         <AeSecurityHistoryTable
           rows={rows}

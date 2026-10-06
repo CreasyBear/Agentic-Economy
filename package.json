@@ -19,9 +19,9 @@
     "env:example": "tsx tools/release/render-env-example.ts",
     "env:example:check": "tsx tools/release/render-env-example.ts --check",
     "build": "npm run pack:cli:public && vite build && node tools/release/verify-server-build.ts",
-    "typecheck": "node --max-old-space-size=4096 ./node_modules/typescript/bin/tsc --noEmit --incremental --tsBuildInfoFile .cache/typecheck.tsbuildinfo && npm run typecheck:convex",
+    "typecheck": "node --max-old-space-size=4096 ./node_modules/typescript/bin/tsc -b tsconfig.arc.json && node --max-old-space-size=4096 ./node_modules/typescript/bin/tsc --noEmit --incremental --tsBuildInfoFile .cache/typecheck.tsbuildinfo && npm run typecheck:convex",
     "typecheck:convex": "node --max-old-space-size=4096 ./node_modules/typescript/bin/tsc --project convex/tsconfig.json --noEmit --incremental --tsBuildInfoFile .cache/typecheck-convex.tsbuildinfo",
-    "typecheck:release": "node --max-old-space-size=4096 ./node_modules/typescript/bin/tsc --noEmit && npm run typecheck:convex:release",
+    "typecheck:release": "node --max-old-space-size=4096 ./node_modules/typescript/bin/tsc -b tsconfig.arc.json && node --max-old-space-size=4096 ./node_modules/typescript/bin/tsc --noEmit && npm run typecheck:convex:release",
     "typecheck:convex:release": "node --max-old-space-size=4096 ./node_modules/typescript/bin/tsc --project convex/tsconfig.json --noEmit",
     "check": "npm run lint && npm run deps:check && npm run typecheck && npm run test:imports && npm run test:ts-standards",
     "lint": "oxlint src convex tests tools --deny-warnings",
@@ -84,6 +84,7 @@
     "@noble/curves": "1.9.1",
     "@noble/hashes": "1.8.0",
     "@openrouter/ai-sdk-provider": "^3.0.0",
+    "@radix-ui/react-accordion": "^1.2.20",
     "@rjsf/core": "6.8.0",
     "@rjsf/shadcn": "6.8.0",
     "@rjsf/utils": "6.8.0",
@@ -135,8 +136,7 @@
     "undici": "7.29.0",
     "viem": "2.55.2",
     "yaml": "2.9.0",
-    "zod": "4.4.3",
-    "@radix-ui/react-accordion": "^1.2.20"
+    "zod": "4.4.3"
   },
   "devDependencies": {
     "@clerk/testing": "^2.2.31",

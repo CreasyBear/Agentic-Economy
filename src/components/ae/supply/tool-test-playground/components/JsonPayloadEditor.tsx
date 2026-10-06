@@ -1,11 +1,9 @@
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
+import { Button } from '@/components/arc/button/button'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { cn } from '@/lib/utils'
 
 import type { JsonPayloadEditorProps } from '../tool-test-playground.contracts'
-import { TACTILE } from '../tool-test-playground.contracts'
 
 export function JsonPayloadEditor({
   inputJson,
@@ -25,9 +23,9 @@ export function JsonPayloadEditor({
         <div className="flex flex-wrap items-center gap-2">
           <Button
             type="button"
-            variant="outline"
+            variant="secondary"
             size="sm"
-            className={cn('h-7 text-xs', TACTILE)}
+            className="h-7 text-xs"
             onClick={onLoadExamples}
             disabled={isRunning}
           >
@@ -37,7 +35,7 @@ export function JsonPayloadEditor({
             type="button"
             variant="ghost"
             size="sm"
-            className={cn('h-7 text-xs', TACTILE)}
+            className="h-7 text-xs"
             onClick={onResetDefaults}
             disabled={isRunning}
           >
@@ -56,13 +54,10 @@ export function JsonPayloadEditor({
       />
       <div className="min-h-[2.5rem]" aria-live="polite" role="status">
         {diagnostic ? (
-          <Alert variant="destructive" className="py-2">
-            <AlertTitle className="text-xs font-semibold">{diagnostic.whatHappened}</AlertTitle>
-            <AlertDescription className="grid gap-0.5 text-xs">
+          <AeAlert tone="danger" title={diagnostic.whatHappened} className="py-2"><div className="grid gap-0.5 text-xs">
               <span className="font-mono tabular-nums">{diagnostic.financialImpact}</span>
               <span>{diagnostic.nextStep}</span>
-            </AlertDescription>
-          </Alert>
+            </div></AeAlert>
         ) : null}
       </div>
     </div>

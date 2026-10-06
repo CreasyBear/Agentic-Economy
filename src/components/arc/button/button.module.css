@@ -1,7 +1,5 @@
-/* Arc UI upstream SHA-256: b6efc172a5943185c76e910c1d2300575091d56fe5655cb8f581cf946687e1d3; source retrieved 2026-10-01. */
 /* Press scale is driven by Motion (whileTap) alone, so transform never gets a CSS transition here. */
 .button { position: relative; display: inline-flex; min-height: var(--control-height-md); align-items: center; justify-content: center; gap: var(--space-2); border: 1px solid transparent; border-radius: var(--radius-control); padding: 0 var(--space-4); font: inherit; font-size: var(--text-sm); font-weight: 500; line-height: var(--leading-body); white-space: nowrap; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: color var(--duration-fast) var(--ease-standard), background var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard), opacity var(--duration-fast) var(--ease-standard), box-shadow var(--duration-fast) var(--ease-standard); }
-.button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
 .button:disabled { cursor: not-allowed; opacity: .52; }
 .button[aria-busy="true"] { cursor: progress; }
 /* Anchors of floating layers never scale: Radix opens on pointerdown and would measure a shrunken trigger. */
@@ -35,19 +33,3 @@
 .loadingLabel { opacity: 0; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .button { transition: none; } .labelSlot { transition: opacity var(--duration-instant) linear; } .spinner { animation-duration: .01ms; animation-iteration-count: 1; } }
-
-/* AE: labels must fit narrow sheets and catalogues, including long source names. */
-.button { max-width: 100%; white-space: normal; }
-.labelSlot { max-width: 100%; }
-.labelContent { max-width: 100%; min-width: 0; flex: 0 1 auto; }
-.labelPhase { min-width: 0; }
-
-.button[data-label-layout] { justify-content: start; }
-.button[data-label-layout] .labelSlot { width: 100% !important; }
-.button[data-label-layout] .labelContent, .button[data-label-layout] .labelPhase { width: 100%; }
-.button[data-label-layout="start"] .labelPhase { justify-content: start; }
-.button[data-label-layout="between"] .labelPhase { justify-content: space-between; }
-
-.button[data-label-layout] .labelPhase { white-space: normal; overflow-wrap: anywhere; }
-.button[data-label-layout] .labelContent { flex: 0 1 auto; }
-.labelPhase { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }

@@ -4,13 +4,13 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from '@tanstack/react-router'
 
 import { AeToolInspector } from '@/components/ae/market/tool-detail'
-import arcButton from '@/components/arc/button/button.module.css'
 import '../CommandPanelComposition.css'
 import type { PublicToolDescriptor } from '@/modules/capability-supply/public'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 
 import { useToolDetailReader } from '../CommandPanelProvider'
 import { rememberRecentToolRef } from '../recent-tools'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 
 type InspectState =
   | Readonly<{ kind: 'loading' }>
@@ -80,7 +80,7 @@ export function ToolDetailPage({
           <Link
             to="/market"
             onClick={onNavigate}
-            className={`${arcButton.button} ${arcButton.primary} ${arcButton.md}`}
+            className={actionLinkClassName('primary', 'md')}
           >
             Browse current Tools
           </Link>

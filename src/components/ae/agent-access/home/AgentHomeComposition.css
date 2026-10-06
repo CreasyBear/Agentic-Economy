@@ -11,8 +11,6 @@
 .arc-market .arc-agent-connect-actions > :is(button, a), .arc-market .arc-agent-inline-action { min-height: 44px; }
 .arc-market.arc-agent-connect-choice:focus-visible, .arc-market.arc-agent-install-region:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
 .arc-market.arc-agent-recovery { min-width: 0; padding: var(--space-4) var(--space-5); border-radius: var(--radius-panel); background: var(--surface); font-family: var(--font-body); font-size: var(--text-sm); line-height: 1.55; }
-.arc-market.arc-agent-recovery [data-slot="alert-title"] { display: block; overflow: visible; -webkit-line-clamp: unset; color: inherit; font-size: var(--text-sm); font-weight: 500; white-space: normal; overflow-wrap: anywhere; }
-.arc-market.arc-agent-recovery [data-slot="alert-description"] { display: grid; min-width: 0; gap: var(--space-3); font-size: var(--text-sm); line-height: 1.55; overflow-wrap: anywhere; }
 .arc-market.arc-agent-recovery p { margin: 0; }
 .arc-market .arc-agent-inline-action { max-width: 100%; justify-self: start; }
 .arc-market.arc-agent-pagination { display: grid; min-width: 0; justify-items: start; gap: var(--space-3); padding-block: var(--space-3); border-block-start: 1px solid var(--border); }

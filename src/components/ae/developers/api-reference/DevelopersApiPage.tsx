@@ -2,7 +2,7 @@ import { useId, useState } from 'react'
 
 import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
-import { Badge } from '@/components/ui/badge'
+import { Badge } from '@/components/arc/badge/badge'
 import { DEVELOPERS_API_COPY, type DevelopersApiViewModel } from './developers-api.contracts'
 import '../DeveloperReferenceComposition.css'
 
@@ -47,7 +47,7 @@ export function DevelopersApiPage({ page }: DevelopersApiPageProps) {
                     {group.operations.map((operation) => (
                       <article key={operation.operationId} className="arc-reference-operation">
                         <header className="arc-reference-operation-head">
-                          <div><Badge variant="outline">{operation.method}</Badge><code>{operation.path}</code></div>
+                          <div><Badge tone="neutral">{operation.method}</Badge><code>{operation.path}</code></div>
                           <h4>{operation.summary}</h4>
                           <code>{operation.operationId}</code>
                         </header>

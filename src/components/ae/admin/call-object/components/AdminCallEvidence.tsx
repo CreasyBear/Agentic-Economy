@@ -2,7 +2,8 @@ import { CallMoneyFacts } from '@/components/ae/call-receipt/CallMoneyFacts'
 import { CallReceiptTimeline } from '@/components/ae/call-receipt/CallReceiptTimeline'
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeSection } from '@/components/ae/layout/AeSection'
-import { SortableDataTable, type DataColumn } from '@/components/arc/sortable-data-table/sortable-data-table'
+import { AeSortableDataTable as SortableDataTable } from '@/components/ae/shared/sortable-data-table/AeSortableDataTable'
+import type { AeDataColumn as DataColumn } from '@/components/ae/shared/sortable-data-table/sortable-data-table.contracts'
 import type { ChatModelCostSummary } from '@/modules/chat/model-cost'
 import type { AdminCallObjectViewModel } from '../call-object.contracts'
 import { ADMIN_CALL_OBJECT_COPY } from '../call-object.contracts'
@@ -99,8 +100,6 @@ export function AdminCallEvidence({ model }: AdminCallEvidenceProps) {
               rows={[...model.view.answerModelCost.cost.requests]}
               columns={answerModelRequestColumns}
               rowKey="requestRef"
-              animateRows={false}
-              ariaLabel="Answer model requests"
               caption="Answer model requests"
               emptyMessage="No model requests recorded for this answer."
             />

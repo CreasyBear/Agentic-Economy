@@ -6,7 +6,6 @@
 
 .arc-decision-panel.arc-command-receipt { gap: 0; }
 .arc-command-receipt .arc-command-receipt-alert { padding: 0; border: 0; border-radius: 0; background: transparent; }
-.arc-command-receipt [data-slot="alert-title"] { display: block; overflow: visible; -webkit-line-clamp: unset; overflow-wrap: anywhere; }
 .arc-command-receipt .arc-command-receipt-body { display: grid; gap: var(--space-3); min-width: 0; }
 .arc-command-receipt .arc-command-receipt-action { justify-self: start; min-height: 44px; }
 

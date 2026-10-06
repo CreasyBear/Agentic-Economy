@@ -1,5 +1,6 @@
+/* The track centers the card and measures the room it may grow into. */
 .track { display: flex; width: 100%; min-width: 0; justify-content: center; }
-.card { width: 100%; max-width: var(--expandable-card-width, 100%); overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--surface); box-shadow: var(--shadow-resting); }
+.card { width: 100%; max-width: var(--expandable-card-width, 100%); overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-surface); background: var(--surface); box-shadow: var(--shadow-resting); }
 .card[data-expanded="true"] { max-width: var(--expandable-card-expanded-width, var(--expandable-card-width, 100%)); }
 /* Once measured, the width is animated in px, so the CSS cap steps aside and never clamps the morph. */
 .card[data-measured] { max-width: 100%; }

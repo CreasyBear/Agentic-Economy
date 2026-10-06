@@ -1,10 +1,10 @@
 import { Link } from '@tanstack/react-router'
 
-import buttonStyles from '@/components/arc/button/button.module.css'
 import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 
 import type { AgentConnectionSectionProps } from '../help.contracts'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 
 import '../SupportComposition.css'
 
@@ -13,7 +13,7 @@ export function AgentConnectionSection({ diagnosticCommand }: AgentConnectionSec
     <section className="arc-market arc-support-section">
       <h2>Agent connection</h2>
       <p>Use your client&apos;s account connection, then return to your task. Connection and spending permission are separate.</p>
-      <Link to="/for-agents" className={[buttonStyles.button, buttonStyles.secondary, buttonStyles.md].join(' ')}>Review Agent connection</Link>
+      <Link to="/for-agents" className={actionLinkClassName('secondary', 'md')}>Review Agent connection</Link>
       <Accordion type="single" collapsible className="arc-support-diagnostics">
         <AccordionItem value="diagnostics">
           <AccordionTrigger>Advanced connection diagnostics</AccordionTrigger>

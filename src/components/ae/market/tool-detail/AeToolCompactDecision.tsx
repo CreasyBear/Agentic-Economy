@@ -1,12 +1,12 @@
 import { Link } from '@tanstack/react-router'
 import { AeToolPrice } from '@/components/ae/market/AeToolPrice'
-import { Badge } from '@/components/ui/badge'
-import { CopyButton } from '@/components/arc/copy-button/copy-button'
-import { DecisionPanel } from '@/components/arc/chat/DecisionPanel'
-import buttonStyles from '@/components/arc/button/button.module.css'
+import { Badge } from '@/components/arc/badge/badge'
+import { AeCopyValue } from '@/components/ae/shared/copy-value/AeCopyValue'
+import { DecisionPanel } from '@/components/ae/shared/arc-pro/chat/DecisionPanel'
 import type { PublicToolDescriptor } from '@/modules/capability-supply/public'
 
 import { AeToolFacts } from './AeToolFacts'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import {
   nextActionCode,
   type ToolInspectorModel,
@@ -30,7 +30,7 @@ export function AeToolCompactDecision({
       <header className="arc-decision-header">
         <div className="arc-decision-heading-group">
           <h3 className="arc-decision-heading">
-            <Badge variant={decisionVariant(model)}>{model.decisionLabel}</Badge>
+            <Badge tone={decisionVariant(model)}>{model.decisionLabel}</Badge>
           </h3>
           <p className="text-sm text-muted-foreground">
             {model.nextActionDescription}
@@ -52,22 +52,22 @@ export function AeToolCompactDecision({
           <Link
             to={model.nextAction.href}
             onClick={onNavigate}
-            className={`${buttonStyles.button} ${buttonStyles.primary} ${buttonStyles.sm} min-h-touch w-fit`}
+            className={`${actionLinkClassName('primary', 'sm')} min-h-touch w-fit`}
           >
             {model.nextAction.label}
           </Link>
         ) : code !== undefined ? (
-          <CopyButton key={code} value={code} label={`Copy ${model.nextAction.label}`} className="min-h-touch w-fit" />
+          <AeCopyValue key={code} value={code} label={`Copy ${model.nextAction.label}`} className="min-h-touch w-fit" />
         ) : null}
       </div>
     </DecisionPanel>
   )
 }
 
-function decisionVariant(model: ToolInspectorModel): 'success' | 'warning' | 'outline' {
+function decisionVariant(model: ToolInspectorModel): 'success' | 'warning' | 'neutral' {
   if (model.nextAction.label === 'request for Agent') return 'success'
   if (model.availabilityPosture === 'setup_required') {
     return 'warning'
   }
-  return 'outline'
+  return 'neutral'
 }

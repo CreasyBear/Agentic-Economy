@@ -1,5 +1,5 @@
 import { AeFactList } from '@/components/ae/data/AeFactList'
-import { Badge } from '@/components/ui/badge'
+import { Badge } from '@/components/arc/badge/badge'
 import { Button } from '@/components/arc/button/button'
 import { formatTimestamp } from '@/lib/ui/format-time'
 import { formatDisplayAmount } from '@/modules/money/public'
@@ -41,7 +41,7 @@ export function AeAgentConnectionReceipts({
           <li key={connection.connectionRef} className="aeAgentConnectionRow">
             <div className="aeAgentConnectionHeader">
               <p className="aeAgentConnectionName">{connection.connectorDisplayName}</p>
-              <Badge variant={connection.state === 'active' ? 'default' : 'outline'}>{connectionStateLabel(connection.state)}</Badge>
+              <Badge tone={connection.state === 'active' ? 'info' : 'neutral'}>{connectionStateLabel(connection.state)}</Badge>
             </div>
             <AeFactList className="aeAgentConnectionFacts" density="compact" facts={[
               { label: 'Environment', value: environmentLabel(connection.environment) },

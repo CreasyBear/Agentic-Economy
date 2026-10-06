@@ -5,7 +5,7 @@ import { FaqSection } from '@/components/arc/blocks/faq-section/faq-section'
 import type { AeSiteFaqProps } from './faq.contracts'
 import './FaqComposition.css'
 
-/** The Arc FAQ block receives the page's exact questions and native continuation. */
+/** The Arc FAQ block receives authored headings and questions; AE keeps its link at the edge. */
 export function AeSiteFaq({
   labelledBy,
   questions,
@@ -13,23 +13,28 @@ export function AeSiteFaq({
   statusLinkLead,
   statusLinkLabel,
 }: AeSiteFaqProps) {
-  return (
+  const faq = (
     <FaqSection
-      className="arc-market"
       variant="accordion"
       title={title ?? null}
-      titleId={labelledBy}
+      {...(title === undefined ? {} : { titleId: labelledBy })}
       description=""
-      items={questions.map(item => ({ ...item, id: item.question }))}
+      items={questions.map((item, index) => ({ ...item, id: `question-${index}` }))}
       defaultValue={[]}
       multiple={false}
       contact={null}
-      footer={statusLinkLabel === undefined ? null : (
+    />
+  )
+
+  return (
+    <div className="arc-market arc-site-faq">
+      {faq}
+      {statusLinkLabel === undefined ? null : (
         <p className="arc-site-faq-status">
           {statusLinkLead === undefined ? null : <>{statusLinkLead}{' '}</>}
           <Link to="/status">{statusLinkLabel}</Link>
         </p>
       )}
-    />
+    </div>
   )
 }

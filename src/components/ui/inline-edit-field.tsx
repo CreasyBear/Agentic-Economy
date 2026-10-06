@@ -168,7 +168,7 @@ function InlineEditEditor({
 
   return (
     <form
-      className="flex w-full flex-col gap-intra"
+      className="arc-market flex w-full flex-col gap-intra"
       aria-busy={busy}
       onSubmit={(event) => {
         event.preventDefault()
@@ -178,7 +178,6 @@ function InlineEditEditor({
       <Input
         id={inputId}
         label={label}
-        labelMode="external"
         aria-label={label}
         aria-invalid={session.error !== null}
         aria-describedby={session.error === null ? undefined : errorId}

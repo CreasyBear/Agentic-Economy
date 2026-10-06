@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 
-import buttonStyles from '@/components/arc/button/button.module.css'
 import {
   MALFORMED_CALL_REFERENCE_MESSAGE,
   OPEN_CALL_LABEL,
@@ -23,20 +23,20 @@ export function SupportStatusSection({ callRef }: SupportStatusSectionProps) {
           <Link
             to="/calls/$callRef"
             params={{ callRef: callRef.value }}
-            className={[buttonStyles.button, buttonStyles.secondary, buttonStyles.md].join(' ')}
+            className={actionLinkClassName('secondary', 'md')}
           >
             {OPEN_CALL_LABEL}
           </Link>
         ) : (
           <Link
             to="/activity"
-            className={[buttonStyles.button, buttonStyles.secondary, buttonStyles.md].join(' ')}
+            className={actionLinkClassName('secondary', 'md')}
           >
             {OPEN_CALLS_LABEL}
           </Link>
         )}
-        <Link to="/owner/operations" className={[buttonStyles.button, buttonStyles.secondary, buttonStyles.md].join(' ')}>Continue Provider setup</Link>
-        <Link to="/owner/credit" className={[buttonStyles.button, buttonStyles.secondary, buttonStyles.md].join(' ')}>Review account credit</Link>
+        <Link to="/owner/operations" className={actionLinkClassName('secondary', 'md')}>Continue Provider setup</Link>
+        <Link to="/owner/credit" className={actionLinkClassName('secondary', 'md')}>Review account credit</Link>
       </div>
     </section>
   )

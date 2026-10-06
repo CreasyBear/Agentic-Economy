@@ -1,13 +1,13 @@
 import { Await } from '@tanstack/react-router'
 import { Suspense, type ComponentProps } from 'react'
 
-import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
+import { AeEmptyState } from '@/components/ae/shared/empty-state/AeEmptyState'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeWorkspaceGeneral } from '@/components/ae/settings/AeWorkspaceGeneral'
-import buttonStyles from '@/components/arc/button/button.module.css'
 import { Skeleton } from '@/components/arc/skeleton/skeleton'
 import { appDestination } from '@/lib/navigation/app-navigation'
 import { OwnershipConflict, SummaryCard, UnavailableSummary } from './ProviderWorkspaceSharedUi'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import type {
   ProviderWorkspaceIdentityDetailResult,
   ProviderWorkspacePublicStatusResult,
@@ -48,7 +48,7 @@ export function ProviderWorkspaceIdentitySection({
       ) : <UnavailableSummary title="Provider identity controls unavailable" retryLabel="Try provider identity again" onRetry={onRetryIdentity} /> : null}
       <a
         href={appDestination('settings').to}
-        className={['arc-market', buttonStyles.button, buttonStyles.secondary, buttonStyles.md, 'w-fit'].join(' ')}
+        className={['arc-market', actionLinkClassName('secondary', 'md'), 'w-fit'].join(' ')}
       >
         Open Settings
       </a>

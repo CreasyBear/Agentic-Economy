@@ -41,9 +41,7 @@ export function ProviderConnectionsTable({ rows }: ProviderConnectionsTableProps
         columns={columns}
         rows={[...rows]}
         rowKey="connectionRef"
-        animateRows={false}
         caption={PROVIDER_OBJECT_COPY.connectionsTitle}
-        ariaLabel={PROVIDER_OBJECT_COPY.connectionsTitle}
         emptyMessage={PROVIDER_OBJECT_COPY.noConnections}
       />
     </section>

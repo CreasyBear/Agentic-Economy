@@ -3,7 +3,7 @@ import { createFileRoute, redirect, useLocation } from '@tanstack/react-router'
 
 import { clerkEmbeddedProfileAppearance } from '@/components/ae/website/clerk-appearance'
 import { SettingsPage } from '@/components/ae/settings/settings-shell/components/SettingsSections'
-import { SecuritySettings } from '@/components/arc/blocks/security-settings/security-settings'
+import { SecuritySettings } from '@/components/ae/shared/arc-pro/security-settings/security-settings'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 
 export const Route = createFileRoute('/_operator/owner/settings/account/$')({

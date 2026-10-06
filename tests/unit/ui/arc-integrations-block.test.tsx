@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { Integrations, type IntegrationRecord } from '@/components/arc/blocks/integrations/integrations'
+import { Integrations, type IntegrationRecord } from '@/components/ae/shared/arc-pro/integrations/integrations'
 
 afterEach(cleanup)
 

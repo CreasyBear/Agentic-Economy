@@ -1,8 +1,8 @@
 import { Link } from '@tanstack/react-router'
 
-import buttonStyles from '@/components/arc/button/button.module.css'
 
 import type { StatusPageFooterProps } from '../system-status.contracts'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import '../../StatusComposition.css'
 
 export function StatusPageFooter({ statusAnnouncement }: StatusPageFooterProps) {
@@ -13,7 +13,7 @@ export function StatusPageFooter({ statusAnnouncement }: StatusPageFooterProps) 
       </p>
       <Link
         to="/support"
-        className={[buttonStyles.button, buttonStyles.secondary, buttonStyles.md].join(' ')}
+        className={actionLinkClassName('secondary', 'md')}
       >
         Help
       </Link>

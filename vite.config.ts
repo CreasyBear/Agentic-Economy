@@ -1,4 +1,5 @@
 import { defineConfig } from "vite";
+import { fileURLToPath } from "node:url";
 
 import { sentryVitePlugin } from "@sentry/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
@@ -64,6 +65,11 @@ export default defineConfig({
     noExternal: [/@visx\//],
   },
   resolve: {
+    alias: {
+      "next/image": fileURLToPath(
+        new URL("./src/lib/arc/next-image.tsx", import.meta.url),
+      ),
+    },
     tsconfigPaths: true,
   },
   build: {

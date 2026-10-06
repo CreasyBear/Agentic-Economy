@@ -7,7 +7,7 @@ import {
   AeOperatorSortableHeader,
   AeRecordTable,
 } from '@/components/ae/operator/AeOperatorDataTable'
-import { Badge } from '@/components/ui/badge'
+import { Badge } from '@/components/arc/badge/badge'
 
 import type { ActivityBadgeView, ActivityCallQueueProps, ActivityCallRowView } from '../activity.contracts'
 import './ActivityQueueComposition.css'
@@ -15,7 +15,7 @@ import './ActivityQueueComposition.css'
 function ActivityBadge({ badge }: Readonly<{ badge: ActivityBadgeView }>) {
   return (
     <Badge
-      variant={badge.variant}
+      tone={badge.variant}
       className={`arc-activity-badge${badge.warning ? ' border-warning/50 text-warning' : ''}`}
     >
       {badge.label}

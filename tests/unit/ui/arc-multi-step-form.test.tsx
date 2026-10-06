@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { MultiStepForm } from '@/components/arc/blocks/multi-step-form/multi-step-form'
+import { MultiStepForm } from '@/components/ae/shared/arc-pro/multi-step-form/multi-step-form'
 
 afterEach(cleanup)
 const steps = [{ id: 'source', title: 'Source' }, { id: 'terms', title: 'Terms' }] as const

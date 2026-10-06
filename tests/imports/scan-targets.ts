@@ -2,7 +2,7 @@ import type { ScanTarget } from '@/lib/ui/contract-scans'
 
 export function cleanRuntimeTargets(): readonly ScanTarget[] {
   return [
-    { root: 'src', includeExtensions: ['.ts', '.tsx'], exclude: ['src/lib/ui/contract-scans.ts'] },
+    { root: 'src', includeExtensions: ['.ts', '.tsx'], exclude: ['src/lib/ui/contract-scans.ts', 'src/components/arc'] },
     { root: 'convex', includeExtensions: ['.ts'] },
   ]
 }

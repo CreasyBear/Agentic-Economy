@@ -1,5 +1,5 @@
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { Button } from '@/components/arc/button/button'
 
 import type { HomeLifecycleIssueAlertProps } from '../agent-access-home.contracts'
@@ -12,9 +12,7 @@ export function HomeLifecycleIssueAlert({
   onRetry,
 }: HomeLifecycleIssueAlertProps) {
   return (
-    <Alert variant="destructive" className="arc-market arc-agent-recovery">
-      <AlertTitle>{issue.title}</AlertTitle>
-      <AlertDescription>
+    <AeAlert tone="danger" title={issue.title} className="arc-market arc-agent-recovery">
         <p>{issue.message}</p>
         {issue.correlationRef === undefined
           ? null
@@ -30,7 +28,6 @@ export function HomeLifecycleIssueAlert({
             {retryLabel}
           </Button>
         )}
-      </AlertDescription>
-    </Alert>
+      </AeAlert>
   )
 }

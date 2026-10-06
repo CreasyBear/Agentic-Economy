@@ -1,4 +1,4 @@
-import { Badge } from '@/components/ui/badge'
+import { Badge } from '@/components/arc/badge/badge'
 
 import type { DecommissionFenceListProps } from '../workspace-danger-zone.contracts'
 import '../WorkspaceDangerComposition.css'
@@ -7,7 +7,7 @@ export function DecommissionFenceList({ fenceMessages }: DecommissionFenceListPr
   return (
     <div className="arc-market arc-workspace-fences">
       <div className="arc-workspace-fences-heading">
-        <Badge variant="destructive">Close blocked</Badge>
+        <Badge tone="danger">Close blocked</Badge>
         <span>
           Close stays blocked until these are resolved.
         </span>

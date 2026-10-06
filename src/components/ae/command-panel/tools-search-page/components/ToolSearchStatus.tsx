@@ -3,10 +3,10 @@
 import { Link } from '@tanstack/react-router'
 
 import { Button } from '@/components/arc/button/button'
-import arcButton from '@/components/arc/button/button.module.css'
 import '../../CommandPanelComposition.css'
 
 import type { MarketToolSearchStatus, SearchRecoveryProps, ToolSearchNextPage } from '../tools-search-page.contracts'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 
 export type ToolSearchStatusProps = Readonly<{
   status: MarketToolSearchStatus
@@ -97,7 +97,7 @@ function SearchRecovery({ message, onRetry, onClear, onContinue, nextPage, isErr
         </Button>
         <Link
           to="/market"
-          className={`${arcButton.button} ${arcButton.secondary} ${arcButton.md}`}
+          className={actionLinkClassName('secondary', 'md')}
         >
           Browse current Tools
         </Link>

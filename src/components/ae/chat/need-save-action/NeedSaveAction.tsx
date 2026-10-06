@@ -1,8 +1,8 @@
 import { Button } from '@/components/arc/button/button'
-import buttonStyles from '@/components/arc/button/button.module.css'
 import type { ChatNeedActions, ChatSaveNeed } from '@/modules/chat/tool-card'
 import './NeedRecordComposition.css'
 import { useNeedSaveAction } from './useNeedSaveAction'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 
 type NeedSaveActionProps = Readonly<{ input: ChatSaveNeed; actions: ChatNeedActions | null }>
 
@@ -12,7 +12,7 @@ export function NeedSaveAction({ input, actions }: NeedSaveActionProps) {
   if (!actions.authenticated) {
     return (
       <div className="arc-market arc-chat arc-need-record arc-need-record-root">
-        <a href="/sign-in" className={[buttonStyles.button, buttonStyles.secondary, buttonStyles.md].join(' ')}>Sign in to save this need</a>
+        <a href="/sign-in" className={actionLinkClassName('secondary', 'md')}>Sign in to save this need</a>
       </div>
     )
   }

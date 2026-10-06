@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { SettingsShell } from '@/components/ae/settings/settings-shell/SettingsShell'
 import { SettingsPage } from '@/components/ae/settings/settings-shell/components/SettingsSections'
-import { SecuritySettings } from '@/components/arc/blocks/security-settings/security-settings'
+import { SecuritySettings } from '@/components/ae/shared/arc-pro/security-settings/security-settings'
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({ to, activeOptions: _activeOptions, ...props }: { to: string; activeOptions?: unknown; children: ReactNode }) => <a href={to} {...props} />,

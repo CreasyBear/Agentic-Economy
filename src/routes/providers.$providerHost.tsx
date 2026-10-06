@@ -4,7 +4,6 @@ import { AePageSkeleton, AePageState } from '@/components/ae/layout/AePageState'
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
 import { HostGrouping } from '@/components/ae/shared/HostGrouping'
 import { projectToolObject } from '@/components/ae/shared/listing-family.view-model'
-import arcButtonStyles from '@/components/arc/button/button.module.css'
 import '@/components/ae/shared/ProviderCatalogueComposition.css'
 import { cn } from '@/lib/utils'
 import { directoryTitle } from '@/modules/market/directory-card.view-model'
@@ -12,6 +11,7 @@ import { directoryProviderKey, directorySlugBase } from '@/modules/market/x402-d
 import { readX402DirectoryCatalogueServer } from '@/modules/market/x402-directory-index.functions'
 import { x402DirectoryFilterSchema } from '@/modules/market/x402-directory'
 import { projectDirectoryListing } from '@/modules/registry/public'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 
 export const Route = createFileRoute('/providers/$providerHost')({
   loader: async ({ params }) => {
@@ -43,5 +43,5 @@ function HostPage() {
 }
 
 function HostError() {
-  return <AePageState tone="warning" title="Directory Host unavailable" description="This Host's sourced listings cannot be checked right now. Try again or browse the Market." action={<Link to="/market" className={cn(arcButtonStyles.button, arcButtonStyles.primary, arcButtonStyles.md)}>Browse Market</Link>} />
+  return <AePageState tone="warning" title="Directory Host unavailable" description="This Host's sourced listings cannot be checked right now. Try again or browse the Market." action={<Link to="/market" className={cn(actionLinkClassName('primary', 'md'))}>Browse Market</Link>} />
 }

@@ -1,4 +1,3 @@
-/* Arc registry source retrieved 2026-10-04; upstream SHA-256: 6daed55a7cd2122cc67fa4ee0243c3266fb1b002ed5609c00836e349bc781812. */
 "use client";
 
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
@@ -102,7 +101,7 @@ function HeightFrame({ morphKey, reduce, children }: { morphKey: string; reduce:
     // The minimum follows the moving height, so a flex parent short on room cannot squeeze the frame mid-morph and snap it when the morph ends.
     const unfollow = height.on("change", value => { if (frame.current) frame.current.style.minHeight = typeof value === "number" ? `${value}px` : ""; });
     const observer = new ResizeObserver(([entry]) => {
-      const next = entry?.borderBoxSize?.[0]?.blockSize ?? node.offsetHeight;
+      const next = entry.borderBoxSize?.[0]?.blockSize ?? node.offsetHeight;
       const current = height.get();
       const from = typeof current === "number" ? current : last.current;
       last.current = next;
@@ -128,7 +127,7 @@ function Swap({ follow, style, ...props }: HTMLMotionProps<"span"> & { follow?: 
   const held = useMotionValue(0);
   // Runs before the chip re-measures its width in the same commit, so this reads the offset from before the change.
   useLayoutEffect(() => { if (!present && follow) held.jump(follow.get()); }, [present, follow, held]);
-  return <motion.span {...props} {...(follow ? { style: { ...style, x: present ? follow : held } } : style === undefined ? {} : { style })} aria-hidden={present ? props["aria-hidden"] : true} />;
+  return <motion.span {...props} style={follow ? { ...style, x: present ? follow : held } : style} aria-hidden={present ? props["aria-hidden"] : true} />;
 }
 
 interface ChipProps {
@@ -184,13 +183,14 @@ function Chip({ option, selected, tabbable, reduce, delay, onToggle, onFocusChip
 interface MoreChipProps { hidden: number; expanded: boolean; tabbable: boolean; reduce: boolean; onToggle: () => void; onFocusChip: (value: string) => void; ref?: Ref<HTMLButtonElement>; }
 
 function MoreChip({ hidden, expanded, tabbable, reduce, onToggle, onFocusChip, ref }: MoreChipProps) {
-  const present = useIsPresent();
   const body = useRef<HTMLSpanElement>(null);
+  const present = useIsPresent();
   const text = expanded ? "Show less" : `+${hidden} more`;
   const lag = useWidthLag(body, text, reduce);
   const edge = useTransform(lag, value => -value);
   // The text stays centred on the visible surface while its edge catches up.
   const centre = useTransform(lag, value => value / 2);
+  // arc-patch: keep an exiting overflow control out of the keyboard and interaction model.
   return <motion.button ref={ref} type="button" className={`${styles.chip} ${styles.more}`} data-more="" aria-expanded={expanded} aria-hidden={present ? undefined : true} tabIndex={present && tabbable ? 0 : -1} disabled={!present}
     onClick={onToggle} onFocus={() => onFocusChip(MORE)} layout="position" transition={{ layout: reduce ? { duration: 0 } : motionTokens.spring.morph }}>
     <span ref={body} className={styles.body}>
@@ -226,6 +226,7 @@ export function ChipGroup({ options, value, onValueChange, label, multiple = tru
     onValueChange(options.filter(option => option.value === next ? !on : value.includes(option.value)).map(option => option.value));
   }
 
+  // arc-patch: return focus before collapse removes the focused overflow control.
   function toggleMore() {
     if (expanded) {
       setPinned(value);
@@ -247,8 +248,7 @@ export function ChipGroup({ options, value, onValueChange, label, multiple = tru
     const moves: Record<string, number> = { ArrowRight: index === last ? 0 : index + 1, ArrowDown: index === last ? 0 : index + 1, ArrowLeft: index === 0 ? last : index - 1, ArrowUp: index === 0 ? last : index - 1, Home: 0, End: last };
     if (!(event.key in moves)) return;
     event.preventDefault();
-    const nextIndex = moves[event.key];
-    if (nextIndex !== undefined) buttons[nextIndex]?.focus();
+    buttons[moves[event.key]].focus();
   }
 
   return <LayoutGroup id={id}>

@@ -2,9 +2,9 @@ import '@/components/ae/shared/ProviderCatalogueComposition.css'
 import { Link, type NotFoundRouteProps } from '@tanstack/react-router'
 
 import { AePageState } from '@/components/ae/layout/AePageState'
-import arcButtonStyles from '@/components/arc/button/button.module.css'
 import { cn } from '@/lib/utils'
 import type { PublicBusinessPageNotFoundReason } from '@/modules/catalog/public'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 
 export function PublicBusinessNotFound({ data }: NotFoundRouteProps) {
   const reason: PublicBusinessPageNotFoundReason =
@@ -19,8 +19,8 @@ export function PublicBusinessNotFound({ data }: NotFoundRouteProps) {
         description="This provider is not published in the catalogue right now."
         action={
           <div className="arc-provider-actions">
-            <Link to="/for-providers" className={cn(arcButtonStyles.button, arcButtonStyles.primary, arcButtonStyles.md)}>Add Tool</Link>
-            <Link to="/market" className={cn(arcButtonStyles.button, arcButtonStyles.secondary, arcButtonStyles.md)}>Browse Tools</Link>
+            <Link to="/for-providers" className={cn(actionLinkClassName('primary', 'md'))}>Add Tool</Link>
+            <Link to="/market" className={cn(actionLinkClassName('secondary', 'md'))}>Browse Tools</Link>
           </div>
         }
       />
@@ -33,8 +33,8 @@ export function PublicBusinessNotFound({ data }: NotFoundRouteProps) {
       description="Nothing is published here. Check the address, or browse the catalogue."
       action={
         <div className="arc-provider-actions">
-          <Link to="/market" className={cn(arcButtonStyles.button, arcButtonStyles.primary, arcButtonStyles.md)}>Browse Tools</Link>
-          <Link to="/for-providers" className={cn(arcButtonStyles.button, arcButtonStyles.secondary, arcButtonStyles.md)}>Add Tool</Link>
+          <Link to="/market" className={cn(actionLinkClassName('primary', 'md'))}>Browse Tools</Link>
+          <Link to="/for-providers" className={cn(actionLinkClassName('secondary', 'md'))}>Add Tool</Link>
         </div>
       }
     />

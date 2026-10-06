@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { PageHeader } from '@/components/arc/blocks/page-header/page-header'
+import { AeRecordPageHeader as PageHeader } from '@/components/ae/shared/record-page-header/AeRecordPageHeader'
 
 afterEach(cleanup)
 
-describe('Arc record header', () => {
+describe('AE record header', () => {
   it('preserves exact record identity, native breadcrumb destinations and the current crumb', () => {
     const reference = `provider:${'a'.repeat(180)}`
     render(<PageHeader title={`Provider ${reference}`} description="Current provider evidence"

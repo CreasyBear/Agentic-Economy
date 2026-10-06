@@ -2,13 +2,13 @@ import { Link } from '@tanstack/react-router'
 import { useRef, useState } from 'react'
 import { useServerFn } from '@tanstack/react-start'
 import { useReverification } from '@clerk/tanstack-react-start'
-import buttonStyles from '@/components/arc/button/button.module.css'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { AeNavigationSafetyBoundary } from '@/components/ae/layout/AeNavigationSafetyBoundary'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSupplySourceNativeStart } from '@/components/ae/supply/AeSupplySourceNativeStart'
 import './SupplyJourneyComposition.css'
 import type { ProviderWorkspaceIdentityDetailResult } from '@/components/ae/offerings/provider-workspace.functions'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import {
   assessOwnerSupplySourceServer,
   filterOwnerSupplyAuthorityOptions,
@@ -61,23 +61,20 @@ export function AeOwnerSupplySourceStartPage({ data, search, navigate }: AeOwner
   return (
     <AeOperatorPage operatorRole="owner" title="Add Tool" description="Connect a Tool you already run. Agentic Economy checks what agents can buy." currentPath="/owner/operations/new" breadcrumbs={[{ label: 'Tools', href: '/owner/operations' }, { label: 'Add Tool' }]}>
       {identity.kind !== 'available' ? (
-        <Alert variant="destructive" className="arc-market arc-supply-owner-feedback">
-          <AlertTitle>Provider Workspace unavailable</AlertTitle>
-          <AlertDescription className="arc-supply-owner-feedback-description">
+        <AeAlert tone="danger" title="Provider Workspace unavailable" className="arc-market arc-supply-owner-feedback"><div className="arc-supply-owner-feedback-description">
             <p>Agentic Economy could not confirm the current Business. Return to Tools and try again.</p>
             <Link
               to="/owner/operations"
-              className={`arc-market ${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md} arc-supply-feedback-action`}
+              className={`arc-market ${actionLinkClassName('secondary', 'md')} arc-supply-feedback-action`}
             >
               Return to Tools
             </Link>
-          </AlertDescription>
-        </Alert>
+          </div></AeAlert>
       ) : sourceUnavailable ? (
-        <Alert variant="destructive" className="arc-market arc-supply-owner-feedback"><AlertTitle>Saved source unavailable</AlertTitle><AlertDescription className="arc-supply-owner-feedback-description">Agentic Economy could not read the saved source or current connections. Reload before starting or submitting another connection.</AlertDescription></Alert>
+        <AeAlert tone="danger" title="Saved source unavailable" className="arc-market arc-supply-owner-feedback"><div className="arc-supply-owner-feedback-description">Agentic Economy could not read the saved source or current connections. Reload before starting or submitting another connection.</div></AeAlert>
       ) : (<>
         {resumeRequested && resume.kind !== 'available' ? (
-          <Alert variant="destructive" className="arc-market arc-supply-owner-feedback mb-5"><AlertTitle>Saved source could not be resumed</AlertTitle><AlertDescription className="arc-supply-owner-feedback-description">The saved source is unavailable or changed. Review it from Add Tool before starting another connection.</AlertDescription></Alert>
+          <AeAlert tone="danger" title="Saved source could not be resumed" className="arc-market arc-supply-owner-feedback mb-5"><div className="arc-supply-owner-feedback-description">The saved source is unavailable or changed. Review it from Add Tool before starting another connection.</div></AeAlert>
         ) : null}
         <AeNavigationSafetyBoundary
           state={navigationSafety}

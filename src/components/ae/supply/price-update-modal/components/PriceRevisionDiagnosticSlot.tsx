@@ -1,4 +1,4 @@
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 
 import type { PriceRevisionDiagnosticSlotProps } from '../price-update-modal.contracts'
 import '../PriceRevisionComposition.css'
@@ -7,13 +7,10 @@ export function PriceRevisionDiagnosticSlot({ diagnostic }: PriceRevisionDiagnos
   return (
     <div className="arc-price-revision-diagnostic" role="status" aria-live="polite">
       {diagnostic ? (
-        <Alert variant="destructive" className="py-2">
-          <AlertTitle>{diagnostic.whatHappened}</AlertTitle>
-          <AlertDescription>
+        <AeAlert tone="danger" title={diagnostic.whatHappened} className="py-2">
             <span className="font-mono tabular-nums">{diagnostic.financialImpact}</span>
             <span>{diagnostic.nextStep}</span>
-          </AlertDescription>
-        </Alert>
+          </AeAlert>
       ) : null}
     </div>
   )

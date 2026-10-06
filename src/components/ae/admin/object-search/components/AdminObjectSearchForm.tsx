@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 
 import { Button } from '@/components/arc/button/button'
 import { Input } from '@/components/arc/input/input'
-import { Select } from '@/components/arc/select/select'
+import { Select } from '@/components/ae/shared/base-ui/select/select'
 import type { AdminObjectKind } from '@/lib/operator/admin-console/contracts'
 import type { AdminObjectSearchInput, AdminObjectSearchState } from '../object-search.contracts'
 import {

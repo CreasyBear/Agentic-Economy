@@ -1060,22 +1060,22 @@ describe('assistant access components', () => {
       />,
     )
 
-    const suggestedAmounts = screen.getByRole('group', { name: 'Choose a credit amount' })
+    const suggestedAmounts = screen.getByRole('radiogroup', { name: 'Choose a credit amount' })
     expect(suggestedAmounts.textContent).toContain('A$5.00')
     expect(suggestedAmounts.textContent).toContain('A$10.00')
     expect(suggestedAmounts.textContent).toContain('A$25.00')
 
-    const tenDollarChoice = screen.getByRole('button', { name: '+A$10.00' })
-    expect(tenDollarChoice.className).toMatch(/font-mono/)
-    expect(tenDollarChoice.className).toMatch(/tabular-nums/)
+    const tenDollarChoice = screen.getByRole('radio', { name: '+A$10.00' })
+    expect(tenDollarChoice.querySelector('.font-mono')).toBeTruthy()
+    expect(tenDollarChoice.querySelector('.tabular-nums')).toBeTruthy()
     fireEvent.click(tenDollarChoice)
-    expect(tenDollarChoice.getAttribute('aria-pressed')).toBe('true')
+    expect(tenDollarChoice.getAttribute('aria-checked')).toBe('true')
     expect((screen.getByLabelText(/other amount/i) as HTMLInputElement).value).toBe('10')
     const quotedPayment = screen.getByRole('button', { name: /pay A\$11\.55 and add A\$10\.00/i })
     expect(screen.getByRole('group', { name: 'Funding quote and payment' }).contains(quotedPayment)).toBe(true)
 
     fireEvent.change(screen.getByLabelText(/other amount/i), { target: { value: '7.50' } })
-    expect(tenDollarChoice.getAttribute('aria-pressed')).toBe('false')
+    expect(tenDollarChoice.getAttribute('aria-checked')).toBe('false')
     expect(screen.getByRole('button', { name: /pay A\$8\.67 and add A\$7\.50/i })).toBeTruthy()
   })
 

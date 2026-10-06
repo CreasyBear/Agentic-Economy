@@ -2,7 +2,7 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
-import { ComparisonTable } from '@/components/arc/market/ComparisonTable'
+import { AeComparisonTable as ComparisonTable } from '@/components/ae/shared/comparison-table/AeComparisonTable'
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 

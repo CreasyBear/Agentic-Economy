@@ -7,9 +7,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 
 import { AePageState } from '@/components/ae/layout/AePageState'
 import { Button } from '@/components/arc/button/button'
-import buttonStyles from '@/components/arc/button/button.module.css'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { api } from '../../../../convex/_generated/api'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import './RouteRecoveryComposition.css'
 
 const CHAT_VISIBLE_STYLE = { display: 'contents' } as const
@@ -40,7 +40,7 @@ export function ChatConfigurationUnavailable() {
       description="Chat is not configured. The Tool catalogue remains available."
       tone="warning"
       action={(
-        <Link to="/market" className={`arc-market ${buttonStyles.button} ${buttonStyles.primary} ${buttonStyles.md}`}>
+        <Link to="/market" className={`arc-market ${actionLinkClassName('primary', 'md')}`}>
           Browse Tools
         </Link>
       )}
@@ -171,7 +171,7 @@ function ConfiguredChatConvexProvider({ convexUrl, children }: { convexUrl: stri
               <Button type="button" size="md" onClick={() => setAttempt((value) => value + 1)}>
                 Try again
               </Button>
-              <Link to="/market" className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}>Browse Tools</Link>
+              <Link to="/market" className={actionLinkClassName('secondary', 'md')}>Browse Tools</Link>
             </div>
           )}
         />

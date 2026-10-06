@@ -3,9 +3,9 @@ import { AeInlineState } from '@/components/ae/feedback/AeInlineState'
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Button } from '@/components/arc/button/button'
-import { Checkbox } from '@/components/arc/checkbox/checkbox'
-import { DecisionPanel } from '@/components/arc/chat/DecisionPanel'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Checkbox } from '@/components/ae/shared/base-ui/checkbox/checkbox'
+import { DecisionPanel } from '@/components/ae/shared/arc-pro/chat/DecisionPanel'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
@@ -169,7 +169,7 @@ export function SupplyPublicationFlow({
           onPriceChange={onPriceChange}
         />
         {selected.authentication.kind === 'public' ? (
-          <Alert><AlertTitle>Public source</AlertTitle><AlertDescription>AE will validate this source. Publication remains Under review until Provider authority is established.</AlertDescription></Alert>
+          <AeAlert role="alert" tone="info" title="Public source">AE will validate this source. Publication remains Under review until Provider authority is established.</AeAlert>
         ) : (
           <ConnectionField
             value={connectionRef}
@@ -274,9 +274,7 @@ function ConnectionField({ value, options, connecting, disabled, invalid = false
     <Field data-invalid={invalid || undefined}>
       <FieldLabel id="supply-native-connection-label">Source connection</FieldLabel>
       {options.length === 0 ? (
-        <Alert>
-          <AlertTitle>Connect this source</AlertTitle>
-          <AlertDescription>
+        <AeAlert role="alert" tone="info" title="Connect this source">
             <p>This Tool requires the source’s standard authentication. Your selected Tool is saved.</p>
             <Button
               id={SUPPLY_PUBLICATION_FIELD_IDS.connection}
@@ -291,8 +289,7 @@ function ConnectionField({ value, options, connecting, disabled, invalid = false
             >
               {connecting ? 'Opening payee proof…' : 'Prove payTo'}
             </Button>
-          </AlertDescription>
-        </Alert>
+          </AeAlert>
       ) : (
         <RadioGroup
           id={SUPPLY_PUBLICATION_FIELD_IDS.connection}

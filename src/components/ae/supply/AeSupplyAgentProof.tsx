@@ -1,6 +1,6 @@
 import { useId, type ReactNode } from 'react'
 
-import { Badge } from '@/components/ui/badge'
+import { Badge } from '@/components/arc/badge/badge'
 
 import type { SupplyLandingTool } from '@/modules/capability-supply/supply-funnel.functions'
 import type { ToolCardViewModel } from '@/modules/market/tool-view-model'
@@ -118,7 +118,7 @@ function PublishedToolProofRow({ tool }: Readonly<{ tool: ToolCardViewModel }>) 
       <div className="arc-supply-proof__tool-info">
         <h4 className="arc-supply-proof__tool-name">{tool.title}</h4>
         <div className="arc-supply-proof__tool-state">
-          <Badge className="arc-supply-proof__readiness" variant={tool.readiness === 'Routeable' ? 'success' : tool.readiness === 'SetupRequired' ? 'warning' : 'outline'}>
+          <Badge className="arc-supply-proof__readiness" tone={tool.readiness === 'Routeable' ? 'success' : tool.readiness === 'SetupRequired' ? 'warning' : 'neutral'}>
             {tool.readinessLabel}
           </Badge>
         </div>

@@ -8,9 +8,9 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion'
-import buttonStyles from '@/components/arc/button/button.module.css'
 import { cn } from '@/lib/utils'
 import type { PublicToolDescriptor } from '@/modules/capability-supply/public'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 
 /** Compact-only actions that locate this Tool in the wider market. */
 export function AeToolPosition({
@@ -27,7 +27,7 @@ export function AeToolPosition({
         params={{ toolRef: tool.toolRef }}
         data-testid="command-panel-open-tool"
         onClick={onNavigate}
-        className={cn(buttonStyles.button, buttonStyles.secondary, buttonStyles.sm, 'min-h-touch justify-self-start')}
+        className={cn(actionLinkClassName('secondary', 'sm'), 'min-h-touch justify-self-start')}
       >
         Open full Tool details
         <ArrowUpRightIcon aria-hidden="true" data-icon="inline-end" />

@@ -4,12 +4,13 @@ import { useEffect, useState } from 'react'
 import { ArrowUpRightIcon, RefreshCwIcon, ShoppingBagIcon } from 'lucide-react'
 
 import { api } from '../../../../../convex/_generated/api'
-import { Alert } from '@/components/arc/alert/alert'
+import { AeAlert as Alert } from '@/components/ae/shared/alert/AeAlert'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Badge } from '@/components/arc/badge/badge'
-import { EmptyState } from '@/components/arc/empty-state/empty-state'
-import { SortableDataTable, type DataColumn } from '@/components/arc/sortable-data-table/sortable-data-table'
-import { Button } from '@/components/ui/button'
+import { AeEmptyState } from '@/components/ae/shared/empty-state/AeEmptyState'
+import { AeSortableDataTable } from '@/components/ae/shared/sortable-data-table/AeSortableDataTable'
+import type { AeDataColumn } from '@/components/ae/shared/sortable-data-table/sortable-data-table.contracts'
+import { Button } from '@/components/arc/button/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { adminActivityHref, adminActivityWindow, type AdminActivitySearch, type AdminPurchaseRow } from '@/lib/operator/admin-console/activity'
 import { formatPerthTimestamp } from '@/lib/ui/format-time'
@@ -61,7 +62,7 @@ function PurchaseActivityQuery({ search, compact = false }: PurchaseActivityProp
 
   const exhausted = activity.status === 'Exhausted'
   const loadMore = !compact && !exhausted ? (
-    <Button variant="outline" disabled={activity.status !== 'CanLoadMore'} onClick={() => activity.loadMore(25)}>
+    <Button variant="secondary" disabled={activity.status !== 'CanLoadMore'} onClick={() => activity.loadMore(25)}>
       {activity.status === 'LoadingMore' ? 'Loading…' : 'Load more purchases'}
     </Button>
   ) : undefined
@@ -90,7 +91,7 @@ function PurchaseActivityQuery({ search, compact = false }: PurchaseActivityProp
       </div>
       {activity.results.length === 0 ? (
         <div className="ae-arc rounded-card border border-border bg-card">
-          <EmptyState
+          <AeEmptyState
             icon={<ShoppingBagIcon size={24} />}
             title={exhausted ? 'No matching purchases' : 'No matches in the records scanned'}
             description={exhausted
@@ -109,7 +110,7 @@ function PurchaseActivityQuery({ search, compact = false }: PurchaseActivityProp
   )
 }
 
-const PURCHASE_COLUMNS: DataColumn<PurchaseTableRow>[] = [
+const PURCHASE_COLUMNS: AeDataColumn<PurchaseTableRow>[] = [
   {
     key: 'purchase', label: 'Purchase',
     render: (_value, row) => (
@@ -172,7 +173,7 @@ export function PurchaseActivityTable({ rows, showAccount = true }: Readonly<{ r
   const records = rows.map(row => ({ ...row, purchase: row.toolName ?? row.toolRef, account: row.accountName ?? row.accountRef }))
   return (
     <div className="ae-arc w-full min-w-0">
-      <SortableDataTable density="compact"
+      <AeSortableDataTable
         rows={records}
         columns={showAccount ? PURCHASE_COLUMNS : PURCHASE_COLUMNS.filter(column => column.key !== 'account')}
         rowKey="callRef"

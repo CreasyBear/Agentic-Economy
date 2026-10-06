@@ -3,7 +3,6 @@ import { Link } from '@tanstack/react-router'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AePageState } from '@/components/ae/layout/AePageState'
 import { AeSection } from '@/components/ae/layout/AeSection'
-import buttonStyles from '@/components/arc/button/button.module.css'
 import '../RecordWorkspaceComposition.css'
 import { AdminSearchNotice } from '../AdminSearchNotice'
 import { AdminAuditPageSkeleton } from './AdminAuditPageSkeleton'
@@ -16,6 +15,7 @@ import { AuditEventsTable } from './components/AuditEventsTable'
 import { AuditFilterChips } from './components/AuditFilterChips'
 import { PendingApprovalsActions } from './PendingApprovalsActions'
 import { useAdminAudit } from './useAdminAudit'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 
 export function AdminAuditPage(props: AdminAuditPageProps) {
   const audit = useAdminAudit(props)
@@ -46,7 +46,7 @@ export function AdminAuditPage(props: AdminAuditPageProps) {
         action={
           <Link
             to="/admin"
-            className={`arc-market ${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}
+            className={`arc-market ${actionLinkClassName('secondary', 'md')}`}
           >
             Return to Overview
           </Link>

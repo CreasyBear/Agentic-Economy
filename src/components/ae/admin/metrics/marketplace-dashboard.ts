@@ -1,4 +1,4 @@
-import type { DashboardMetric } from '@/components/arc/blocks/marketplace-dashboard/metrics-dashboard'
+import type { DashboardMetric } from '@/components/ae/shared/arc-pro/marketplace-dashboard/metrics-dashboard'
 import type { MarketplaceMetricsRange, MarketplaceMetricsReport } from '@/lib/operator/admin-console/metrics.contracts'
 import { adminActivityHref } from '@/lib/operator/admin-console/activity'
 import { formatCurrencyAmount } from '@/modules/money/public'

@@ -1,6 +1,3 @@
-/* Actual Arc FAQ section registry source retrieved 2026-10-03. TSX SHA-256: 5af43fde71647c95a0e9e4538345ea9ad4324dd5f76afb6622b64b4fb63c1565
- * Adaptations: strict indexed/optional access, collision-free answer IDs,
- * heading identity/omission and native footer ports. */
 "use client";
 
 import { forwardRef, useId, useMemo, useState } from "react";
@@ -29,10 +26,8 @@ export interface FaqSectionProps {
   /** `accordion` is one centered list, `columns` groups questions beside a category rail, `search` filters as you type. */
   variant?: FaqSectionVariant;
   title?: string | null;
-  /** Preserve a supplied page heading anchor. Null title omits the heading. */
+  // arc-patch: preserve authored heading ids and omit headings without dangling section labels.
   titleId?: string;
-  /** Native page continuation after the questions. */
-  footer?: ReactNode;
   description?: string;
   items?: FaqItem[];
   /** Allow several answers open at once. Defaults to false. */
@@ -116,12 +111,12 @@ function onListKeyDown(event: KeyboardEvent<HTMLElement>) {
   if (index < 0) return;
   event.preventDefault();
   const next = event.key === "Home" ? 0 : event.key === "End" ? triggers.length - 1 : (index + (event.key === "ArrowDown" ? 1 : -1) + triggers.length) % triggers.length;
-  triggers[next]?.focus();
+  triggers[next].focus();
 }
 
 function Question({ item, open, onToggle, query = "", reduced, baseId, layout }: { item: FaqItem; open: boolean; onToggle: () => void; query?: string; reduced: boolean; baseId: string; layout?: boolean }) {
   const key = keyOf(item);
-  const safe = `${baseId}-${encodeURIComponent(key)}`;
+  const safe = `${baseId}-${key.replace(/[^a-zA-Z0-9_-]/g, "")}`;
   const hint = query && !open && !normalize(item.question).includes(normalize(query.trim())) ? snippet(item.answer, query) : null;
   return <motion.li className={styles.item} data-open={open ? "" : undefined}
     layout={layout && !reduced ? "position" : false}
@@ -142,7 +137,7 @@ function Question({ item, open, onToggle, query = "", reduced, baseId, layout }:
     </AnimatePresence>
     <AnimatePresence initial={false}>
       {open && <motion.div key="answer" id={`${safe}-a`} role="region" aria-labelledby={`${safe}-q`} className={styles.panel} variants={reduced ? reducedPanel : panelVariants} initial="closed" animate="open" exit="closed">
-        <motion.p className={styles.answer} {...(reduced ? {} : { variants: contentVariants })}><Highlight text={item.answer} query={query} /></motion.p>
+        <motion.p className={styles.answer} variants={reduced ? undefined : contentVariants}><Highlight text={item.answer} query={query} /></motion.p>
       </motion.div>}
     </AnimatePresence>
   </motion.li>;
@@ -163,9 +158,8 @@ function Contact({ contact }: { contact: NonNullable<FaqSectionProps["contact"]>
 export const FaqSection = forwardRef<HTMLElement, FaqSectionProps>(function FaqSection({
   variant = "accordion",
   title = "Frequently asked questions",
-  description = "Everything you need to know before you install your first component.",
   titleId,
-  footer,
+  description = "Everything you need to know before you install your first component.",
   items = faqExampleItems,
   multiple = false,
   value,
@@ -217,7 +211,6 @@ export const FaqSection = forwardRef<HTMLElement, FaqSectionProps>(function FaqS
       {heading}
       {list(items)}
       {contact && <Contact contact={contact} />}
-      {footer}
     </div>}
 
     {variant === "columns" && <div className={styles.columnsGrid}>
@@ -235,7 +228,6 @@ export const FaqSection = forwardRef<HTMLElement, FaqSectionProps>(function FaqS
           </div>
         </LayoutGroup>
         {contact && <Contact contact={contact} />}
-      {footer}
       </div>
       <div className={styles.stage}>
         <AnimatePresence initial={false} mode="popLayout" custom={direction}>
@@ -266,7 +258,6 @@ export const FaqSection = forwardRef<HTMLElement, FaqSectionProps>(function FaqS
         </motion.div>}
       </AnimatePresence>
       {contact && <Contact contact={contact} />}
-      {footer}
     </div>}
   </section>;
 });

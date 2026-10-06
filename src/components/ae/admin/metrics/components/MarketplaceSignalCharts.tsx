@@ -1,18 +1,22 @@
 import { DonutChart } from '@/components/arc/donut-chart/donut-chart'
-import { FunnelChart } from '@/components/arc/funnel-chart/funnel-chart'
+import { FunnelChart } from '@/components/ae/shared/arc-pro/funnel-chart/funnel-chart'
 import type { MarketplaceMetricsReport } from '@/lib/operator/admin-console/metrics.contracts'
+import { marketplaceFundingChartViewModel } from '../marketplace-signal.view-model'
 import styles from './MarketplaceSignalCharts.module.css'
+
+type MarketplaceSignalChartsProps = Readonly<{ report: MarketplaceMetricsReport | undefined }>
 
 const count = new Intl.NumberFormat('en-AU', { maximumFractionDigits: 0 })
 
 /** Range comparisons require complete snapshots. Funding parts are disjoint settled Call counts. */
-export function MarketplaceSignalCharts({ report }: Readonly<{ report: MarketplaceMetricsReport | undefined }>) {
+export function MarketplaceSignalCharts({ report }: MarketplaceSignalChartsProps) {
   const fundingTitle = useId()
   const conversionTitle = useId()
   const complete = report?.coverageComplete === true && report.days.length > 0 && report.days.every(day => day.complete)
   const quotes = complete ? report.days.reduce((sum, day) => sum + day.quotesCreated, 0) : null
   const converted = complete ? report.days.reduce((sum, day) => sum + day.quotesConvertedAtClose, 0) : null
   const funding = complete ? report.funding : null
+  const fundingChart = funding == null ? null : marketplaceFundingChartViewModel(funding)
   const conversionAvailable = quotes !== null && converted !== null && converted <= quotes
     && report?.days.every(day => day.quotesConvertedAtClose <= day.quotesCreated)
   const unavailable = report === undefined ? 'Loading the selected period…' : 'Complete observations are required for this comparison.'
@@ -22,13 +26,11 @@ export function MarketplaceSignalCharts({ report }: Readonly<{ report: Marketpla
     <section className={styles.card} aria-labelledby={fundingTitle} aria-busy={report === undefined}>
       <h3 id={fundingTitle}>How Calls are funded</h3>
       <p className={styles.description}>Settled paid Calls · selected period</p>
-      {funding == null ? <p role="status" className={styles.unavailable}>{unavailable}</p> : <DonutChart
-        label="Settled Call funding" unit="Calls" totalLabel="Paid Calls" size={funding.customerFundedCalls + funding.promotionalOnlyCalls === 0 ? 176 : 208} thickness={28}
+      {fundingChart == null ? <p role="status" className={styles.unavailable}>{unavailable}</p> : <DonutChart
+        className={styles.chart ?? ''}
+        label="Settled Call funding" unit="Calls" totalLabel="Paid Calls" size={fundingChart.size} thickness={28}
         legendAction="select" groupBelow={0} formatValue={value => count.format(value)} emptyLabel="No paid Calls"
-        data={[
-          { key: 'purchased', label: 'Uses purchased credit', value: funding.customerFundedCalls, color: 'var(--signal-violet)' },
-          { key: 'promotional', label: 'Promotional only', value: funding.promotionalOnlyCalls, color: 'var(--signal-mint)' },
-        ]} />}
+        data={fundingChart.data} />}
       <p className={styles.note}>Mixed funding belongs to purchased credit. Free, unsettled, refunded and unclassified Calls are excluded.</p>
     </section>
     <section className={styles.card} aria-labelledby={conversionTitle} aria-busy={report === undefined}>

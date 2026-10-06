@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react'
 
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
+import { Badge } from '@/components/arc/badge/badge'
 import { Button } from '@/components/arc/button/button'
 import './ReceiptComposition.css'
 
@@ -43,7 +43,7 @@ export function CallReceiptIssue({ issue }: Readonly<{ issue: CallIssueView }>) 
       className="arc-market arc-call-issue"
       aria-labelledby="call-receipt-issue-title"
     >
-      <Badge variant="warning" className="w-fit">Needs attention</Badge>
+      <Badge tone="warning" className="w-fit">Needs attention</Badge>
       <h2 id="call-receipt-issue-title" className="arc-call-heading">
         {issue.title}
       </h2>
@@ -98,9 +98,6 @@ export function CallReceiptStatusFeedback({
     )
   }
   return (
-    <Alert role="status" className="arc-market arc-call-status-feedback">
-      <AlertTitle>Status refreshed</AlertTitle>
-      <AlertDescription>{feedback.message}</AlertDescription>
-    </Alert>
+    <AeAlert tone="info" title="Status refreshed" role="status" className="arc-market arc-call-status-feedback">{feedback.message}</AeAlert>
   )
 }

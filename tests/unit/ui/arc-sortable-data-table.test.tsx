@@ -5,7 +5,8 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { afterEach, describe, expect, it } from 'vitest'
 import '../../setup/jsdom-platform'
 
-import { SortableDataTable, type DataColumn } from '@/components/arc/sortable-data-table/sortable-data-table'
+import { AeSortableDataTable } from '@/components/ae/shared/sortable-data-table/AeSortableDataTable'
+import type { AeDataColumn } from '@/components/ae/shared/sortable-data-table/sortable-data-table.contracts'
 import { AeRecordTable } from '@/components/ae/operator/AeOperatorDataTable'
 
 afterEach(cleanup)
@@ -18,7 +19,7 @@ const rows: RecordRow[] = [
   { id: 'negative', name: 'Negative', amount: -9007199254740993n, display: '-9,007,199,254,740,993' },
   { id: 'equal', name: 'Equal', amount: 9007199254740992n, display: '9,007,199,254,740,992' },
 ]
-const columns: DataColumn<RecordRow>[] = [
+const columns: AeDataColumn<RecordRow>[] = [
   { key: 'name', label: 'Name' },
   { key: 'display', label: 'Amount', numeric: true, sortValue: row => row.amount },
 ]
@@ -27,7 +28,7 @@ const shownNames = () => within(screen.getByRole('table')).getAllByRole('row').s
 
 describe('Arc sortable data table exact inputs', () => {
   it('sorts exact signed integers behind formatted values, keeps missing values last and ties stable', () => {
-    render(<SortableDataTable rows={rows} columns={columns} rowKey="id" animateRows={false} />)
+    render(<AeSortableDataTable rows={rows} columns={columns} rowKey="id" animateRows={false} />)
     fireEvent.click(screen.getByRole('button', { name: 'Sort by Amount' }))
     expect(shownNames()).toEqual(['Negative', 'Smaller', 'Equal', 'Larger', 'Missing'])
     expect(screen.getByRole('status')).toHaveTextContent('Sorted by Amount, ascending')
@@ -41,21 +42,21 @@ describe('Arc sortable data table exact inputs', () => {
   })
 
   it('keeps caller order under controlled sorting and exposes the supplied direction', () => {
-    const view = render(<SortableDataTable rows={rows} columns={[
+    const view = render(<AeSortableDataTable rows={rows} columns={[
       columns[0]!, { ...columns[1]!, sortDirection: 'asc' },
     ]} rowKey="id" manualSorting animateRows={false} />)
     expect(shownNames()).toEqual(rows.map(row => row.name))
     expect(screen.getByRole('columnheader', { name: /Amount/ })).toHaveAttribute('aria-sort', 'ascending')
     expect(screen.getByRole('status')).toHaveTextContent('Sorted by Amount, ascending')
     fireEvent.click(screen.getByRole('button', { name: /Sort by Amount/ }))
-    view.rerender(<SortableDataTable rows={rows} columns={columns} rowKey="id" manualSorting animateRows={false} />)
+    view.rerender(<AeSortableDataTable rows={rows} columns={columns} rowKey="id" manualSorting animateRows={false} />)
     expect(shownNames()).toEqual(rows.map(row => row.name))
     expect(screen.getByRole('columnheader', { name: /Amount/ })).toHaveAttribute('aria-sort', 'none')
     expect(screen.queryByRole('status')).toBeNull()
   })
 
   it('walks native header controls with arrows and Home/End without moving focus into rows', () => {
-    render(<SortableDataTable rows={rows} columns={columns} rowKey="id" animateRows={false} />)
+    render(<AeSortableDataTable rows={rows} columns={columns} rowKey="id" animateRows={false} />)
     const first = screen.getByRole('button', { name: 'Sort by Name' })
     const last = screen.getByRole('button', { name: 'Sort by Amount' })
     first.focus()
@@ -83,7 +84,7 @@ describe('Arc sortable data table exact inputs', () => {
 
 function SelectedRecords() {
   const [selected, setSelected] = useState<string[]>([])
-  return <><SortableDataTable rows={rows.slice(0, 3)} columns={columns} rowKey="id" animateRows={false}
+  return <><AeSortableDataTable rows={rows.slice(0, 3)} columns={columns} rowKey="id" animateRows={false}
     selectable selectedKeys={selected} onSelectionChange={setSelected} />
     <div aria-label="Selected record IDs">{selected.join(',')}</div></>
 }

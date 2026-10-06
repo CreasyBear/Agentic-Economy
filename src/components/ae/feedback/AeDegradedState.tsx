@@ -1,22 +1,24 @@
 import type { ReactNode } from 'react'
 
-import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
+import { AeEmptyState } from '@/components/ae/shared/empty-state/AeEmptyState'
+
+type AeDegradedStateProps = Readonly<{
+  title: string
+  description: string
+  action?: ReactNode
+}>
 
 /**
  * Degraded half of AE's canonical content-state pair: `AeEmptyState` speaks
  * for "resolved and genuinely empty" (`role="status"`), this sibling speaks
- * for "should work but could not be loaded" (`role="alert"`). Copy states
+ * for "should work but could not be loaded" (`role="alert`). Copy states
  * what was lost and how to recover — never why the backend failed.
  */
 export function AeDegradedState({
   title,
   description,
   action,
-}: {
-  title: string
-  description: string
-  action?: ReactNode
-}) {
+}: AeDegradedStateProps) {
   return (
     <AeEmptyState
       {...(action === undefined ? {} : { action })}

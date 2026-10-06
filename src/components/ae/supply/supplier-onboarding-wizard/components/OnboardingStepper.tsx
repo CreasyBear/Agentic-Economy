@@ -1,4 +1,4 @@
-import { Stepper } from '@/components/arc/stepper/stepper'
+import { AeStatusStepper } from '@/components/ae/shared/status-stepper/AeStatusStepper'
 
 import '../OnboardingComposition.css'
 
@@ -25,11 +25,9 @@ export function OnboardingStepper({
   })
 
   return (
-    <Stepper
+    <AeStatusStepper
       steps={steps}
       current={STEP_META.findIndex(({ id }) => id === step)}
-      orientation="vertical"
-      details="all"
       label="Provider setup"
       className="arc-market arc-provider-setup-steps"
       canSelectStep={(index) => {

@@ -1,5 +1,4 @@
 import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
-import buttonStyles from '@/components/arc/button/button.module.css'
 import {
   Card,
   CardContent,
@@ -8,6 +7,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import {
   nextActionCode,
   type ToolInspectorModel,
@@ -43,7 +43,7 @@ export function AeToolNextAction({
         {nextAction.kind === 'navigate' ? (
           <a
             href={nextAction.href ?? agentSetupHref(model.toolRef)}
-            className={cn(buttonStyles.button, buttonStyles.primary, buttonStyles.md, 'min-h-touch w-full sm:w-auto sm:justify-self-start')}
+            className={cn(actionLinkClassName('primary', 'md'), 'min-h-touch w-full sm:w-auto sm:justify-self-start')}
           >
             {nextAction.label === 'Find Tool alternatives' ? 'Find Tool alternatives' : 'Connect an Agent'}
           </a>
@@ -59,7 +59,7 @@ export function AeToolNextAction({
         {nextAction.label === 'request for Agent' ? (
           <a
             href={agentSetupHref(model.toolRef)}
-            className={cn(buttonStyles.button, buttonStyles.ghost, buttonStyles.md, 'underline underline-offset-4', 'min-h-touch w-full sm:w-auto sm:justify-self-start')}
+            className={cn(actionLinkClassName('ghost', 'md'), 'underline underline-offset-4', 'min-h-touch w-full sm:w-auto sm:justify-self-start')}
           >
             Need to connect an Agent?
           </a>
@@ -83,7 +83,7 @@ export function AeToolNextAction({
         {nextAction.kind === 'navigate' ? (
           <a
             href={nextAction.href ?? agentSetupHref(model.toolRef)}
-            className={cn(buttonStyles.button, buttonStyles.primary, buttonStyles.sm, 'min-h-touch')}
+            className={cn(actionLinkClassName('primary', 'sm'), 'min-h-touch')}
           >
             {nextAction.label === 'Find Tool alternatives' ? 'Find Tool alternatives' : 'Connect an Agent'}
           </a>
@@ -98,7 +98,7 @@ export function AeToolNextAction({
         {nextAction.label === 'request for Agent' ? (
           <a
             href={agentSetupHref(model.toolRef)}
-            className={cn(buttonStyles.button, buttonStyles.ghost, buttonStyles.sm, 'underline underline-offset-4', 'min-h-touch')}
+            className={cn(actionLinkClassName('ghost', 'sm'), 'underline underline-offset-4', 'min-h-touch')}
           >
             Need to connect an Agent?
           </a>

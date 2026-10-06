@@ -1,4 +1,3 @@
-/* Arc UI upstream SHA-256: 9e1a4bc135246c86ed2d8875a3a1266490aa38a3d7800759db630e700188e840; source retrieved 2026-10-01. */
 "use client";
 
 import { useEffect, useId, useLayoutEffect, useRef, type KeyboardEvent, type ReactNode } from "react";
@@ -42,19 +41,12 @@ export default function SegmentedControl({ options, value, onValueChange, label,
   const first = useRef(true);
   useEffect(() => {
     const node = track.current;
-    if (!node) return;
-    const revealSelected = (behavior: ScrollBehavior) => {
-      const button = node.querySelector<HTMLElement>('[aria-pressed="true"]');
-      if (!button || node.scrollWidth <= node.clientWidth) return;
-      const room = 20, start = button.offsetLeft - room, end = button.offsetLeft + button.offsetWidth + room - node.clientWidth;
-      const left = node.scrollLeft > start ? start : node.scrollLeft < end ? end : node.scrollLeft;
-      if (left !== node.scrollLeft) node.scrollTo({ left: Math.max(0, left), behavior });
-    };
-    revealSelected(first.current || reduced ? "auto" : "smooth");
+    const button = node?.querySelector<HTMLElement>('[aria-pressed="true"]');
+    if (!node || !button || node.scrollWidth <= node.clientWidth) { first.current = false; return; }
+    const room = 20, start = button.offsetLeft - room, end = button.offsetLeft + button.offsetWidth + room - node.clientWidth;
+    const left = node.scrollLeft > start ? start : node.scrollLeft < end ? end : node.scrollLeft;
+    if (left !== node.scrollLeft) node.scrollTo({ left: Math.max(0, left), behavior: first.current || reduced ? "auto" : "smooth" });
     first.current = false;
-    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => revealSelected("auto"));
-    observer?.observe(node);
-    return () => observer?.disconnect();
   }, [value, reduced]);
 
   // Arrow keys, Home and End move the selection like a tab list; only the selected option is a tab stop.
@@ -64,18 +56,17 @@ export default function SegmentedControl({ options, value, onValueChange, label,
     const target = event.key === "ArrowRight" || event.key === "ArrowDown" ? (selectedIndex === last ? 0 : selectedIndex + 1)
       : event.key === "ArrowLeft" || event.key === "ArrowUp" ? (selectedIndex === 0 ? last : selectedIndex - 1)
         : event.key === "Home" ? 0 : event.key === "End" ? last : -1;
-    const targetOption = options[target];
-    if (target < 0 || targetOption === undefined) return;
+    if (target < 0 || !options[target]) return;
     event.preventDefault();
-    onValueChange(targetOption.value);
-    document.getElementById(`${id}-${targetOption.value}`)?.focus({ preventScroll: true });
+    onValueChange(options[target].value);
+    track.current?.querySelector<HTMLElement>(`[data-value="${CSS.escape(options[target].value)}"]`)?.focus({ preventScroll: true });
   };
 
-  return <div className={`arc-market ${styles.root} ${className ?? ""}`} role="group" aria-label={label}>
+  return <div className={`${styles.root} ${className ?? ""}`} role="group" aria-label={label}>
     <LayoutGroup id={id}><motion.div ref={track} layoutScroll className={styles.track}>
       {options.map((option, index) => <button key={option.value} id={`${id}-${option.value}`} className={styles.button} type="button" data-value={option.value} aria-pressed={value === option.value} tabIndex={index === selectedIndex ? 0 : -1} onClick={() => onValueChange(option.value)} onKeyDown={onKeyDown} onPointerEnter={onOptionIntent ? () => onOptionIntent(option.value) : undefined} onFocus={onOptionIntent ? () => onOptionIntent(option.value) : undefined}>
         {value === option.value && <motion.span className={styles.selection} layoutId="selection" layoutDependency={value} transition={reduced ? { duration: 0 } : motionTokens.spring.morph} aria-hidden="true" />}
-        <span className={styles.label}>{option.label}{option.accessory === undefined ? null : <> {' '}{option.accessory}</>}</span>
+        <span className={styles.label}>{option.label}{option.accessory}</span>
       </button>)}
     </motion.div></LayoutGroup>
   </div>;
