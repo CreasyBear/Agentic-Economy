@@ -69,6 +69,8 @@ export async function prepareFinancialSubjectsHandler(
 export async function prepareFinancialSubjectsCore(
   ctx: MutationCtx,
   args: QuoteArgs,
+  planTotalUnits?: string,
+  reservedSpendingPeriods?: SpendingPeriods,
 ): Promise<FinancialSubjectsResult> {
   const now = Date.now()
   const deploymentEnvironment = deploymentPaymentEnvironment(env)
@@ -194,12 +196,14 @@ export async function prepareFinancialSubjectsCore(
     || monthly.currency !== 'AUD' || monthly.exponent !== 6) {
     return { kind: 'refused', code: 'budget_exceeded' }
   }
-  const financialMode = pricing.config.kind === 'fixed_aud' && pricing.config.amountUnits === '0'
+  const financialMode = planTotalUnits === undefined
+    ? pricing.config.kind === 'fixed_aud' && pricing.config.amountUnits === '0' ? 'none' as const : 'formance' as const
+    : planTotalUnits === '0'
     ? 'none' as const
     : 'formance' as const
-  let spendingPeriods: SpendingPeriods | undefined
+  let spendingPeriods: SpendingPeriods | undefined = reservedSpendingPeriods
   let spendingPeriodCommands: SpendingPeriodAdjustment[] = []
-  if (financialMode === 'formance') {
+  if (financialMode === 'formance' && reservedSpendingPeriods === undefined) {
     const prepared = await prepareAgentSpendingPeriods(ctx, {
       principalRef: authority.principal.principalId,
       dailyLimitUnits: daily.units,

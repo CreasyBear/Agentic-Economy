@@ -175,7 +175,8 @@ export async function readCapabilityProbeTarget(
   if (
     (publication.sourceKind === 'openapi_http'
       || publication.sourceKind === 'mcp'
-      || publication.sourceKind === 'agent_plugin_mcp')
+      || publication.sourceKind === 'agent_plugin_mcp'
+      || publication.sourceKind === 'ae_envelope')
     && contractDocument.effects.some((effect) => (
       effect.class === 'financial_exposure' || effect.class === 'external_state_change'
     ))
@@ -188,15 +189,19 @@ export async function readCapabilityProbeTarget(
     publication.sourceKind === 'openapi_http'
     || publication.sourceKind === 'mcp'
     || publication.sourceKind === 'agent_plugin_mcp'
+    || publication.sourceKind === 'ae_envelope'
     || publication.sourceKind === 'x402'
   ) {
-    const candidate = contractDocument.inputExamples?.find(({ input }) => (
+    const candidateInput = contractDocument.inputExamples?.find(({ input }) => (
       validateJsonSchema(inputSchema, input)
-    ))
-    if (candidate === undefined) {
-      return unavailable('input_unrepresentable')
+    ))?.input
+    if (candidateInput === undefined) {
+      if (publication.sourceKind !== 'ae_envelope') {
+        return unavailable('input_unrepresentable')
+      }
+    } else {
+      probeInputJson = JSON.stringify(candidateInput)
     }
-    probeInputJson = JSON.stringify(candidate.input)
   }
 
   let expectedPaymentJson: string | undefined

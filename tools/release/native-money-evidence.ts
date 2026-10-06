@@ -6,6 +6,8 @@ export const REQUIRED_NATIVE_MONEY_FILES = Object.freeze([
   'tests/integration/capability-call-money-matrix.test.ts',
   'tests/integration/capability-call-workpool.test.ts',
   'tests/integration/money-formance-boundary.test.ts',
+  'tests/integration/money-formance-plans.test.ts',
+  'tests/integration/plan-workflow-money.test.ts',
 ])
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -23,7 +25,7 @@ export function sanitizeNativeMoneyLog(text: string): string {
 }
 
 /**
- * Requires: an actual Vitest JSON report from the three explicitly listed files.
+ * Requires: an actual Vitest JSON report from every explicitly listed file.
  * Ensures: each required file contains executed, passed assertions; counts alone
  * cannot establish native proof. Output omits exception payloads and raw inputs.
  * Invariant: missing, pending, skipped, empty or failed evidence never passes.

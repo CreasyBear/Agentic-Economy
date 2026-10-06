@@ -150,6 +150,14 @@ export type ActionExecutionView<Result extends ActionResult = ActionResult> = Re
   acceptedAuthority?:
     | Readonly<{ kind: 'approval_required'; authorityRef: string }>
     | SpendingPolicyAuthorityBasis
+    | Readonly<{
+        kind: 'plan_node'
+        planRef: string
+        planAuthorityDigest: string
+        nodeId: string
+        resolvedInputDigest: string
+        ceilingAudUnits: string
+      }>
     | CustomerRequestAuthorizationAuthorityBasis
     | PublicCapabilityAuthorityBasis
   observedResolution:
@@ -233,6 +241,15 @@ export function canonicalAuthorityBasisMaterial(
             },
         grantRef: basis.grantRef,
         grantDigest: basis.grantDigest,
+      }
+    case 'plan_node':
+      return {
+        kind: basis.kind,
+        planRef: basis.planRef,
+        planAuthorityDigest: basis.planAuthorityDigest,
+        nodeId: basis.nodeId,
+        resolvedInputDigest: basis.resolvedInputDigest,
+        ceilingAudUnits: basis.ceilingAudUnits,
       }
     case 'public_capability_use':
       return {
@@ -374,10 +391,6 @@ export type AuthorityBindingSnapshot = Readonly<{
   targetDigest: string
   consequence: string
   limits: ActionExecutionLimits
-  acceptedBasis?:
-    | Readonly<{ kind: 'approval_required'; authorityRef: string }>
-    | SpendingPolicyAuthorityBasis
-    | CustomerRequestAuthorizationAuthorityBasis
-    | PublicCapabilityAuthorityBasis
+  acceptedBasis?: ActionExecutionAcceptedAuthority
 
 }>

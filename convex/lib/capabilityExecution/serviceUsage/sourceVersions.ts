@@ -1,3 +1,4 @@
+import { planCallChanged } from '../plans/callEventBridge'
 import {enqueueMoneyAlertEvaluation} from '../../principalAccount/notifications/usageAlerts'
 import {degradeBackend} from '@/lib/observability/degrade-backend'
 import { Triggers } from 'convex-helpers/server/triggers'
@@ -25,6 +26,7 @@ async function changedCalls(ctx:MutationCtx, before:Doc<'capabilityCalls'>|null,
 usageSourceTriggers.register('capabilityCalls',async(ctx,change)=>{
   const inner={...ctx,db:ctx.innerDb}
   await changedCalls(inner,change.oldDoc,change.newDoc)
+  await planCallChanged(inner, change.newDoc)
   if(change.newDoc?.state==='completed'&&(change.oldDoc?.state!=='completed'||change.oldDoc.usage?.transactionRef!==change.newDoc.usage?.transactionRef)){
     try{await enqueueMoneyAlertEvaluation(inner,change.newDoc.ownerId,true)}catch{degradeBackend(new Error('usage_alert_enqueue_unavailable'),undefined,{site:'usageAlertEvaluation',reason:'source_unavailable'})}
   }

@@ -117,6 +117,17 @@ export function validateCallAuthority(input: Readonly<{
         )) return undefined
         break
       }
+      case 'plan_node': {
+        if (
+          basis.planRef.trim().length === 0
+          || basis.planAuthorityDigest.trim().length === 0
+          || basis.nodeId.trim().length === 0
+          || basis.resolvedInputDigest.trim().length === 0
+          || basis.ceilingAudUnits.trim().length === 0
+          || authority.reference !== `operation-authority:${input.dispatch.callRef}`
+        ) return undefined
+        break
+      }
       case 'customer_request_authorization_use':
       case 'public_capability_use':
         return undefined

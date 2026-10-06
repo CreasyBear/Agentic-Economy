@@ -31,7 +31,7 @@ export async function readForCallHandler(
   const row = await ctx.db.query('capabilityQuotes')
     .withIndex('by_quoteRef', (query) => query.eq('quoteRef', args.quoteRef))
     .unique()
-  if (row === null
+  if (row === null || row.planRef !== undefined
     || row.principalId !== args.principal.principalId
     || row.accountRef !== args.principal.ownerId
     || row.credentialId !== args.principal.credentialId

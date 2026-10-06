@@ -4,38 +4,11 @@ import { degradeBackend } from '@/lib/observability/degrade-backend'
 import type { Doc } from '../../../_generated/dataModel'
 import type { QueryCtx } from '../../../_generated/server'
 import { currentUtcDayBounds, currentUtcMonthBounds } from '../../../../src/modules/common/freshness'
-import { PACKAGE4_FORMANCE_REQUIREMENTS, spendingPeriodsValue, promotionalCreditAllocationValue, validateExecutableRateEvidenceIntegrity, type ExecutableRateEvidence } from '../../../../src/modules/money/public'
+import { PACKAGE4_FORMANCE_REQUIREMENTS, managedCallBookingValue, validateExecutableRateEvidenceIntegrity, type ExecutableRateEvidence } from '../../../../src/modules/money/public'
 import { parsePublishedToolSnapshot } from '../../../../src/modules/capability-supply/public'
 
 export const transactionRefsValue = v.array(v.string())
-const bookingValue = v.object({
-  callRef: v.string(),
-  quoteRef: v.string(),
-  idempotencyKey: v.string(),
-  accountRef: v.string(),
-  principalRef: v.string(),
-  agentBudgetGeneration: v.number(),
-  legalCustomerRef: v.string(),
-  legalCustomerGeneration: v.number(),
-  treasuryRef: v.string(),
-  treasuryGeneration: v.number(),
-  toolRef: v.string(),
-  providerRef: v.string(),
-  authorityGeneration: v.number(),
-  policyGeneration: v.number(),
-  buyerAmountUnits: v.string(),
-  buyerRevenueUnits: v.string(),
-  buyerTaxUnits: v.string(),
-  providerAmountUnits: v.string(),
-  quoteDigest: v.string(),
-  inputDigest: v.string(),
-  policyDigest: v.string(),
-  rateEvidenceDigest: v.string(),
-  treasuryEvidenceDigest: v.string(),
-  x402RequirementDigest: v.string(),
-  spendingPeriods: v.optional(spendingPeriodsValue),
-  promotionalCreditAllocation: v.optional(promotionalCreditAllocationValue),
-})
+const bookingValue = managedCallBookingValue
 
 function validStoredSpendingPeriods(
   periods: Doc<'capabilityQuotes'>['spendingPeriods'],
@@ -83,6 +56,10 @@ export function bookingFromRows(
     || call.ownerId !== quote.accountRef
     || call.principalId !== quote.principalId
     || call.toolRef !== quote.toolRef
+    || call.planRef !== quote.planRef || call.planNodeId !== quote.planNodeId
+    || (call.planRef !== undefined && (call.planAllocation?.planRef !== call.planRef
+      || call.planAllocation.nodeId !== call.planNodeId || !periodAware))
+    || (call.planRef === undefined && call.planAllocation !== undefined)
     || (periodAware
       ? (quote.formanceSchemaVersion !== 'v1.4.0'
           && quote.formanceSchemaVersion !== 'v1.5.0')
@@ -127,6 +104,7 @@ export function bookingFromRows(
     rateEvidenceDigest: quote.rateEvidenceDigest,
     treasuryEvidenceDigest: quote.treasuryEvidenceDigest,
     x402RequirementDigest: quote.x402RequirementDigest,
+    ...(call.planAllocation === undefined ? {} : { planAllocation: call.planAllocation }),
     ...(call.promotionalCreditAllocation === undefined ? {} : { promotionalCreditAllocation: call.promotionalCreditAllocation }),
     ...(quote.spendingPeriods === undefined ? {} : { spendingPeriods: quote.spendingPeriods }),
   }

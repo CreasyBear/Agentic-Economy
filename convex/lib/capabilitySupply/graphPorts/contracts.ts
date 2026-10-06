@@ -19,6 +19,7 @@ export const bindingControlStateValue = v.union(
   }),
 )
 const capabilityGraphNodeValue = v.object({
+  admittedToolRef: v.optional(v.string()),
   publicationRef: v.string(),
   revision: v.number(),
   businessId: v.id('businesses'),
@@ -161,6 +162,7 @@ export const capabilityGraphResultValue = v.union(
         ),
         from: v.string(),
         to: v.string(),
+        inputMappings: v.optional(v.array(v.object({ inputKey: v.string(), outputPointer: v.string() }))),
       }),
     ),
   }),

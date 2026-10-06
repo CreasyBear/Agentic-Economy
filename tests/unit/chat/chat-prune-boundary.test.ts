@@ -9,16 +9,20 @@ const EXPECTED_CHAT_ACTION_IDS = [
   'registry.tools.describe',
   'registry.tools.compare',
   'tool.quote',
+  'tool.plan.quote',
+  'tool.plan.run',
+  'tool.plan.get',
   'tool.call',
 ] as const
 
 const EXPECTED_CHAT_TOOL_IDS = [
-  ...EXPECTED_CHAT_ACTION_IDS,
-  'chat.clarify',
+  'registry.tools.list', 'registry.tools.search', 'registry.tools.describe', 'registry.tools.compare',
+  'tool.plan.suggest', 'tool.plan.import', 'tool.plan.quote', 'tool.plan.run', 'tool.plan.get',
+  'tool.quote', 'tool.call', 'chat.clarify',
 ] as const
 
 describe('Tool chat prune boundary', () => {
-  it('pins the six canonical chat Actions and excludes unrelated consequential surfaces', () => {
+  it('pins bounded chat Actions and excludes unrelated consequential surfaces', () => {
     const actions = listActions()
     const excludedActionIds: readonly string[] = [
       'call.status',
@@ -43,7 +47,7 @@ describe('Tool chat prune boundary', () => {
     const boundedCommercialIds = chatActions
       .filter(({ effect }) => effect.class === 'payment' || effect.spendExposure !== 'none')
       .map(({ id }) => id)
-    expect(boundedCommercialIds).toEqual(['tool.quote', 'tool.call'])
+    expect(boundedCommercialIds).toEqual(['tool.quote', 'tool.plan.quote', 'tool.plan.run', 'tool.call'])
     expect(chatActions.find(({ id }) => id === 'tool.quote')?.effect).toMatchObject({
       class: 'commitment',
       reversible: true,

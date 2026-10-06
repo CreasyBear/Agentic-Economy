@@ -24,6 +24,9 @@ export type {
 export {
   validateJsonSchema,
   resolvePointedSchema,
+  pointerSyntaxIsCanonical,
+  escapePointerSegment,
+  decodeJsonPointerSegments,
   rehydratePointedSchemaIdentity,
   samePointedSchema,
 } from './internal/pointed-schema'

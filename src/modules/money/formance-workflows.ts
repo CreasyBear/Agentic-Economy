@@ -11,7 +11,8 @@ import {
   type FormanceMoneyCommand,
   type FormanceReferenceReadResult,
 } from './formance'
-import { completed, refused, unavailable, unknown, type FormanceSettlementReadResult, type FormanceReservationReadResult, type FormanceReleaseReadResult } from './formance-result'
+import { completed, completedMany, refused, unavailable, unknown, type FormanceSettlementReadResult, type FormanceReservationReadResult, type FormanceReleaseReadResult } from './formance-result'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   prepareFormanceSettledSaleRefund,
   formanceCommandPostingsMatch,
@@ -55,6 +56,23 @@ import {
   type PreparedManagedCallBulk,
 } from './internal/formance-transaction-templates'
 
+import {
+  planHoldAccountAddress,
+  planPromotionalHoldAccountAddress,
+  validPlanRemainder,
+  preparePlanHold,
+  preparePlanNodeAllocation,
+  preparePlanNodeRelease,
+  preparePlanNodeSettlement,
+  preparePlanRemainderRelease,
+  type PlanHoldBooking,
+  type PlanNodeAllocation,
+  type PlanNodeRelease,
+  type PlanNodeSettlement,
+  type PlanRelease,
+} from './internal/formance-plan-templates'
+
+export * from './internal/formance-plan-templates'
 export * from './internal/formance-transaction-templates'
 export * from './internal/formance-promotional-credit'
 export { prepareFormanceSettledSaleRefund }
@@ -152,6 +170,125 @@ export async function reserveFormanceManagedCall(
   input: FormanceManagedCallBooking,
 ): Promise<FormanceMoneyResult> {
   return executePreparedBulk(context, prepareFormanceManagedCallReservation(input))
+}
+
+/**
+ * Places the authorized Plan's exact aggregate capacity Hold in one atomic bulk.
+ * A native timeout or incomplete reference set remains outcome_unknown.
+ */
+export async function reservePlanHold(
+  context: FormanceContext,
+  input: PlanHoldBooking,
+): Promise<FormanceMoneyResult> {
+  return executePreparedBulk(context, preparePlanHold(input))
+}
+
+/** Allocates a Node from the existing Plan Hold without debiting capacity again. */
+export async function allocatePlanNode(
+  context: FormanceContext,
+  input: PlanNodeAllocation,
+): Promise<FormanceMoneyResult> {
+  return executePreparedBulk(context, preparePlanNodeAllocation(input))
+}
+
+/** Settles a Node's accepted buyer reservation; it does not reserve capacity again. */
+export async function settlePlanNode(
+  context: FormanceContext,
+  input: PlanNodeSettlement,
+): Promise<FormanceMoneyResult> {
+  return executePreparedBulk(context, preparePlanNodeSettlement(input))
+}
+
+/** Releases a Node's unused reservation to available capacity. */
+export async function releasePlanNode(
+  context: FormanceContext,
+  input: PlanNodeRelease,
+): Promise<FormanceMoneyResult> {
+  return executePreparedBulk(context, preparePlanNodeRelease(input))
+}
+
+/** Read-only native remainder used to freeze the terminal release command. */
+export async function readPlanHoldRemainder(context: FormanceContext, input: PlanHoldBooking): Promise<
+  | Readonly<{ kind: 'available'; holdBalanceUnits: string; remainingCreditAllocation?: NonNullable<PlanHoldBooking['promotionalCreditAllocation']> }>
+  | Readonly<{ kind: 'unavailable' | 'refused'; code: string }>
+> {
+  const hold = preparePlanHold(input)
+  if (hold.kind === 'refused') return hold
+  const proof = await readPlanCommands(context, hold.bulk.commands)
+  if (proof.kind !== 'confirmed') return proof.kind === 'absent'
+    ? { kind: 'refused', code: 'formance_plan_hold_evidence_missing' } : proof
+  const addresses = [planHoldAccountAddress(input), ...(input.promotionalCreditAllocation?.grants ?? [])
+    .map(grant => planPromotionalHoldAccountAddress(input, grant.grantRef))]
+  const units: string[] = []
+  for (const address of addresses) {
+    const read = await readFormanceAccount(context, address)
+    if (read.kind === 'setup_required') return { kind: 'refused', code: read.code }
+    if (read.kind === 'unavailable') return { kind: 'unavailable', code: read.code }
+    const balance = read.kind === 'not_found' ? '0' : read.volumes['AUD/6']?.balanceUnits ?? '0'
+    if (!/^(?:0|[1-9]\d{0,15})$/u.test(balance)) return { kind: 'refused', code: 'formance_plan_hold_balance_invalid' }
+    units.push(balance)
+  }
+  const purchasedUnits = units[0]
+  if (purchasedUnits === undefined) return { kind: 'refused', code: 'formance_plan_hold_balance_invalid' }
+  const holdBalanceUnits = units.reduce((sum, amount) => sum + BigInt(amount), 0n).toString()
+  const allocation = input.promotionalCreditAllocation === undefined ? {} : { remainingCreditAllocation: {
+    version: 'ae.promotional-credit-allocation:v1' as const, purchasedUnits,
+    grants: input.promotionalCreditAllocation.grants.flatMap((grant, index) => {
+      const amountUnits = units[index + 1]
+      return amountUnits === undefined || amountUnits === '0' ? [] : [{ ...grant, amountUnits }]
+    }),
+  } }
+  return { kind: 'available', holdBalanceUnits, ...allocation }
+}
+
+/** Requires a financially conclusive Plan and its frozen, native-read remainder.
+ * Ensures an exact atomic release or proven replay, including every original grant.
+ * Invariant: unknown/missing Hold evidence never becomes a successful zero refund.
+ * On violation: refuse conflicting evidence; unavailable/partial reads retain uncertainty.
+ */
+export async function releasePlanRemainder(context: FormanceContext, input: PlanRelease): Promise<FormanceMoneyResult> {
+  if (!validPlanRemainder(input) || input.allNodeCallsFinanciallyConclusive !== true
+    || !/^sha256:[a-f0-9]{64}$/u.test(input.terminalEvidenceDigest)
+    || !/^(?:0|[1-9]\d{0,15})$/u.test(input.holdBalanceUnits)
+    || BigInt(input.holdBalanceUnits) > BigInt(input.approvedTotalUnits)) return refused('formance_plan_release_input_invalid')
+  const prepared = input.holdBalanceUnits === '0' ? undefined : preparePlanRemainderRelease(input)
+  if (prepared?.kind === 'refused') return prepared
+  if (prepared !== undefined) {
+    const replay = await readPlanCommands(context, prepared.bulk.commands)
+    if (replay.kind === 'confirmed') return completedMany(prepared.bulk.commands.map(command => command.commandRef), true)
+    if (replay.kind === 'refused') return replay.code === 'formance_plan_evidence_partial'
+      ? unknown(prepared.bulk.commands[0]?.commandRef ?? input.planRef) : refused(replay.code)
+    if (replay.kind === 'unavailable') return unknown(prepared.bulk.commands[0]?.commandRef ?? input.planRef)
+  }
+  const current = await readPlanHoldRemainder(context, input)
+  if (current.kind !== 'available') return current.kind === 'refused' ? refused(current.code) : unavailable(current.code)
+  if (current.holdBalanceUnits !== input.holdBalanceUnits
+    || canonicalDigest(current.remainingCreditAllocation ?? null) !== canonicalDigest(input.remainingCreditAllocation ?? null)) {
+    return refused('formance_plan_remainder_changed')
+  }
+  return prepared === undefined ? completedMany([], false) : executePreparedBulk(context, prepared)
+}
+
+async function readPlanCommands(context: FormanceContext, commands: readonly FormanceMoneyCommand[]): Promise<
+  | Readonly<{ kind: 'confirmed' }>
+  | Readonly<{ kind: 'absent' }>
+  | Readonly<{ kind: 'refused' | 'unavailable'; code: string }>
+> {
+  let found = 0
+  for (const expected of commands) {
+    const actual = await readFormanceTransactionByReference(context, expected.commandRef)
+    if (actual.kind === 'setup_required') return { kind: 'refused', code: actual.code }
+    if (actual.kind === 'unavailable') return { kind: 'unavailable', code: actual.code }
+    if (actual.kind === 'absent') continue
+    if (actual.template !== expected.template || actual.reference !== expected.commandRef
+      || !formanceCommandPostingsMatch(expected, actual.postings)
+      || Object.entries(expected.metadata).some(([key, value]) => actual.metadata[key] !== value)) {
+      return { kind: 'refused', code: 'formance_plan_evidence_invalid' }
+    }
+    found += 1
+  }
+  return found === commands.length ? { kind: 'confirmed' } : found === 0 ? { kind: 'absent' }
+    : { kind: 'refused', code: 'formance_plan_evidence_partial' }
 }
 
 /**

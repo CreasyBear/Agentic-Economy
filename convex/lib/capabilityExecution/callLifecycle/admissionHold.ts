@@ -17,6 +17,14 @@ export async function abandonHandler(
   const commitment = await ctx.db.query('capabilityQuotes')
     .withIndex('by_quoteRef', (query) => query.eq('quoteRef', args.quoteRef))
     .unique()
+  if (row.planRef !== undefined) {
+    // The rejected allocation never left the Plan Hold. Retain this one Call identity;
+    // the native terminal remainder returns its credit exactly once with the Plan.
+    await ctx.db.patch(row._id, { state: 'refused', formanceFinancialState: 'released',
+      result: { kind: 'refused', toolRef: row.toolRef, code: 'invocation_runtime_unavailable', retryable: false },
+      dispatchState: 'failed', updatedAt: Date.now() })
+    return { kind: 'abandoned' }
+  }
   if (row.promotionalCreditAllocation !== undefined) {
     const restored = await restorePromotionalCredit(ctx, row.promotionalCreditAllocation, row.ownerId, row.environment, Date.now())
     if (restored.kind !== 'restored') throw new Error('promotional_credit_restore_failed')

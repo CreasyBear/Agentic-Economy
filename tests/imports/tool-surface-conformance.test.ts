@@ -158,7 +158,9 @@ describe('Tool surface conformance', () => {
     expect(callCommandDescriptor.run).toBe(runCallCommand)
 
     const chatActions = listActions().filter((action) => action.surfaces.includes('chat'))
-    expect(chatActions.map(({ id }) => id)).toEqual(CHAT_TOOL_IDS.filter((id) => id !== 'chat.clarify'))
+    // Conversation controls and editable drafts have dedicated read-only chat contracts.
+    const chatOnly = new Set<string>(['chat.clarify', 'tool.plan.suggest', 'tool.plan.import'])
+    expect(chatActions.map(({ id }) => id).sort()).toEqual(CHAT_TOOL_IDS.filter(id => !chatOnly.has(id)).sort())
     for (const action of chatActions) {
       expect(CHAT_TOOL_NAME_MAP.canonicalToProvider[action.id as keyof typeof CHAT_TOOL_NAME_MAP.canonicalToProvider]).toBeDefined()
       if (action.id !== 'registry.tools.list') expect(action.surfaces).toContain('mcp')

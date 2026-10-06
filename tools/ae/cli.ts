@@ -94,6 +94,12 @@ const COMMAND_OPTIONS: Readonly<Record<string, readonly string[]>> = {
   'supply disconnect': ['input', 'idempotency-key'],
   fund: [],
   quote: ['input'],
+  plan: [],
+  'plan quote': [],
+  'plan run': ['idempotency-key'],
+  'plan get': [],
+  'plan watch': [],
+  'plan cancel': [],
   procure: ['input', 'prefer'],
   call: ['input', 'idempotency-key', 'wait'],
   history: ['limit', 'cursor', 'state'],
@@ -424,6 +430,7 @@ async function main(argv: readonly string[] = process.argv.slice(2)): Promise<nu
     statusCommands,
     supplyCommands,
     waitCommands,
+    planCommands,
   ] = await Promise.all([
     import('./commands/account'),
     import('./commands/cancel'),
@@ -443,12 +450,14 @@ async function main(argv: readonly string[] = process.argv.slice(2)): Promise<nu
     import('./commands/status'),
     import('./commands/supply'),
     import('./commands/wait'),
+    import('./commands/plan'),
   ])
   const marketToolRunners: Record<string, CommandRunner> = Object.fromEntries(
     marketToolCommands.MARKET_TOOL_COMMAND_DESCRIPTORS.map(({ command, run }) => [command, run] as const),
   )
   const commands: Record<string, CommandRunner> = {
     manifest: manifestCommands.runManifestCommand,
+    plan: planCommands.runPlanCommand,
     config: configCommands.runConfigCommand,
     ...marketToolRunners,
     connect: connectCommands.runConnectCommand,

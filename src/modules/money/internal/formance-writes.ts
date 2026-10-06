@@ -96,7 +96,7 @@ export async function executeFormanceMoneyBulk(
 ): Promise<FormanceMoneyResult> {
   const startedAt = Date.now()
   const commands = [...bulk.commands]
-  if (commands.length < 2 || commands.length > 103
+  if (commands.length === 0 || commands.length > 103
     || new Set(commands.map(({ commandRef }) => commandRef)).size !== commands.length
     || new Set(commands.map(({ idempotencyKey }) => idempotencyKey)).size !== commands.length) {
     return refused('formance_bulk_invalid')
@@ -117,7 +117,9 @@ export async function executeFormanceMoneyBulk(
   const before = await readBulkReferences(context, commands)
   if (before.kind === 'completed') return before.result
   if (before.kind === 'refused') return refused(before.code)
-  if (before.kind === 'unavailable') return unavailable(before.code)
+  if (before.kind === 'unavailable' || before.kind === 'unknown') {
+    return unknown(commands[0]!.commandRef)
+  }
 
   try {
     const response = await context.sdk.ledger.v2.createBulk({
@@ -183,6 +185,7 @@ type BulkReadback =
   | Readonly<{ kind: 'completed'; result: FormanceMoneyResult }>
   | Readonly<{ kind: 'refused'; code: string }>
   | Readonly<{ kind: 'unavailable'; code: string }>
+  | Readonly<{ kind: 'unknown' }>
 
 async function readBulkReferences(
   context: FormanceContext,
@@ -208,7 +211,7 @@ async function readBulkReferences(
   if (reads.every((read) => read.kind === 'found')) {
     return Object.freeze({ kind: 'refused', code: 'formance_reference_conflict' })
   }
-  return Object.freeze({ kind: 'refused', code: 'formance_bulk_partial_state' })
+  return Object.freeze({ kind: 'unknown' })
 }
 
 function matchingCommand(

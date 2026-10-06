@@ -25,6 +25,8 @@ export const LEGACY_FORMANCE_SCHEMA_VERSION = 'v1.3.0' as const
 export const PERIOD_FORMANCE_SCHEMA_VERSION = 'v1.4.0' as const
 /** The promotional schema used by accepted Calls and credit commands. */
 export const PROMOTIONAL_FORMANCE_SCHEMA_VERSION = 'v1.5.0' as const
+/** v1.7 adds digest-addressed Plan Holds and node allocations. */
+export const PLAN_FORMANCE_SCHEMA_VERSION = 'v1.7.0' as const
 /** The current schema pin, shared with the commercial policy requirements. */
 export const FORMANCE_SCHEMA_VERSION = PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion
 
@@ -65,7 +67,17 @@ export const FORMANCE_TEMPLATE_NAMES = Object.freeze([
   'CALL_PROMO_REFUNDED',
 ] as const)
 
-export type FormanceMoneyTemplate = (typeof FORMANCE_TEMPLATE_NAMES)[number]
+export const PLAN_FORMANCE_TEMPLATE_NAMES = Object.freeze([
+  ...FORMANCE_TEMPLATE_NAMES,
+  'PLAN_HOLD_RESERVED_AUD',
+  'PLAN_NODE_ALLOCATED_AUD',
+  'PLAN_NODE_SETTLED_AUD',
+  'PLAN_NODE_RELEASED_AUD',
+  'PLAN_REMAINDER_RELEASED_AUD',
+] as const)
+
+export type FormanceMoneyTemplate = (typeof PLAN_FORMANCE_TEMPLATE_NAMES)[number]
+
 
 export const LEGACY_FORMANCE_TEMPLATE_NAMES = PACKAGE4_FORMANCE_TEMPLATE_NAMES
 
@@ -646,6 +658,178 @@ export const FORMANCE_SCHEMA_DIGEST = canonicalDigest({
   schema: FORMANCE_SCHEMA,
 })
 
+/** v1.7 adds Plan-specific Holds while preserving the v1.6 schema verbatim. */
+export const PLAN_FORMANCE_SCHEMA: FormanceSchemaData = Object.freeze({
+  ...FORMANCE_SCHEMA,
+  chart: Object.freeze({
+    ...FORMANCE_SCHEMA.chart,
+    plans: digestSegment({ hold: leaf }),
+  }),
+  transactions: Object.freeze({
+    ...FORMANCE_SCHEMA.transactions,
+    PLAN_HOLD_RESERVED_AUD: Object.freeze({
+      description: 'Atomically reserve Plan AUD across Account, both periods, and legal exposure',
+      runtime: 'machine' as const,
+      script: `vars {
+  account $account_available
+  account $plan_hold
+  account $legal_available
+  account $legal_reserved
+  account $daily_available
+  account $daily_reserved
+  account $monthly_available
+  account $monthly_reserved
+  monetary $buyer_amount
+  monetary $exposure_amount
+  monetary $daily_amount
+  monetary $monthly_amount
+}
+send $buyer_amount (
+  source = $account_available
+  destination = $plan_hold
+)
+send $exposure_amount (
+  source = $legal_available
+  destination = $legal_reserved
+)
+send $daily_amount (
+  source = $daily_available
+  destination = $daily_reserved
+)
+send $monthly_amount (
+  source = $monthly_available
+  destination = $monthly_reserved
+)`,
+    }),
+    PLAN_NODE_ALLOCATED_AUD: Object.freeze({
+      description: 'Allocate one Node ceiling from its Plan Hold without a second capacity debit',
+      runtime: 'machine' as const,
+      script: `vars {
+  account $plan_hold
+  account $call_reserved
+  monetary $buyer_amount
+}
+send $buyer_amount (
+  source = $plan_hold
+  destination = $call_reserved
+)`,
+    }),
+    PLAN_NODE_SETTLED_AUD: Object.freeze({
+      description: 'Settle one allocated Node against the Plan legal and period reservations',
+      runtime: 'machine' as const,
+      script: `vars {
+  account $call_reserved
+  account $revenue
+  account $tax
+  account $legal_reserved
+  account $legal_settled
+  account $daily_reserved
+  account $daily_spent
+  account $monthly_reserved
+  account $monthly_spent
+  monetary $revenue_amount
+  monetary $tax_amount
+  monetary $exposure_amount
+  monetary $daily_amount
+  monetary $monthly_amount
+}
+send $revenue_amount (
+  source = $call_reserved
+  destination = $revenue
+)
+send $tax_amount (
+  source = $call_reserved
+  destination = $tax
+)
+send $exposure_amount (
+  source = $legal_reserved
+  destination = $legal_settled
+)
+send $daily_amount (
+  source = $daily_reserved
+  destination = $daily_spent
+)
+send $monthly_amount (
+  source = $monthly_reserved
+  destination = $monthly_spent
+)`,
+    }),
+    PLAN_NODE_RELEASED_AUD: Object.freeze({
+      description: 'Release one unspent Node allocation and its Plan legal and period reservations',
+      runtime: 'machine' as const,
+      script: `vars {
+  account $account_available
+  account $call_reserved
+  account $legal_available
+  account $legal_reserved
+  account $daily_available
+  account $daily_reserved
+  account $monthly_available
+  account $monthly_reserved
+  monetary $buyer_amount
+  monetary $exposure_amount
+  monetary $daily_amount
+  monetary $monthly_amount
+}
+send $buyer_amount (
+  source = $call_reserved
+  destination = $account_available
+)
+send $exposure_amount (
+  source = $legal_reserved
+  destination = $legal_available
+)
+send $daily_amount (
+  source = $daily_reserved
+  destination = $daily_available
+)
+send $monthly_amount (
+  source = $monthly_reserved
+  destination = $monthly_available
+)`,
+    }),
+    PLAN_REMAINDER_RELEASED_AUD: Object.freeze({
+      description: 'Release only unused Plan Hold and its remaining period and legal exposure',
+      runtime: 'machine' as const,
+      script: `vars {
+  account $account_available
+  account $plan_hold
+  account $legal_available
+  account $legal_reserved
+  account $daily_available
+  account $daily_reserved
+  account $monthly_available
+  account $monthly_reserved
+  monetary $buyer_amount
+  monetary $exposure_amount
+  monetary $daily_amount
+  monetary $monthly_amount
+}
+send $buyer_amount (
+  source = $plan_hold
+  destination = $account_available
+)
+send $exposure_amount (
+  source = $legal_reserved
+  destination = $legal_available
+)
+send $daily_amount (
+  source = $daily_reserved
+  destination = $daily_available
+)
+send $monthly_amount (
+  source = $monthly_reserved
+  destination = $monthly_available
+)`,
+    }),
+  }),
+}) as FormanceSchemaData
+
+export const PLAN_FORMANCE_SCHEMA_DIGEST = canonicalDigest({
+  format: 'ae.package4.formance-schema:v1',
+  schema: PLAN_FORMANCE_SCHEMA,
+})
+
 export function normalizeSchemaReadback(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(normalizeSchemaReadback)
   if (typeof value !== 'object' || value === null) return value
@@ -667,3 +851,4 @@ export const LEGACY_FORMANCE_SCHEMA_READBACK_DIGEST = schemaReadbackDigest(PACKA
 export const PERIOD_FORMANCE_SCHEMA_READBACK_DIGEST = schemaReadbackDigest(PERIOD_FORMANCE_SCHEMA)
 export const PROMOTIONAL_FORMANCE_SCHEMA_READBACK_DIGEST = schemaReadbackDigest(PROMOTIONAL_FORMANCE_SCHEMA)
 export const FORMANCE_SCHEMA_READBACK_DIGEST = schemaReadbackDigest(FORMANCE_SCHEMA)
+export const PLAN_FORMANCE_SCHEMA_READBACK_DIGEST = schemaReadbackDigest(PLAN_FORMANCE_SCHEMA)

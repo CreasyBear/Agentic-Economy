@@ -11,6 +11,8 @@ import {
   FORMANCE_SCHEMA,
   FORMANCE_TEMPLATE_NAMES,
   PERIOD_FORMANCE_SCHEMA,
+  PLAN_FORMANCE_SCHEMA,
+  PLAN_FORMANCE_SCHEMA_VERSION,
   PROMOTIONAL_FORMANCE_SCHEMA,
   PROMOTIONAL_FORMANCE_SCHEMA_DIGEST,
   PROMOTIONAL_FORMANCE_TEMPLATE_NAMES,
@@ -71,9 +73,9 @@ describe('Package 4 official Formance boundary', () => {
       .toContain('destination = $capacity')
   })
 
-  it('installs the current schema when SDK v7 reports the exact existing-ledger conflict', async () => {
-    let currentInstalled = false
-    const insertSchema = vi.fn(async () => { currentInstalled = true })
+  it('installs current and Plan schemas when SDK v7 reports the exact existing-ledger conflict', async () => {
+    const installedVersions = new Set<string>()
+    const insertSchema = vi.fn(async ({ version }: { version: string }) => { installedVersions.add(version) })
     const context = {
       configuration: { environment: 'sandbox', gatewayUrl: 'https://formance.example', ledger: 'existing-ledger', requestTimeoutMs: 10_000 },
       sdk: { ledger: { v2: {
@@ -81,7 +83,10 @@ describe('Package 4 official Formance boundary', () => {
           if (version === 'v1.4.0') return { v2SchemaResponse: { data: { version, ...PERIOD_FORMANCE_SCHEMA } } }
           if (version === 'v1.3.0') return { v2SchemaResponse: { data: { version, ...PACKAGE4_FORMANCE_SCHEMA } } }
           if (version === 'v1.5.0') return { v2SchemaResponse: { data: { version, ...PROMOTIONAL_FORMANCE_SCHEMA } } }
-          if (currentInstalled) return { v2SchemaResponse: { data: { version, ...FORMANCE_SCHEMA } } }
+          if (installedVersions.has(version)) {
+            const schema = version === PLAN_FORMANCE_SCHEMA_VERSION ? PLAN_FORMANCE_SCHEMA : FORMANCE_SCHEMA
+            return { v2SchemaResponse: { data: { version, ...schema } } }
+          }
           throw Object.assign(new Error('schema absent'), { statusCode: 404 })
         }),
         createLedger: vi.fn(async () => {
@@ -104,7 +109,11 @@ describe('Package 4 official Formance boundary', () => {
       schemaVersion: 'v1.6.0',
       replayed: false,
     })
-    expect(insertSchema).toHaveBeenCalledTimes(1)
+    expect(insertSchema).toHaveBeenCalledTimes(2)
+    expect(insertSchema.mock.calls.map(([{ version }]) => version)).toEqual([
+      PACKAGE4_FORMANCE_REQUIREMENTS.schemaVersion,
+      PLAN_FORMANCE_SCHEMA_VERSION,
+    ])
   })
 
   it('does not treat a different SDK v7 HTTP 400 as an existing ledger', async () => {
@@ -586,6 +595,7 @@ describe('Package 4 official Formance boundary', () => {
                 postings: [
                   { source: `calls:${DIGEST_B}:buyer_reserved`, destination: 'platform:revenue:sales', asset: 'AUD/6', amount: 2n },
                   { source: `calls:${DIGEST_B}:buyer_reserved`, destination: 'platform:tax:gst', asset: 'AUD/6', amount: 1n },
+                  { source: `legal_customers:${DIGEST_A}:exposure_reserved`, destination: `legal_customers:${DIGEST_A}:exposure_settled`, asset: 'AUD/6', amount: 3n },
                 ],
               },
               {
@@ -615,6 +625,7 @@ describe('Package 4 official Formance boundary', () => {
               postings: [
                 { source: `calls:${DIGEST_A}:buyer_reserved`, destination: 'platform:revenue:sales', asset: 'AUD/6', amount: 4n },
                 { source: `calls:${DIGEST_A}:buyer_reserved`, destination: 'platform:tax:gst', asset: 'AUD/6', amount: 1n },
+                { source: `legal_customers:${DIGEST_A}:exposure_reserved`, destination: `legal_customers:${DIGEST_A}:exposure_settled`, asset: 'AUD/6', amount: 5n },
               ],
             }],
             hasMore: false,

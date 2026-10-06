@@ -3,6 +3,8 @@ import { z } from 'zod'
 import { canonicalDigest } from '../../common/canonical-digest'
 import { isPositiveX402AtomicUnits } from '../x402-spend-admission'
 
+export const DEFAULT_PLAN_RATE_TOLERANCE_BPS = 50
+
 export const COMMERCIAL_POLICY_FAMILIES = Object.freeze([
   'commercial_perimeter',
   'tax',
@@ -74,6 +76,7 @@ export type CommercialPolicyControl =
       paidCallReportsPerDay?: number
       fundingServiceFeeBps: number
       buyerPricingMarginBps: number
+      planRateToleranceBps?: number
       commitmentTtlMs: number
       formanceSdkVersion: string
       formanceSdkArtifactDigest: string
@@ -138,6 +141,7 @@ export const SANDBOX_COMMERCIAL_POLICY_CONTROLS: CommercialPolicyControls = Obje
     family: 'operations',
     fundingServiceFeeBps: 500,
     buyerPricingMarginBps: 0,
+    planRateToleranceBps: DEFAULT_PLAN_RATE_TOLERANCE_BPS,
     commitmentTtlMs: 5 * 60 * 1_000,
     formanceSdkVersion: PACKAGE4_FORMANCE_REQUIREMENTS.sdkVersion,
     formanceSdkArtifactDigest: PACKAGE4_FORMANCE_REQUIREMENTS.sdkArtifactDigest,
@@ -374,6 +378,8 @@ export function validCommercialPolicyControl(control: CommercialPolicyControl): 
           && control.paidCallReportsPerDay >= 0 && control.paidCallReportsPerDay <= 20))
         && validBasisPoints(control.fundingServiceFeeBps)
         && validBasisPoints(control.buyerPricingMarginBps)
+        && (control.planRateToleranceBps === undefined
+          || validBasisPoints(control.planRateToleranceBps))
         && Number.isSafeInteger(control.commitmentTtlMs)
         && control.commitmentTtlMs >= 10_000
         && control.commitmentTtlMs <= 15 * 60 * 1_000

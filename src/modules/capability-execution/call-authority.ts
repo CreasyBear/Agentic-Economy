@@ -8,7 +8,12 @@ import {
 } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
-import { pricingConfigDecisionAmount, type ExactAmount } from '@/modules/money/public'
+import {
+  AUD_EXPONENT,
+  compareExactAmounts,
+  pricingConfigDecisionAmount,
+  type ExactAmount,
+} from '@/modules/money/public'
 import type { CallPersistedAuthority } from './internal/convex-schema'
 import {
   type CallInput,
@@ -21,6 +26,8 @@ import type {
 } from './call-recovery-contracts'
 import type { CallListInput, CallListResult } from './call-history.actions'
 import type { ToolQuoteInput, ToolQuoteResult } from './quote'
+import type { PlanGetResult, PlanReferenceInput } from './plan/runtime.schemas'
+import type { PlanRunInput, PlanRunResult, PlanQuoteInput, PlanQuoteResult } from './plan/contracts'
 import {
   admitCall,
   reserveCall,
@@ -112,6 +119,10 @@ export type CallRuntime = Readonly<{
 
 export type CallService = CallExecutor & Readonly<{
   quoteTool?(input: Readonly<{ input: ToolQuoteInput; principal: AgentAccessPrincipal; correlationId: string }>): Promise<ToolQuoteResult>
+  planRun?(input: Readonly<{ input: PlanRunInput; principal: AgentAccessPrincipal; correlationId: string }>): Promise<PlanRunResult>
+  planGet?(input: Readonly<{ input: PlanReferenceInput; principal: AgentAccessPrincipal; correlationId: string }>): Promise<PlanGetResult>
+  planCancel?(input: Readonly<{ input: PlanReferenceInput; principal: AgentAccessPrincipal; correlationId: string }>): Promise<PlanRunResult>
+  planQuote?(input: Readonly<{ input: PlanQuoteInput; principal: AgentAccessPrincipal; correlationId: string }>): Promise<PlanQuoteResult>
   listCalls?(input: Readonly<{ input: CallListInput; principal: AgentAccessPrincipal; correlationId: string }>): Promise<CallListResult>
   readCallStatus(input: CallRecoveryRequest): Promise<CallStatusResult>
   cancelCall(input: CallRecoveryRequest & Readonly<{ idempotencyKey: string }>): Promise<CallRecoveryResult>
@@ -363,6 +374,16 @@ export function buildCallAuthority(input: Readonly<{
   const decisionPrice = pricingConfigDecisionAmount(input.operation.pricingConfig)
     ?? input.decisionPrice
   if (decisionPrice === undefined) return undefined
+  const basis = input.authority.basis
+  if (basis.kind === 'plan_node') {
+    if (basis.resolvedInputDigest !== input.inputDigest) return undefined
+    const ceilingComparison = compareExactAmounts(decisionPrice, {
+      currency: 'AUD',
+      units: basis.ceilingAudUnits,
+      exponent: AUD_EXPONENT,
+    })
+    if (ceilingComparison === undefined || ceilingComparison > 0) return undefined
+  }
   const authorityExpiresAt = Date.parse(input.authority.expiresAt)
   const grantExpiresAt = input.grant.expiresAt
   const readinessExpiresAt = input.operation.readiness.validUntil

@@ -7,20 +7,20 @@
 The npm package is `@agentic-economy/cli`; its installed command is `ae`. For a published version:
 
 ```sh
-npm install --global @agentic-economy/cli@0.2.1
+npm install --global @agentic-economy/cli@0.3.0
 ae --help
 ```
 
-Check `npm view @agentic-economy/cli@0.2.1 version` before installing. A 404 means that version is not published yet. Node.js 20 or newer is required.
+Check `npm view @agentic-economy/cli@0.3.0 version` before installing. A 404 means that version is not published yet. Node.js 20 or newer is required.
 
 ## Install a verified signed archive
 
 Signed archives are distributed through [CreasyBear/aecon-cli releases](https://github.com/CreasyBear/aecon-cli/releases). Use these commands only when the selected tagged release and its three assets exist.
 
-For an *existing* version, install `curl`, `jq`, `cosign`, npm, and a SHA-256 checker (`shasum` on macOS), then download all three assets **from the same tag**. The example is for version `0.2.1`; substitute the actual published version if different:
+For an *existing* version, install `curl`, `jq`, `cosign`, npm, and a SHA-256 checker (`shasum` on macOS), then download all three assets **from the same tag**. The example is for version `0.3.0`; substitute the actual published version if different:
 
 ```sh
-VERSION=0.2.1
+VERSION=0.3.0
 BASE="https://github.com/CreasyBear/aecon-cli/releases/download/v${VERSION}"
 ARCHIVE="agentic-economy-cli-${VERSION}.tgz"
 curl --fail --location --remote-name "${BASE}/${ARCHIVE}"
@@ -98,6 +98,28 @@ fi
 Both ref extractions use `jq -e` and fail when the CLI does not return a recorded Call; status and wait run **only** with those exact returned refs. Preserve `callRef`, `recoveryRef`, the retained idempotency identity, and any typed `nextCommand`. `ae status` reads recorded state and its receipt, including usage and available evidence; `ae wait` observes the same Call until a bounded terminal outcome. Follow the returned continuation instead of assuming a pending Call failed.
 
 `--wait` on `ae call` waits for a bounded outcome; a timeout does not mean failure or permission to start another Call. For an interrupted or unknown purchase, run `ae call resume "$RECOVERY_REF" --json` against the same origin and Agent; it reuses the saved Quote and idempotency key. Do not pass new input or a new key to resume. If a status says reconciliation is required, inspect it first and use `ae recover` only with canonical evidence for a genuinely uncertain outcome; it does not replay a known result. `ae cancel` also requires its own explicit `--idempotency-key`. `ae help call`, `ae help status`, and `ae help recover` expose the exact command contracts.
+
+## Quote and run a Plan
+
+A Plan groups up to ten admitted Tools into a dependency graph. Put the Plan in
+`plan.json`, with each node's exact Tool reference, inputs and dependencies.
+
+```sh
+ae plan quote plan.json --json
+ae plan run <planRef> <approvedTotalAudUnits> --idempotency-key <key> --json
+ae plan watch <planRef> --json
+ae plan get <planRef> --json
+ae plan cancel <planRef> --json
+```
+
+Review the returned quote before running. Pass its exact AUD micro-unit maximum
+unchanged, and retain the Plan reference and run key for recovery. Approval-required
+Plans wait for their owner at `/plans/<planRef>` before a Hold. A Plan receipt
+links each admitted Call and reports settled and released funds separately.
+Cancellation stops future nodes; uncertain payments retain their Hold until
+reconciled. Read the same Plan after a timeout or lost response. Supported paid
+execution uses admitted managed x402 Tools; paid fixed-AUD execution and unbounded
+dependent prices refuse before a Hold.
 
 ## Origin, credentials, and Provider access
 

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import cliPackage from '../../../packages/cli/package.json'
 
 import { parseArgs } from '../../../tools/ae/lib/args'
 import { runCliInProcess, spawnCliSync } from './cli-errors-harness'
@@ -589,7 +590,7 @@ describe('market-terminal CLI error contracts', () => {
     const parsed = JSON.parse(json.stdout) as { kind: string; version: string; buildRevision: string; runtime: string }
     expect(parsed).toMatchObject({
       kind: 'VERSION',
-      version: '0.2.1',
+      version: cliPackage.version,
       runtime: process.version,
     })
     expect(parsed.buildRevision).toBeTruthy()
@@ -598,6 +599,6 @@ describe('market-terminal CLI error contracts', () => {
     const human = spawnCliSync(['--version'])
     expect(human.status).toBe(0)
     expect(human.stderr).toBe('')
-    expect(human.stdout).toMatch(/^ae 0\.2\.1 \(.+\)\n$/u)
+    expect(human.stdout).toBe(`ae ${cliPackage.version} (${parsed.buildRevision})\n`)
   }, 30_000)
 })

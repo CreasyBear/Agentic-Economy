@@ -1,5 +1,7 @@
 import type { CapabilityContract } from '@/modules/capability-contract/public'
+import { escapePointerSegment } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { isRecord } from '@/modules/common/is-record'
 import { uniqueSorted } from '@/modules/common/unique-sorted'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { displayPriceFromPricingConfig, normalizePricingConfig } from '@/modules/money/public'
@@ -23,6 +25,7 @@ import type {
   GraphPublishedBusiness,
 } from './ports'
 export type CapabilityGraphNode = Readonly<{
+  admittedToolRef?: string
   publicationRef: string
   revision: number
   businessId: string
@@ -74,11 +77,16 @@ export type CapabilityGraphNode = Readonly<{
   evidenceRefs: readonly string[]
 }>
 
+type CapabilityGraphInputMapping = Readonly<{ inputKey: string; outputPointer: string }>
+
 export type CapabilityGraphEdge = Readonly<{
   kind: 'published_by' | 'bound_to' | 'schema_compatible'
   from: string
   to: string
+  inputMappings?: readonly CapabilityGraphInputMapping[]
 }>
+
+const noInputMappings: readonly CapabilityGraphInputMapping[] = []
 
 export type QueryCapabilityGraphResult =
   | Readonly<{ kind: 'available'; nodes: CapabilityGraphNode[]; edges: CapabilityGraphEdge[] }>
@@ -116,6 +124,7 @@ export async function queryCapabilityGraph(
   }
   const now = args.now ?? Date.now()
   const nodes: CapabilityGraphNode[] = []
+  const inputMappingsByPublication = new Map<string, readonly CapabilityGraphInputMapping[]>()
   for (const publication of publications.toSorted((left, right) => (
     left.publicationRef.localeCompare(right.publicationRef)
   ))) {
@@ -150,6 +159,16 @@ export async function queryCapabilityGraph(
       now,
     })
     if (!args.includeInactive && qualification.status !== 'eligible') continue
+    const properties = contract.contract.inputSchema.properties
+    const inputMappings: CapabilityGraphInputMapping[] = []
+    if (isRecord(properties)) for (const inputKey of Object.keys(properties).sort()) {
+      if (inputKey.length === 0) continue
+      inputMappings.push({
+        inputKey,
+        outputPointer: `/${escapePointerSegment(inputKey)}`,
+      })
+    }
+    inputMappingsByPublication.set(publication.publicationRef, inputMappings)
     nodes.push(projectGraphNode({
       publication,
       offering,
@@ -160,7 +179,7 @@ export async function queryCapabilityGraph(
       qualification,
     }))
   }
-  return { kind: 'available' as const, nodes, edges: projectGraphEdges(nodes) }
+  return { kind: 'available' as const, nodes, edges: projectGraphEdges(nodes, inputMappingsByPublication) }
 }
 function graphNodeDisplayPrice(
   pricingConfig: GraphPublicationRow['pricingConfig'],
@@ -183,6 +202,7 @@ function projectGraphNode(input: Readonly<{
   const { publication, offering, binding, contract, business, now, qualification } = input
   return {
     publicationRef: publication.publicationRef,
+    ...(qualification.status === 'eligible' ? { admittedToolRef: publication.toolRef } : {}),
     revision: publication.revision,
     businessId: publication.businessId,
     contractRef: contractRefFromRow(publication),
@@ -251,7 +271,10 @@ function projectGraphNode(input: Readonly<{
   }
 }
 
-function projectGraphEdges(nodes: readonly CapabilityGraphNode[]): CapabilityGraphEdge[] {
+function projectGraphEdges(
+  nodes: readonly CapabilityGraphNode[],
+  inputMappingsByPublication: ReadonlyMap<string, readonly CapabilityGraphInputMapping[]>,
+): CapabilityGraphEdge[] {
   const edges: CapabilityGraphEdge[] = nodes.flatMap((node) => [
     { kind: 'published_by' as const, from: node.publicationRef, to: `business:${node.businessId}` },
     { kind: 'bound_to' as const, from: node.publicationRef, to: node.bindingId },
@@ -266,6 +289,7 @@ function projectGraphEdges(nodes: readonly CapabilityGraphNode[]): CapabilityGra
           kind: 'schema_compatible' as const,
           from: upstream.publicationRef,
           to: downstream.publicationRef,
+          inputMappings: inputMappingsByPublication.get(downstream.publicationRef) ?? noInputMappings,
         })
       }
     }
