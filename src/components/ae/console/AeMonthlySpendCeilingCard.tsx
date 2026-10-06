@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
 import { SettingsGroup } from '@/components/ae/settings/settings-shell/components/SettingsSections'
 import { UsageBillingMeter } from '@/components/ae/shared/arc-pro/usage-billing/usage-billing'
-import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { Button } from '@/components/arc/button/button'
 import { Drawer, DrawerContent } from '@/components/ae/shared/base-ui/drawer/drawer'
 import './MonthlySpendComposition.css'

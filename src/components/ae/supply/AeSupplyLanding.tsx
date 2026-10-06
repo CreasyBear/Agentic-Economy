@@ -1,7 +1,7 @@
 import { Button as ArcButton } from '@/components/arc/button/button'
 import { RouterLinkBoundary } from '@/components/ae/shared/router-link-boundary/RouterLinkBoundary'
 import { HeroSection } from '@/components/arc/blocks/hero-section/hero-section'
-import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { AeSiteFaq } from '@/components/ae/website'
 import { PROVIDER_FAQ } from '@/content/provider-copy'
 

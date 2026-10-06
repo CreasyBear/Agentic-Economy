@@ -1,6 +1,6 @@
 import { useRef, useState, type FormEvent } from 'react'
 
-import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { SettingsSaveBar } from '@/components/ae/shared/arc-pro/settings-page/settings-page'
 import { Button } from '@/components/arc/button/button'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'

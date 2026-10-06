@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useServerFn } from '@tanstack/react-start'
 
 import { AeSecurityHistoryTable } from '@/components/ae/settings/AeSecurityHistoryTable'
-import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { Button } from '@/components/arc/button/button'
 import { readAgentSecurityHistoryServer } from '@/modules/security/account-security.functions'
 import {

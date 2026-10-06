@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
-import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { Badge } from '@/components/arc/badge/badge'
 import { Button } from '@/components/arc/button/button'
 import './ReceiptComposition.css'

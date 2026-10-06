@@ -6,7 +6,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { SearchIcon } from 'lucide-react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { AeEmptyState } from '@/components/ae/shared/arc/empty-state/AeEmptyState'
+import { AeEmptyState } from '@/components/ae/shared/empty-state/AeEmptyState'
 import { AeTableEmptyState } from '@/components/ae/feedback/AeTableEmptyState'
 
 afterEach(cleanup)

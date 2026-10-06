@@ -1,9 +1,9 @@
 import { Link } from '@tanstack/react-router'
 
-import { AeEmptyState } from '@/components/ae/shared/arc/empty-state/AeEmptyState'
+import { AeEmptyState } from '@/components/ae/shared/empty-state/AeEmptyState'
 import { ProviderNameEditor } from '@/components/ae/settings/ProviderNameEditor'
 import { SettingsGroup, SettingsRow } from '@/components/ae/settings/settings-shell/components/SettingsSections'
-import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import type { RenameProviderDisplayNameResult } from '@/lib/server/owner-workspace.functions'
 import type { PublicOwnerStatusRouteReadbackResult } from '@/modules/catalog/public'
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'

@@ -4,10 +4,10 @@ import { useEffect, useState } from 'react'
 import { ArrowUpRightIcon, RefreshCwIcon, ShoppingBagIcon } from 'lucide-react'
 
 import { api } from '../../../../../convex/_generated/api'
-import { AeAlert as Alert } from '@/components/ae/shared/arc/alert/AeAlert'
+import { AeAlert as Alert } from '@/components/ae/shared/alert/AeAlert'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Badge } from '@/components/arc/badge/badge'
-import { EmptyState } from '@/components/arc/empty-state/empty-state'
+import { AeEmptyState } from '@/components/ae/shared/empty-state/AeEmptyState'
 import { AeSortableDataTable } from '@/components/ae/shared/sortable-data-table/AeSortableDataTable'
 import type { AeDataColumn } from '@/components/ae/shared/sortable-data-table/sortable-data-table.contracts'
 import { Button } from '@/components/arc/button/button'
@@ -91,7 +91,7 @@ function PurchaseActivityQuery({ search, compact = false }: PurchaseActivityProp
       </div>
       {activity.results.length === 0 ? (
         <div className="ae-arc rounded-card border border-border bg-card">
-          <EmptyState
+          <AeEmptyState
             icon={<ShoppingBagIcon size={24} />}
             title={exhausted ? 'No matching purchases' : 'No matches in the records scanned'}
             description={exhausted

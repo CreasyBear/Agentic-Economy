@@ -3,7 +3,7 @@ import { useServerFn } from '@tanstack/react-start'
 
 import { SettingsGroup } from '@/components/ae/settings/settings-shell/components/SettingsSections'
 import { AeSecurityHistoryTable } from '@/components/ae/settings/AeSecurityHistoryTable'
-import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { Button } from '@/components/arc/button/button'
 import {
   readAccountSecurityHistoryServer,

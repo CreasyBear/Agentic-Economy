@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 
-import { AeEmptyState } from '@/components/ae/shared/arc/empty-state/AeEmptyState'
+import { AeEmptyState } from '@/components/ae/shared/empty-state/AeEmptyState'
 
 type AeDegradedStateProps = Readonly<{
   title: string

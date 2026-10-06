@@ -5,9 +5,9 @@ import { SearchIcon } from 'lucide-react'
 
 import { api } from '../../../../../convex/_generated/api'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
-import { AeAlert as Alert } from '@/components/ae/shared/arc/alert/AeAlert'
+import { AeAlert as Alert } from '@/components/ae/shared/alert/AeAlert'
 import { Badge } from '@/components/arc/badge/badge'
-import { EmptyState } from '@/components/arc/empty-state/empty-state'
+import { AeEmptyState } from '@/components/ae/shared/empty-state/AeEmptyState'
 import { SearchField } from '@/components/arc/search-field/search-field'
 import { SortableDataTable } from '@/components/arc/sortable-data-table/sortable-data-table'
 import { Button } from '@/components/arc/button/button'
@@ -72,7 +72,7 @@ function AccountsList({ search, onSearchChange }: AccountSearchProps) {
         <Skeleton className="h-44 w-full" role="status" aria-label="Loading Accounts" />
       ) : result.results.length === 0 ? (
         <div className="ae-arc rounded-card border border-border bg-card">
-          <EmptyState
+          <AeEmptyState
             icon={<SearchIcon size={24} />}
             title="No Accounts found"
             description={search.length > 0 ? 'Try another name or clear the search.' : 'Accounts will appear here when they are created.'}

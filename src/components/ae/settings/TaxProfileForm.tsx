@@ -4,7 +4,7 @@ import { SettingsGroup, SettingsPage, SettingsRow } from '@/components/ae/settin
 import { SettingsSaveBar } from '@/components/ae/shared/arc-pro/settings-page/settings-page'
 import './TaxProfileComposition.css'
 
-import { AeAlert as Alert } from '@/components/ae/shared/arc/alert/AeAlert'
+import { AeAlert as Alert } from '@/components/ae/shared/alert/AeAlert'
 import { Button } from '@/components/arc/button/button'
 import { Checkbox } from '@/components/ae/shared/base-ui/checkbox/checkbox'
 import { Input } from '@/components/ui/input'

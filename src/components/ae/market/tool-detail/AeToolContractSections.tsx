@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 
-import { AeAlert as Alert } from '@/components/ae/shared/arc/alert/AeAlert'
+import { AeAlert as Alert } from '@/components/ae/shared/alert/AeAlert'
 import { Button } from '@/components/arc/button/button'
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { AeSection } from '@/components/ae/layout/AeSection'

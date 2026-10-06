@@ -1,5 +1,5 @@
 
-import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import type { Rule4Diagnostic } from '@/lib/ui/diagnostic'
 import '../SpendingPolicyComposition.css'
 

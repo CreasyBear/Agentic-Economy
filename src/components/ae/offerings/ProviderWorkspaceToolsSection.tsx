@@ -2,7 +2,7 @@ import { Await } from '@tanstack/react-router'
 import { Suspense, type ReactNode } from 'react'
 
 import { AeSection } from '@/components/ae/layout/AeSection'
-import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import './ProviderWorkspaceComposition.css'
 import { projectProviderWorkspace, type ProviderWorkspaceProjectionRow } from './provider-workspace-projection'
 import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'

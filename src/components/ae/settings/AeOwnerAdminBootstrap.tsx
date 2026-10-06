@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { useServerFn } from '@tanstack/react-start'
 import { SettingsGroup } from './settings-shell/components/SettingsSections'
-import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { Button } from '@/components/arc/button/button'
 import { Input } from '@/components/arc/input/input'
 import { createPrefixedRandomId } from '@/modules/common/random-id'

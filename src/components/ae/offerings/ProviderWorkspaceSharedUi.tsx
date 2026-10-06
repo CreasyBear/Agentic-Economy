@@ -1,9 +1,9 @@
 import { Await } from '@tanstack/react-router'
 import { Suspense, type ReactNode } from 'react'
 
-import { AeEmptyState } from '@/components/ae/shared/arc/empty-state/AeEmptyState'
+import { AeEmptyState } from '@/components/ae/shared/empty-state/AeEmptyState'
 import { Skeleton as ArcSkeleton } from '@/components/arc/skeleton/skeleton'
-import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { Button } from '@/components/arc/button/button'
 import './ProviderWorkspaceComposition.css'
 

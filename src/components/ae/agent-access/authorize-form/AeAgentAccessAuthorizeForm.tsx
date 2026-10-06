@@ -9,7 +9,7 @@ import { MultiStepForm } from '@/components/ae/shared/arc-pro/multi-step-form/mu
 import type { CompletedFormStep, FormStep } from '@/components/ae/shared/arc-pro/multi-step-form/multi-step-form'
 import { SettingsPageGroup, SettingsPageRow } from '@/components/ae/shared/arc-pro/settings-page/settings-page'
 import { Button } from '@/components/arc/button/button'
-import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import type { AgentAccessAuthorizeFormDetails, ConsentLocator } from '@/modules/agent-access/consent.contracts'
 
 import { AuthorityModeRadioGroup } from './components/AuthorityModeRadioGroup'

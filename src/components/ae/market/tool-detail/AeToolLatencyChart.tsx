@@ -1,6 +1,6 @@
 import { lazy, Suspense } from 'react'
 
-import { AeEmptyState } from '@/components/ae/shared/arc/empty-state/AeEmptyState'
+import { AeEmptyState } from '@/components/ae/shared/empty-state/AeEmptyState'
 import type { MarketLatencyProjection } from '@/modules/market/listing-evidence'
 
 import { AeToolLatencyChartSkeleton } from './AeToolLatencyChartSkeleton'

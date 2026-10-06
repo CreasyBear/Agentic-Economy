@@ -1,5 +1,5 @@
 import { SettingsGroup, SettingsRow } from '@/components/ae/settings/settings-shell/components/SettingsSections'
-import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import './SecurityHistoryComposition.css'
 

@@ -3,7 +3,7 @@ import { AeAccountFundingPanel } from '@/components/ae/console/AeCreditTopUpPane
 import { BillingOverview } from '@/components/ae/shared/arc-pro/billing-overview/billing-overview'
 import { Button } from '@/components/arc/button/button'
 import { Skeleton } from '@/components/arc/skeleton/skeleton'
-import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { formatDisplayAmount } from '@/modules/money/public'
 
 import type { AeOwnerCreditProps } from '../owner-credit.contracts'

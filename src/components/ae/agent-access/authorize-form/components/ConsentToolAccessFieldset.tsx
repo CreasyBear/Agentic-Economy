@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router'
 
-import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { Button } from '@/components/arc/button/button'
 import { SearchField } from '@/components/arc/search-field/search-field'
 import { Label } from '@/components/ui/label'

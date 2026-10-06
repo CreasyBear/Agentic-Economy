@@ -2,7 +2,7 @@ import { Link } from '@tanstack/react-router'
 
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSettingsStack } from '@/components/ae/layout/AeSection'
-import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { Badge } from '@/components/arc/badge/badge'
 import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import './connection-handoff/ConnectionHandoffComposition.css'

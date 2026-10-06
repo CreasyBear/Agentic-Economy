@@ -1,7 +1,7 @@
 'use client'
 
 
-import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 
 import { FirstToolStep } from './components/FirstToolStep'
 import { OnboardingStepper } from './components/OnboardingStepper'

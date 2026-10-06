@@ -1,4 +1,4 @@
-import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 
 import type { HandoffStatusPanelProps } from '../connection-handoff.contracts'
 import { ReturnToAddTool } from './ReturnToAddTool'

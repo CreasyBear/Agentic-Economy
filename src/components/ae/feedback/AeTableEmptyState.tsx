@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 
-import { AeEmptyState } from '@/components/ae/shared/arc/empty-state/AeEmptyState'
+import { AeEmptyState } from '@/components/ae/shared/empty-state/AeEmptyState'
 
 export type AeTableEmptyStateProps = Readonly<{
   title: string

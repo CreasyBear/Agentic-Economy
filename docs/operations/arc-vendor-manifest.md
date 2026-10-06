@@ -45,7 +45,21 @@ These do not auto-update from Arc. Port upstream visual or motion changes into t
 
 - **Pro-derived compounds**, in `src/components/ae/shared/arc-pro/`: `agent-run`, `ai-chat`, `ai-composer`, `api-keys`, `billing-overview`, `chat`, `funnel-chart`, `integrations`, `market`, `marketplace-dashboard`, `metrics-dashboard`, `multi-step-form`, `orbit-logos`, `security-settings`, `settings-page`, `sidebar-rail`, `team-members`, `usage-billing`. Pristine Pro blocks render built-in demo data and export none of the slots AE uses.
 - **Base UI ports**, in `src/components/ae/shared/base-ui/`: `checkbox`, `drawer`, `select`, `tabs`. Upstream builds these on Radix, and Joel kept Base UI.
-- **Edge adapters**, in `src/components/ae/shared/`: `action-link` (`actionLinkClassName`), `arc/alert`, `arc/empty-state`, `status-badge`, `status-stepper`, `copy-value`, `usage-meter`, `record-page-header`, `comparison-table`, `sortable-data-table`, `router-link-boundary`, `router-tabs`.
+- **Edge adapters**, in `src/components/ae/shared/`: `action-link` (`actionLinkClassName`), `alert`, `empty-state`, `status-stepper`, `copy-value`, `usage-meter`, `record-page-header`, `comparison-table`, `sortable-data-table`, `router-link-boundary`, `router-tabs`.
+
+## Which component to use
+
+| Need | Use | Not |
+|---|---|---|
+| Button | Arc `Button` | `ui/button` |
+| Router link or anchor that looks like a button | `actionLinkClassName(variant, size)` on the `Link`/`a`, or `AeActionLink` | Arc `button.module.css` or any other private Arc stylesheet |
+| Alert or inline notice | `AeAlert` (Arc `Alert` plus AE spacing) | `ui/alert` |
+| Empty state | `AeEmptyState` | Arc `EmptyState` directly, or `ui/empty` |
+| Status or label pill | Arc `Badge` with an `AeTone` (`neutral`, `info`, `success`, `warning`, `danger`). Status-page rows use `ae/status/AeStatusBadge`. Key a badge on its value when it sits in a live region. | `ui/badge` |
+| Sortable table | Arc `SortableDataTable` for plain records. `AeSortableDataTable` when sorting exact BigInt amounts, for selectable rows, or for rows with operator actions. | Hand-built `<table>` sorting |
+| Progress steps | Arc `Stepper` for linear progress. `AeStatusStepper` when each step carries its own status (an error, or completion out of order) or steps are selectable. | — |
+| Drawer, select, tabs, checkbox | The Base UI ports in `ae/shared/base-ui/` | Radix, or Arc's Radix versions |
+| Pro block look (billing, settings, chat, keys) | The AE-owned compound in `ae/shared/arc-pro/<id>/` | Reinstalling the pristine Pro block |
 
 ## Removed in E5
 

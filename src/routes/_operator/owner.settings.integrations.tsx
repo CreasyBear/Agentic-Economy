@@ -5,7 +5,7 @@ import { AeOwnerProviderConnections } from '@/components/ae/supply/AeOwnerProvid
 import { providerConnectionTargetId } from '@/components/ae/supply/provider-connection-target'
 import { readProviderWorkspaceConnectionsDetailServer } from '@/components/ae/offerings/provider-workspace.functions'
 import { SettingsEmptyState, SettingsPage } from '@/components/ae/settings/settings-shell/components/SettingsSections'
-import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { parseOwnerToolsCompatibilitySearch, parseOwnerToolsX402ConnectionSearch } from '@/lib/operator/supply-compatibility'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 import { cn } from '@/lib/utils'

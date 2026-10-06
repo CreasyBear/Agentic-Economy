@@ -6,7 +6,7 @@ import { SpendingLimitInputs } from '@/components/ae/shared/SpendingLimitInputs'
 import { Button } from '@/components/arc/button/button'
 import { Drawer, DrawerContent } from '@/components/ae/shared/base-ui/drawer/drawer'
 import { MultiStepForm } from '@/components/ae/shared/arc-pro/multi-step-form/multi-step-form'
-import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import type { AgentAccessKeyIssueResult, IssuedAgentAccessReveal } from '@/modules/agent-access/issue-key.contracts'
 import type { AgentKeyDraft } from './agent-key-draft'
 

@@ -2,7 +2,7 @@ import { ArrowRightIcon } from 'lucide-react'
 import { useEffect } from 'react'
 
 import { Button } from '@/components/arc/button/button'
-import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
 
 import type { ProviderIdentityFieldsProps } from '../supplier-onboarding-wizard.contracts'

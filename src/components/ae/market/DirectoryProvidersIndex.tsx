@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router'
 import { ArrowRight, StoreIcon } from 'lucide-react'
-import { AeEmptyState } from '@/components/ae/shared/arc/empty-state/AeEmptyState'
+import { AeEmptyState } from '@/components/ae/shared/empty-state/AeEmptyState'
 import { toDirectoryProviderRow } from '@/modules/market/directory-card.view-model'
 import type { X402DirectoryFacet, X402DirectoryProvidersPage } from '@/modules/market/x402-directory-catalogue'
 import { AeSortableDataTable } from '@/components/ae/shared/sortable-data-table/AeSortableDataTable'

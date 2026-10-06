@@ -1,7 +1,7 @@
 import { Await } from '@tanstack/react-router'
 import { Suspense, type ComponentProps } from 'react'
 
-import { AeEmptyState } from '@/components/ae/shared/arc/empty-state/AeEmptyState'
+import { AeEmptyState } from '@/components/ae/shared/empty-state/AeEmptyState'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeWorkspaceGeneral } from '@/components/ae/settings/AeWorkspaceGeneral'
 import { Skeleton } from '@/components/arc/skeleton/skeleton'

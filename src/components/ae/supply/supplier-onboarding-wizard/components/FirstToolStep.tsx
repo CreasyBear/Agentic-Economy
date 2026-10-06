@@ -2,7 +2,7 @@ import { ArrowRightIcon, WrenchIcon } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
 
 import { DecisionPanel } from '@/components/ae/shared/arc-pro/chat/DecisionPanel'
-import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 
 import '../OnboardingComposition.css'

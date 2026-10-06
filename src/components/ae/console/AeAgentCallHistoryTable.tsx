@@ -9,7 +9,7 @@ import {
   AeOperatorSortableHeader,
   AeRecordTable,
 } from '@/components/ae/operator/AeOperatorDataTable'
-import { AeEmptyState } from '@/components/ae/shared/arc/empty-state/AeEmptyState'
+import { AeEmptyState } from '@/components/ae/shared/empty-state/AeEmptyState'
 import { formatDisplayAmount } from '@/modules/money/public'
 import { projectCallSummaryPurchaseStatus } from '@/modules/capability-execution/call-receipt-view'
 import { formatUtcTimestamp } from '@/lib/ui/format-time'

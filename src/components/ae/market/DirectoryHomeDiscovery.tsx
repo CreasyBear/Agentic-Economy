@@ -1,7 +1,7 @@
 import { ArrowUpRight } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
 
-import { AeEmptyState } from '@/components/ae/shared/arc/empty-state/AeEmptyState'
+import { AeEmptyState } from '@/components/ae/shared/empty-state/AeEmptyState'
 import { ProductListingShelf } from '@/components/ae/shared/arc-pro/market/ProductListing'
 import { cn } from '@/lib/utils'
 import { carryMarketCompare } from '@/modules/market/market-route-data'

@@ -1,5 +1,5 @@
 import { AeRecordSheet } from '@/components/ae/layout/AeRecordSheet'
-import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { Button } from '@/components/arc/button/button'
 import { ADMIN_ACTION_COPY, ADMIN_ACTION_SHEET_COPY, type AdminActionSheetProps } from './actions.contracts'
 import { AuditPreview } from './components/AuditPreview'

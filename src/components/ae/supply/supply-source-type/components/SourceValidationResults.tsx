@@ -1,6 +1,6 @@
 import { CheckCircle2Icon } from 'lucide-react'
 
-import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field'
 import '../../SupplyPublicationComposition.css'
 import { inspectHttpsUrl } from '../../supply-source-native-start-presentation'

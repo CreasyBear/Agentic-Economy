@@ -1,5 +1,5 @@
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
-import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { Button } from '@/components/arc/button/button'
 
 import type { HomeLifecycleIssueAlertProps } from '../agent-access-home.contracts'

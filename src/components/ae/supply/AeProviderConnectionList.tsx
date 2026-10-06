@@ -1,6 +1,6 @@
 import type { RefObject } from 'react'
 
-import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { Button as ArcButton } from '@/components/arc/button/button'

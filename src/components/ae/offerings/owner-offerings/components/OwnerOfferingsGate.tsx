@@ -1,8 +1,8 @@
 import { Link } from '@tanstack/react-router'
 
-import { AeEmptyState } from '@/components/ae/shared/arc/empty-state/AeEmptyState'
+import { AeEmptyState } from '@/components/ae/shared/empty-state/AeEmptyState'
 import { Button } from '@/components/arc/button/button'
-import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 
 import { OWNER_OFFERINGS_COPY, type OwnerOfferingsProjectionGateProps } from '../owner-offerings.contracts'
 import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'

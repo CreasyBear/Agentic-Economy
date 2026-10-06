@@ -1,7 +1,7 @@
 import { useId, useState } from 'react'
 
 import { AeFactList } from '@/components/ae/data/AeFactList'
-import { AeEmptyState } from '@/components/ae/shared/arc/empty-state/AeEmptyState'
+import { AeEmptyState } from '@/components/ae/shared/empty-state/AeEmptyState'
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
 import { Badge } from '@/components/arc/badge/badge'
 import { cn } from '@/lib/utils'

@@ -4,7 +4,7 @@ import { CheckIcon, ShieldAlertIcon } from 'lucide-react'
 
 import { SpendingLimitInputs } from '@/components/ae/shared/SpendingLimitInputs'
 import { Button } from '@/components/arc/button/button'
-import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { Badge } from '@/components/arc/badge/badge'
 import type { AgentDetail } from '@/modules/agent-access/agent-operator-view-model'
 import type {

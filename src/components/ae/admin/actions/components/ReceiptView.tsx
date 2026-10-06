@@ -1,7 +1,7 @@
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import ArcButton from '@/components/arc/button/button'
 import { DecisionPanel } from '@/components/ae/shared/arc-pro/chat/DecisionPanel'
-import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { ADMIN_REFUSAL_PRESENTATION } from '@/lib/operator/admin-console/refusal-presentation'
 import { formatPerthTimestamp } from '@/lib/ui/format-time'
 import { getStatusPresentation } from '@/lib/ui/status-presentation'

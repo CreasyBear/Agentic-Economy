@@ -4,7 +4,7 @@ import type { ReactNode } from 'react'
 
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Button } from '@/components/arc/button/button'
-import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import type { AgentDirectoryProjection } from '@/modules/agent-access/agent-operator-view-model'
 import type { PendingCallApproval } from '@/modules/capability-execution/call-approval.functions'
 import type { AgentSpendingLimitsReadResult, AgentSpendingLimitsResult } from '@/modules/agent-access/spending-policy-update'

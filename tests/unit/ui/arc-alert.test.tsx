@@ -3,7 +3,7 @@ import { cleanup, render, screen } from '@testing-library/react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, expect, it } from 'vitest'
 import '../../setup/jsdom-platform'
-import { AeAlert as Alert } from '@/components/ae/shared/arc/alert/AeAlert'
+import { AeAlert as Alert } from '@/components/ae/shared/alert/AeAlert'
 
 afterEach(cleanup)
 

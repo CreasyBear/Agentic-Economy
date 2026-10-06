@@ -3,7 +3,7 @@ import { Link } from '@tanstack/react-router'
 import { AeAgentAccessAuthorizeForm } from '@/components/ae/agent-access/authorize-form/AeAgentAccessAuthorizeForm'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSettingsStack } from '@/components/ae/layout/AeSection'
-import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import '../authorize-form/ConsentComposition.css'
 import { presentConnectionProblem } from '@/modules/agent-access/public'
 

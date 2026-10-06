@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router'
 
-import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { presentConnectionProblem } from '@/modules/agent-access/public'
 
 import type { ConsentOutcomeViewProps } from '../authorize-form.contracts'

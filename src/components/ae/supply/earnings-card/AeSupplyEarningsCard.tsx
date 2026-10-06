@@ -1,5 +1,5 @@
-import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
-import { AeEmptyState } from '@/components/ae/shared/arc/empty-state/AeEmptyState'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
+import { AeEmptyState } from '@/components/ae/shared/empty-state/AeEmptyState'
 import { formatCurrencyAmount, formatDisplayAmount } from '@/modules/money/public'
 import type { AeSupplyEarningsCardProps } from './earnings-card.contracts'
 
