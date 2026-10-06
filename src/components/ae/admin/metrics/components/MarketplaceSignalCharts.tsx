@@ -27,7 +27,7 @@ export function MarketplaceSignalCharts({ report }: MarketplaceSignalChartsProps
       <h3 id={fundingTitle}>How Calls are funded</h3>
       <p className={styles.description}>Settled paid Calls · selected period</p>
       {fundingChart == null ? <p role="status" className={styles.unavailable}>{unavailable}</p> : <DonutChart
-        className={styles.chart}
+        className={styles.chart ?? ''}
         label="Settled Call funding" unit="Calls" totalLabel="Paid Calls" size={fundingChart.size} thickness={28}
         legendAction="select" groupBelow={0} formatValue={value => count.format(value)} emptyLabel="No paid Calls"
         data={fundingChart.data} />}

@@ -58,7 +58,7 @@ beforeAll(() => {
 })
 
 afterAll(() => {
-  MotionGlobalConfig.skipAnimations = originalMotionSkipAnimations
+  MotionGlobalConfig.skipAnimations = originalMotionSkipAnimations ?? false
   if (typeof window === 'undefined') return
 
   restoreGlobal('ResizeObserver', originalResizeObserver)

@@ -1,5 +1,5 @@
 import { useRouter } from '@tanstack/react-router'
-import { useCallback, type FocusEvent, type MouseEvent, type PointerEvent } from 'react'
+import { useCallback, type MouseEvent } from 'react'
 
 import type { RouterLinkBoundaryProps, RouterLinkDestination } from './router-link-boundary.contracts'
 
@@ -31,12 +31,6 @@ export function RouterLinkBoundary({ children, shouldReloadDocument }: RouterLin
     (root: HTMLDivElement, target: EventTarget | null) => resolveLink(root, target, shouldReloadDocument),
     [shouldReloadDocument],
   )
-  function preload(href: string) {
-    void router.preloadRoute({ href }).catch((cause: unknown) => {
-      console.warn('Unable to preload a route from an Arc link.', cause)
-    })
-  }
-
   function handleClick(event: MouseEvent<HTMLDivElement>) {
     if (
       event.defaultPrevented || event.button !== 0 || event.metaKey || event.altKey || event.ctrlKey || event.shiftKey
@@ -49,24 +43,8 @@ export function RouterLinkBoundary({ children, shouldReloadDocument }: RouterLin
     void router.navigate({ href: link.href })
   }
 
-  function handlePointerOver(event: PointerEvent<HTMLDivElement>) {
-    const link = resolve(event.currentTarget, event.target)
-    if (!link || (event.relatedTarget instanceof Node && link.anchor.contains(event.relatedTarget))) return
-    preload(link.href)
-  }
-
-  function handleFocus(event: FocusEvent<HTMLDivElement>) {
-    const link = resolve(event.currentTarget, event.target)
-    if (link) preload(link.href)
-  }
-
   return (
-    <div
-      style={CONTENTS_STYLE}
-      onClick={handleClick}
-      onPointerOver={handlePointerOver}
-      onFocus={handleFocus}
-    >
+    <div style={CONTENTS_STYLE} onClick={handleClick}>
       {children}
     </div>
   )

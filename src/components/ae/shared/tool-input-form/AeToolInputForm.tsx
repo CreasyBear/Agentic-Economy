@@ -35,7 +35,7 @@ function AeToolInputFieldTemplate(props: FieldTemplateProps) {
   const description = props.rawDescription
     ? createElement(DescriptionFieldTemplate, {
         id: descriptionId(props.id),
-        description: props.description,
+        description: props.description ?? "",
         schema: props.schema,
         registry: props.registry,
         ...(props.uiSchema === undefined ? {} : { uiSchema: props.uiSchema }),

@@ -440,7 +440,7 @@ export function DirectoryDiscoveryFilters(props: DirectoryExplorerFiltersProps) 
       <h2 id={headingId}>Browse by Provider category</h2>
       <p className="text-xs leading-relaxed text-muted-foreground">Category names and counts come from a bounded catalogue sample, not current search matches.</p>
       <ChipGroup
-        className={styles.categoryChips}
+        className={styles.categoryChips ?? ''}
         options={categoryOptions(props.overview, selectedCategory)}
         value={selectedCategory === undefined ? [] : [selectedCategory]}
         onValueChange={values => props.onChange({ directoryCategory: values[0] || undefined })}

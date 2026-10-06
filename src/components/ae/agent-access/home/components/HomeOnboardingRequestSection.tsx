@@ -124,7 +124,7 @@ export function HomeOnboardingRequestSection({ request, search, onCheck, checkin
         current={view.progress.current}
         label="Access request progress"
         completeLabel="Access exchange recorded"
-        steps={view.progress.steps}
+        steps={[...view.progress.steps]}
       />
       : null}
     <div className="arc-agent-connect-actions">
