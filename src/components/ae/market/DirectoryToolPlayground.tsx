@@ -4,7 +4,7 @@ import { BracesIcon, FileJsonIcon } from 'lucide-react'
 import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
 import { CodeBlock, CodeBlockActions, CodeBlockCopyButton, CodeBlockHeader, CodeBlockTitle } from '@/components/ai-elements/code-block'
 import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
-import { Badge } from '@/components/ui/badge'
+import { Badge } from '@/components/arc/badge/badge'
 import { Button } from '@/components/arc/button/button'
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty'
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
@@ -80,7 +80,7 @@ function PlaygroundEditor({ entry, toolRef, inputSchemaJson, inputExampleJson }:
         {!formAvailable ? <p className="text-sm text-muted-foreground">{schema ? 'Use JSON for this schema’s input structure.' : entry.input?.schemaOmitted ? 'The full input schema is too large to display here.' : 'This Provider has not published an input schema.'}</p> : null}
       </section>
       <section className="grid min-w-0 content-start gap-4" aria-labelledby={`${id}-output`}>
-        <div className="flex flex-wrap items-center justify-between gap-3"><h3 id={`${id}-output`} className="text-lg font-medium">Output</h3><Badge variant="secondary">Provider example</Badge></div>
+        <div className="flex flex-wrap items-center justify-between gap-3"><h3 id={`${id}-output`} className="text-lg font-medium">Output</h3><Badge tone="neutral">Provider example</Badge></div>
         <p className="text-sm text-muted-foreground">Published sample output. Editing the input does not generate a new result.</p>
         {outputExample !== undefined ? <JsonExample title="Example response" code={JSON.stringify(outputExample, null, 2)} />
           : <Empty className="min-h-72 border"><EmptyHeader><EmptyMedia variant="icon"><FileJsonIcon /></EmptyMedia><EmptyTitle>No output example</EmptyTitle><EmptyDescription>{entry.output?.exampleOmitted ? 'The published example is too large to display here.' : 'The Provider has not included a sample response.'}</EmptyDescription></EmptyHeader></Empty>}

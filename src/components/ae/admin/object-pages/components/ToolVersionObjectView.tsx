@@ -5,10 +5,10 @@ import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeRecordPageHeader as PageHeader } from '@/components/ae/shared/record-page-header/AeRecordPageHeader'
-import { Badge } from '@/components/ui/badge'
+import { Badge } from '@/components/arc/badge/badge'
 import type { AdminToolVersionView } from '@/lib/operator/admin-console/views'
 import { timestampIso } from '@/lib/ui/format-time'
-import { aeStatusToneVariants, getStatusPresentation } from '@/lib/ui/status-presentation'
+import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import '../../RecordWorkspaceComposition.css'
 import { ADMIN_OBJECT_PAGE_COPY, formatPerthTimestamp } from '../object-pages.contracts'
 
@@ -53,7 +53,7 @@ export function ToolVersionObjectView({ view }: ToolVersionObjectViewProps) {
           },
           { id: 'record', label: view.ref },
         ]}
-        actions={<Badge variant={aeStatusToneVariants[status.tone]}>{status.label}</Badge>}
+        actions={<Badge tone={status.tone}>{status.label}</Badge>}
         detail={(
           <div className="arc-market arc-admin-object-reference">
             <span>{ADMIN_OBJECT_PAGE_COPY.referenceLabel}</span>

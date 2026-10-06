@@ -5,7 +5,7 @@ import { CheckIcon, ShieldAlertIcon } from 'lucide-react'
 import { SpendingLimitInputs } from '@/components/ae/shared/SpendingLimitInputs'
 import { Button } from '@/components/arc/button/button'
 import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
-import { Badge } from '@/components/ui/badge'
+import { Badge } from '@/components/arc/badge/badge'
 import type { AgentDetail } from '@/modules/agent-access/agent-operator-view-model'
 import type {
   AgentSpendingLimitsReadResult,
@@ -53,19 +53,19 @@ export function AeAgentSpendingLimitsForm({
         <div className="arc-spending-policy-heading">
           <span className="arc-spending-policy-title">Spending policy</span>
           {loading ? (
-            <Badge variant="outline">Refreshing</Badge>
+            <Badge tone="neutral">Refreshing</Badge>
           ) : policy.kind === 'known' && view.isPaused ? (
-            <Badge variant="warning" className="gap-1">
+            <Badge tone="warning" className="gap-1">
               <ShieldAlertIcon className="size-3" />
               {getStatusPresentation('paused').label}
             </Badge>
           ) : policy.kind === 'known' ? (
-            <Badge variant="success" className="gap-1">
+            <Badge tone="success" className="gap-1">
               <CheckIcon className="size-3" />
               {getStatusPresentation('active').label}
             </Badge>
           ) : (
-            <Badge variant="outline">{policy.kind === 'expired' ? getStatusPresentation('expired').label : policy.kind === 'unset' ? 'Unset' : getStatusPresentation('unavailable').label}</Badge>
+            <Badge tone="neutral">{policy.kind === 'expired' ? getStatusPresentation('expired').label : policy.kind === 'unset' ? 'Unset' : getStatusPresentation('unavailable').label}</Badge>
           )}
         </div>
         <div className="arc-spending-policy-header-actions">

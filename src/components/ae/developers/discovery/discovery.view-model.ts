@@ -1,5 +1,5 @@
 import { formatRelativeTime } from '@/lib/ui/format-time'
-import { aeStatusToneVariants, getStatusPresentation } from '@/lib/ui/status-presentation'
+import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import type { DeveloperDiscoveryArtifactState } from '@/modules/discovery/developer-discovery'
 import type { DeveloperDiscoveryRoutePageReadback } from '@/modules/discovery/developer-discovery-route'
 import { DEVELOPER_DISCOVERY_UI_COPY } from './discovery.contracts'
@@ -26,7 +26,7 @@ export function buildDeveloperDiscoveryViewModel(
         href: url.href,
         origin: url.origin,
         statusLabel: status.label,
-        statusVariant: aeStatusToneVariants[status.presentation.tone],
+        statusVariant: status.presentation.tone,
         checkedLabel: `${DEVELOPER_DISCOVERY_UI_COPY.checkedPrefix} ${formatRelativeTime(artifact.checkedAt, readback.generatedAt)}`,
         code: JSON.stringify({ route: url.href, fields: artifact.schemaFields.slice(0, 8) }, null, 2),
       }

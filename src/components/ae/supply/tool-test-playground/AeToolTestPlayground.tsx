@@ -1,5 +1,5 @@
 import { AeSection } from '@/components/ae/layout/AeSection'
-import { Badge } from '@/components/ui/badge'
+import { Badge } from '@/components/arc/badge/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -73,11 +73,11 @@ export function AeToolTestPlayground({
             {response ? (
               <>
                 {response.status >= 200 && response.status < 300 ? (
-                  <Badge variant="success">{response.status} OK</Badge>
+                  <Badge tone="success">{response.status} OK</Badge>
                 ) : (
-                  <Badge variant="destructive">{mapHttpStatus(response.status)}</Badge>
+                  <Badge tone="danger">{mapHttpStatus(response.status)}</Badge>
                 )}
-                <Badge variant="outline" className="font-mono tabular-nums">
+                <Badge tone="neutral" className="font-mono tabular-nums">
                   ⚡ {response.latencyMs}ms
                 </Badge>
               </>

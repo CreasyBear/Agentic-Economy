@@ -63,11 +63,11 @@ function formatPaymentStateLabel(
 function callStateStatusBadge(state: BuyerCallSummaryFacts['state']): ActivityBadgeView {
   switch (state) {
     case 'completed':
-      return { variant: 'secondary', label: 'Completed' }
+      return { variant: 'success', label: 'Completed' }
     case 'refused':
-      return { variant: 'outline', label: 'Refused' }
+      return { variant: 'neutral', label: 'Refused' }
     case 'outcome_unknown':
-      return { variant: 'outline', label: 'Outcome unknown', warning: true }
+      return { variant: 'neutral', label: 'Outcome unknown', warning: true }
     default: {
       const _exhaustive: never = state
       return _exhaustive
@@ -80,14 +80,14 @@ function purchaseStatusBadge(
 ): ActivityBadgeView {
   switch (purchase.kind) {
     case 'delivered':
-      return { variant: 'secondary', label: purchase.label }
+      return { variant: 'success', label: purchase.label }
     case 'refunded':
     case 'failed':
-      return { variant: 'outline', label: purchase.label }
+      return { variant: 'neutral', label: purchase.label }
     case 'uncertain':
-      return { variant: 'outline', label: 'Needs review', warning: true }
+      return { variant: 'neutral', label: 'Needs review', warning: true }
     case 'pending':
-      return { variant: 'outline', label: purchase.label, warning: true }
+      return { variant: 'neutral', label: purchase.label, warning: true }
     default: {
       const _exhaustive: never = purchase.kind
       return _exhaustive

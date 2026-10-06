@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router'
 import { AeToolPrice } from '@/components/ae/market/AeToolPrice'
-import { Badge } from '@/components/ui/badge'
+import { Badge } from '@/components/arc/badge/badge'
 import { AeCopyValue } from '@/components/ae/shared/copy-value/AeCopyValue'
 import { DecisionPanel } from '@/components/ae/shared/arc-pro/chat/DecisionPanel'
 import type { PublicToolDescriptor } from '@/modules/capability-supply/public'
@@ -30,7 +30,7 @@ export function AeToolCompactDecision({
       <header className="arc-decision-header">
         <div className="arc-decision-heading-group">
           <h3 className="arc-decision-heading">
-            <Badge variant={decisionVariant(model)}>{model.decisionLabel}</Badge>
+            <Badge tone={decisionVariant(model)}>{model.decisionLabel}</Badge>
           </h3>
           <p className="text-sm text-muted-foreground">
             {model.nextActionDescription}
@@ -64,10 +64,10 @@ export function AeToolCompactDecision({
   )
 }
 
-function decisionVariant(model: ToolInspectorModel): 'success' | 'warning' | 'outline' {
+function decisionVariant(model: ToolInspectorModel): 'success' | 'warning' | 'neutral' {
   if (model.nextAction.label === 'request for Agent') return 'success'
   if (model.availabilityPosture === 'setup_required') {
     return 'warning'
   }
-  return 'outline'
+  return 'neutral'
 }

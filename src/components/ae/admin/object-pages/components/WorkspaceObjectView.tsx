@@ -5,12 +5,12 @@ import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeRecordPageHeader as PageHeader } from '@/components/ae/shared/record-page-header/AeRecordPageHeader'
-import { Badge } from '@/components/ui/badge'
+import { Badge } from '@/components/arc/badge/badge'
 import { Button } from '@/components/arc/button/button'
 import { Input } from '@/components/arc/input/input'
 import type { AdminWorkspaceView } from '@/lib/operator/admin-console/views'
 import { timestampIso } from '@/lib/ui/format-time'
-import { aeStatusToneVariants, getStatusPresentation } from '@/lib/ui/status-presentation'
+import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import '../../RecordWorkspaceComposition.css'
 import { PurchaseActivity } from '../../activity/PurchaseActivity'
 import { ADMIN_OBJECT_PAGE_COPY, formatPerthTimestamp } from '../object-pages.contracts'
@@ -63,7 +63,7 @@ export function WorkspaceObjectView({ view, grant = null }: WorkspaceObjectViewP
           },
           { id: 'record', label: view.ref },
         ]}
-        actions={<Badge variant={aeStatusToneVariants[status.tone]}>{status.label}</Badge>}
+        actions={<Badge tone={status.tone}>{status.label}</Badge>}
         detail={(
           <div className="arc-market arc-admin-object-reference">
             <span>{ADMIN_OBJECT_PAGE_COPY.referenceLabel}</span>

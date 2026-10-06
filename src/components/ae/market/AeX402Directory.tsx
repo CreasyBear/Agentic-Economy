@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AeEmptyState } from '@/components/ae/shared/arc/empty-state/AeEmptyState'
 import { degrade } from '@/lib/observability/degrade'
 import { AeCollectionRail } from '@/components/ae/shared/AeCollectionRail'
-import { Badge } from '@/components/ui/badge'
+import { Badge } from '@/components/arc/badge/badge'
 import { Button } from '@/components/arc/button/button'
 import { ProductListing, ProductListingHeader } from '@/components/ae/shared/arc-pro/market/ProductListing'
 import { MarketUseGuide } from './MarketUseGuide'
@@ -429,7 +429,7 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
   const comparisonTray = comparison.length === 0 ? null : (
     <section className="arc-comparison-tray" aria-label="Selected comparison" data-compare-tray="flow">
       <span className="text-sm">{comparison.length} of 4 selected</span>
-      {comparison.map(item => <Badge key={item.resource} variant="secondary" className="gap-1.5 text-muted-foreground">
+      {comparison.map(item => <Badge key={item.resource} tone="neutral" className="gap-1.5 text-muted-foreground">
         {item.entry?.title ?? ('missing' in item ? MARKET_COMPARE_MISSING_LABEL : MARKET_COMPARE_PENDING_LABEL)}
         <Button type="button" size="sm" variant="ghost" aria-label={'missing' in item ? 'Remove unavailable Tool from comparison' : item.entry === undefined ? 'Remove pending Tool from comparison' : `Remove ${item.entry.title} from selected comparison`} onClick={() => changeComparison(item.resource)}><XIcon /></Button>
       </Badge>)}
@@ -594,7 +594,7 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
             ) })}
             className="mb-5"
           />
-          {search.query === undefined && (search.network !== undefined || search.maxUsdPrice !== undefined) ? <div className="mb-4 flex flex-wrap gap-2">{search.network === undefined ? null : <Badge variant="secondary">Network: {overview?.kind === 'ok' ? overview.networks.find(item => item.key === search.network)?.label ?? search.network : search.network}</Badge>}{search.maxUsdPrice === undefined ? null : <Badge variant="secondary">Provider-listed price: up to {search.maxUsdPrice} USDC</Badge>}</div> : null}
+          {search.query === undefined && (search.network !== undefined || search.maxUsdPrice !== undefined) ? <div className="mb-4 flex flex-wrap gap-2">{search.network === undefined ? null : <Badge tone="neutral">Network: {overview?.kind === 'ok' ? overview.networks.find(item => item.key === search.network)?.label ?? search.network : search.network}</Badge>}{search.maxUsdPrice === undefined ? null : <Badge tone="neutral">Provider-listed price: up to {search.maxUsdPrice} USDC</Badge>}</div> : null}
           {canonicalSearchEnabled ? canonicalResults() : page.kind === 'unavailable' ? <AeEmptyState icon={<SearchIcon />} title={page.reason === 'query_invalid' ? 'Check your search' : 'Catalogue temporarily unavailable'}
             description={page.reason === 'query_invalid' ? 'Use a service description without personal identifiers.' : search.indexCursor !== undefined ? 'This catalogue page could not be loaded. Refresh results to start again with the same search and filters.' : 'The discovery service could not be reached. Try again.'}
             action={<Link to={marketPath} reloadDocument search={carryMarketCompare(search, search.indexCursor === undefined ? search : { ...indexedSearch(), view: tab })} className={cn(cn(actionLinkClassName('secondary', 'md')))}>{search.indexCursor === undefined ? "Try again" : "Refresh results"}</Link>} /> : <>

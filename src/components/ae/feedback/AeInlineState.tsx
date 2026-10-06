@@ -1,4 +1,4 @@
-import { Badge } from '@/components/ui/badge'
+import { Badge } from '@/components/arc/badge/badge'
 import { getAeUiStatePresentation, type AeUiState, type AeUiStateTone } from '@/lib/ui/ui-state'
 import '../layout/RouteRecoveryComposition.css'
 
@@ -8,11 +8,11 @@ type AeInlineStateProps = Readonly<{
   description?: string
 }>
 
-const badgeVariantForTone: Record<AeUiStateTone, 'secondary' | 'success' | 'warning' | 'destructive'> = {
-  neutral: 'secondary',
+const badgeVariantForTone: Record<AeUiStateTone, 'neutral' | 'success' | 'warning' | 'danger'> = {
+  neutral: 'neutral',
   positive: 'success',
   warning: 'warning',
-  danger: 'destructive',
+  danger: 'danger',
 }
 
 export function AeInlineState({ state, label, description }: AeInlineStateProps) {
@@ -25,7 +25,7 @@ export function AeInlineState({ state, label, description }: AeInlineStateProps)
       aria-live={presentation.live}
       data-ui-state={state}
     >
-      <Badge variant={badgeVariantForTone[presentation.tone]}>{label ?? presentation.label}</Badge>
+      <Badge tone={badgeVariantForTone[presentation.tone]}>{label ?? presentation.label}</Badge>
       <span>{description ?? presentation.description}</span>
     </span>
   )

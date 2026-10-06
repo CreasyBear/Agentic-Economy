@@ -5,8 +5,8 @@ import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeRecordPageHeader as PageHeader } from '@/components/ae/shared/record-page-header/AeRecordPageHeader'
 import { AeSection } from '@/components/ae/layout/AeSection'
-import { Badge } from '@/components/ui/badge'
-import { aeStatusToneVariants, getStatusPresentation } from '@/lib/ui/status-presentation'
+import { Badge } from '@/components/arc/badge/badge'
+import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import { timestampIso } from '@/lib/ui/format-time'
 import type { AdminQuoteView } from '@/lib/operator/admin-console/views'
 import '../../RecordWorkspaceComposition.css'
@@ -44,7 +44,7 @@ export function QuoteObjectView({ view }: QuoteObjectViewProps) {
             renderLink: ({ children, ...linkProps }) => <Link to="/admin/search" search={{ kind: 'quote' }} {...linkProps}>{children}</Link> },
           { id: 'record', label: view.ref },
         ]}
-        actions={<Badge variant={aeStatusToneVariants[status.tone]}>{status.label}</Badge>}
+        actions={<Badge tone={status.tone}>{status.label}</Badge>}
         detail={(
           <div className="arc-market arc-admin-object-reference">
             <span>{ADMIN_OBJECT_PAGE_COPY.referenceLabel}</span>

@@ -8,7 +8,7 @@ import { AePriceUpdateModal } from './price-update-modal/AePriceUpdateModal'
 import { Button as ArcButton } from '@/components/arc/button/button'
 import { DecisionPanel } from '@/components/ae/shared/arc-pro/chat/DecisionPanel'
 import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
-import { Badge } from '@/components/ui/badge'
+import { Badge } from '@/components/arc/badge/badge'
 import { formatTimestamp } from '@/lib/ui/format-time'
 import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
@@ -77,7 +77,7 @@ export function AeProviderToolDetail({
       <DecisionPanel aria-labelledby="provider-tool-state" className="arc-provider-tool-state">
         <div className="arc-provider-tool-state-heading">
           <h2 id="provider-tool-state" className="arc-provider-tool-state-title">{status.state}</h2>
-          <Badge className="arc-provider-tool-availability" variant={status.routeability.available ? 'default' : 'outline'}>
+          <Badge className="arc-provider-tool-availability" tone={status.routeability.available ? 'info' : 'neutral'}>
             {status.routeability.available ? 'Available to buyers' : 'Not available to buyers'}
           </Badge>
         </div>

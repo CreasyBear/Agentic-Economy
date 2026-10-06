@@ -7,7 +7,7 @@ import { Button } from '@/components/arc/button/button'
 import { DecisionPanel } from '@/components/ae/shared/arc-pro/chat/DecisionPanel'
 import { ProductListing } from '@/components/ae/shared/arc-pro/market/ProductListing'
 import { AeComparisonTable } from '@/components/ae/shared/comparison-table/AeComparisonTable'
-import { Badge } from '@/components/ui/badge'
+import { Badge } from '@/components/arc/badge/badge'
 import { Spinner } from '@/components/ui/spinner'
 import { formatUtcTimestamp } from '@/lib/ui/format-time'
 import {
@@ -238,7 +238,7 @@ function cardBody(projection: ToolCardProjection, onAddCredit?: ToolCardProps['o
           )}
           {projection.state === 'completed' && projection.paid !== undefined && projection.callRef !== undefined && reportOwner != null
             ? <PaidCallReportControl key={projection.callRef} callRef={projection.callRef} paidLabel={projection.paid} onPosted={reportOwner.onPosted} />
-            : projection.paid === undefined ? null : <Badge variant="secondary">{projection.paid}</Badge>}
+            : projection.paid === undefined ? null : <Badge tone="neutral">{projection.paid}</Badge>}
           {projection.state === 'completed' && projection.callRef !== undefined && reportOwner != null
             ? <CallFeedbackControl key={projection.callRef} callRef={projection.callRef} /> : null}
         </div>
@@ -284,7 +284,7 @@ const STATUS_VARIANT = {
   pending: 'info',
   attention: 'warning',
   refused: 'warning',
-  error: 'destructive',
+  error: 'danger',
 } as const
 
 /** Requires: a current typed Tool projection; actions and reporting callbacks are caller-owned.
@@ -308,7 +308,7 @@ export function ToolCard({ projection, onContinueSearch, onRepeatSearch, signedT
     <DecisionPanel data-tool-card={projection.toolId} className="arc-tool-result">
       <header className="arc-tool-result-header">
         <h3>{projection.title}</h3>
-        <Badge variant={STATUS_VARIANT[state]}>{chatToolStatus[state]}</Badge>
+        <Badge tone={STATUS_VARIANT[state]}>{chatToolStatus[state]}</Badge>
       </header>
       <div className="arc-tool-result-body">
         {cardBody(projection, onAddCredit, reportOwner)}

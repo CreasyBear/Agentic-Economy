@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useServerFn } from '@tanstack/react-start'
 
-import { Badge } from '@/components/ui/badge'
+import { Badge } from '@/components/arc/badge/badge'
 import { Button } from '@/components/arc/button/button'
 import { formatDisplayAmount } from '@/modules/money/public'
 import { readOwnerPaidCallReportServer, reportOwnerPaidCallServer } from '@/modules/capability-execution/paid-call-report.functions'
@@ -116,7 +116,7 @@ export function PaidCallReportControl({
 
   return (
     <div className="grid gap-intra text-sm">
-      {paidLabel === undefined ? null : <Badge variant="secondary" className="w-fit">{view?.kind === 'posted' ? 'Credit returned' : paidLabel}</Badge>}
+      {paidLabel === undefined ? null : <Badge tone="neutral" className="w-fit">{view?.kind === 'posted' ? 'Credit returned' : paidLabel}</Badge>}
       {view?.kind === 'eligible' ? (
         <div className="grid gap-intra">
           <p className="text-muted-foreground">Reports remaining today: {view.remainingToday}. Resets at midnight UTC.</p>

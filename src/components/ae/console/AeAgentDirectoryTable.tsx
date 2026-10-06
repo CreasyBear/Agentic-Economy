@@ -7,7 +7,7 @@ import {
   AeOperatorSortableHeader,
   AeRecordTable,
 } from '@/components/ae/operator/AeOperatorDataTable'
-import { Badge } from '@/components/ui/badge'
+import { Badge } from '@/components/arc/badge/badge'
 import SegmentedControl from '@/components/arc/segmented-control/segmented-control'
 import { stagedListPhase, useFirstLoadPending } from '@/components/ui/data-state'
 import { InlineEditField } from '@/components/ui/inline-edit-field'
@@ -78,7 +78,7 @@ export function AeAgentDirectoryTable({
                   displayName,
                 ) ?? false}
               />
-              <Badge variant="outline" className="arc-agent-directory-state">{environmentLabel(row.original.environment)}</Badge>
+              <Badge tone="neutral" className="arc-agent-directory-state">{environmentLabel(row.original.environment)}</Badge>
             </div>
             <span className="arc-agent-directory-reference" title={row.original.principalRef}>
               {row.original.principalRef}
@@ -193,7 +193,7 @@ export function AeAgentDirectoryTable({
         cell: ({ row }) => {
           const status = agentStatusLabel(row.original.status)
           const variant = agentStatusBadgeVariant(row.original.status)
-          return <Badge variant={variant} className="arc-agent-directory-state">{status}</Badge>
+          return <Badge tone={variant} className="arc-agent-directory-state">{status}</Badge>
         },
       },
     ],

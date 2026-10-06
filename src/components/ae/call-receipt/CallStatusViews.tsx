@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeSection } from '@/components/ae/layout/AeSection'
-import { Badge } from '@/components/ui/badge'
+import { Badge } from '@/components/arc/badge/badge'
 import { Button } from '@/components/arc/button/button'
 import { projectCallReceipt, type CallReceiptView } from '@/modules/capability-execution/call-receipt-view'
 
@@ -73,7 +73,7 @@ export function CallStatusUnchangedView({
         aria-labelledby="unchanged-receipt-title"
       >
         <div className="flex flex-wrap items-start justify-between gap-intra">
-          <Badge variant="secondary" className="w-fit">No status change</Badge>
+          <Badge tone="neutral" className="w-fit">No status change</Badge>
           <CallReceiptRef value={result.callRef} />
         </div>
         <div className="grid gap-intra">
@@ -208,7 +208,7 @@ function CallReceiptBarrierHeader({
   return (
     <>
       <div className="arc-market arc-call-barrier">
-        <Badge variant="warning" className="w-fit">{badgeLabel}</Badge>
+        <Badge tone="warning" className="w-fit">{badgeLabel}</Badge>
         <CallReceiptRef value={callRef} />
         {showRefresh && actions !== undefined ? (
           <CallReceiptRefreshButton actions={actions} labelMode="refresh_status" />

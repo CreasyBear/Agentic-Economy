@@ -7,7 +7,7 @@ import {
   ownerToolProtocolBadgeVariant,
   type OwnerOfferingSummary,
 } from '@/components/ae/offerings/provider-workspace-projection'
-import { Badge } from '@/components/ui/badge'
+import { Badge } from '@/components/arc/badge/badge'
 
 import {
   OWNER_OFFERINGS_COPY,
@@ -130,9 +130,9 @@ function OwnerOfferingStatusCluster({
   const availability = ownerOfferingAvailabilityPresentation(item.availability)
   return (
     <div className="arc-market arc-owner-inventory-status">
-      <Badge variant={lifecycle.variant}>{lifecycle.label}</Badge>
+      <Badge tone={lifecycle.variant}>{lifecycle.label}</Badge>
       {availability === undefined ? null : (
-        <Badge variant={availability.variant} className="gap-1.5">
+        <Badge tone={availability.variant} className="gap-1.5">
           {availability.hasDot ? (
             <span
               className={`size-1.5 rounded-full ${availability.variant === 'success' ? 'bg-success' : 'bg-destructive'}`}
@@ -142,7 +142,7 @@ function OwnerOfferingStatusCluster({
         </Badge>
       )}
       {item.protocolLabel === undefined ? null : (
-        <Badge variant={ownerToolProtocolBadgeVariant(item.protocolLabel)}>{item.protocolLabel}</Badge>
+        <Badge tone={ownerToolProtocolBadgeVariant(item.protocolLabel)}>{item.protocolLabel}</Badge>
       )}
       {showBlocker && item.blocker !== undefined ? (
         <span className="arc-owner-inventory-blocker">{item.blocker}</span>

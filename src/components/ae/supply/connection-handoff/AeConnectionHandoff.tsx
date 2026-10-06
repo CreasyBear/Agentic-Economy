@@ -1,6 +1,6 @@
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSettingsStack } from '@/components/ae/layout/AeSection'
-import { Badge } from '@/components/ui/badge'
+import { Badge } from '@/components/arc/badge/badge'
 
 import {
   CONNECTION_HANDOFF_COPY,
@@ -31,7 +31,7 @@ export function AeConnectionHandoff({ loaded }: AeConnectionHandoffProps) {
     >
       <AeSettingsStack>
         {page.environmentLabel === undefined ? null : (
-          <Badge variant="outline">{page.environmentLabel}</Badge>
+          <Badge tone="neutral">{page.environmentLabel}</Badge>
         )}
         {surface.kind === 'unavailable' ? (
           <HandoffStatusPanel

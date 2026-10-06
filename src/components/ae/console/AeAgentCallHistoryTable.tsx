@@ -4,7 +4,7 @@ import { useMemo } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 import { ArrowUpRightIcon } from 'lucide-react'
 
-import { Badge } from '@/components/ui/badge'
+import { Badge } from '@/components/arc/badge/badge'
 import {
   AeOperatorSortableHeader,
   AeRecordTable,
@@ -28,19 +28,19 @@ export type AeAgentCallHistoryTableProps = Readonly<{
 
 function purchaseStatusBadgeVariant(
   kind: 'delivered' | 'failed' | 'pending' | 'refunded' | 'uncertain',
-): 'success' | 'destructive' | 'warning' | 'outline' {
+): 'success' | 'danger' | 'warning' | 'neutral' {
   switch (kind) {
     case 'delivered':
       return 'success'
     case 'failed':
-      return 'destructive'
+      return 'danger'
     case 'refunded':
-      return 'outline'
+      return 'neutral'
     case 'uncertain':
     case 'pending':
       return 'warning'
     default:
-      return 'outline'
+      return 'neutral'
   }
 }
 
@@ -110,7 +110,7 @@ export function AeAgentCallHistoryTable({
         cell: ({ row }) => {
           const status = projectCallSummaryPurchaseStatus(row.original)
           return (
-            <Badge variant={purchaseStatusBadgeVariant(status.kind)}>
+            <Badge tone={purchaseStatusBadgeVariant(status.kind)}>
               {status.label}
             </Badge>
           )

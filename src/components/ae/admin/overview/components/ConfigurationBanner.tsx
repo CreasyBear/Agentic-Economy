@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { AeSection } from '@/components/ae/layout/AeSection'
-import { Badge } from '@/components/ui/badge'
+import { Badge } from '@/components/arc/badge/badge'
 import { formatPerthTimestamp, timestampIso } from '@/lib/ui/format-time'
 import { PAYMENT_READINESS_CHECK_KEYS, type PaymentReadinessCheck, type PaymentReadinessView } from '@/modules/money/payment-readiness'
 import { ALPHA_X402_PAYEE_SCREENING_POLICY } from '@/modules/money/x402-spend-admission'
@@ -83,7 +83,7 @@ export function ConfigurationBanner({ readiness, compact = false }: Configuratio
   return (
     <AeSection title={ADMIN_OVERVIEW_COPY.configurationTitle} description={ADMIN_OVERVIEW_COPY.configurationDescription} className="arc-market arc-overview-configuration">
       <div className="mb-related grid gap-intra">
-        <p role="status" aria-label="Payment readiness status"><Badge variant={ready ? 'secondary' : 'warning'}>{ready ? 'Ready' : 'Not ready'}</Badge></p>
+        <p role="status" aria-label="Payment readiness status"><Badge tone={ready ? 'neutral' : 'warning'}>{ready ? 'Ready' : 'Not ready'}</Badge></p>
         {ready && readiness?.checks.sanctions.kind === 'deferred'
           ? <p className="text-sm">Payee screening deferred under the alpha policy; payees are not screened.</p> : null}
         <p className="text-sm">{readiness === null ? 'Environment: Not declared'

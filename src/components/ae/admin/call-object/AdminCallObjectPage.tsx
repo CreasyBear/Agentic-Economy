@@ -2,13 +2,12 @@ import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { ErrorBoundary } from '@sentry/react'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Button } from '@/components/arc/button/button'
-import { Badge } from '@/components/ui/badge'
+import { Badge } from '@/components/arc/badge/badge'
 import { Link } from '@tanstack/react-router'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AePageState } from '@/components/ae/layout/AePageState'
 import { OperatorRouteNotFoundRecovery } from '@/components/ae/layout/AeRouteNotFound'
 import { AeRecordPageHeader as PageHeader } from '@/components/ae/shared/record-page-header/AeRecordPageHeader'
-import { aeStatusToneVariants } from '@/lib/ui/status-presentation'
 import { AdminCallActivity } from './components/AdminCallActivity'
 import { AdminCallEvidence } from './components/AdminCallEvidence'
 import { AdminCallReferences } from './components/AdminCallReferences'
@@ -79,7 +78,7 @@ function AdminCallObjectFound({ view }: AdminCallObjectFoundProps) {
           { id: 'record', label: view.ref },
         ]}
         actions={(
-          <Badge variant={aeStatusToneVariants[model.status.tone]}>
+          <Badge tone={model.status.tone}>
             {model.status.compactLabel}
           </Badge>
         )}

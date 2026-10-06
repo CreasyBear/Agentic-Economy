@@ -3,7 +3,7 @@ import type { ColumnDef } from '@tanstack/react-table'
 import '../../RecordWorkspaceComposition.css'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeRecordTable } from '@/components/ae/operator/AeOperatorDataTable'
-import { Badge } from '@/components/ui/badge'
+import { Badge } from '@/components/arc/badge/badge'
 import {
   ADMIN_EXCEPTIONS_COPY,
   type AdminResolutionRowModel,
@@ -23,7 +23,7 @@ const columns: ColumnDef<AdminResolutionRowModel, unknown>[] = [
   {
     accessorKey: 'terminalStateLabel',
     header: ADMIN_EXCEPTIONS_COPY.columnLabels.terminalState,
-    cell: ({ row }) => <Badge variant="outline">{row.original.terminalStateLabel}</Badge>,
+    cell: ({ row }) => <Badge tone="neutral">{row.original.terminalStateLabel}</Badge>,
   },
   {
     accessorKey: 'resolvedAtLabel',

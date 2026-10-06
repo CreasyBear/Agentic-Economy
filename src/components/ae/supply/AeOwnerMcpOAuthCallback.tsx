@@ -3,7 +3,7 @@ import { Link } from '@tanstack/react-router'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSettingsStack } from '@/components/ae/layout/AeSection'
 import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
-import { Badge } from '@/components/ui/badge'
+import { Badge } from '@/components/arc/badge/badge'
 import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import './connection-handoff/ConnectionHandoffComposition.css'
 
@@ -29,7 +29,7 @@ export function AeOwnerMcpOAuthCallback({ result }: AeOwnerMcpOAuthCallbackProps
     >
       <AeSettingsStack>
         {result.environment === undefined ? null : (
-          <Badge variant="outline">
+          <Badge tone="neutral">
             {OWNER_MCP_OAUTH_CALLBACK_COPY.environment[result.environment]}
           </Badge>
         )}

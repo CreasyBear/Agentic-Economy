@@ -201,16 +201,16 @@ export function agentStatusLabel(status: AgentDirectoryItem['status']):
 
 export function agentStatusBadgeVariant(
   status: AgentDirectoryItem['status'],
-): 'success' | 'warning' | 'destructive' | 'outline' {
+): 'success' | 'warning' | 'danger' | 'neutral' {
   switch (status) {
     case 'connected':
       return 'success'
     case 'attention':
       return 'warning'
     case 'expired':
-      return 'destructive'
+      return 'danger'
     case 'disconnected':
-      return 'outline'
+      return 'neutral'
     default: {
       const exhaustive: never = status
       return exhaustive
