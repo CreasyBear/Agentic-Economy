@@ -11,7 +11,7 @@ import {
   type FormanceMoneyCommand,
   type FormanceReferenceReadResult,
 } from './formance'
-import { completed, refused, unavailable, unknown, type FormanceSettlementReadResult, type FormanceReservationReadResult, type FormanceReleaseReadResult } from './formance-result'
+import { completed, completedMany, refused, unavailable, unknown, type FormanceSettlementReadResult, type FormanceReservationReadResult, type FormanceReleaseReadResult } from './formance-result'
 import {
   prepareFormanceSettledSaleRefund,
   formanceCommandPostingsMatch,
@@ -40,6 +40,12 @@ import {
   prepareFormancePaidCallRemedy,
   prepareFormanceProviderReversal,
   prepareFormanceSpendingPeriodAdjustment,
+  planHoldAccountAddress,
+  preparePlanHold,
+  preparePlanNodeAllocation,
+  preparePlanNodeRelease,
+  preparePlanNodeSettlement,
+  preparePlanRemainderRelease,
   spendingPeriodIdentity,
   type FormanceBalanceKind,
   type FormanceBuyerAdjustment,
@@ -51,6 +57,11 @@ import {
   type FormanceProviderReversal,
   type FormanceSpendingPeriodAdjustment,
   type FormanceSpendingPeriodKind,
+  type PlanHoldBooking,
+  type PlanNodeAllocation,
+  type PlanNodeRelease,
+  type PlanNodeSettlement,
+  type PlanRelease,
   type PreparedCommand,
   type PreparedManagedCallBulk,
 } from './internal/formance-transaction-templates'
@@ -152,6 +163,60 @@ export async function reserveFormanceManagedCall(
   input: FormanceManagedCallBooking,
 ): Promise<FormanceMoneyResult> {
   return executePreparedBulk(context, prepareFormanceManagedCallReservation(input))
+}
+
+/**
+ * Places the authorized Plan's exact aggregate capacity Hold in one atomic bulk.
+ * A native timeout or incomplete reference set remains outcome_unknown.
+ */
+export async function reservePlanHold(
+  context: FormanceContext,
+  input: PlanHoldBooking,
+): Promise<FormanceMoneyResult> {
+  return executePreparedBulk(context, preparePlanHold(input))
+}
+
+/** Allocates a Node from the existing Plan Hold without debiting capacity again. */
+export async function allocatePlanNode(
+  context: FormanceContext,
+  input: PlanNodeAllocation,
+): Promise<FormanceMoneyResult> {
+  return executePreparedBulk(context, preparePlanNodeAllocation(input))
+}
+
+/** Settles a Node's accepted buyer reservation; it does not reserve capacity again. */
+export async function settlePlanNode(
+  context: FormanceContext,
+  input: PlanNodeSettlement,
+): Promise<FormanceMoneyResult> {
+  return executePreparedBulk(context, preparePlanNodeSettlement(input))
+}
+
+/** Releases a Node's unused reservation to available capacity. */
+export async function releasePlanNode(
+  context: FormanceContext,
+  input: PlanNodeRelease,
+): Promise<FormanceMoneyResult> {
+  return executePreparedBulk(context, preparePlanNodeRelease(input))
+}
+
+/** Releases only the balance read from this Plan's Hold after the caller's terminal gate. */
+export async function releasePlanRemainder(
+  context: FormanceContext,
+  input: Omit<PlanRelease, 'holdBalanceUnits'>,
+): Promise<FormanceMoneyResult> {
+  const hold = await readFormanceAccount(context, planHoldAccountAddress(input))
+  if (hold.kind === 'setup_required') return refused(hold.code)
+  if (hold.kind === 'unavailable') return unavailable(hold.code)
+
+  const holdBalanceUnits = hold.kind === 'not_found'
+    ? '0'
+    : hold.volumes[balanceAsset('account_aud')]?.balanceUnits ?? '0'
+  const holdBalance = BigInt(holdBalanceUnits)
+  if (holdBalance < 0n) return refused('formance_plan_hold_balance_invalid')
+  if (holdBalance === 0n) return completedMany([], false)
+
+  return executePreparedBulk(context, preparePlanRemainderRelease({ ...input, holdBalanceUnits }))
 }
 
 /**

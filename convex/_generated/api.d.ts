@@ -40,6 +40,7 @@ import type * as capabilityCallX402AuthorizationExpiry from "../capabilityCallX4
 import type * as capabilityCalls from "../capabilityCalls.js";
 import type * as capabilityCallsStatus from "../capabilityCallsStatus.js";
 import type * as capabilityContractDocuments from "../capabilityContractDocuments.js";
+import type * as capabilityPlans from "../capabilityPlans.js";
 import type * as capabilityProcure from "../capabilityProcure.js";
 import type * as capabilityProviderApprovals from "../capabilityProviderApprovals.js";
 import type * as capabilityProviderConnectionAgents from "../capabilityProviderConnectionAgents.js";
@@ -260,6 +261,7 @@ import type * as lib_capabilityExecution_liveX402Requirement_requirementRef from
 import type * as lib_capabilityExecution_paidCallReports_admission from "../lib/capabilityExecution/paidCallReports/admission.js";
 import type * as lib_capabilityExecution_paidCallReports_lifecycle from "../lib/capabilityExecution/paidCallReports/lifecycle.js";
 import type * as lib_capabilityExecution_plans_priceQuote from "../lib/capabilityExecution/plans/priceQuote.js";
+import type * as lib_capabilityExecution_plans_quotePlan from "../lib/capabilityExecution/plans/quotePlan.js";
 import type * as lib_capabilityExecution_providerConsequence_abort from "../lib/capabilityExecution/providerConsequence/abort.js";
 import type * as lib_capabilityExecution_providerConsequence_attest from "../lib/capabilityExecution/providerConsequence/attest.js";
 import type * as lib_capabilityExecution_providerConsequence_claim from "../lib/capabilityExecution/providerConsequence/claim.js";
@@ -827,6 +829,7 @@ declare const fullApi: ApiFromModules<{
   capabilityCalls: typeof capabilityCalls;
   capabilityCallsStatus: typeof capabilityCallsStatus;
   capabilityContractDocuments: typeof capabilityContractDocuments;
+  capabilityPlans: typeof capabilityPlans;
   capabilityProcure: typeof capabilityProcure;
   capabilityProviderApprovals: typeof capabilityProviderApprovals;
   capabilityProviderConnectionAgents: typeof capabilityProviderConnectionAgents;
@@ -1047,6 +1050,7 @@ declare const fullApi: ApiFromModules<{
   "lib/capabilityExecution/paidCallReports/admission": typeof lib_capabilityExecution_paidCallReports_admission;
   "lib/capabilityExecution/paidCallReports/lifecycle": typeof lib_capabilityExecution_paidCallReports_lifecycle;
   "lib/capabilityExecution/plans/priceQuote": typeof lib_capabilityExecution_plans_priceQuote;
+  "lib/capabilityExecution/plans/quotePlan": typeof lib_capabilityExecution_plans_quotePlan;
   "lib/capabilityExecution/providerConsequence/abort": typeof lib_capabilityExecution_providerConsequence_abort;
   "lib/capabilityExecution/providerConsequence/attest": typeof lib_capabilityExecution_providerConsequence_attest;
   "lib/capabilityExecution/providerConsequence/claim": typeof lib_capabilityExecution_providerConsequence_claim;
