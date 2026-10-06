@@ -2,8 +2,10 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { spawnCli } from './cli-errors-harness'
+import { runPlanCommand } from '../../../tools/ae/commands/plan'
+import type { CliOptions } from '../../../tools/ae/lib/args'
 
 const plan = { nodes: [{ id: 'first', toolRef: `operation:v1:${'a'.repeat(64)}`, input: { name: 'Perth' }, dependsOn: [] }] }
 const quote = {
@@ -35,7 +37,13 @@ beforeEach(async () => {
   origin = `http://127.0.0.1:${address.port}`
   close = () => new Promise<void>((resolve, reject) => server.close((error) => error === undefined ? resolve() : reject(error)))
 })
-afterEach(async () => { await close(); rmSync(directory, { recursive: true, force: true }) })
+afterEach(async () => {
+  vi.useRealTimers()
+  vi.unstubAllGlobals()
+  vi.unstubAllEnvs()
+  await close()
+  rmSync(directory, { recursive: true, force: true })
+})
 function run(file: string) {
   return spawnCli(['plan', 'quote', file, '--json', '--base-url', origin], {
     env: { ...process.env, AE_API_KEY: 'test-key', AE_API_KEY_ORIGIN: origin, AE_CONFIG_DIR: directory },
@@ -88,6 +96,39 @@ describe('ae plan lifecycle', () => {
     expect(requests.map(request => [request.path, request.body])).toEqual([
       ['/api/v1/tools/plans/plan%3Av1%3Acli', undefined], ['/api/v1/tools/plans/plan%3Av1%3Acli', undefined],
     ])
+  })
+  it.each([undefined, 0, 50_000])('preserves read-only recovery when watch ends (response stalls after %s ms)', async (stallAfter) => {
+    const options: CliOptions = { baseUrl: origin, baseUrlSource: 'flag', json: true, help: false, allowWrite: false }
+    vi.stubEnv('AE_API_KEY', 'test-key')
+    vi.stubEnv('AE_API_KEY_ORIGIN', origin)
+    vi.useFakeTimers()
+    vi.setSystemTime(1_800_000_000_000)
+    const startedAt = Date.now()
+    const requestTimes: number[] = []
+    let stalledSignal: AbortSignal | undefined
+    const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation((_url, init) => {
+      requestTimes.push(Date.now() - startedAt)
+      if (stallAfter !== undefined && Date.now() - startedAt >= stallAfter) {
+        stalledSignal = init!.signal!
+        return Promise.resolve(new Response(new ReadableStream({
+          start(controller) {
+            stalledSignal!.addEventListener('abort', () => controller.error(stalledSignal!.reason), { once: true })
+          },
+        })))
+      }
+      return Promise.resolve(Response.json(progress))
+    })
+    vi.stubGlobal('fetch', fetch)
+    const failure = expect(runPlanCommand(['watch', progress.planRef], options)).rejects.toMatchObject({
+      code: 'plan-watch-timeout', detail: { planRef: progress.planRef, identityPreserved: true },
+      nextCommand: `ae plan watch ${progress.planRef} --base-url ${origin} --json`,
+    })
+    await vi.advanceTimersByTimeAsync(stallAfter === 0 ? 30_000 : 60_000)
+    await failure
+    expect(requestTimes.every(time => time < 60_000)).toBe(true)
+    expect(fetch.mock.calls.every(([url, init]) => String(url).endsWith('/api/v1/tools/plans/plan%3Av1%3Acli') && init?.method === 'GET')).toBe(true)
+    if (stallAfter !== undefined) expect(stalledSignal?.aborted).toBe(true)
+    expect(vi.getTimerCount()).toBe(0)
   })
   it.each(['awaiting_approval', 'reconciliation_required'])('stops watching when %s needs attention', async state => {
     responses = [{ ...progress, state }]

@@ -7,20 +7,20 @@
 The npm package is `@agentic-economy/cli`; its installed command is `ae`. For a published version:
 
 ```sh
-npm install --global @agentic-economy/cli@0.3.0
+npm install --global @agentic-economy/cli@0.3.1
 ae --help
 ```
 
-Check `npm view @agentic-economy/cli@0.3.0 version` before installing. A 404 means that version is not published yet. Node.js 20 or newer is required.
+Check `npm view @agentic-economy/cli@0.3.1 version` before installing. A 404 means that version is not published yet. Node.js 20 or newer is required.
 
 ## Install a verified signed archive
 
 Signed archives are distributed through [CreasyBear/aecon-cli releases](https://github.com/CreasyBear/aecon-cli/releases). Use these commands only when the selected tagged release and its three assets exist.
 
-For an *existing* version, install `curl`, `jq`, `cosign`, npm, and a SHA-256 checker (`shasum` on macOS), then download all three assets **from the same tag**. The example is for version `0.3.0`; substitute the actual published version if different:
+For an *existing* version, install `curl`, `jq`, `cosign`, npm, and a SHA-256 checker (`shasum` on macOS), then download all three assets **from the same tag**. The example is for version `0.3.1`; substitute the actual published version if different:
 
 ```sh
-VERSION=0.3.0
+VERSION=0.3.1
 BASE="https://github.com/CreasyBear/aecon-cli/releases/download/v${VERSION}"
 ARCHIVE="agentic-economy-cli-${VERSION}.tgz"
 curl --fail --location --remote-name "${BASE}/${ARCHIVE}"

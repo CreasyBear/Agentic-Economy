@@ -5,7 +5,7 @@ import type { PlanGetResult } from '@/modules/capability-execution/plan/runtime.
 import type { CliOptions } from '../lib/args'
 import { CliFailure, callJson, heading, line, printJson, requireOk } from '../lib/output'
 import { usageFailure } from '../lib/help'
-import { continuationCommand } from '../lib/continuation-command'
+import { cliContinuation } from '../lib/continuation-command'
 import { MAX_STATUS_WAIT_MS, requireAgentAccessKey } from './status'
 
 export const planQuoteCommandDescriptor = {
@@ -69,11 +69,25 @@ async function readPlan(planRef: string, options: CliOptions, timeoutMs = 30_000
   return result.data
 }
 
+/**
+ * Requires a valid Plan reference and origin-bound credential.
+ * Ensures bounded reads return recorded progress or an actionable timeout.
+ * Invariant: observation never creates, resumes or cancels a purchase.
+ * On timeout: abort the read and preserve the same Plan, origin and output mode.
+ */
 async function watchPlan(planRef: string, options: CliOptions): Promise<void> {
   const deadline = Date.now() + MAX_STATUS_WAIT_MS
   let lastState: string | undefined
-  while (Date.now() < deadline) {
-    const result = await readPlan(planRef, options, Math.min(30_000, deadline - Date.now()))
+  while (true) {
+    const remainingMs = deadline - Date.now()
+    if (remainingMs <= 0) break
+    let result: PlanGetResult
+    try {
+      result = await readPlan(planRef, options, Math.min(30_000, remainingMs))
+    } catch (error) {
+      if (error instanceof CliFailure && error.code === 'request-timeout') break
+      throw error
+    }
     if (result.kind === 'refused' || result.state !== 'running') { present(result, options); return }
     if (!options.json && result.state !== lastState) process.stderr.write(`Plan ${planRef}: ${result.state}\n`)
     lastState = result.state
@@ -81,7 +95,7 @@ async function watchPlan(planRef: string, options: CliOptions): Promise<void> {
   }
   throw new CliFailure('Plan watch timed out; read the same Plan to continue.', {
     kind: 'UNAVAILABLE', code: 'plan-watch-timeout', detail: { planRef, identityPreserved: true },
-    nextCommand: continuationCommand(['ae', 'plan', 'watch', planRef, '--base-url', options.baseUrl]),
+    nextCommand: cliContinuation(options, ['ae', 'plan', 'watch', planRef]),
   })
 }
 
