@@ -13,7 +13,7 @@ import type {
   PlanQuoteResult,
 } from '@/modules/capability-execution/plan/contracts'
 import type { CommercialPolicyControls } from '@/modules/money/public'
-import { normalizePricingConfig } from '@/modules/money/public'
+import { DEFAULT_PLAN_RATE_TOLERANCE_BPS, normalizePricingConfig } from '@/modules/money/public'
 import type { LiveX402Requirement } from '@/modules/capability-execution/live-x402-requirement'
 
 import type { QueryCtx } from '../../../_generated/server'
@@ -119,13 +119,15 @@ export async function pricePlanNodes(
 
     let ceilingUnits = valuation.price.units
     let rateEvidence: PlanNodeQuote['rateEvidence']
+    let rateToleranceBps: number | undefined
     if (valuation.rateEvidence !== undefined) {
-      const toleranceBps = policy.operations.planRateToleranceBps
+      const toleranceBps = policy.operations.planRateToleranceBps ?? DEFAULT_PLAN_RATE_TOLERANCE_BPS
       if (typeof toleranceBps !== 'number' || !Number.isSafeInteger(toleranceBps)
         || toleranceBps < 0 || toleranceBps > MAX_RATE_TOLERANCE_BPS) {
         return { kind: 'refused', code: 'probe_failed', nodeId: node.id }
       }
       const amount = BigInt(ceilingUnits)
+      rateToleranceBps = toleranceBps
       const numerator = amount * (BPS_DENOMINATOR + BigInt(toleranceBps))
       ceilingUnits = ((numerator + BPS_DENOMINATOR - 1n) / BPS_DENOMINATOR).toString()
       rateEvidence = {
@@ -144,6 +146,7 @@ export async function pricePlanNodes(
       ...(node.bounds === undefined ? {} : { bounds: node.bounds }),
       ceilingAudUnits: ceilingUnits as AudUnits,
       ...(rateEvidence === undefined ? {} : { rateEvidence }),
+      ...(rateToleranceBps === undefined ? {} : { rateToleranceBps }),
       validation,
       dependsOn: [...node.dependsOn],
     })

@@ -45,6 +45,20 @@ export type PublicCallRouteExample = Readonly<{
 
 export function callRouteExample(route: PublicCallRouteDescriptor): PublicCallRouteExample {
   const authorization = 'Bearer <Agent access key>'
+  const planRef = '12345678-1234-4234-8234-123456789abc'
+  if (['tool.plan.quote', 'tool.plan.run', 'tool.plan.get', 'tool.plan.cancel'].includes(route.actionId)) {
+    const actionInput: Record<string, JsonValue> = route.actionId === 'tool.plan.quote'
+      ? { plan: { nodes: [{ id: 'lookup', toolRef: PUBLIC_TOOL_REF_EXAMPLE, input: {}, dependsOn: [] }] } }
+      : route.actionId === 'tool.plan.run'
+        ? { planRef, approvedTotalAudUnits: '1000000', idempotencyKey: PUBLIC_IDEMPOTENCY_KEY_EXAMPLE }
+        : { planRef }
+    return { actionInput, http: {
+      path: route.path.replace('{planRef}', planRef),
+      headers: { Authorization: authorization, Accept: CALL_ROUTE_CONTRACT.media.response,
+        ...(route.method === 'POST' ? { 'Content-Type': CALL_ROUTE_CONTRACT.media.request } : {}) },
+      ...(route.method === 'POST' ? { body: actionInput } : {}),
+    } }
+  }
   if (route.actionId === TOOL_QUOTE_ACTION_ID) {
     const actionInput = { toolRef: PUBLIC_TOOL_REF_EXAMPLE, input: {} }
     return {

@@ -595,6 +595,7 @@ describe('Package 4 official Formance boundary', () => {
                 postings: [
                   { source: `calls:${DIGEST_B}:buyer_reserved`, destination: 'platform:revenue:sales', asset: 'AUD/6', amount: 2n },
                   { source: `calls:${DIGEST_B}:buyer_reserved`, destination: 'platform:tax:gst', asset: 'AUD/6', amount: 1n },
+                  { source: `legal_customers:${DIGEST_A}:exposure_reserved`, destination: `legal_customers:${DIGEST_A}:exposure_settled`, asset: 'AUD/6', amount: 3n },
                 ],
               },
               {
@@ -624,6 +625,7 @@ describe('Package 4 official Formance boundary', () => {
               postings: [
                 { source: `calls:${DIGEST_A}:buyer_reserved`, destination: 'platform:revenue:sales', asset: 'AUD/6', amount: 4n },
                 { source: `calls:${DIGEST_A}:buyer_reserved`, destination: 'platform:tax:gst', asset: 'AUD/6', amount: 1n },
+                { source: `legal_customers:${DIGEST_A}:exposure_reserved`, destination: `legal_customers:${DIGEST_A}:exposure_settled`, asset: 'AUD/6', amount: 5n },
               ],
             }],
             hasMore: false,

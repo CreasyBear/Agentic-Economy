@@ -16,12 +16,13 @@ import type {
   PlanNodeId,
   PlanValidationRefusal,
 } from '@/modules/capability-execution/plan/contracts'
-import { normalizePricingConfig } from '@/modules/money/public'
+import { normalizePricingConfig, pricingConfigDigest } from '@/modules/money/public'
 import type { CapabilityInputExample } from '@/modules/capability-contract/public'
 import type { LiveX402RequirementActionResult } from '../liveX402Requirement/requirementRef'
 
 import { env, type ActionCtx, type MutationCtx, type QueryCtx } from '../../../_generated/server'
 import { readCurrentPublishedTool } from '../../capabilitySupply/currentTool/reads'
+import { readManagedX402InspectionTarget } from '../../capabilitySupply/currentTool/inspection'
 import { toolProviderRouteabilityIsFrozen } from '../../capabilitySupply/providerOffboarding/freeze'
 import { readCommercialPolicyGate } from '../../../moneyCommercialPolicy'
 import { liveX402RequirementValue } from '../quotes/contracts'
@@ -29,7 +30,9 @@ import { requireSourceWrite } from '../../security/sourceWrite/admission'
 import { sourceWriteArgs } from '../../security/sourceWrite/contracts'
 import { principalValue, type CallPrincipal, type CurrentAgentAuthority } from '../callLifecycle/contracts'
 import { resolveCurrentAgentAuthority } from '../callLifecycle/agentCallAuthority'
-import { inspectLiveX402RequirementRef } from '../liveX402Requirement/requirementRef'
+import { trustedChatAuthorityValue } from '../../chat/turns/contracts'
+import { resolveTrustedChatAuthority } from '../callLifecycle/chatCallAuthority'
+import { bindPersistedManagedX402RequirementRef, inspectLiveX402RequirementRef } from '../liveX402Requirement/requirementRef'
 import { pricePlanNodes, type LiveX402Observation } from './priceQuote'
 
 const planRefusalCodeValue = v.union(
@@ -49,6 +52,7 @@ const planNodeQuoteValue = v.object({
   priceClass: v.union(v.literal('fixed'), v.literal('cardinality_bounded'), v.literal('upto_bounded'), v.literal('unknown')),
   pricingDigest: v.string(), bounds: v.optional(v.record(v.string(), v.object({ maxItems: v.number() }))),
   ceilingAudUnits: v.string(), rateEvidence: v.optional(planRateEvidenceValue),
+  rateToleranceBps: v.optional(v.number()),
   validation: v.union(v.literal('typed'), v.literal('untyped_ref')), dependsOn: v.array(v.string()),
 })
 export const planQuoteResultValue = v.union(planValidationRefusalValue, v.object({
@@ -69,7 +73,7 @@ function normalizePlanRefusal(value: PlanRefusalValue): PlanValidationRefusal {
 
 const quotePlanActionArgsValue = v.object({
   operationKey: v.string(), correlationId: v.string(), ...sourceWriteArgs,
-  principal: principalValue, plan: v.any(),
+  principal: principalValue, planJson: v.string(),
 })
 export const quotePlanActionArgs = quotePlanActionArgsValue.fields
 export type QuotePlanActionArgs = Infer<typeof quotePlanActionArgsValue>
@@ -84,6 +88,7 @@ export const authenticatePlanQuoteResult = planQuoteAuthenticationValue
 type QuoteToolMaterial = Readonly<{
   toolRef: string
   materialDigest: string
+  inspectionTargetDigest?: string
   pricingDigest: string
   pricingConfig: unknown
   inputSchema: unknown
@@ -93,11 +98,11 @@ type QuoteToolMaterial = Readonly<{
   expiresAt: number
 }>
 const quoteToolMaterialValue = v.object({
-  toolRef: v.string(), materialDigest: v.string(), pricingDigest: v.string(), pricingConfig: v.any(),
-  inputSchema: v.any(), outputSchema: v.optional(v.any()), inputExamples: v.optional(v.any()),
+  toolRef: v.string(), materialDigest: v.string(), pricingDigest: v.string(), pricingConfigJson: v.string(),
+  inspectionTargetDigest: v.optional(v.string()),
+  inputSchemaJson: v.string(), outputSchemaJson: v.optional(v.string()), inputExamplesJson: v.optional(v.string()),
   providerHost: v.string(), expiresAt: v.number(),
 })
-const quoteToolSchemaValue = v.object({ inputSchema: v.any(), outputSchema: v.optional(v.any()) })
 const readPlanQuoteMaterialArgsValue = v.object({
   principal: principalValue, grantRef: v.string(), grantGeneration: v.number(), toolRefs: v.array(v.string()),
 })
@@ -105,20 +110,20 @@ export const readPlanQuoteMaterialArgs = readPlanQuoteMaterialArgsValue.fields
 type ReadPlanQuoteMaterialArgs = Infer<typeof readPlanQuoteMaterialArgsValue>
 export const readPlanQuoteMaterialResult = v.union(planValidationRefusalValue, v.object({
   kind: v.literal('ready'), materials: v.array(quoteToolMaterialValue),
-  schemas: v.record(v.string(), quoteToolSchemaValue),
 }))
 
 const edgeValidationValue = v.object({
   from: v.string(), to: v.string(), sourcePointer: v.string(), targetPointer: v.string(),
   validation: v.union(v.literal('typed'), v.literal('untyped_ref')),
 })
-const expectedMaterialValue = v.object({ toolRef: v.string(), materialDigest: v.string(), pricingDigest: v.string(), providerHost: v.string() })
+const expectedMaterialValue = v.object({ toolRef: v.string(), materialDigest: v.string(), pricingDigest: v.string(), providerHost: v.string(), inspectionTargetDigest: v.optional(v.string()) })
 const observedRequirementValue = v.object({ kind: v.literal('observed'), requirement: liveX402RequirementValue })
 const quotePlanHandlerArgsValue = v.object({
-  plan: v.any(), stages: v.array(v.array(v.string())), principal: principalValue,
+  planJson: v.string(), stages: v.array(v.array(v.string())), principal: principalValue,
   grantRef: v.string(), grantGeneration: v.number(), grantExpiresAt: v.number(),
   expectedMaterials: v.array(expectedMaterialValue), edgeValidations: v.array(edgeValidationValue),
   observations: v.array(v.object({ nodeId: v.string(), observation: observedRequirementValue })),
+  chatAuthority: v.optional(trustedChatAuthorityValue),
 })
 export const quotePlanHandlerArgs = quotePlanHandlerArgsValue.fields
 export type QuotePlanHandlerArgs = Infer<typeof quotePlanHandlerArgsValue>
@@ -134,6 +139,13 @@ const quotePlanMutationRef = makeFunctionReference<'mutation', QuotePlanHandlerA
 )
 
 
+// Convex objects reserve $ keys; Plans and JSON schemas retain those keys as JSON.
+function parsePlanJson(json: string): ReturnType<typeof parsePlan> {
+  let value: unknown
+  try { value = JSON.parse(json) } catch { return { kind: 'refused', code: 'input_schema_mismatch' } }
+  return parsePlan(value)
+}
+
 function sameAgent(left: CallPrincipal, right: CallPrincipal): boolean {
   return left.principalId === right.principalId
     && left.ownerId === right.ownerId
@@ -145,15 +157,16 @@ function sameAgent(left: CallPrincipal, right: CallPrincipal): boolean {
     && left.scopes.every((scope, index) => scope === right.scopes[index])
 }
 
-async function authorizePlanTools(
+export async function authorizePlanTools(
   ctx: Pick<QueryCtx, 'db'>,
   principal: CallPrincipal,
   toolRefs: readonly string[],
   now: number,
+  purpose: 'new_operation' | 'persisted_invocation' = 'new_operation',
 ): Promise<CurrentAgentAuthority | undefined> {
   let first: CurrentAgentAuthority | undefined
   for (const toolRef of toolRefs) {
-    const authority = await resolveCurrentAgentAuthority(ctx, principal, now, { kind: 'new_operation', toolRef })
+    const authority = await resolveCurrentAgentAuthority(ctx, principal, now, { kind: purpose, toolRef })
     if (authority === null) return undefined
     if (first === undefined) first = authority
     else if (!sameAgent(first.principal, authority.principal)
@@ -162,11 +175,12 @@ async function authorizePlanTools(
   return first
 }
 
-async function readAdmittedPlanTools(
+export async function readAdmittedPlanTools(
   ctx: Pick<QueryCtx, 'db'>,
   principal: CallPrincipal,
   toolRefs: readonly string[],
   now: number,
+  allowInspection = false,
 ): Promise<readonly QuoteToolMaterial[] | undefined> {
   const deploymentEnvironment = deploymentPaymentEnvironment(env)
   if (deploymentEnvironment === undefined || deploymentEnvironment !== principal.environment) return undefined
@@ -174,7 +188,18 @@ async function readAdmittedPlanTools(
   for (const toolRef of toolRefs) {
     if (await toolProviderRouteabilityIsFrozen(ctx, toolRef)) return undefined
     const operation = await readCurrentPublishedTool(ctx, toolRef, now)
-    if (operation === undefined || operation.runtimeEnvironment !== principal.environment) return undefined
+    if (operation === undefined) {
+      const target = allowInspection ? await readManagedX402InspectionTarget(ctx, toolRef, now) : undefined
+      if (target === undefined || target.runtimeEnvironment !== principal.environment) return undefined
+      materials.push({ toolRef, materialDigest: target.targetDigest, inspectionTargetDigest: target.targetDigest,
+        pricingDigest: pricingConfigDigest(target.pricingConfig), pricingConfig: target.pricingConfig,
+        inputSchema: target.contract.inputSchema, outputSchema: target.contract.outputSchema,
+        ...(target.contract.inputExamples === undefined ? {} : { inputExamples: target.contract.inputExamples }),
+        providerHost: new URL(target.identity.endpoint.url).hostname.toLowerCase(), expiresAt: now,
+      })
+      continue
+    }
+    if (operation.runtimeEnvironment !== principal.environment) return undefined
     materials.push({
       toolRef,
       materialDigest: operation.materialDigest,
@@ -197,7 +222,13 @@ export async function authenticatePlanQuoteHandler(
 ): Promise<Infer<typeof planQuoteAuthenticationValue>> {
   const sourceWrite = await requireSourceWrite(ctx, args, 'protected_action')
   if (sourceWrite.kind === 'rejected') return { kind: 'refused', code: 'tool_not_admitted' }
-  const plan = parsePlan(args.plan)
+  return authenticatePlanPrincipal(ctx, args)
+}
+
+export async function authenticatePlanPrincipal(
+  ctx: Pick<QueryCtx, 'db'>, args: { principal: CallPrincipal; planJson: string },
+): Promise<Infer<typeof planQuoteAuthenticationValue>> {
+  const plan = parsePlanJson(args.planJson)
   if ('kind' in plan) return plan
   const authority = await authorizePlanTools(ctx, args.principal, [...new Set(plan.nodes.map(({ toolRef }) => toolRef))], Date.now())
   if (authority === undefined) return { kind: 'refused', code: 'tool_not_admitted' }
@@ -215,13 +246,15 @@ export async function readPlanQuoteMaterialHandler(
   const authority = await authorizePlanTools(ctx, args.principal, args.toolRefs, now)
   if (authority === undefined || authority.grantRef !== args.grantRef
     || authority.grantGeneration !== args.grantGeneration) return { kind: 'refused', code: 'tool_not_admitted' }
-  const materials = await readAdmittedPlanTools(ctx, args.principal, args.toolRefs, now)
+  const materials = await readAdmittedPlanTools(ctx, args.principal, args.toolRefs, now,
+    args.principal.authorityMode === 'spending_policy' || args.principal.authorityMode === 'unrestricted_test_only')
   if (materials === undefined) return { kind: 'refused', code: 'tool_not_admitted' }
   return {
-    kind: 'ready', materials: [...materials],
-    schemas: Object.fromEntries(materials.map(({ toolRef, inputSchema, outputSchema }) => (
-      [toolRef, { inputSchema, ...(outputSchema === undefined ? {} : { outputSchema }) }]
-    ))),
+    kind: 'ready', materials: materials.map(({ pricingConfig, inputSchema, outputSchema, inputExamples, ...material }) => ({
+      ...material, pricingConfigJson: JSON.stringify(pricingConfig), inputSchemaJson: JSON.stringify(inputSchema),
+      ...(outputSchema === undefined ? {} : { outputSchemaJson: JSON.stringify(outputSchema) }),
+      ...(inputExamples === undefined ? {} : { inputExamplesJson: JSON.stringify(inputExamples) }),
+    })),
   }
 }
 
@@ -237,13 +270,20 @@ export async function quotePlanActionHandler(
   ctx: ActionCtx,
   args: QuotePlanActionArgs,
 ): Promise<Infer<typeof planQuoteResultValue>> {
-  const plan = parsePlan(args.plan)
+  const authentication = await ctx.runMutation(authenticatePlanQuoteRef, args)
+  if (authentication.kind === 'refused') return normalizePlanRefusal(authentication)
+  return quotePlanCore(ctx, args.planJson, authentication)
+}
+
+export async function quotePlanCore(
+  ctx: ActionCtx, planJson: string,
+  authentication: Extract<Infer<typeof planQuoteAuthenticationValue>, { kind: 'ready' }>,
+  chatAuthority?: Infer<typeof trustedChatAuthorityValue>,
+): Promise<Infer<typeof planQuoteResultValue>> {
+  const plan = parsePlanJson(planJson)
   if ('kind' in plan) return plan
   const stages = topologicalStages(plan)
   if ('kind' in stages) return stages
-
-  const authentication = await ctx.runMutation(authenticatePlanQuoteRef, args)
-  if (authentication.kind === 'refused') return normalizePlanRefusal(authentication)
   const toolRefs = [...new Set(plan.nodes.map(({ toolRef }) => toolRef))]
   const loaded = await ctx.runQuery(readPlanQuoteMaterialRef, {
     principal: authentication.principal,
@@ -253,9 +293,17 @@ export async function quotePlanActionHandler(
   })
   if (loaded.kind === 'refused') return normalizePlanRefusal(loaded)
 
-  const edgeValidations = checkPlanReferences(plan, loaded.schemas)
+  const decoded: QuoteToolMaterial[] = loaded.materials.map(({ pricingConfigJson, inputSchemaJson, outputSchemaJson, inputExamplesJson, ...material }) => ({
+    ...material, pricingConfig: JSON.parse(pricingConfigJson), inputSchema: JSON.parse(inputSchemaJson),
+    ...(outputSchemaJson === undefined ? {} : { outputSchema: JSON.parse(outputSchemaJson) }),
+    ...(inputExamplesJson === undefined ? {} : { inputExamples: JSON.parse(inputExamplesJson) }),
+  }))
+  const schemas = Object.fromEntries(decoded.map(({ toolRef, inputSchema, outputSchema }) => (
+    [toolRef, { inputSchema, ...(outputSchema === undefined ? {} : { outputSchema }) }]
+  )))
+  const edgeValidations = checkPlanReferences(plan, schemas)
   if ('kind' in edgeValidations) return edgeValidations
-  const materials = new Map(loaded.materials.map((material) => [material.toolRef, material] as const))
+  const materials = new Map(decoded.map((material) => [material.toolRef, material] as const))
   const observations: Array<{ nodeId: string; observation: Extract<LiveX402RequirementActionResult, { kind: 'observed' }> }> = []
   for (const node of plan.nodes) {
     const material = materials.get(node.toolRef)
@@ -280,9 +328,9 @@ export async function quotePlanActionHandler(
       if (!isBoundedJsonValue(resolved.input)) return { kind: 'refused', code: 'input_schema_mismatch', nodeId: node.id }
       input = resolved.input as Record<string, JsonValue>
     }
-    const inspected = await ctx.runAction(inspectLiveX402RequirementRef, {
-      principal: authentication.principal, toolRef: node.toolRef, input,
-    })
+    const inspected = authentication.principal.authorityMode === 'approval_required'
+      ? await ctx.runAction(bindPersistedManagedX402RequirementRef, { toolRef: node.toolRef, input })
+      : await ctx.runAction(inspectLiveX402RequirementRef, { principal: authentication.principal, toolRef: node.toolRef, input })
     if (inspected.kind === 'operation_not_found' || inspected.kind === 'operation_unsupported') {
       return { kind: 'refused', code: 'tool_not_admitted', nodeId: node.id }
     }
@@ -291,17 +339,18 @@ export async function quotePlanActionHandler(
   }
 
   return await ctx.runMutation(quotePlanMutationRef, {
-    plan,
+    planJson: JSON.stringify(plan),
     stages: stages.map((stage) => [...stage]),
     principal: authentication.principal,
     grantRef: authentication.grantRef,
     grantGeneration: authentication.grantGeneration,
     grantExpiresAt: authentication.grantExpiresAt,
-    expectedMaterials: loaded.materials.map(({ toolRef, materialDigest, pricingDigest, providerHost }) => (
-      { toolRef, materialDigest, pricingDigest, providerHost }
+    expectedMaterials: loaded.materials.map(({ toolRef, materialDigest, pricingDigest, providerHost, inspectionTargetDigest }) => (
+      { toolRef, materialDigest, pricingDigest, providerHost, ...(inspectionTargetDigest === undefined ? {} : { inspectionTargetDigest }) }
     )),
     edgeValidations: edgeValidations.map((edge) => ({ ...edge })),
     observations: observations.map((item) => ({ ...item })),
+    ...(chatAuthority === undefined ? {} : { chatAuthority }),
   })
 }
 
@@ -309,13 +358,19 @@ export async function quotePlanHandler(
   ctx: MutationCtx,
   args: QuotePlanHandlerArgs,
 ): Promise<Infer<typeof planQuoteResultValue>> {
-  const parsed = parsePlan(args.plan)
+  const parsed = parsePlanJson(args.planJson)
   if ('kind' in parsed) return parsed
   const stages = topologicalStages(parsed)
   if ('kind' in stages) return stages
   if (canonicalDigest(stages) !== canonicalDigest(args.stages)) return { kind: 'refused', code: 'ref_type_mismatch' }
 
   const now = Date.now()
+  if (args.chatAuthority !== undefined) {
+    for (const node of parsed.nodes) {
+      const principal = await resolveTrustedChatAuthority(ctx, args.chatAuthority, node.toolRef)
+      if (principal === null || !sameAgent(principal, args.principal)) return { kind: 'refused', code: 'tool_not_admitted' }
+    }
+  }
   const authority = await authorizePlanTools(ctx, args.principal, [...new Set(parsed.nodes.map(({ toolRef }) => toolRef))], now)
   if (authority === undefined || authority.grantRef !== args.grantRef
     || authority.grantGeneration !== args.grantGeneration || authority.expiresAt !== args.grantExpiresAt
@@ -329,7 +384,9 @@ export async function quotePlanHandler(
   const expectedByRef = new Map(args.expectedMaterials.map((material) => [material.toolRef, material] as const))
   for (const material of materials) {
     const expected = expectedByRef.get(material.toolRef)
-    if (expected === undefined || expected.materialDigest !== material.materialDigest
+    const inspected = expected?.inspectionTargetDigest === undefined ? undefined : await readManagedX402InspectionTarget(ctx, material.toolRef, now)
+    if (expected === undefined || (expected.inspectionTargetDigest === undefined
+      ? expected.materialDigest !== material.materialDigest : inspected?.targetDigest !== expected.inspectionTargetDigest)
       || expected.pricingDigest !== material.pricingDigest || expected.providerHost !== material.providerHost) {
       return { kind: 'refused', code: 'tool_not_admitted' }
     }
@@ -375,6 +432,7 @@ export async function quotePlanHandler(
       priceClass: quote.priceClass,
       ...(quote.bounds === undefined ? {} : { bounds: quote.bounds }),
       ceilingAudUnits: quote.ceilingAudUnits,
+      ...(quote.rateToleranceBps === undefined ? {} : { rateToleranceBps: quote.rateToleranceBps }),
       dependsOn: [...node.dependsOn],
     }
   })
@@ -398,8 +456,10 @@ export async function quotePlanHandler(
     now + policy.controls.operations.commitmentTtlMs,
     authority.expiresAt,
     ...materials.map(({ expiresAt: materialExpiresAt }) => materialExpiresAt),
-    ...args.observations.map(({ observation }) => observation.requirement.observedAt + 15_000),
   )
+  // The unpaid probe must be fresh when this maximum is quoted. The approved
+  // maximum then lasts through the policy's review window; every node obtains
+  // a fresh ordinary Quote within its frozen ceiling before any purchase.
   if (expiresAt <= now) return { kind: 'refused', code: 'probe_failed' }
 
   const planRef = brandNonEmpty(globalThis.crypto.randomUUID(), 'PlanRef')
@@ -426,6 +486,12 @@ export async function quotePlanHandler(
     grantRef: authority.grantRef,
     grantGeneration: authority.grantGeneration,
     environment: authority.principal.environment,
+    grantDigest: authority.policyDigest,
+    commercialPolicyDigest: policy.policyDigest,
+    applicationRef: authority.principal.applicationRef,
+    principalScopes: authority.principal.scopes,
+    authorityMode: authority.principal.authorityMode,
+    ...(args.chatAuthority === undefined ? {} : { chatTurnRef: args.chatAuthority.turnRef }),
     planJson: JSON.stringify(parsed),
     planDigest,
     nodes,

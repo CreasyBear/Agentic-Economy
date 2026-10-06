@@ -83,6 +83,22 @@ function splitActionSchemaForTransport(
 const TOOL_QUOTE_ACTION_ID = 'tool.quote' as const
 
 const CALL_ROUTE_FACTS: Readonly<Record<string, Readonly<{ summary: string; problemKinds: readonly ProblemKind[] }>>> = {
+  'tool.plan.quote': {
+    summary: 'Quote an expiring Plan with per-node AUD ceilings; no Hold or Call.',
+    problemKinds: ['UNAUTHENTICATED', 'PERMISSION_DENIED', 'INVALID_ARGUMENT', 'RESOURCE_EXHAUSTED', 'UNAVAILABLE'],
+  },
+  'tool.plan.run': {
+    summary: 'Run the frozen Plan with its exact approved AUD total and stable replay key.',
+    problemKinds: ['UNAUTHENTICATED', 'PERMISSION_DENIED', 'INVALID_ARGUMENT', 'RESOURCE_EXHAUSTED', 'UNAVAILABLE'],
+  },
+  'tool.plan.get': {
+    summary: 'Read the caller’s Plan, Hold and ordinary Call outcomes without running it again.',
+    problemKinds: ['UNAUTHENTICATED', 'PERMISSION_DENIED', 'INVALID_ARGUMENT', 'RESOURCE_EXHAUSTED', 'UNAVAILABLE'],
+  },
+  'tool.plan.cancel': {
+    summary: 'Stop future Plan nodes; admitted Calls retain their consequences.',
+    problemKinds: ['UNAUTHENTICATED', 'PERMISSION_DENIED', 'INVALID_ARGUMENT', 'RESOURCE_EXHAUSTED', 'UNAVAILABLE'],
+  },
   [TOOL_QUOTE_ACTION_ID]: {
     summary: 'Resolve one expiring, caller-bound Quote for a Tool purchase.',
     problemKinds: ['UNAUTHENTICATED', 'PERMISSION_DENIED', 'INVALID_ARGUMENT', 'FAILED_PRECONDITION', 'RESOURCE_EXHAUSTED', 'UNAVAILABLE'],

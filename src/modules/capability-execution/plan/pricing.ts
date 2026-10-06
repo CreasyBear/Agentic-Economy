@@ -36,7 +36,7 @@ export function buildCardinalityProbeInput(
   const orderedBounds = bounds.sort((left, right) => (
     decodeJsonPointerSegments(left[0]).length - decodeJsonPointerSegments(right[0]).length
   ))
-  for (const [pointer, bound] of orderedBounds) {
+  for (const [, bound] of orderedBounds) {
     if (!Number.isSafeInteger(bound.maxItems) || bound.maxItems < 0 || bound.maxItems > MAX_PLAN_CARDINALITY) {
       return { kind: 'refused', code: 'bound_missing_for_cardinality_price' }
     }

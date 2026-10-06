@@ -12,6 +12,7 @@ import {
   type FormanceReferenceReadResult,
 } from './formance'
 import { completed, completedMany, refused, unavailable, unknown, type FormanceSettlementReadResult, type FormanceReservationReadResult, type FormanceReleaseReadResult } from './formance-result'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   prepareFormanceSettledSaleRefund,
   formanceCommandPostingsMatch,
@@ -40,12 +41,6 @@ import {
   prepareFormancePaidCallRemedy,
   prepareFormanceProviderReversal,
   prepareFormanceSpendingPeriodAdjustment,
-  planHoldAccountAddress,
-  preparePlanHold,
-  preparePlanNodeAllocation,
-  preparePlanNodeRelease,
-  preparePlanNodeSettlement,
-  preparePlanRemainderRelease,
   spendingPeriodIdentity,
   type FormanceBalanceKind,
   type FormanceBuyerAdjustment,
@@ -57,15 +52,27 @@ import {
   type FormanceProviderReversal,
   type FormanceSpendingPeriodAdjustment,
   type FormanceSpendingPeriodKind,
+  type PreparedCommand,
+  type PreparedManagedCallBulk,
+} from './internal/formance-transaction-templates'
+
+import {
+  planHoldAccountAddress,
+  planPromotionalHoldAccountAddress,
+  validPlanRemainder,
+  preparePlanHold,
+  preparePlanNodeAllocation,
+  preparePlanNodeRelease,
+  preparePlanNodeSettlement,
+  preparePlanRemainderRelease,
   type PlanHoldBooking,
   type PlanNodeAllocation,
   type PlanNodeRelease,
   type PlanNodeSettlement,
   type PlanRelease,
-  type PreparedCommand,
-  type PreparedManagedCallBulk,
-} from './internal/formance-transaction-templates'
+} from './internal/formance-plan-templates'
 
+export * from './internal/formance-plan-templates'
 export * from './internal/formance-transaction-templates'
 export * from './internal/formance-promotional-credit'
 export { prepareFormanceSettledSaleRefund }
@@ -200,23 +207,88 @@ export async function releasePlanNode(
   return executePreparedBulk(context, preparePlanNodeRelease(input))
 }
 
-/** Releases only the balance read from this Plan's Hold after the caller's terminal gate. */
-export async function releasePlanRemainder(
-  context: FormanceContext,
-  input: Omit<PlanRelease, 'holdBalanceUnits'>,
-): Promise<FormanceMoneyResult> {
-  const hold = await readFormanceAccount(context, planHoldAccountAddress(input))
-  if (hold.kind === 'setup_required') return refused(hold.code)
-  if (hold.kind === 'unavailable') return unavailable(hold.code)
+/** Read-only native remainder used to freeze the terminal release command. */
+export async function readPlanHoldRemainder(context: FormanceContext, input: PlanHoldBooking): Promise<
+  | Readonly<{ kind: 'available'; holdBalanceUnits: string; remainingCreditAllocation?: NonNullable<PlanHoldBooking['promotionalCreditAllocation']> }>
+  | Readonly<{ kind: 'unavailable' | 'refused'; code: string }>
+> {
+  const hold = preparePlanHold(input)
+  if (hold.kind === 'refused') return hold
+  const proof = await readPlanCommands(context, hold.bulk.commands)
+  if (proof.kind !== 'confirmed') return proof.kind === 'absent'
+    ? { kind: 'refused', code: 'formance_plan_hold_evidence_missing' } : proof
+  const addresses = [planHoldAccountAddress(input), ...(input.promotionalCreditAllocation?.grants ?? [])
+    .map(grant => planPromotionalHoldAccountAddress(input, grant.grantRef))]
+  const units: string[] = []
+  for (const address of addresses) {
+    const read = await readFormanceAccount(context, address)
+    if (read.kind === 'setup_required') return { kind: 'refused', code: read.code }
+    if (read.kind === 'unavailable') return { kind: 'unavailable', code: read.code }
+    const balance = read.kind === 'not_found' ? '0' : read.volumes['AUD/6']?.balanceUnits ?? '0'
+    if (!/^(?:0|[1-9]\d{0,15})$/u.test(balance)) return { kind: 'refused', code: 'formance_plan_hold_balance_invalid' }
+    units.push(balance)
+  }
+  const purchasedUnits = units[0]
+  if (purchasedUnits === undefined) return { kind: 'refused', code: 'formance_plan_hold_balance_invalid' }
+  const holdBalanceUnits = units.reduce((sum, amount) => sum + BigInt(amount), 0n).toString()
+  const allocation = input.promotionalCreditAllocation === undefined ? {} : { remainingCreditAllocation: {
+    version: 'ae.promotional-credit-allocation:v1' as const, purchasedUnits,
+    grants: input.promotionalCreditAllocation.grants.flatMap((grant, index) => {
+      const amountUnits = units[index + 1]
+      return amountUnits === undefined || amountUnits === '0' ? [] : [{ ...grant, amountUnits }]
+    }),
+  } }
+  return { kind: 'available', holdBalanceUnits, ...allocation }
+}
 
-  const holdBalanceUnits = hold.kind === 'not_found'
-    ? '0'
-    : hold.volumes[balanceAsset('account_aud')]?.balanceUnits ?? '0'
-  const holdBalance = BigInt(holdBalanceUnits)
-  if (holdBalance < 0n) return refused('formance_plan_hold_balance_invalid')
-  if (holdBalance === 0n) return completedMany([], false)
+/** Requires a financially conclusive Plan and its frozen, native-read remainder.
+ * Ensures an exact atomic release or proven replay, including every original grant.
+ * Invariant: unknown/missing Hold evidence never becomes a successful zero refund.
+ * On violation: refuse conflicting evidence; unavailable/partial reads retain uncertainty.
+ */
+export async function releasePlanRemainder(context: FormanceContext, input: PlanRelease): Promise<FormanceMoneyResult> {
+  if (!validPlanRemainder(input) || input.allNodeCallsFinanciallyConclusive !== true
+    || !/^sha256:[a-f0-9]{64}$/u.test(input.terminalEvidenceDigest)
+    || !/^(?:0|[1-9]\d{0,15})$/u.test(input.holdBalanceUnits)
+    || BigInt(input.holdBalanceUnits) > BigInt(input.approvedTotalUnits)) return refused('formance_plan_release_input_invalid')
+  const prepared = input.holdBalanceUnits === '0' ? undefined : preparePlanRemainderRelease(input)
+  if (prepared?.kind === 'refused') return prepared
+  if (prepared !== undefined) {
+    const replay = await readPlanCommands(context, prepared.bulk.commands)
+    if (replay.kind === 'confirmed') return completedMany(prepared.bulk.commands.map(command => command.commandRef), true)
+    if (replay.kind === 'refused') return replay.code === 'formance_plan_evidence_partial'
+      ? unknown(prepared.bulk.commands[0]?.commandRef ?? input.planRef) : refused(replay.code)
+    if (replay.kind === 'unavailable') return unknown(prepared.bulk.commands[0]?.commandRef ?? input.planRef)
+  }
+  const current = await readPlanHoldRemainder(context, input)
+  if (current.kind !== 'available') return current.kind === 'refused' ? refused(current.code) : unavailable(current.code)
+  if (current.holdBalanceUnits !== input.holdBalanceUnits
+    || canonicalDigest(current.remainingCreditAllocation ?? null) !== canonicalDigest(input.remainingCreditAllocation ?? null)) {
+    return refused('formance_plan_remainder_changed')
+  }
+  return prepared === undefined ? completedMany([], false) : executePreparedBulk(context, prepared)
+}
 
-  return executePreparedBulk(context, preparePlanRemainderRelease({ ...input, holdBalanceUnits }))
+async function readPlanCommands(context: FormanceContext, commands: readonly FormanceMoneyCommand[]): Promise<
+  | Readonly<{ kind: 'confirmed' }>
+  | Readonly<{ kind: 'absent' }>
+  | Readonly<{ kind: 'refused' | 'unavailable'; code: string }>
+> {
+  let found = 0
+  for (const expected of commands) {
+    const actual = await readFormanceTransactionByReference(context, expected.commandRef)
+    if (actual.kind === 'setup_required') return { kind: 'refused', code: actual.code }
+    if (actual.kind === 'unavailable') return { kind: 'unavailable', code: actual.code }
+    if (actual.kind === 'absent') continue
+    if (actual.template !== expected.template || actual.reference !== expected.commandRef
+      || !formanceCommandPostingsMatch(expected, actual.postings)
+      || Object.entries(expected.metadata).some(([key, value]) => actual.metadata[key] !== value)) {
+      return { kind: 'refused', code: 'formance_plan_evidence_invalid' }
+    }
+    found += 1
+  }
+  return found === commands.length ? { kind: 'confirmed' } : found === 0 ? { kind: 'absent' }
+    : { kind: 'refused', code: 'formance_plan_evidence_partial' }
 }
 
 /**

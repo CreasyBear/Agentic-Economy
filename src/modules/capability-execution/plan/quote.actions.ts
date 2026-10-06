@@ -20,11 +20,9 @@ export const toolPlanQuoteAction = defineAction<PlanQuoteInput, PlanQuoteResult>
   name: 'Quote a Tool Plan',
   summary: 'Validate and persist an expiring Plan Quote with per-Node AUD ceilings and an exact total; no Hold or Call is created.',
   boundaries: [
-    'Requires an AE-issued Agent key and resolves the authenticated Principal, admitted Tools, grant, pricing, and policy facts server-side.',
-    'The caller supplies only the Plan. Pricing classes, ceilings, recipients, Provider credentials, and payment details are never caller-controlled.',
-    'Persists a Plan Quote but creates no Hold, Call, reservation, signature, payment, or Provider effect.',
-    'The Plan is frozen and caller-bound; changed Plan or admitted material requires another quote.',
-    'A Plan Quote has no purchaser replay contract. Use its returned PlanRef when committing the exact approved total.',
+    'AE resolves authority, admitted supply, prices and payment facts. The caller supplies only the Plan.',
+    'Unpaid inspection may send inputs; no Hold, Call, signature or payment. Approval-required quotes send no Provider request.',
+    'Changed material requires a new quote. Run the returned PlanRef with its exact total; quoting does not replay a purchase.',
   ],
   schema: planQuoteInputSchema,
   outputSchema: planQuoteResultSchema,
@@ -38,7 +36,7 @@ export const toolPlanQuoteAction = defineAction<PlanQuoteInput, PlanQuoteResult>
     spendExposure: 'bounded',
     approval: 'none',
   },
-  surfaces: ['http', 'mcp', 'cli'],
+  surfaces: ['http', 'mcp', 'cli', 'chat'],
   mcp: { idempotent: false, openWorld: false, destructive: false },
   credentialAdmission: {
     scope: MARKET_TOOLS_CALL_SCOPE,

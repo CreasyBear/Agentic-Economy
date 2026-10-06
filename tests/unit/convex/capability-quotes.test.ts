@@ -438,6 +438,7 @@ describe('direct Quote handlers', () => {
       formance: {
         ...formanceSnapshot(subjects),
         organizationMonthlySpend: {
+          heldPlanExposure: { kind: 'known', units: '0' },
           enabled: true,
           ceilingUnits: '1',
           monthSpendUnits: '0',

@@ -15,6 +15,7 @@ import type {
 
 export {
   COMMERCIAL_POLICY_FAMILIES,
+  DEFAULT_PLAN_RATE_TOLERANCE_BPS,
   COMMERCIAL_POLICY_REFUSAL_REASONS,
   commercialPolicyRefusalReasonSchema,
   evaluateCommercialPolicyGate,
@@ -433,11 +434,11 @@ export type {
   SpendingPeriodAdjustment,
 } from './internal/spending-period-values'
 
-export { promotionalCreditReference, promotionalPurchasedAmounts, promotionalCreditAllocationValue, MAX_PROMOTIONAL_GRANTS_PER_CALL, type PromotionalCreditAllocation } from './promotional-credit-contracts'
+export { promotionalCreditReference, promotionalPurchasedAmounts, promotionalCreditAllocationValue, partitionPromotionalCreditAllocation, MAX_PROMOTIONAL_GRANTS_PER_CALL, type PromotionalCreditAllocation } from './promotional-credit-contracts'
 
 export { accountCreditBalanceValue, eligiblePromotionalGrantValue, type AccountCreditBalance, type EligiblePromotionalGrant } from './promotional-credit-contracts'
 
-export { managedCallBookingValue, MANAGED_CALL_FORMANCE_SCHEMA_VERSION } from './managed-call-contracts'
+export { managedCallBookingValue, planCallAllocationValue, planHoldBookingValue, MANAGED_CALL_FORMANCE_SCHEMA_VERSION } from './managed-call-contracts'
 export { settledSaleRefundReference, settledSaleRefundReferences } from './settled-sale-refund-contracts'
 export type { X402PayeeScreeningDecision, X402SpendAdmissionResult } from './x402-spend-admission'
 

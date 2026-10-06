@@ -1,6 +1,9 @@
+import { projectCallReceipt, type PublicCallStatusRead, type CallReceiptView } from './call-receipt-view'
+import type { PlanGetResult } from './plan/runtime.schemas'
 import { formatCurrencyAmount } from '@/modules/money/public'
 
 import type {
+  PlanJson,
   PlanNodeId,
   PlanNodeQuote,
   PlanQuoteResult,
@@ -13,6 +16,8 @@ import type {
 export type PlanNodeLineView = Readonly<{
   nodeId: PlanNodeId
   toolRef: string
+  providerHost?: string
+  inputJson?: string
   dependencies: readonly PlanNodeId[]
   dependenciesLabel: string
   inputMode: PlanNodeQuote['inputMode']
@@ -21,6 +26,7 @@ export type PlanNodeLineView = Readonly<{
   priceClassLabel: string
   ceilingAudUnits: string
   ceilingLabel: string
+  rateToleranceLabel?: string
 }>
 
 export type PlanStageView = Readonly<{
@@ -73,21 +79,6 @@ export type PlanRunView = Readonly<{
   message: string
 }>
 
-/** A run status is not an aggregate financial receipt; amounts remain owned by each Call receipt. */
-export type PlanReceiptView = Readonly<{
-  kind: 'status_only'
-  planRef: string
-  state: PlanState
-  title: string
-  detail: string
-  callReceiptsAvailable: false
-}> | Readonly<{
-  kind: 'unavailable'
-  title: string
-  detail: string
-  callReceiptsAvailable: false
-}>
-
 const priceClassLabels: Readonly<Record<PlanNodeQuote['priceClass'], string>> = {
   fixed: 'Fixed price',
   cardinality_bounded: 'Bounded by item count',
@@ -111,6 +102,7 @@ function nodeLineView(node: PlanNodeQuote, exponent: number): PlanNodeLineView {
     priceClassLabel: priceClassLabels[node.priceClass],
     ceilingAudUnits: node.ceilingAudUnits,
     ceilingLabel: exactAudLabel(node.ceilingAudUnits, exponent),
+    ...(node.rateToleranceBps === undefined ? {} : { rateToleranceLabel: `${node.rateToleranceBps / 100}% FX allowance included in this maximum` }),
   }
 }
 
@@ -131,7 +123,7 @@ function quoteRefusalMessage(code: string, nodeId?: PlanNodeId): string {
   return `This Plan could not be quoted (${code}).${target}`
 }
 
-export function mapPlanQuoteResult(result: PlanQuoteResult, now: number): PlanConfirmationView {
+export function mapPlanQuoteResult(result: PlanQuoteResult, now: number, providerHosts: Readonly<Record<string, string>> = {}, plan?: PlanJson): PlanConfirmationView {
   if (result.kind === 'refused') {
     return {
       kind: 'refused',
@@ -151,7 +143,8 @@ export function mapPlanQuoteResult(result: PlanQuoteResult, now: number): PlanCo
     totalLabel: exactAudLabel(quote.approvedTotalAudUnits, quote.exponent),
     expiresAt: quote.expiresAt,
     expired: !Number.isSafeInteger(now) || quote.expiresAt <= now,
-    nodes: quote.nodes.map((node) => nodeLineView(node, quote.exponent)),
+    nodes: quote.nodes.map((node) => ({ ...nodeLineView(node, quote.exponent), ...(providerHosts[node.nodeId] === undefined ? {} : { providerHost: providerHosts[node.nodeId] }),
+      ...(plan?.nodes.find(item => item.id === node.nodeId) === undefined ? {} : { inputJson: JSON.stringify(plan.nodes.find(item => item.id === node.nodeId)?.input, null, 2) }) })),
     stages: quote.stages.map((nodeIds, index) => stageView(nodeIds, index)),
     dataFlows: quote.dataFlows.map((flow) => ({
       from: flow.from,
@@ -200,26 +193,45 @@ export function mapPlanRunResult(result: PlanRunResult): PlanRunView {
   }
 }
 
-export function mapPlanReceiptResult(result: PlanRunResult): PlanReceiptView {
-  if (result.kind === 'refused') {
-    return {
-      kind: 'unavailable',
-      title: 'Plan receipt unavailable',
-      detail: `No Plan receipt is available because the run was refused (${result.code}).`,
-      callReceiptsAvailable: false,
-    }
-  }
-  const stateLabel = planStateLabels[result.state]
-  return {
-    kind: 'status_only',
-    planRef: result.planRef,
-    state: result.state,
-    title: `Plan ${stateLabel.toLowerCase()}`,
-    detail: result.state === 'reconciliation_required'
-      ? 'Financial outcome is uncertain. Individual Call receipts and reconciliation evidence are required before claiming settlement or release.'
-      : result.state === 'awaiting_approval'
-        ? 'Approval is pending. No Hold or Provider Call is created yet.'
-        : 'This Plan status contains no individual Call receipts or settled amounts. Use each Call receipt as the financial record.',
-    callReceiptsAvailable: false,
+export type PlanProgressView = Readonly<{
+  planRef: string
+  stateLabel: string
+  phase: 'running' | 'waiting' | 'done' | 'stopped'
+  detail: string
+  facts: readonly Readonly<{ label: string; value: string }>[]
+  stages: readonly Readonly<{ id: string; label: string; description: string; status: 'complete' | 'current' | 'error' | 'upcoming'; statusLabel: string }>[]
+  currentStage: number
+  money: Readonly<{ settled: string; released: string; held: string; uncertain: boolean }>
+  nodes: readonly Readonly<{ nodeId: string; providerHost: string; stateLabel: string; callRef?: string; outcome?: string; receipt?: CallReceiptView; outputJson?: string }>[]
+}>
+
+export function mapPlanProgress(result: Extract<PlanGetResult, { kind: 'available' }>, callStatuses: readonly PublicCallStatusRead[]): PlanProgressView {
+  const phase = result.state === 'running' ? 'running' : result.state === 'succeeded' ? 'done'
+    : ['quoted', 'awaiting_approval', 'reconciliation_required'].includes(result.state) ? 'waiting' : 'stopped'
+  const stages: PlanProgressView['stages'] = result.stages.map((ids, index) => {
+    const nodes = result.nodes.filter(node => ids.includes(node.nodeId))
+    const state = nodes.every(node => node.state === 'succeeded') ? 'complete' : nodes.some(node => node.state === 'admitted' || node.state === 'ready') ? 'current'
+      : nodes.some(node => node.state === 'failed' || node.state === 'skipped') ? 'error' : 'upcoming'
+    return { id: `stage-${index}`, label: `Stage ${index + 1}`, description: ids.join(', '), status: state,
+      statusLabel: state === 'complete' ? 'Completed' : state === 'current' ? 'In progress' : state === 'error' ? 'Stopped or skipped' : 'Waiting' }
+  })
+  const firstActive = stages.findIndex(stage => stage.status !== 'complete')
+  return { planRef: result.planRef, stateLabel: planStateLabels[result.state], phase, detail: runDetail(result.state),
+    facts: [{ label: 'Maximum authorized', value: exactAudLabel(result.approvedTotalAudUnits, 6) },
+      { label: 'Nodes completed', value: `${result.nodes.filter(node => node.state === 'succeeded').length} of ${result.nodes.length}` },
+      { label: 'Held credit', value: result.hold.heldAudUnits === undefined ? result.hold.status === 'none' ? 'No Hold' : 'Unconfirmed' : exactAudLabel(result.hold.heldAudUnits, 6) }],
+    stages, currentStage: firstActive === -1 ? stages.length : firstActive,
+    money: { settled: exactAudLabel(result.hold.settledAudUnits, 6), released: exactAudLabel(result.hold.releasedAudUnits, 6),
+      held: result.hold.heldAudUnits === undefined ? result.hold.status === 'none' ? 'No Hold' : 'Unconfirmed' : exactAudLabel(result.hold.heldAudUnits, 6),
+      uncertain: result.hold.status === 'uncertain' },
+    nodes: result.nodes.map(node => {
+      const status = node.callRef === undefined ? undefined : callStatuses.find(item => item.callRef === node.callRef)
+      return { nodeId: node.nodeId, providerHost: node.providerHost,
+        stateLabel: ({ waiting: 'Waiting', ready: 'Ready', admitted: 'Call in progress', succeeded: 'Succeeded', failed: 'Failed', skipped: 'Skipped' } as const)[node.state],
+        ...(node.callRef === undefined ? {} : { callRef: node.callRef }), ...(node.outcome === undefined ? {} : { outcome: node.outcome }),
+        ...(status === undefined ? {} : { receipt: projectCallReceipt(status) }),
+        ...(node.result?.kind === 'completed' ? { outputJson: JSON.stringify(node.result.output, undefined, 2) } : {}),
+      }
+    }),
   }
 }

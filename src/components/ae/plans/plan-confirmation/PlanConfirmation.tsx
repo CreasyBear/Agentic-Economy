@@ -44,15 +44,10 @@ export function PlanConfirmation({ view, pending = false, onApprove, onDeny }: P
             <dt>Quote expires</dt>
             <dd><time>{formatUtcTimestamp(view.expiresAt)} UTC</time></dd>
           </div>
-          <div>
-            <dt>Plan reference</dt>
-            <dd className="break-all font-mono text-xs">{view.planRef}</dd>
-          </div>
-          <div>
-            <dt>Plan digest</dt>
-            <dd className="break-all font-mono text-xs">{view.planDigest}</dd>
-          </div>
         </dl>
+        <details className="text-xs text-muted-foreground"><summary className="cursor-pointer">Plan reference and digest</summary>
+          <p className="break-all font-mono">{view.planRef}</p><p className="break-all font-mono">{view.planDigest}</p>
+        </details>
         <PlanStageColumns stages={view.stages} />
         <PlanNodeLineItems nodes={view.nodes} />
         <PlanDataFlowDisclosures flows={view.dataFlows} />
@@ -76,7 +71,7 @@ export function PlanConfirmation({ view, pending = false, onApprove, onDeny }: P
           disabled={pending}
           onClick={() => onDeny(view.planRef)}
         >
-          Not now
+          Decline Plan
         </Button>
       </div>
     </DecisionPanel>

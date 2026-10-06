@@ -96,6 +96,8 @@ jobs:
             tests/integration/capability-call-money-matrix.test.ts \
             tests/integration/capability-call-workpool.test.ts \
             tests/integration/money-formance-boundary.test.ts \
+            tests/integration/money-formance-plans.test.ts \
+            tests/integration/plan-workflow-money.test.ts \
             -- --no-file-parallelism --test-timeout=30000 --reporter=default --reporter=json \
             --outputFile.json="${RUNNER_TEMP}/native-money-vitest.json"
       - name: Require complete executed assertion evidence

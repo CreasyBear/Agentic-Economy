@@ -9,7 +9,7 @@ import {
   type AgentAccessPrincipal,
   type AgentAccessPrincipalResolver,
 } from '@/lib/server/agent-access-auth'
-import { ConvexSourceError, callPublicSourceAction, callPublicSourceQuery, sourceAction, sourceQuery } from '@/lib/server/convex-source'
+import { ConvexSourceError, callPublicSourceAction, callPublicSourceQuery, callPublicSourceMutation, sourceAction, sourceQuery, sourceMutation } from '@/lib/server/convex-source'
 import { problem, duplicateQueryParameterProblem } from '@/lib/server/problem'
 import { withHttpRateLimit } from '@/lib/server/rate-limit'
 import { runWithRequestCorrelation, withRequestCorrelationHeader } from '@/lib/server/request-correlation'
@@ -21,6 +21,8 @@ import { callAction } from '@/modules/capability-execution/call.actions'
 import {
   toolQuoteAction,
 } from '@/modules/capability-execution/quote.actions'
+import { planRunResultSchema, parsePlanReadback } from '@/modules/capability-execution/plan/runtime.schemas'
+import { toolPlanQuoteAction } from '@/modules/capability-execution/plan/quote.actions'
 import {
   callListInputSchema,
   callListResultSchema,
@@ -68,6 +70,10 @@ const callJsonResponseHeaders = {
 const MAX_CALL_BODY_BYTES = 256 * 1024
 const callSourceAction = sourceAction<Record<string, unknown>, unknown>('capabilityCalls:call')
 const toolQuoteSourceAction = sourceAction<Record<string, unknown>, unknown>('capabilityQuotes:quote')
+const planRunSourceAction = sourceAction<Record<string, unknown>, unknown>('capabilityPlans:run')
+const planGetSourceQuery = sourceQuery<Record<string, unknown>, unknown>('capabilityPlans:get')
+const planCancelSourceMutation = sourceMutation<Record<string, unknown>, unknown>('capabilityPlans:cancel')
+const planQuoteSourceAction = sourceAction<Record<string, unknown>, unknown>('capabilityPlans:quote')
 const callListSourceAction = sourceAction<Record<string, unknown>, unknown>('capabilityCalls:listCalls')
 const callStatusSourceQuery = sourceQuery<Record<string, unknown>, unknown>('capabilityCallsStatus:readCallStatus')
 const callCancelSourceAction = sourceAction<Record<string, unknown>, unknown>('capabilityCalls:cancelCall')
@@ -291,7 +297,33 @@ export function createCallService(
     })
     return callRecoveryResultSchema.parse(result)
   }
-  return { callTool, quoteTool, listCalls, readCallStatus, cancelCall, reconcileCall }
+  const planQuote: NonNullable<CallService['planQuote']> = async ({ input, principal, correlationId }) => {
+    const operationKey = canonicalDigest({
+      contract: 'tool.plan.quote:v1', plan: input.plan,
+      principalId: principal.principalId, credentialId: principal.credentialId,
+      applicationRef: principal.applicationRef, environment: principal.environment,
+    })
+    const command = { planJson: JSON.stringify(input.plan), principal, correlationId, operationKey }
+    const sourceWrite = await sourceWriteAdmissionFromRequest({
+      request, command, body: bodyText, scope: 'protected_action', operationKey, correlationId,
+    })
+    return toolPlanQuoteAction.outputSchema.parse(await callPublicSourceAction(planQuoteSourceAction, {
+      ...command, sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite), sourceWrite,
+    }))
+  }
+  async function planCommand(actionId: string, input: Record<string, unknown>, principal: AgentAccessPrincipal, correlationId: string) {
+    const operationKey = canonicalDigest({ actionId, input, principalId: principal.principalId, applicationRef: principal.applicationRef, environment: principal.environment })
+    const command = { ...input, principal, correlationId, operationKey }
+    const sourceWrite = await sourceWriteAdmissionFromRequest({ request, command, body: bodyText, scope: 'protected_action', operationKey, correlationId })
+    return { ...command, sourceWrite, sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite) }
+  }
+  const planRun: NonNullable<CallService['planRun']> = async ({ input, principal, correlationId }) =>
+    planRunResultSchema.parse(await callPublicSourceAction(planRunSourceAction, await planCommand('tool.plan.run', input, principal, correlationId)))
+  const planGet: NonNullable<CallService['planGet']> = async ({ input, principal, correlationId }) =>
+    parsePlanReadback(await callPublicSourceQuery(planGetSourceQuery, await planCommand('tool.plan.get', input, principal, correlationId)))
+  const planCancel: NonNullable<CallService['planCancel']> = async ({ input, principal, correlationId }) =>
+    planRunResultSchema.parse(await callPublicSourceMutation(planCancelSourceMutation, await planCommand('tool.plan.cancel', input, principal, correlationId)))
+  return { callTool, quoteTool, planQuote, planRun, planGet, planCancel, listCalls, readCallStatus, cancelCall, reconcileCall }
 }
 
 function gatewayErrorCode(

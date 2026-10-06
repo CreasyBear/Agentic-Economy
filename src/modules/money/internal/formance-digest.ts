@@ -11,3 +11,17 @@ export function digestValue(kind: string, value: unknown): string {
 export function stripDigest(value: string): string {
   return value.slice('sha256:'.length)
 }
+
+type PlanHoldIdentity = Readonly<{ planRef: string; planDigest: string; accountRef: string }>
+
+export function planHoldAccountAddress(input: PlanHoldIdentity): string {
+  return `plans:${digestReference('plan_hold', {
+    planRef: input.planRef, planDigest: input.planDigest, accountRef: input.accountRef,
+  })}:hold`
+}
+
+export function planPromotionalHoldAccountAddress(input: PlanHoldIdentity, grantRef: string): string {
+  return `plans:${digestReference('plan_promotional_hold', {
+    planRef: input.planRef, planDigest: input.planDigest, accountRef: input.accountRef, grantRef,
+  })}:hold`
+}

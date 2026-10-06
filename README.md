@@ -252,6 +252,23 @@ npm run -s ae -- describe <toolRef> --base-url http://127.0.0.1:3024
 npm run -s ae -- call <toolRef> --input '{"city":"Perth"}' --base-url http://127.0.0.1:3024
 ```
 
+A Plan groups up to ten admitted Tools into a dependency graph. Quote the JSON
+file, review its exact AUD micro-unit maximum, then run the returned PlanRef with
+that unchanged total and a stable idempotency key:
+
+```sh
+npm run -s ae -- plan quote plan.json --base-url http://127.0.0.1:3024 --json
+npm run -s ae -- plan run <planRef> <approvedTotalAudUnits> --idempotency-key <key> --base-url http://127.0.0.1:3024 --json
+npm run -s ae -- plan watch <planRef> --base-url http://127.0.0.1:3024 --json
+npm run -s ae -- plan cancel <planRef> --base-url http://127.0.0.1:3024 --json
+```
+
+Approval-required Plans wait for their owner in `/plans/<planRef>` before any
+Hold. Cancellation stops future nodes; admitted Calls retain their outcomes and
+receipts. Read or replay the same Plan after a lost response. Supported paid
+execution uses admitted managed x402 Tools; paid fixed-AUD execution and unbounded
+dependent prices refuse before a Hold.
+
 Against a different explicitly verified origin, pass `--base-url "$AE_ORIGIN"` instead.
 Do not treat an origin, archive, `/mcp`, `/llms.txt` or `/SKILL.md` read as hosted-release proof.
 

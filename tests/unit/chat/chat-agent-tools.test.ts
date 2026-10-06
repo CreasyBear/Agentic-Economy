@@ -881,6 +881,32 @@ describe('Tool chat Agent tools', () => {
     expect(getFunctionName(runAction.mock.calls[5]![0])).toBe('capabilityToolCatalog:compareInternal')
   })
 
+  it.each([['tool.plan.run', 'tool.call'], ['tool.call', 'tool.plan.run']] as const)('shares the execute slot across %s then %s', async (firstId, secondId) => {
+    let finish: ((value: unknown) => void) | undefined
+    const waiting = new Promise<unknown>(resolve => { finish = resolve })
+    const runAction = vi.fn(async () => waiting)
+    const agent = createChatAgent(mockModel(), AUTHORITY)
+    const ctx = toolCtx({ runAction: runAction as ToolCtx['runAction'] })
+    const input = (id: typeof firstId) => id === 'tool.call' ? { quoteRef: COMMITMENT_REF }
+      : { planRef: 'plan-one', approvedTotalAudUnits: '1200' }
+    const first = invokeTool(agent, firstId, ctx, input(firstId))
+    await expect(invokeTool(agent, secondId, ctx, input(secondId))).resolves.toMatchObject({
+      kind: 'chat_tool_refused', toolId: secondId, reason: 'execute_limit',
+    })
+    finish?.(firstId === 'tool.call' ? { kind: 'refused', code: 'grant_not_found', retryable: false }
+      : { kind: 'awaiting_approval', planRef: 'plan-one', state: 'awaiting_approval' })
+    await first
+    expect(runAction).toHaveBeenCalledOnce()
+    if (firstId === 'tool.plan.run') expect(runAction.mock.calls[0]).toBeDefined()
+  })
+
+  it('projects a Plan approval card with a scoped link and no invented charge', () => {
+    const part = { type: `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['tool.plan.run']}`, state: 'output-available',
+      output: { kind: 'awaiting_approval', planRef: 'plan-one', state: 'awaiting_approval' } }
+    const card = projectToolCard(part)
+    expect(card).toMatchObject({ kind: 'status', planRef: 'plan-one', summary: expect.stringContaining('No credit is held') })
+  })
+
   it('reserves the single execute slot before parallel work awaits', async () => {
     let release: ((value: unknown) => void) | undefined
     const firstExecution = new Promise<unknown>((resolve) => {

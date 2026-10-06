@@ -5,6 +5,7 @@ import { directoryNetwork, directoryEntryMatchesFilters, directoryProviderKey, x
 import { env, type QueryCtx } from '../../../_generated/server'
 import { coverageValue, directoryEntryValue, indexedEntryValue, unavailableValue } from './contracts'
 import { admittedToolRef } from './browse'
+import { readCurrentPublishedTool } from '../../capabilitySupply/currentTool/reads'
 import { activeDirectoryGeneration, canonicalSlugForToolRef, directoryCoverage, indexedDirectoryEntry, storedDirectoryEntry } from './rows'
 
 /**
@@ -48,8 +49,14 @@ export async function admittedToolRefForMercatorRoute(
     .filter((q) => q.eq(q.field('network'), '*'))
     .take(2)))).flat()
   const match = matches[0]
-  if (matches.length !== 1 || match === undefined) return undefined
-  return admittedToolRef(ctx, match.sourceRouteRef)
+  const environment = deploymentPaymentEnvironment(env)
+  if (matches.length !== 1 || match?.sourceRouteRef === undefined || environment === undefined) return undefined
+  const publications = await ctx.db.query('capabilityPublications')
+    .withIndex('by_sourceRouteRef_and_disposition', q => q.eq('sourceRouteRef', match.sourceRouteRef).eq('disposition', 'current'))
+    .filter(q => q.eq(q.field('runtimeEnvironment'), environment)).take(2)
+  const publication = publications[0]
+  if (publications.length !== 1 || publication === undefined) return undefined
+  return await readCurrentPublishedTool(ctx, publication.toolRef, Date.now()) === undefined ? undefined : publication.toolRef
 }
 
 export const resourceArgs = v.object({ resource: v.string() })

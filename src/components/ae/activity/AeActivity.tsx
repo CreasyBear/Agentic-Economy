@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useRouter } from '@tanstack/react-router'
 import { Download } from 'lucide-react'
 
+import { PlanActivity } from '@/components/ae/plans/PlanActivity'
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { Button } from '@/components/arc/button/button'
@@ -117,6 +118,7 @@ function AeActivityAvailable({
             onResetFilters={vm.resetFilters}
           />
         ) : null}
+        {result.filteredAgent === undefined ? <PlanActivity plans={result.plans} /> : null}
         <ActivityMonthlySummary
           periodStart={vm.periodStart}
           monthly={vm.monthly}

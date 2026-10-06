@@ -117,6 +117,7 @@ describe('Clerk webhook environment admission', () => {
     vi.stubEnv('AE_CLI_PREBUILT', undefined)
     for (const name of DEPLOYMENT_MANIFEST.configuration.forbiddenProduction) vi.stubEnv(name, undefined)
     for (const [name, value] of Object.entries(liveConfiguration())) vi.stubEnv(name, value)
+    vi.stubEnv('VITE_CONVEX_URL', undefined)
     vi.stubEnv('AE_CONVEX_SERVER_FUNCTION_TOKEN', 'webhook-source-token-with-at-least-32-characters')
     expect(() => ensureBootEnvironmentValidated()).not.toThrow()
     vi.stubEnv('CLERK_WEBHOOK_SIGNING_SECRET', 'invalid')

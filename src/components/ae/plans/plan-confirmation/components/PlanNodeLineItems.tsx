@@ -17,10 +17,13 @@ export function PlanNodeLineItems({ nodes }: PlanNodeLineItemsProps) {
               <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
                 <div className="grid min-w-0 gap-1">
                   <h4 className="m-0 break-all font-mono text-sm font-medium">{node.nodeId}</h4>
-                  <code className="break-all text-xs text-muted-foreground">{node.toolRef}</code>
+                  {node.providerHost === undefined ? null : <p className="m-0 break-all text-xs text-muted-foreground">Provider: {node.providerHost}</p>}
+                  {node.inputJson === undefined ? null : <details><summary className="cursor-pointer text-xs">Inputs sent to this Provider</summary><pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words text-xs">{node.inputJson}</pre></details>}
+                  <details><summary className="cursor-pointer text-xs text-muted-foreground">Tool reference</summary><code className="break-all text-xs">{node.toolRef}</code></details>
                 </div>
                 <strong className="font-mono text-sm tabular-nums">{node.ceilingLabel}</strong>
               </div>
+              {node.rateToleranceLabel === undefined ? null : <p className="m-0 text-xs text-muted-foreground">{node.rateToleranceLabel}</p>}
               <dl className="grid min-w-0 gap-x-4 gap-y-2 text-xs sm:grid-cols-2">
                 <div className="grid min-w-0 gap-1">
                   <dt className="text-muted-foreground">Input</dt>

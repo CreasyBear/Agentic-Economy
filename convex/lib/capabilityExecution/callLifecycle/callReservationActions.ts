@@ -1,3 +1,4 @@
+import { brandNonEmpty } from '@/modules/common/ids'
 import { v, type Infer } from 'convex/values'
 import { degradeBackend } from '../../../../src/lib/observability/degrade-backend'
 import type { ActionCtx, QueryCtx } from '../../../_generated/server'
@@ -138,6 +139,7 @@ export async function callHandler(
   args: CallArgs,
   sourceAlreadyAdmitted = false,
   turnRef?: string,
+  planNode?: { planRef: string; nodeId: string },
 ): Promise<Infer<typeof callResultValue>> {
   if (!sourceAlreadyAdmitted) {
     await ctx.runMutation(internal.capabilityCalls.admit, args)
@@ -210,6 +212,15 @@ export async function callHandler(
         }
       },
       evaluateAuthority: async ({ operation, descriptor, toolRef, grant, callRef }) => {
+        if (planNode !== undefined) {
+          const basis = await ctx.runQuery(internal.capabilityPlans.readNodeAuthority, { ...planNode, callRef })
+          return basis === null ? { kind: 'refused' as const, code: 'authority_required' as const, retryable: false }
+            : { kind: 'approved' as const, basis: { kind: 'plan_node' as const, planRef: brandNonEmpty(basis.planRef, 'PlanRef'),
+              nodeId: brandNonEmpty(basis.nodeId, 'PlanNodeId'), planAuthorityDigest: basis.planAuthorityDigest,
+              resolvedInputDigest: basis.resolvedInputDigest, ceilingAudUnits: brandNonEmpty(basis.ceilingAudUnits, 'AudUnits') },
+              expiresAt: new Date(basis.expiresAt).toISOString() }
+        }
+
         const authorityExpiresAt = principal.authorityMode === 'spending_policy'
           ? grant.expiresAt
           : Math.min(Date.now() + 30_000, grant.expiresAt)

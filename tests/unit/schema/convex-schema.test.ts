@@ -96,6 +96,7 @@ const durableTables = [
   'capabilityUsageReportUnits',
   'purchaseResolutionRecords',
   'capabilityQuotes',
+  'capabilityPlans',
   'capabilityCalls',
   'paidCallReports',
   'toolSelectionDecisions',

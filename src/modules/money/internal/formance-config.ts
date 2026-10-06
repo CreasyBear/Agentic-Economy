@@ -307,11 +307,12 @@ export function validateFormanceMoneyCommand(command: FormanceMoneyCommand): str
       || value !== value.trim()
       || !validFormanceVariableValue(
         value,
-        (['BUYER_SALE_SETTLED', 'BUYER_SALE_REFUNDED'].includes(command.template) && key === 'tax_amount')
+        (['BUYER_SALE_SETTLED', 'BUYER_SALE_REFUNDED', 'PLAN_NODE_SETTLED_AUD'].includes(command.template) && key === 'tax_amount')
           || ((command.schemaVersion === FORMANCE_SCHEMA_VERSION
+            || command.schemaVersion === PLAN_FORMANCE_SCHEMA_VERSION
             || command.schemaVersion === PROMOTIONAL_FORMANCE_SCHEMA_VERSION) && (
-            (['CALL_RESERVED_AUD', 'CALL_RELEASED_AUD'].includes(command.template) && key === 'buyer_amount')
-            || (['BUYER_SALE_SETTLED', 'BUYER_SALE_REFUNDED'].includes(command.template) && key === 'revenue_amount')
+            (['CALL_RESERVED_AUD', 'CALL_RELEASED_AUD', 'PLAN_HOLD_RESERVED_AUD', 'PLAN_NODE_ALLOCATED_AUD', 'PLAN_NODE_RELEASED_AUD', 'PLAN_REMAINDER_RELEASED_AUD'].includes(command.template) && key === 'buyer_amount')
+            || (['BUYER_SALE_SETTLED', 'BUYER_SALE_REFUNDED', 'PLAN_NODE_SETTLED_AUD'].includes(command.template) && key === 'revenue_amount')
           )),
       )) return 'formance_variables_invalid'
   }

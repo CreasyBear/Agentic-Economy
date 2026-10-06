@@ -1,6 +1,32 @@
 # Plan Quotes: handoff (2026-10-06)
 
-## Where things are
+## Continuation status (2026-10-06)
+
+W2–W6 source is now implemented in this worktree: HTTP/MCP/CLI quote/run/get/cancel,
+one purchased/promotional Hold, durable Workflow and ordinary Call allocation,
+owner approval/status/receipts/Activity, and bounded chat suggestion/import/run.
+The existing implementation plan below is retained as the original handoff;
+its remaining-work list and funding prohibition are historical.
+
+Joel subsequently authorized the current live funding for the final paid proof.
+No Clerk configuration change is required. Release still requires the full source
+gate, a PR, verified production v1.7 chart installation/readback, separate backend
+and web deployment, and the actual paid CLI/MCP/HTTP journey. Those release steps
+are pending at this update; local and native evidence is not a hosted claim.
+
+Native Ledger :3080: twelve Plan money tests pass, including the actual Workflow
+with purchased/promotional credit, partial delivery, uncertain settlement and paid
+owner approval. Lifecycle, chat, parser, selector, HTTP/CLI and presenter tests
+cover their boundaries; `npm run check` passes before the latest inspection and
+approval additions, whose final check is running. See build decisions B8–B12.
+
+Current limits: paid execution requires managed x402; paid fixed-AUD execution
+refuses before Hold. Deferred managed prices need a proven finite bound. An
+approval-required quote needs current published readiness and performs no unpaid
+Provider request until approval. Conventional Provider async completion, selected
+binary artifacts and alternate payment rails remain separate ADR 0006 work.
+
+## Original handoff snapshot
 - **Worktree:** `/Users/joelchan/Documents/Coding/App-Dev/live/01. Pre-Implementation/aecon-plan-quotes`.
 - **Branch:** `well-32/plan-quotes`, based on `main` at 453b6f60d. It has not been pushed and there is no PR yet.
 - **Commits:**

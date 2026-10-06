@@ -42,6 +42,7 @@ export type PlanNodeQuote = Readonly<{
   bounds?: PlanNodeBounds
   ceilingAudUnits: AudUnits
   rateEvidence?: PlanRateEvidence
+  rateToleranceBps?: number
   validation: 'typed' | 'untyped_ref'
   dependsOn: readonly PlanNodeId[]
 }>
@@ -100,6 +101,7 @@ export type PlanRunRefusalCode =
   | 'plan_quote_expired' | 'plan_changed' | 'approved_total_mismatch' | 'grant_changed'
   | 'approval_required' | 'total_exceeds_available' | 'hold_unavailable'
   | 'idempotency_key_reused' | 'plan_not_found' | 'plan_access_denied' | 'plan_not_cancellable'
+  | 'mfa_reverification_required'
 export type NodeRefusalCode =
   | 'input_invalid' | 'ref_type_mismatch' | 'input_exceeds_bound'
   | 'price_exceeded_ceiling' | 'tool_not_ready' | 'reconciliation_required'

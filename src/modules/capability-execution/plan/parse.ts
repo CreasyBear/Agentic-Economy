@@ -7,20 +7,16 @@ import { isBoundedJsonValue } from '@/modules/common/bounded-json'
 import { isRecord } from '@/modules/common/is-record'
 
 import type {
-  AudUnits,
   FlowRef,
   JsonPointer,
   PlanInput,
   PlanJson,
-  PlanNodeId,
   PlanNodePriceClass,
   PlanNodeQuote,
   PlanQuote,
   PlanQuoteInput,
   PlanQuoteResult,
-  PlanRef,
   PlanValidationRefusal,
-  ToolRef,
 } from './contracts'
 
 const MAX_PLAN_NODES = 10
@@ -33,14 +29,6 @@ const flowRefPattern = /^flow:\/\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/output(?:#
 
 function isJsonPointer(value: unknown): value is JsonPointer {
   return typeof value === 'string' && pointerSyntaxIsCanonical(value)
-}
-
-function isPlanNodeId(value: unknown): value is PlanNodeId {
-  return typeof value === 'string' && nodeIdPattern.test(value)
-}
-
-function isToolRef(value: unknown): value is ToolRef {
-  return typeof value === 'string' && toolRefPattern.test(value)
 }
 
 function isFlowRef(value: unknown): value is FlowRef {
@@ -144,6 +132,7 @@ const planNodeQuoteSchema: z.ZodType<PlanNodeQuote> = z.strictObject({
   bounds: planNodeBoundsSchema.exactOptional(),
   ceilingAudUnits: audUnitsSchema,
   rateEvidence: planRateEvidenceSchema.exactOptional(),
+  rateToleranceBps: z.number().int().min(0).max(10_000).exactOptional(),
   validation: z.enum(['typed', 'untyped_ref']),
   dependsOn: z.array(planNodeIdSchema),
 })
@@ -235,4 +224,3 @@ function hasBadPointer(value: unknown): boolean {
   }
   return Object.values(value).some(hasBadPointer)
 }
-

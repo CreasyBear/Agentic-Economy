@@ -39,6 +39,8 @@ import { MARKET_REQUEST_ROUTE_CONTRACTS } from '@/modules/market-demand/market-d
 import { SAVED_TOOLS_ROUTE_CONTRACTS } from '@/modules/market/saved-tools.contracts'
 
 import { TOOL_QUOTE_ACTION_ID } from '@/modules/capability-execution/quote'
+import { TOOL_PLAN_QUOTE_ACTION_ID } from '@/modules/capability-execution/plan/quote.actions'
+import { PLAN_RUNTIME_ROUTES } from '@/modules/capability-execution/plan/runtime.actions'
 import { TOOL_PROCURE_ACTION_ID } from '@/modules/capability-execution/procure'
 
 import type { CliOptions } from '../lib/args'
@@ -328,6 +330,27 @@ export const COMMANDS: Readonly<Record<string, RootCommandManifestEntry>> = {
     group: 'connect_account',
     rootOrder: 3,
     guidance: ['Open the returned /owner/credit#fund continuation as the owner. No agent credential is used.'],
+  },
+  plan: {
+    summary: 'Quote, run and follow a bounded Plan of Tool purchases.',
+    args: '<quote|run|get|watch|cancel> ...',
+    json: true,
+    authentication: 'buyer',
+    group: 'call_recover',
+    rootOrder: 0,
+    commands: {
+      quote: {
+        ...deriveCliCommand(TOOL_PLAN_QUOTE_ACTION_ID),
+        args: '<file>',
+        guidance: ['Read a JSON file containing {nodes:[...]}. Quoting creates no Hold or Call.'],
+      },
+      run: { ...deriveCliCommand(PLAN_RUNTIME_ROUTES.run.actionId), args: '<plan-ref> <approved-total-aud-units> --idempotency-key <key>',
+        guidance: ['Copy the exact approvedTotalAudUnits from the quote. After an interruption, read the same Plan or replay this exact command and key.'] },
+      get: { ...deriveCliCommand(PLAN_RUNTIME_ROUTES.get.actionId), args: '<plan-ref>' },
+      watch: { summary: 'Wait for a Plan to conclude or need attention, preserving its identity.', args: '<plan-ref>', json: true,
+        guidance: ['Stops at approval, reconciliation or a terminal outcome. A timeout never cancels or reruns the Plan.'] },
+      cancel: { ...deriveCliCommand(PLAN_RUNTIME_ROUTES.cancel.actionId), args: '<plan-ref>' },
+    },
   },
   quote: {
     ...deriveCliCommand(TOOL_QUOTE_ACTION_ID),

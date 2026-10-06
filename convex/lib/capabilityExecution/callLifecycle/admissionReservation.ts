@@ -11,6 +11,8 @@ export const reserveArgs = {
     enabled: v.boolean(),
     ceilingUnits: v.optional(v.string()),
     monthSpendUnits: v.optional(v.string()),
+    planExposureDigest: v.optional(v.string()),
+    organizationMonth: v.optional(v.string()),
   })),
 } as const
 export const reservationValue = v.object({
@@ -86,6 +88,8 @@ export type ReserveArgs = Readonly<{
     enabled: boolean
     ceilingUnits?: string
     monthSpendUnits?: string
+    planExposureDigest?: string
+    organizationMonth?: string
   }>
 }>
 

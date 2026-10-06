@@ -1,7 +1,7 @@
 import { brandNonEmpty } from '@/modules/common/ids'
 import { pointerSyntaxIsCanonical } from '@/modules/capability-contract/public'
 
-import type { FlowRef, PlanJson, ToolRef } from './contracts'
+import type { PlanJson, ToolRef } from './contracts'
 
 type PlanSuggestionGraphNode = Readonly<{
   publicationRef: string

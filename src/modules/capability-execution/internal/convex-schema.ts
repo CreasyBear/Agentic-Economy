@@ -4,7 +4,7 @@ import {
   acceptedAuthorityValue,
   type CanonicalClaimAuthority,
 } from '@/modules/action-execution/runtime'
-import { spendingPeriodsValue, promotionalCreditAllocationValue, managedCallBookingValue } from '@/modules/money/public'
+import { spendingPeriodsValue, promotionalCreditAllocationValue, managedCallBookingValue, planCallAllocationValue } from '@/modules/money/public'
 import { purchaseResolutionRecordValidator } from '@/modules/capability-execution/purchase-resolution'
 import { providerUnitObservationValue, providerUnitSummaryValue } from './provider-service-unit-values'
 
@@ -352,6 +352,8 @@ export const capabilityCallTables = {
     .index('by_accountRef_and_applicationRef_and_createdAt', ['accountRef', 'applicationRef', 'createdAt']),
   capabilityQuotes: defineTable({
     quoteRef: v.string(),
+    planRef: v.optional(v.string()),
+    planNodeId: v.optional(v.string()),
     principalId: v.string(),
     accountRef: v.string(),
     credentialId: v.string(),
@@ -452,6 +454,7 @@ export const capabilityCallTables = {
       v.literal('settled'),
     )),
     promotionalCreditAllocation: v.optional(promotionalCreditAllocationValue),
+    planAllocation: v.optional(planCallAllocationValue),
     formanceReservationAttempt: v.optional(v.object({
       generation: v.number(), leaseUntil: v.number(), ambiguous: v.boolean(),
     })),

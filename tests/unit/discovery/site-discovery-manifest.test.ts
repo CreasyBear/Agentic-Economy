@@ -7,6 +7,8 @@ import { MCP_LATEST_PROTOCOL_VERSION } from '@/lib/mcp-protocol'
 import { describeActionForAgent, findAction } from '@/modules/actions'
 import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
 import { TOOL_QUOTE_ROUTE_CONTRACT } from '@/modules/capability-execution/quote.actions'
+import { TOOL_PLAN_QUOTE_ROUTE_CONTRACT } from '@/modules/capability-execution/plan/quote.actions'
+import { PLAN_RUNTIME_ROUTES } from '@/modules/capability-execution/plan/runtime.actions'
 import { canonicalDigest, schemaDescriptorDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { buildOpenApiDocument, buildSiteDiscoveryManifest, projectCompactSiteDiscoveryManifest } from '@/modules/discovery/public'
@@ -278,6 +280,10 @@ describe('Site discovery manifest', () => {
   })
   it('projects every Tool and Call route and schema from the canonical contract', () => {
     const expected = [
+      TOOL_PLAN_QUOTE_ROUTE_CONTRACT,
+      PLAN_RUNTIME_ROUTES.run,
+      PLAN_RUNTIME_ROUTES.get,
+      PLAN_RUNTIME_ROUTES.cancel,
       TOOL_QUOTE_ROUTE_CONTRACT,
       CALL_ROUTE_CONTRACT.call,
       CALL_ROUTE_CONTRACT.list,
@@ -324,6 +330,7 @@ describe('Site discovery manifest', () => {
       '/api/v1/calls/{callRef}',
       '/api/v1/calls/{callRef}/cancel',
       '/api/v1/calls/{callRef}/reconcile',
+      '/api/v1/tools/plans/{planRef}',
     ])
   })
 

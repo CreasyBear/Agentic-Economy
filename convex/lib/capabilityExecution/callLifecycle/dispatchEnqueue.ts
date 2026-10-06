@@ -1,3 +1,4 @@
+import { readPlan } from '../plans/planState'
 import { type Infer } from 'convex/values'
 import { internal } from '../../../_generated/api'
 import type { Doc } from '../../../_generated/dataModel'
@@ -77,5 +78,16 @@ export async function dispatchHandler(
     || row.inputJson === undefined
   ) return { kind: 'refused' as const }
   if (args.authority === undefined) return { kind: 'refused' as const }
+  const basis = args.authority.acceptedBasis
+  if (row.planRef !== undefined) {
+    const plan = await readPlan(ctx, row.planRef)
+    const node = plan?.nodes.find(candidate => candidate.nodeId === row.planNodeId)
+    if (plan?.authority === undefined || node === undefined || basis.kind !== 'plan_node'
+      || plan.holdReservationRefs === undefined || plan.holdReleaseRefs !== undefined
+      || plan.authority.expiresAt <= args.now || basis.planRef !== plan.planRef || basis.nodeId !== node.nodeId
+      || basis.planAuthorityDigest !== canonicalDigest(plan.authority) || basis.resolvedInputDigest !== row.inputDigest
+      || basis.ceilingAudUnits !== node.ceilingAudUnits || args.authority.grantRef !== plan.grantRef
+      || args.authority.grantGeneration !== plan.grantGeneration) return { kind: 'refused' as const }
+  } else if (basis.kind === 'plan_node') return { kind: 'refused' as const }
   return await enqueueCallDispatch(ctx, row, args.authority, args.now)
 }

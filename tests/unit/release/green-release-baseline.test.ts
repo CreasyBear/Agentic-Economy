@@ -158,6 +158,8 @@ describe('green release baseline', () => {
       'tests/integration/capability-call-money-matrix.test.ts',
       'tests/integration/capability-call-workpool.test.ts',
       'tests/integration/money-formance-boundary.test.ts',
+      'tests/integration/money-formance-plans.test.ts',
+      'tests/integration/plan-workflow-money.test.ts',
     ])
     for (const file of REQUIRED_NATIVE_MONEY_FILES) expect(execute?.run).toContain(file)
     expect(execute?.run).toContain('npm exec --no -- node tools/dev/run-listed-vitest.ts')
@@ -222,7 +224,7 @@ describe('green release baseline', () => {
   it('accepts executed native assertions and projects only sanitized evidence', () => {
     const evidence = inspectNativeMoneyReport(executedNativeReport())
     expect(evidence.status).toBe('passed')
-    expect(evidence.files).toHaveLength(3)
+    expect(evidence.files).toHaveLength(REQUIRED_NATIVE_MONEY_FILES.length)
     expect(evidence.files.every(file => file.assertions.length === 1 && file.assertions[0]?.status === 'passed')).toBe(true)
     expect(JSON.stringify(evidence)).not.toContain('private SDK payload')
     expect(JSON.stringify(evidence)).not.toContain(root)

@@ -2,6 +2,7 @@ import { defineTable } from 'convex/server'
 import { v } from 'convex/values'
 import { capabilityCallTables as existingCapabilityCallTables } from './internal/convex-schema'
 import { callFeedbackValue } from './call-feedback'
+import { planHoldBookingValue, promotionalCreditAllocationValue } from '@/modules/money/public'
 
 export const capabilityCallTables = {
   ...existingCapabilityCallTables,
@@ -13,6 +14,11 @@ export const capabilityCallTables = {
     credentialId: v.string(),
     grantRef: v.string(),
     grantGeneration: v.number(),
+    grantDigest: v.optional(v.string()),
+    commercialPolicyDigest: v.optional(v.string()),
+    applicationRef: v.optional(v.string()),
+    principalScopes: v.optional(v.array(v.string())),
+    authorityMode: v.optional(v.union(v.literal('read_only'), v.literal('approval_required'), v.literal('spending_policy'), v.literal('unrestricted_test_only'))),
     environment: v.union(v.literal('sandbox'), v.literal('production')),
     planJson: v.string(),
     planDigest: v.string(),
@@ -33,6 +39,7 @@ export const capabilityCallTables = {
       ),
       bounds: v.optional(v.record(v.string(), v.object({ maxItems: v.number() }))),
       ceilingAudUnits: v.string(),
+      rateToleranceBps: v.optional(v.number()),
       dependsOn: v.array(v.string()),
     })),
     stages: v.array(v.array(v.string())),
@@ -69,6 +76,21 @@ export const capabilityCallTables = {
       expiresAt: v.number(),
     })),
     idempotencyKey: v.optional(v.string()),
+    runCommandDigest: v.optional(v.string()),
+    maximumConcurrentNodes: v.optional(v.number()),
+    holdBooking: v.optional(planHoldBookingValue),
+    holdRemainingCreditAllocation: v.optional(promotionalCreditAllocationValue),
+    holdRemainder: v.optional(v.object({
+      holdBalanceUnits: v.string(), remainingCreditAllocation: v.optional(promotionalCreditAllocationValue),
+      terminalEvidenceDigest: v.string(),
+    })),
+    holdCreditRestored: v.optional(v.boolean()),
+    holdReleaseAttempts: v.optional(v.number()),
+    concludedNodeIds: v.optional(v.array(v.string())),
+    workflowFinished: v.optional(v.boolean()),
+    failureCode: v.optional(v.string()),
+    approvalDecision: v.optional(v.object({ decision: v.union(v.literal('approved'), v.literal('denied')), actorRef: v.string(), decidedAt: v.number() })),
+    chatTurnRef: v.optional(v.string()),
     workflowId: v.optional(v.string()),
     terminationIntent: v.optional(v.union(v.literal('cancelled'), v.literal('expired'))),
     holdReservationRefs: v.optional(v.array(v.string())),
@@ -98,6 +120,7 @@ export const capabilityCallTables = {
     updatedAt: v.number(),
   })
     .index('by_planRef', ['planRef'])
+    .index('by_ownerId_and_createdAt', ['ownerId', 'createdAt'])
     .index('by_accountRef_and_organizationMonth', ['accountRef', 'organizationMonth'])
     .index('by_principalId_and_idempotencyKey', ['principalId', 'idempotencyKey'])
     .index('by_ownerId_and_state_and_createdAt', ['ownerId', 'state', 'createdAt']),

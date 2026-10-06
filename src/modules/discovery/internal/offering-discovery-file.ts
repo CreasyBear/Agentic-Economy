@@ -3,6 +3,8 @@ import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
 import { TOOL_QUOTE_PATH } from '@/modules/capability-execution/quote'
+import { PLAN_RUNTIME_ROUTES } from '@/modules/capability-execution/plan/runtime.actions'
+import { TOOL_PLAN_QUOTE_PATH } from '@/modules/capability-execution/plan/quote.actions'
 import {
   TOOL_MARKET_COMPARE_PATH,
   TOOL_MARKET_DESCRIBE_PATH,
@@ -32,6 +34,8 @@ export const DiscoveryPublicSurfacePaths = [
   TOOL_MARKET_LIST_PATH,
   TOOL_MARKET_DESCRIBE_PATH,
   TOOL_MARKET_COMPARE_PATH,
+  TOOL_PLAN_QUOTE_PATH,
+  ...Object.values(PLAN_RUNTIME_ROUTES).map(route => route.path),
 ] as const
 
 /** Supporting provider facts never become executable merely because they are published. */

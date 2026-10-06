@@ -13,7 +13,7 @@ export type LiveX402RequirementActionResult =
 
 export const inspectLiveX402RequirementRef = makeFunctionReference<
   'action',
-  { toolRef: string; input: Record<string, JsonValue>; principal: CallPrincipal; callRef?: string },
+  { toolRef: string; input: Record<string, JsonValue>; principal: CallPrincipal; callRef?: string; planNode?: { planRef: string; nodeId: string } },
   LiveX402RequirementActionResult
 >('capabilityCallLiveX402:inspect')
 

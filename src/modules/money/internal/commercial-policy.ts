@@ -3,6 +3,8 @@ import { z } from 'zod'
 import { canonicalDigest } from '../../common/canonical-digest'
 import { isPositiveX402AtomicUnits } from '../x402-spend-admission'
 
+export const DEFAULT_PLAN_RATE_TOLERANCE_BPS = 50
+
 export const COMMERCIAL_POLICY_FAMILIES = Object.freeze([
   'commercial_perimeter',
   'tax',
@@ -139,7 +141,7 @@ export const SANDBOX_COMMERCIAL_POLICY_CONTROLS: CommercialPolicyControls = Obje
     family: 'operations',
     fundingServiceFeeBps: 500,
     buyerPricingMarginBps: 0,
-    planRateToleranceBps: 50,
+    planRateToleranceBps: DEFAULT_PLAN_RATE_TOLERANCE_BPS,
     commitmentTtlMs: 5 * 60 * 1_000,
     formanceSdkVersion: PACKAGE4_FORMANCE_REQUIREMENTS.sdkVersion,
     formanceSdkArtifactDigest: PACKAGE4_FORMANCE_REQUIREMENTS.sdkArtifactDigest,

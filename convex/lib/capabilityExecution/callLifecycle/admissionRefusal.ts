@@ -3,6 +3,7 @@ import type { Doc } from '../../../_generated/dataModel'
 import type { MutationCtx } from '../../../_generated/server'
 import { assertAgentAccessRateAdmission } from '../../platform/rateLimit'
 import { evaluateOrganizationMonthlySpendFence } from '@/modules/money/public'
+import { readOutstandingPlanExposureHandler } from '../plans/planCommands'
 import {
   normalizeStoredAgentAccessGrant,
   normalizeStoredAgentAccessGrantForTool,
@@ -195,28 +196,28 @@ export async function spendingPeriodAdmissionRefusal(
 }
 
 export async function organizationMonthlySpendReserveRefusal(
-  ctx: MutationCtx,
-  args: ReserveArgs,
-  commitment: CommitmentRow | null,
+  ctx: Pick<MutationCtx, 'db'>,
+  args: Pick<ReserveArgs, 'ownerId' | 'now' | 'organizationMonthlySpend'>,
+  commitment: Pick<CommitmentRow, 'decisionAudUnits'> | null,
 ): Promise<GrantRefusal | null> {
   if (commitment === null || commitment.decisionAudUnits === '0') return null
-  let snapshot: { enabled: boolean; ceilingUnits?: string; monthSpendUnits?: string } | undefined = args.organizationMonthlySpend
-  if (snapshot === undefined || !snapshot.enabled) {
-    const budgetRow = await ctx.db
-      .query('moneyMonthlySpendBudgets')
-      .withIndex('by_accountRef', (query) => query.eq('accountRef', args.ownerId))
-      .unique()
-    if (budgetRow === null || !budgetRow.enabled) return null
-    snapshot = {
-      enabled: true,
-      ceilingUnits: budgetRow.ceilingUnits,
-    }
+  const budgetRow = await ctx.db.query('moneyMonthlySpendBudgets')
+    .withIndex('by_accountRef', query => query.eq('accountRef', args.ownerId)).unique()
+  if (budgetRow === null || !budgetRow.enabled) return null
+  const snapshot = args.organizationMonthlySpend
+  const organizationMonth = new Date(args.now).toISOString().slice(0, 7)
+  const held = await readOutstandingPlanExposureHandler(ctx, { accountRef: args.ownerId, organizationMonth })
+  if (held.kind !== 'available' || snapshot?.planExposureDigest !== held.digest
+    || snapshot.organizationMonth !== organizationMonth) return {
+    kind: 'refused', code: 'budget_exceeded', retryable: true,
+    nextAction: 'Retry with the same idempotency key to inspect current organization spend.',
   }
   const fence = evaluateOrganizationMonthlySpendFence({
     enabled: true,
-    ...(snapshot.ceilingUnits === undefined ? {} : { ceilingUnits: snapshot.ceilingUnits }),
+    ceilingUnits: budgetRow.ceilingUnits,
     ...(snapshot.monthSpendUnits === undefined ? {} : { monthSpendUnits: snapshot.monthSpendUnits }),
     requestUnits: commitment.decisionAudUnits,
+    heldPlanExposure: { kind: 'known', units: held.units },
   })
   switch (fence.kind) {
     case 'not_applicable':

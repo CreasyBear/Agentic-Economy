@@ -220,10 +220,10 @@ export type OrganizationMonthlySpendAdmissionSnapshot = Readonly<{
   enabled: boolean
   ceilingUnits?: string | undefined
   monthSpendUnits?: string | undefined
-  heldPlanExposure?: Readonly<
+  heldPlanExposure: Readonly<
     | { kind: 'known'; units: string }
     | { kind: 'unavailable' }
-  > | undefined
+  >
 }>
 
 export function quoteOrganizationMonthlySpendAdmission(
@@ -387,4 +387,3 @@ export function quoteExpiresAt(
       : Math.min(input.spendingPeriods.daily.periodEndAt, input.spendingPeriods.monthly.periodEndAt),
   )
 }
-
