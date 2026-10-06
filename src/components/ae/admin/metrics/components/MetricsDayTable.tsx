@@ -1,9 +1,10 @@
 import { useEffect, useId, useState } from 'react'
 
 import { Button } from '@/components/arc/button/button'
-import { Drawer, DrawerContent } from '@/components/ae/shared/arc/drawer/AeDrawerContent'
+import { Drawer, DrawerContent } from '@/components/ae/shared/base-ui/drawer/drawer'
 import SegmentedControl from '@/components/arc/segmented-control/segmented-control'
-import { SortableDataTable, type DataColumn } from '@/components/arc/sortable-data-table/sortable-data-table'
+import { AeSortableDataTable as SortableDataTable } from '@/components/ae/shared/sortable-data-table/AeSortableDataTable'
+import type { AeDataColumn as DataColumn } from '@/components/ae/shared/sortable-data-table/sortable-data-table.contracts'
 import { ADMIN_METRICS_COPY, type AdminMetricDayRow } from '../metrics.contracts'
 import styles from './MetricsDayTable.module.css'
 

@@ -36,12 +36,6 @@ afterEach(() => {
   cleanup()
   vi.clearAllMocks()
 })
-function activateTab(name: RegExp) {
-  const tab = screen.getByRole('tab', { name })
-  fireEvent.mouseDown(tab, { button: 0, ctrlKey: false })
-  fireEvent.click(tab)
-}
-
 
 describe('AeKeyRevealDialog (W-27)', () => {
   it('T1: does not render dialog when open is false or reveal is undefined', () => {
@@ -182,18 +176,18 @@ describe('AeKeyRevealDialog (W-27)', () => {
     expect(screen.getByText(new RegExp('mcpServers'))).toBeInTheDocument()
     expect(screen.getByText(AGENT_ACCESS_SNIPPET_DESTINATIONS.cursor)).toBeInTheDocument()
 
-    activateTab(/claude code/i)
+    fireEvent.click(screen.getByRole('tab', { name: /claude code/i }))
     await waitFor(() => {
       expect(screen.getByText(AGENT_ACCESS_SNIPPET_DESTINATIONS.claude)).toBeInTheDocument()
     })
 
-    activateTab(/^python$/i)
+    fireEvent.click(screen.getByRole('tab', { name: /^python$/i }))
     await waitFor(() => {
       expect(screen.getByText(AGENT_ACCESS_SNIPPET_DESTINATIONS.python)).toBeInTheDocument()
     })
     expect(screen.queryByText(AGENT_ACCESS_SNIPPET_COPY_HINTS.python)).not.toBeInTheDocument()
 
-    activateTab(/curl/i)
+    fireEvent.click(screen.getByRole('tab', { name: /curl/i }))
     await waitFor(() => {
       expect(screen.getByText(AGENT_ACCESS_SNIPPET_DESTINATIONS.curl)).toBeInTheDocument()
     })
@@ -365,7 +359,7 @@ describe('AeKeyRevealDialog (W-27)', () => {
       />,
     )
 
-    activateTab(/claude code/i)
+    fireEvent.click(screen.getByRole('tab', { name: /claude code/i }))
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /download \.env/i })).toBeInTheDocument()
     })
@@ -425,7 +419,7 @@ describe('AeKeyRevealDialog (W-27)', () => {
       />,
     )
 
-    activateTab(/python/i)
+    fireEvent.click(screen.getByRole('tab', { name: /python/i }))
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /download \.env/i })).toBeInTheDocument()
     })

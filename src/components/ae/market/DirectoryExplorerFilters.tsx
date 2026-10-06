@@ -7,7 +7,7 @@ import { Combobox, type ComboboxOption } from '@/components/arc/combobox/combobo
 import { FilterToolbar, type FilterChip } from '@/components/arc/filter-toolbar/filter-toolbar'
 import { Input } from '@/components/arc/input/input'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { Drawer, DrawerClose, DrawerContent, DrawerTrigger } from '@/components/ae/shared/arc/drawer/AeDrawerContent'
+import { Drawer, DrawerClose, DrawerContent, DrawerTrigger } from '@/components/ae/shared/base-ui/drawer/drawer'
 import { cn } from '@/lib/utils'
 import { SEARCH_QUERY_MAX_LENGTH } from '@/modules/common/search-query'
 import { x402DirectoryFilterSchema } from '@/modules/market/x402-directory'
@@ -362,17 +362,15 @@ export function DirectoryExplorerFilters({ entity = 'tools', ...props }: Directo
     : 'Filter Tool listings by category, Provider, price and published details.'
 
   return <Drawer>
-    <DrawerTrigger asChild>
-      <button data-filter-trigger="" type="button" className={cn(styles.filterTrigger, 'w-40')} aria-label={count > 0 ? `Filters ${count}` : 'Filters'}>
-        <span className="inline-flex items-center gap-2"><SlidersHorizontalIcon />Filters</span>
-        <span className={cn('min-w-5 rounded px-1 text-center text-xs tabular-nums', count > 0 ? 'bg-muted' : 'invisible')} aria-hidden="true">{count > 0 ? count : 1}</span>
-      </button>
-    </DrawerTrigger>
+    <DrawerTrigger render={<button data-filter-trigger="" type="button" className={cn(styles.filterTrigger, 'w-40')} aria-label={count > 0 ? `Filters ${count}` : 'Filters'}>
+      <span className="inline-flex items-center gap-2"><SlidersHorizontalIcon />Filters</span>
+      <span className={cn('min-w-5 rounded px-1 text-center text-xs tabular-nums', count > 0 ? 'bg-muted' : 'invisible')} aria-hidden="true">{count > 0 ? count : 1}</span>
+    </button>} />
     <DrawerContent side="left" title={title} description={description} closeLabel="Close" className={cn('arc-market-filters', styles.facetTargets)}>
       <div className="min-w-0"><FilterBody key={clearCount} {...props} entity={entity} onReset={() => { setClearCount(value => value + 1); props.onReset() }} /></div>
       <footer className="mt-5 flex flex-row flex-wrap items-stretch gap-3 border-t pt-5">
         <Button type="button" variant="secondary" className="min-h-touch flex-1 active:scale-100" onClick={() => { setClearCount(value => value + 1); props.onReset() }}>Clear filters</Button>
-        <DrawerClose asChild><Button type="button" className="min-h-touch flex-1 active:scale-100">Show results</Button></DrawerClose>
+        <DrawerClose render={<Button type="button" className="min-h-touch flex-1 active:scale-100">Show results</Button>} />
       </footer>
     </DrawerContent>
   </Drawer>

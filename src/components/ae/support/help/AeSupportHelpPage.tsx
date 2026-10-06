@@ -4,7 +4,7 @@ import { ActivityIcon, ArrowUpRightIcon, CableIcon, CodeIcon, MailIcon } from 'l
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
 import { AeSiteFaq } from '@/components/ae/website/AeSiteFaq'
 import buttonStyles from '@/components/arc/button/button.module.css'
-import { Tabs, TabsList, TabsTrigger } from '@/components/arc/tabs/tabs'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ae/shared/base-ui/tabs/tabs'
 
 import { AgentConnectionSection } from './components/AgentConnectionSection'
 import { PrivateSupportSection } from './components/PrivateSupportSection'
@@ -55,6 +55,8 @@ export function AeSupportHelpPage({ canonicalBaseUrl, callRef }: AeSupportHelpPa
     event.stopPropagation()
     const nextIndex = edge >= 0 ? edge : (currentIndex + delta + channels.length) % channels.length
     tabs[nextIndex]?.focus()
+    const next = channels[nextIndex]
+    if (next !== undefined) setTopic(next.value)
   }
 
   return (

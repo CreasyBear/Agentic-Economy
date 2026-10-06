@@ -28,7 +28,7 @@ import buttonStyles from '@/components/arc/button/button.module.css'
 import { AeSortableDataTable, AeSortableDataTableHeader } from '@/components/ae/shared/sortable-data-table/AeSortableDataTable'
 import type { AeDataColumn } from '@/components/ae/shared/sortable-data-table/sortable-data-table.contracts'
 import './RecordTable.css'
-import { Checkbox } from '@/components/arc/checkbox/checkbox'
+import { Checkbox } from '@/components/ae/shared/base-ui/checkbox/checkbox'
 import { useFirstLoadPending } from '@/components/ui/data-state'
 
 

@@ -16,7 +16,7 @@ import {
 } from '@/components/ae/console/owner-credit-format'
 import { SearchField } from '@/components/arc/search-field/search-field'
 import { Button as ArcButton } from '@/components/arc/button/button'
-import { Drawer, DrawerContent, DrawerTrigger } from '@/components/ae/shared/arc/drawer/AeDrawerContent'
+import { Drawer, DrawerContent, DrawerTrigger } from '@/components/ae/shared/base-ui/drawer/drawer'
 import { timestampIso } from '@/lib/ui/format-time'
 import type { MoneyDocumentView } from '@/lib/server/money-documents.functions'
 import type {
@@ -93,7 +93,7 @@ function CreditDocumentRowActions({ document, documentActions, onOpenDocument, r
         : undefined
   return (
     <div className="arc-credit-document-row-actions">
-      <DrawerTrigger asChild>
+      <DrawerTrigger render={
         <ArcButton
           type="button"
           variant="secondary"
@@ -107,7 +107,7 @@ function CreditDocumentRowActions({ document, documentActions, onOpenDocument, r
         >
           View details
         </ArcButton>
-      </DrawerTrigger>
+      } />
       {document.state === 'issued' && onOpenDocument !== undefined ? (
         <ArcButton
           type="button"
@@ -150,12 +150,7 @@ function CreditDocumentDetails({ document, documentActions, onOpenDocument, onSi
       title={`${label} details`}
       description={document.documentRef}
       className="arc-credit-document-drawer"
-      onCloseAutoFocus={event => {
-        const target = finalFocus()
-        if (target === null) return
-        event.preventDefault()
-        target.focus({ preventScroll: true })
-      }}
+      finalFocus={finalFocus}
     >
       <div className="arc-credit-document-detail-stack">
         <AeFactList facts={documentFacts(document)} className="arc-credit-document-detail-facts" />

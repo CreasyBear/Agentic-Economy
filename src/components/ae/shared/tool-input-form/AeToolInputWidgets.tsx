@@ -14,7 +14,7 @@ import {
 } from '@rjsf/utils'
 import type { BaseInputTemplateProps, WidgetProps } from '@rjsf/utils'
 
-import { Checkbox } from '@/components/arc/checkbox/checkbox'
+import { Checkbox } from '@/components/ae/shared/base-ui/checkbox/checkbox'
 import { Input } from '@/components/arc/input/input'
 import { Textarea } from '@/components/arc/textarea/textarea'
 

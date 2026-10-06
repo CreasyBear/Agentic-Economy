@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 
 import { SpendingLimitInputs } from '@/components/ae/shared/SpendingLimitInputs'
 import { Button } from '@/components/arc/button/button'
-import { Drawer, DrawerContent } from '@/components/ae/shared/arc/drawer/AeDrawerContent'
+import { Drawer, DrawerContent } from '@/components/ae/shared/base-ui/drawer/drawer'
 import { MultiStepForm } from '@/components/arc/blocks/multi-step-form/multi-step-form'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import type { AgentAccessKeyIssueResult, IssuedAgentAccessReveal } from '@/modules/agent-access/issue-key.contracts'
@@ -79,19 +79,25 @@ export function AeConnectAgentWizardDialog({
   const presentation = wizardPresentation(view, step)
 
   return (
-    <Drawer open={open} onOpenChange={wizard.handleOpenChange}>
+    <Drawer
+      open={open}
+      onOpenChange={(nextOpen, eventDetails) => {
+        if (!nextOpen && eventDetails.reason === 'outside-press') {
+          const target = eventDetails.event.target
+          if (target instanceof Element && target.closest('[role="alertdialog"]') !== null) {
+            eventDetails.cancel()
+            return
+          }
+        }
+        wizard.handleOpenChange(nextOpen)
+      }}
+    >
       <DrawerContent
         side="right"
         title="Issue a manual Agent key"
         description="Choose access, review it, then save the one-time secret in your client."
         className="arc-connect-agent-drawer"
         data-slot="dialog-content"
-        onInteractOutside={event => {
-          const target = event.target
-          if (target instanceof Element && target.closest('[role="alertdialog"]') !== null) {
-            event.preventDefault()
-          }
-        }}
       >
         <form onSubmit={(event) => {
           event.preventDefault()

@@ -5,7 +5,7 @@ import { SlidersHorizontal } from 'lucide-react'
 import { AeActionLink } from '@/components/ae/shared/action-link/AeActionLink'
 import { Button } from '@/components/arc/button/button'
 import { Input } from '@/components/arc/input/input'
-import { Drawer, DrawerContent, DrawerTrigger } from '@/components/ae/shared/arc/drawer/AeDrawerContent'
+import { Drawer, DrawerContent, DrawerTrigger } from '@/components/ae/shared/base-ui/drawer/drawer'
 import { x402DirectoryFilterSchema, type X402DirectoryFilters } from '@/modules/market/x402-directory'
 
 type Props = { search: X402DirectoryFilters; onApply: (filters: X402DirectoryFilters) => void }
@@ -14,11 +14,13 @@ export function DirectoryFilters({ search, onApply }: Props) {
   const [open, setOpen] = useState(false)
   const count = [search.network, search.provider, search.maxUsdPrice].filter(value => value !== undefined).length
   return <Drawer open={open} onOpenChange={setOpen}>
-    <DrawerTrigger asChild>
-      <Button type="button" variant="secondary" className="min-h-touch rounded-full sm:min-h-10">
-        <SlidersHorizontal className="size-4" /> Filters{count > 0 ? ` (${count})` : ''}
-      </Button>
-    </DrawerTrigger>
+    <DrawerTrigger
+      render={
+        <Button type="button" variant="secondary" className="min-h-touch rounded-full sm:min-h-10">
+          <SlidersHorizontal className="size-4" /> Filters{count > 0 ? ` (${count})` : ''}
+        </Button>
+      }
+    />
       <DrawerContent className="arc-market-filters" title="Filter Tools" description="Search the directory by network, provider or maximum price per Call.">
         {open ? <FilterForm search={search} onApply={filters => { onApply(filters); setOpen(false) }} /> : null}
       </DrawerContent>

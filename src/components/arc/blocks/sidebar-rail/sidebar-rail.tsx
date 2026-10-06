@@ -5,7 +5,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { LazyMotion, domMax, m, useReducedMotion } from "motion/react";
 
-import { Drawer, DrawerContent } from "../../drawer/Drawer";
+import { Drawer, DrawerContent } from "@/components/ae/shared/base-ui/drawer/drawer";
 import { motionTokens } from "../../lib/motion-tokens";
 import styles from "./sidebar-rail.module.css";
 

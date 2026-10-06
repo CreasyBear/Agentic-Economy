@@ -6,7 +6,7 @@ import './TaxProfileComposition.css'
 
 import { AeAlert as Alert } from '@/components/ae/shared/arc/alert/AeAlert'
 import { Button } from '@/components/arc/button/button'
-import { Checkbox } from '@/components/arc/checkbox/checkbox'
+import { Checkbox } from '@/components/ae/shared/base-ui/checkbox/checkbox'
 import { Input } from '@/components/arc/input/input'
 import { toast } from '@/lib/ui/toast'
 import { formatAbnDisplay, isValidAbn, normalizeAbn } from '@/modules/money/public'

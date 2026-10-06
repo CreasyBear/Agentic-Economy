@@ -66,12 +66,6 @@ vi.mock('@/components/ae/layout/AePublicPage', () => ({
 import '@/routes/support'
 
 afterEach(cleanup)
-function activateTab(name: RegExp | string) {
-  const tab = screen.getByRole('tab', { name })
-  fireEvent.mouseDown(tab, { button: 0 })
-  fireEvent.click(tab)
-}
-
 
 describe('/support', () => {
   it('returns people to authoritative records without inventing a retry', () => {
@@ -99,10 +93,10 @@ describe('/support', () => {
     renderRoute()
     expect(screen.getByRole('link', { name: /Email support \(opens email app\)/ }).getAttribute('href')).toBe('mailto:support@aecon.ai')
     expect(screen.getByText('Do not include credentials, raw inputs or private results.')).toBeTruthy()
-    activateTab(/^Private support/)
+    fireEvent.click(screen.getByRole('tab', { name: /^Private support/ }))
     expect(screen.getByRole('link', { name: 'Request a listing correction' }).getAttribute('href')).toBe('/privacy/remove-business')
     expect(screen.getByRole('link', { name: 'Review Provider requirements' }).getAttribute('href')).toBe('/for-providers')
-    activateTab(/^Developer issue/)
+    fireEvent.click(screen.getByRole('tab', { name: /^Developer issue/ }))
     expect(screen.getByRole('link', { name: /Open a public developer issue/ }).getAttribute('href')).toBe(
       'https://github.com/CreasyBear/Agentic-Economy/issues/new/choose',
     )
@@ -113,7 +107,7 @@ describe('/support', () => {
 
   it('discloses advanced diagnostics with the configured canonical origin', () => {
     renderRoute()
-    activateTab(/^Agent connection/)
+    fireEvent.click(screen.getByRole('tab', { name: /^Agent connection/ }))
     expect(screen.queryByRole('button', { name: 'Copy diagnostic command' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Advanced connection diagnostics' }))
     expect(screen.getByText('ae doctor --base-url "https://ae.example"')).toBeTruthy()
@@ -147,7 +141,7 @@ describe('/support', () => {
     renderRoute({ callRef: validCallRef })
     const initialHref = screen.getByRole('link', { name: /Email support \(opens email app\)/ }).getAttribute('href')
     for (const name of [/^Agent connection/, /^Private support/, /^Developer issue/, /^Current status/]) {
-      activateTab(name)
+      fireEvent.click(screen.getByRole('tab', { name }))
       expect(screen.getByText(`Referenced Call: ${validCallRef}`)).toBeTruthy()
       expect(screen.getByRole('link', { name: /Email support \(opens email app\)/ }).getAttribute('href')).toBe(initialHref)
       expect(screen.getAllByRole('tabpanel')).toHaveLength(1)

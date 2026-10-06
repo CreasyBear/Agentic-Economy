@@ -12,7 +12,7 @@ import {
   type AeRecordTableRowAction,
 } from '@/components/ae/operator/AeOperatorDataTable'
 import { formatCreditAmount } from '@/components/ae/console/owner-credit-format'
-import { Drawer, DrawerContent } from '@/components/ae/shared/arc/drawer/AeDrawerContent'
+import { Drawer, DrawerContent } from '@/components/ae/shared/base-ui/drawer/drawer'
 import { formatTimestamp, timestampIso } from '@/lib/ui/format-time'
 import { formatCurrencyAmount } from '@/modules/money/public'
 import type {
@@ -332,12 +332,7 @@ export function CreditReconciliationRecords({
       <DrawerContent
         title="Reconciliation case"
         description="Recorded difference, affected scope and evidence."
-        onCloseAutoFocus={event => {
-          const target = finalFocus()
-          if (target === null) return
-          event.preventDefault()
-          target.focus({ preventScroll: true })
-        }}
+        finalFocus={finalFocus}
       >
         {selectedRecord === undefined ? null : (
           <div className="arc-credit-administration-detail-stack">
@@ -453,12 +448,7 @@ export function CreditProviderObligationRecords({
       <DrawerContent
         title="Provider obligation"
         description="Amounts, recorded state and evidence."
-        onCloseAutoFocus={event => {
-          const target = finalFocus()
-          if (target === null) return
-          event.preventDefault()
-          target.focus({ preventScroll: true })
-        }}
+        finalFocus={finalFocus}
       >
         {selectedRecord === undefined ? null : (
           <div className="arc-credit-administration-detail-stack">

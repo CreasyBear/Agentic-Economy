@@ -3,8 +3,8 @@ import { useEffect, useRef, useState } from 'react'
 import { FileCode2Icon } from 'lucide-react'
 
 import { Button } from '@/components/arc/button/button'
-import { Drawer, DrawerContent, DrawerTrigger } from '@/components/ae/shared/arc/drawer/AeDrawerContent'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/arc/tabs/tabs'
+import { Drawer, DrawerContent, DrawerTrigger } from '@/components/ae/shared/base-ui/drawer/drawer'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ae/shared/base-ui/tabs/tabs'
 import type { PublicToolDescriptor } from '@/modules/capability-supply/public'
 import {
   type MarketListingEvidenceProjection,
@@ -37,7 +37,6 @@ export function AeToolInspector({
 }>) {
   const model = toToolInspectorModel(tool)
   const fullInspectorRef = useRef<HTMLElement>(null)
-  const drawerReturnFocusRef = useRef<HTMLElement | null>(null)
   const [technicalContractOpen, setTechnicalContractOpen] = useState(false)
 
   useEffect(() => {
@@ -68,6 +67,7 @@ export function AeToolInspector({
   const researchPanel = (
     <Tabs
       defaultValue="overview"
+      animateContent={false}
       className="flex min-w-0 flex-col gap-0"
     >
       <div className="flex min-h-12 shrink-0 items-center justify-between gap-3 border-b border-border px-gutter">
@@ -75,18 +75,16 @@ export function AeToolInspector({
           <TabsTrigger value="overview" className="min-h-touch px-3">Overview</TabsTrigger>
           <TabsTrigger value="contract" className="min-h-touch px-3">Contract</TabsTrigger>
         </TabsList>
-        <DrawerTrigger asChild>
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            aria-label="Open schemas and references"
-            className="min-h-touch shrink-0"
-          >
-            <FileCode2Icon aria-hidden="true" />
-            <span>Schemas</span>
-          </Button>
-        </DrawerTrigger>
+        <DrawerTrigger render={<Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          aria-label="Open schemas and references"
+          className="min-h-touch shrink-0"
+        >
+          <FileCode2Icon aria-hidden="true" />
+          <span>Schemas</span>
+        </Button>} />
       </div>
 
       <TabsContent
@@ -132,16 +130,6 @@ export function AeToolInspector({
           title="Schemas and references"
           description="Exact transport, provenance, payment, data-use, effect, and JSON Schema facts for this Tool."
           closeLabel="Close schemas and references"
-          onOpenAutoFocus={() => {
-            const activeElement = document.activeElement
-            drawerReturnFocusRef.current = activeElement instanceof HTMLElement ? activeElement : null
-          }}
-          onCloseAutoFocus={event => {
-            event.preventDefault()
-            const returnTarget = drawerReturnFocusRef.current
-            drawerReturnFocusRef.current = null
-            if (returnTarget?.isConnected) returnTarget.focus({ preventScroll: true })
-          }}
         >
           <AeToolTechnicalContract tool={tool} />
         </DrawerContent>

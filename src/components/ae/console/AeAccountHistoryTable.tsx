@@ -12,7 +12,7 @@ import { AeEmptyState } from '@/components/ae/shared/arc/empty-state/AeEmptyStat
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button as ArcButton } from '@/components/arc/button/button'
-import { Drawer, DrawerContent } from '@/components/ae/shared/arc/drawer/AeDrawerContent'
+import { Drawer, DrawerContent } from '@/components/ae/shared/base-ui/drawer/drawer'
 import { Skeleton } from '@/components/arc/skeleton/skeleton'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { formatTimestamp } from '@/lib/ui/format-time'

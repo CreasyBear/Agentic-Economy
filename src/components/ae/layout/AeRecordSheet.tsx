@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 
 import { Button as ArcButton } from '@/components/arc/button/button'
-import { Drawer, DrawerContent } from '@/components/ae/shared/arc/drawer/AeDrawerContent'
+import { Drawer, DrawerContent } from '@/components/ae/shared/base-ui/drawer/drawer'
 import { AeFactList, type AeFact } from '@/components/ae/data/AeFactList'
 
 type AeRecordSheetProps = {

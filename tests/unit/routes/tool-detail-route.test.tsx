@@ -322,9 +322,7 @@ describe('/tools/$toolRef', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Close schemas and references' }))
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Schemas and references' })).toBeNull())
     await waitFor(() => expect(document.activeElement).toBe(trigger))
-    const contractTab = screen.getByRole('tab', { name: 'Contract' })
-    fireEvent.mouseDown(contractTab, { button: 0, ctrlKey: false })
-    fireEvent.click(contractTab)
+    fireEvent.click(screen.getByRole('tab', { name: 'Contract' }))
     const inlineTrigger = screen.getByRole('button', { name: 'Read the input JSON Schema' })
     inlineTrigger.focus()
     fireEvent.click(inlineTrigger)
@@ -437,7 +435,7 @@ describe('/tools/$toolRef', () => {
     fireEvent.mouseDown(contractTab, { button: 0, ctrlKey: false })
     fireEvent.click(contractTab)
     expect(within(inspector).getByRole('heading', { name: 'Parameters' })).toBeTruthy()
-    expect(document.activeElement).toBe(contractTab)
+    expect(document.activeElement).toBe(inspector)
 
     const secondTool = {
       ...tool,

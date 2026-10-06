@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { Button as ArcButton } from "@/components/arc/button/button";
-import { Drawer, DrawerContent, DrawerTrigger } from "@/components/ae/shared/arc/drawer/AeDrawerContent";
+import { Drawer, DrawerContent, DrawerTrigger } from '@/components/ae/shared/base-ui/drawer/drawer';
 import { AeSortableDataTable } from "@/components/ae/shared/sortable-data-table/AeSortableDataTable";
 import type { AeDataColumn } from "@/components/ae/shared/sortable-data-table/sortable-data-table.contracts";
 import type { SearchResult } from "@/modules/registry/tool-choice-contracts";
@@ -104,17 +104,10 @@ export function CanonicalSearchResults({ results, renderActions }: CanonicalSear
       sortable: false,
       render: (_value, item) => <div className="arc-canonical-actions">
         {renderActions(item)}
-        <DrawerTrigger asChild>
-          <ArcButton
-            type="button"
-            variant="secondary"
-            size="sm"
-            aria-label={`Inspect ${item.title}`}
-            onClick={() => setSelectedIdentity(identity(item))}
-          >
-            Inspect
-          </ArcButton>
-        </DrawerTrigger>
+        <DrawerTrigger
+          onClick={() => setSelectedIdentity(identity(item))}
+          render={<ArcButton type="button" variant="secondary" size="sm" aria-label={`Inspect ${item.title}`}>Inspect</ArcButton>}
+        />
       </div>,
     },
   ];

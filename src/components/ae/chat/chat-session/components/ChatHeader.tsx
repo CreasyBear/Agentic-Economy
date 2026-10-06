@@ -4,7 +4,8 @@ import { createPortal } from 'react-dom'
 
 import { ArcAiChatHeader } from '@/components/arc/blocks/ai-chat/ai-chat'
 import { AeActionLink } from '@/components/ae/shared/action-link/AeActionLink'
-import { Drawer, DrawerContent } from '@/components/ae/shared/arc/drawer/AeDrawerContent'
+import { Button } from '@/components/arc/button/button'
+import { Drawer, DrawerContent } from '@/components/ae/shared/base-ui/drawer/drawer'
 import { Input } from '@/components/arc/input/input'
 import { chatHistory, chatStageDetail, chatStageTitle } from '@/lib/public/chat-ia'
 

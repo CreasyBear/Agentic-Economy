@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import type { ComponentProps } from 'react'
 import {
   AlertTriangleIcon,
   CheckIcon,
@@ -11,11 +12,11 @@ import {
 } from 'lucide-react'
 
 import { Button } from '@/components/arc/button/button'
-import { Drawer, DrawerContent } from '@/components/ae/shared/arc/drawer/AeDrawerContent'
+import { Drawer, DrawerContent } from '@/components/ae/shared/base-ui/drawer/drawer'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Checkbox } from '@/components/arc/checkbox/checkbox'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/arc/tabs/tabs'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ae/shared/base-ui/tabs/tabs'
 import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
 import { cn } from '@/lib/utils'
 import { degrade } from '@/lib/observability/degrade'
@@ -130,8 +131,9 @@ export function AeKeyRevealDialog({
     }
   }
 
-  const handleOpenChange = (next: boolean) => {
+  const handleOpenChange: NonNullable<ComponentProps<typeof Drawer>['onOpenChange']> = (next, details) => {
     if (!next && !acknowledged) {
+      details.cancel()
       triggerDismissBlocked()
       return
     }
@@ -197,16 +199,6 @@ export function AeKeyRevealDialog({
           dismissBlocked && 'ring-2 ring-warning-ring',
         )}
         data-slot="dialog-content"
-        onEscapeKeyDown={event => {
-          if (acknowledged) return
-          event.preventDefault()
-          triggerDismissBlocked()
-        }}
-        onInteractOutside={event => {
-          if (acknowledged) return
-          event.preventDefault()
-          triggerDismissBlocked()
-        }}
       >
         <div className="arc-key-environment-row">
           <span className="arc-key-display-name">{reveal.displayName}</span>
@@ -296,6 +288,7 @@ export function AeKeyRevealDialog({
                 setDownloadStatus('')
                 setDownloadFailed(false)
               }}
+              animateContent={false}
               className="arc-key-tabs"
             >
               <TabsList className="arc-key-tab-list">
@@ -421,11 +414,16 @@ export function AeKeyRevealDialog({
         >
           <Checkbox
             id="agent-access-key-saved"
-            label="I have saved my secret key securely"
             ref={acknowledgeCheckboxRef}
             checked={acknowledged}
             onCheckedChange={(checked) => setAcknowledged(checked === true)}
           />
+          <Label
+            htmlFor="agent-access-key-saved"
+            className="arc-key-ack-label"
+          >
+            I have saved my secret key securely
+          </Label>
         </div>
         {dismissBlocked ? (
           <p role="alert" className="arc-key-dismiss-alert">
