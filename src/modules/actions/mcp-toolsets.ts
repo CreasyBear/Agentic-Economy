@@ -4,7 +4,7 @@ import type { AnyAction } from '@/modules/common/action'
 export const MCP_TOOLSETS = {
   discover: ['registry.tools.search', 'registry.tools.describe', 'registry.tools.compare', 'marketDemand.record', 'marketDemand.list', 'marketDemand.status', 'marketDemand.withdraw', 'market.savedTools.list', 'market.savedTools.save', 'market.savedTools.remove'],
   buy: ['tool.quote', 'tool.plan.quote', 'tool.plan.run', 'tool.plan.get', 'tool.plan.cancel', 'tool.call', 'tool.procure', 'journey.status', 'call.status', 'call.cancel', 'call.reconcile'],
-  account: ['agentAccess.whoami', 'agentAccess.balance', 'agentAccess.activity', 'call.list', 'funding.handoff.config', 'funding.handoff.create', 'funding.handoff.status'],
+  account: ['agentAccess.whoami', 'agentAccess.balance', 'agentAccess.activity', 'call.list', 'funding.handoff.config', 'funding.handoff.create', 'funding.handoff.status', 'feedback.submit'],
   provider: [
     'supply.calls', 'supply.connection.connect', 'supply.connection.detail',
     'supply.connection.list', 'supply.connection.reconnect', 'supply.connection.revoke',

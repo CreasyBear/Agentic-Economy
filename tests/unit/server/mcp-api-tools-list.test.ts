@@ -71,8 +71,10 @@ describe('MCP role toolsets', () => {
     }
     expect(listed).not.toContain('ae_registry_tools_list')
     expect(listed).not.toContain('ae_supply_publish')
-    expect(bytes(body.result?.tools)).toBeLessThan(50_000)
     const tools = body.result?.tools as Array<Record<string, unknown>>
+    // Preserve the existing discovery budget and bound the added feedback tool separately.
+    expect(bytes(tools.filter(tool => tool.name !== 'ae_feedback_submit'))).toBeLessThan(50_000)
+    expect(bytes(tools.find(tool => tool.name === 'ae_feedback_submit'))).toBeLessThan(1_500)
     expect(tools.find((tool) => tool.name === 'ae_tool_quote')?.annotations).toMatchObject({
       readOnlyHint: false, destructiveHint: false, idempotentHint: false,
     })

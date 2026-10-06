@@ -29,6 +29,7 @@ export const DiscoveryPublicSurfacePaths = [
   '/openapi.json',
   '/api/v1/release',
   '/api/v1/catalogue-status',
+  '/api/v1/feedback',
   '/sitemap.xml',
   TOOL_MARKET_SEARCH_PATH,
   TOOL_MARKET_LIST_PATH,

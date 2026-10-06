@@ -1,7 +1,7 @@
 import type { AeSiteUtilityDocumentSection } from '@/components/ae/website/utility-document.contracts'
 
 // Alpha draft: processor locations, remaining retention schedules and legal contact ownership need review.
-export const privacyLastUpdated = '4 October 2026'
+export const privacyLastUpdated = '6 October 2026'
 export const privacyTitle = 'Privacy policy.'
 export const privacyIntro = 'How Agentic Economy collects and uses data.'
 export const privacyOpening = 'This alpha notice describes information handled by the website, accounts, chat and Tool Calls. The alpha content and learning periods are set out below. Legal contact details, processor locations and schedules for other records remain under review.'
@@ -20,6 +20,7 @@ export const privacySections = [
       'Scheduled cleanup removes eligible Call content 30 days after final purchase resolution. Unresolved delivery, payment, reports, disputes or Provider obligations retain the evidence needed to resolve them. Unused Quote inputs are eligible for cleanup 24 hours after the Quote expires. Cleanup runs hourly and may need additional batches to finish.',
       'Inactive chat turns and saved search continuation content are eligible after 30 days, provided linked purchases are resolved. Active generation and unresolved purchases delay deletion. Chat titles expire after 30 days from their last update. Message deletion removes embeddings and releases file references; the chat component then keeps unreferenced files for a further 24-hour grace period before storage cleanup.',
       'Optional usefulness feedback records a bounded choice and reason, with no free-text comment, prompt or output. Feedback and content-free selection records are retained for 90 days. We use recent usefulness, no-match, failure, latency and cost signals to prioritise fixes and create redacted regression cases. Feedback does not request a refund; use the separate answer-report flow for that.',
+      'Separately, optional product feedback submitted through the API, MCP or CLI sends your explicit message to the AE team through PostHog, with pseudonymous Account and Agent attribution and release/environment metadata. Do not include credentials, personal information, Customer business data or Tool inputs and outputs. Product feedback follows the PostHog project’s retention settings, not the 90-day usefulness-feedback period; that vendor retention period remains unverified. Acceptance confirms ingestion, not review or a promised fix. CLI users can prevent feedback submission with DO_NOT_TRACK=1 or AE_DISABLE_ANALYTICS=1; this does not change the remote server’s analytics policy for other requests.',
       'Content expiry preserves purchase identities, original digests, receipts, settlement and other financial or security records on their separate schedules. Backups and independent Tool or model Providers have separate retention arrangements that are not established by this application cleanup. Do not assume every recipient or backup has deleted content when it expires in AE.',
     ],
   },

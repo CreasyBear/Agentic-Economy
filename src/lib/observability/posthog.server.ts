@@ -4,6 +4,7 @@ import { captureRouteException } from '@/lib/observability/capture-route-excepti
 import { readObservabilityServerConfig } from '@/lib/observability/config'
 import { buildFunnelEventProperties, type FunnelCaptureInput } from '@/lib/observability/funnel-event-props'
 import { sanitizeTelemetryValue } from '@/lib/observability/private-route-safety'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 let client: PostHog | undefined
 
@@ -70,6 +71,50 @@ export function captureServerGatewayEvent(
   })
 }
 
+/** Explicit feedback is the sole content-bearing event. Requires validated text
+ * and server-owned attribution. Ensures acceptance only after ingestion returns
+ * 2xx. No buffering, retries, diagnostic payloads or commercial writes. A failed
+ * or timed-out request is unconfirmed; the remote event may already exist.
+ * Executor uses this batch API directly. posthog-node 5.39 captureImmediate
+ * catches ingestion errors, so it cannot establish this acknowledgment. */
+export async function submitServerFeedback(input: Readonly<{
+  message: string
+  principalRef: string
+  accountRef: string
+}>): Promise<'accepted' | 'disabled' | 'unavailable'> {
+  const config = readObservabilityServerConfig()
+  if (!config.enabled || config.posthogKey === undefined) return 'disabled'
+  const digest = (kind: string, value: string) => canonicalDigest({ format: 'ae.product-feedback:v1', kind, value })
+  const body = JSON.stringify({
+    api_key: config.posthogKey,
+    batch: [{
+      uuid: crypto.randomUUID(), event: 'feedback_submitted',
+      distinct_id: digest('principal', input.principalRef), timestamp: new Date().toISOString(),
+      properties: {
+        message: input.message, accountRefDigest: digest('account', input.accountRef),
+        ae_environment: config.environment,
+        ...(config.release === undefined ? {} : { ae_release: config.release }),
+        $process_person_profile: false, $geoip_disable: true,
+      },
+    }],
+  })
+  try {
+    // Only deployment configuration selects this vendor; request data never supplies a URL.
+    const destination = new URL(`${config.posthogHost.replace(/\/+$/u, '')}/batch/`)
+    if (destination.protocol !== 'https:' || destination.username !== '' || destination.password !== ''
+      || destination.search !== '' || destination.hash !== '') return 'unavailable'
+    const { sendGuardedHttpRequest } = await import('@/modules/network-guard/server')
+    const response = await sendGuardedHttpRequest(new Request(destination, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body,
+      redirect: 'error', signal: AbortSignal.timeout(5_000),
+    }), 8 * 1024)
+    void response.body?.cancel().catch(() => {})
+    return response.ok ? 'accepted' : 'unavailable'
+  } catch {
+    // Network errors can contain request data. Return the bounded outcome without logging it.
+    return 'unavailable'
+  }
+}
 
 export async function shutdownPostHogServer(): Promise<void> {
   if (client === undefined) {

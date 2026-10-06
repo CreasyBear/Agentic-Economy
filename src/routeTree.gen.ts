@@ -93,6 +93,7 @@ import { Route as ApiV1AccountRouteImport } from './routes/api.v1.account'
 import { Route as ApiV1BusinessesRouteImport } from './routes/api.v1.businesses'
 import { Route as ApiV1CallsRouteImport } from './routes/api.v1.calls'
 import { Route as ApiV1CatalogueStatusRouteImport } from './routes/api.v1.catalogue-status'
+import { Route as ApiV1FeedbackRouteImport } from './routes/api.v1.feedback'
 import { Route as ApiV1MarketMetricsRouteImport } from './routes/api.v1.market-metrics'
 import { Route as ApiV1MarketRequestsRouteImport } from './routes/api.v1.market-requests'
 import { Route as ApiV1RegistryRouteImport } from './routes/api.v1.registry'
@@ -598,6 +599,11 @@ const ApiV1CallsRoute = ApiV1CallsRouteImport.update({
 const ApiV1CatalogueStatusRoute = ApiV1CatalogueStatusRouteImport.update({
   id: '/api/v1/catalogue-status',
   path: '/api/v1/catalogue-status',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1FeedbackRoute = ApiV1FeedbackRouteImport.update({
+  id: '/api/v1/feedback',
+  path: '/api/v1/feedback',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiV1MarketMetricsRoute = ApiV1MarketMetricsRouteImport.update({
@@ -1106,6 +1112,7 @@ export interface FileRoutesByFullPath {
   '/api/v1/businesses': typeof ApiV1BusinessesRouteWithChildren
   '/api/v1/calls': typeof ApiV1CallsRouteWithChildren
   '/api/v1/catalogue-status': typeof ApiV1CatalogueStatusRoute
+  '/api/v1/feedback': typeof ApiV1FeedbackRoute
   '/api/v1/market-metrics': typeof ApiV1MarketMetricsRoute
   '/api/v1/market-requests': typeof ApiV1MarketRequestsRouteWithChildren
   '/api/v1/registry': typeof ApiV1RegistryRouteWithChildren
@@ -1268,6 +1275,7 @@ export interface FileRoutesByTo {
   '/api/v1/businesses': typeof ApiV1BusinessesRouteWithChildren
   '/api/v1/calls': typeof ApiV1CallsRouteWithChildren
   '/api/v1/catalogue-status': typeof ApiV1CatalogueStatusRoute
+  '/api/v1/feedback': typeof ApiV1FeedbackRoute
   '/api/v1/market-metrics': typeof ApiV1MarketMetricsRoute
   '/api/v1/market-requests': typeof ApiV1MarketRequestsRouteWithChildren
   '/api/v1/registry': typeof ApiV1RegistryRouteWithChildren
@@ -1432,6 +1440,7 @@ export interface FileRoutesById {
   '/api/v1/businesses': typeof ApiV1BusinessesRouteWithChildren
   '/api/v1/calls': typeof ApiV1CallsRouteWithChildren
   '/api/v1/catalogue-status': typeof ApiV1CatalogueStatusRoute
+  '/api/v1/feedback': typeof ApiV1FeedbackRoute
   '/api/v1/market-metrics': typeof ApiV1MarketMetricsRoute
   '/api/v1/market-requests': typeof ApiV1MarketRequestsRouteWithChildren
   '/api/v1/registry': typeof ApiV1RegistryRouteWithChildren
@@ -1596,6 +1605,7 @@ export interface FileRouteTypes {
     | '/api/v1/businesses'
     | '/api/v1/calls'
     | '/api/v1/catalogue-status'
+    | '/api/v1/feedback'
     | '/api/v1/market-metrics'
     | '/api/v1/market-requests'
     | '/api/v1/registry'
@@ -1758,6 +1768,7 @@ export interface FileRouteTypes {
     | '/api/v1/businesses'
     | '/api/v1/calls'
     | '/api/v1/catalogue-status'
+    | '/api/v1/feedback'
     | '/api/v1/market-metrics'
     | '/api/v1/market-requests'
     | '/api/v1/registry'
@@ -1921,6 +1932,7 @@ export interface FileRouteTypes {
     | '/api/v1/businesses'
     | '/api/v1/calls'
     | '/api/v1/catalogue-status'
+    | '/api/v1/feedback'
     | '/api/v1/market-metrics'
     | '/api/v1/market-requests'
     | '/api/v1/registry'
@@ -2063,6 +2075,7 @@ export interface RootRouteChildren {
   ApiV1BusinessesRoute: typeof ApiV1BusinessesRouteWithChildren
   ApiV1CallsRoute: typeof ApiV1CallsRouteWithChildren
   ApiV1CatalogueStatusRoute: typeof ApiV1CatalogueStatusRoute
+  ApiV1FeedbackRoute: typeof ApiV1FeedbackRoute
   ApiV1MarketMetricsRoute: typeof ApiV1MarketMetricsRoute
   ApiV1MarketRequestsRoute: typeof ApiV1MarketRequestsRouteWithChildren
   ApiV1RegistryRoute: typeof ApiV1RegistryRouteWithChildren
@@ -2692,6 +2705,13 @@ declare module '@tanstack/react-router' {
       path: '/api/v1/catalogue-status'
       fullPath: '/api/v1/catalogue-status'
       preLoaderRoute: typeof ApiV1CatalogueStatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/feedback': {
+      id: '/api/v1/feedback'
+      path: '/api/v1/feedback'
+      fullPath: '/api/v1/feedback'
+      preLoaderRoute: typeof ApiV1FeedbackRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/v1/market-metrics': {
@@ -3584,6 +3604,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1BusinessesRoute: ApiV1BusinessesRouteWithChildren,
   ApiV1CallsRoute: ApiV1CallsRouteWithChildren,
   ApiV1CatalogueStatusRoute: ApiV1CatalogueStatusRoute,
+  ApiV1FeedbackRoute: ApiV1FeedbackRoute,
   ApiV1MarketMetricsRoute: ApiV1MarketMetricsRoute,
   ApiV1MarketRequestsRoute: ApiV1MarketRequestsRouteWithChildren,
   ApiV1RegistryRoute: ApiV1RegistryRouteWithChildren,
