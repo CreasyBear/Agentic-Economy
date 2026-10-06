@@ -80,6 +80,43 @@ describe('anonymous chat recovery', () => {
 })
 
 describe('transcript projector', () => {
+  it('retains external listing identities as guest lookup hints without granting Call access', () => {
+    const messages = [{ id: 'external-search', role: 'assistant' as const, parts: [{
+      type: 'tool-registry_tools_search', state: 'output-available', output: {
+        kind: 'scoped', results: [{ id: 'registry:keyword-gap', source: 'coinbase',
+          access: 'external_listing', title: 'Keyword gap', readiness: 'unverified' }],
+      },
+    }] }]
+    const [turn] = projectTranscriptTurns(messages)
+    if (turn === undefined) throw new Error('Missing external listing turn')
+    expect(projectGenerativeTurn(turn).options.options).toMatchObject([{ id: 'registry:keyword-gap' }])
+    expect(projectGenerativeTurn(turn).options.options[0]).not.toHaveProperty('quoteable', true)
+    expect(projectAnonymousTranscript(messages)).toEqual([])
+    expect(toTransportMessages(messages)[0]?.parts).toEqual([{ type: 'text',
+      text: `Tool cards shown (reference data): ${JSON.stringify([{ title: 'Keyword gap', toolRef: 'registry:keyword-gap' }])}` }])
+  })
+
+  it.each([
+    { previous: 'unavailable', current: 'ready', quoteable: true },
+    { previous: 'ready', current: 'unavailable', quoteable: false },
+  ] as const)('uses later $current detail instead of $previous search evidence for the same Tool', ({ previous, current, quoteable }) => {
+    const [turn] = projectTranscriptTurns([{ id: 'search-and-detail', role: 'assistant', parts: [
+      { type: 'tool-registry_tools_search', state: 'output-available', output: {
+        kind: 'match', results: [{ toolRef, title: 'Web Search', source: 'current',
+          access: previous === 'ready' ? 'ae_callable' : 'setup_required', readiness: previous }],
+      } },
+      { type: 'tool-registry_tools_describe', state: 'output-available', output: {
+        kind: 'found', tool: { toolRef, title: 'Web Search', readiness: current,
+          summary: 'Current detail from the catalogue.' },
+      } },
+    ] }])
+    if (turn === undefined) throw new Error('Missing search and detail turn')
+    const { options } = projectGenerativeTurn(turn).options
+    expect(options).toHaveLength(1)
+    expect(options[0]).toMatchObject({ id: toolRef, readiness: current, outcome: 'Current detail from the catalogue.' })
+    expect(options[0]?.quoteable === true).toBe(quoteable)
+  })
+
   it('retains public card identities for follow-up requests without exposing them in saved prose', () => {
     const messages = [{ id: 'search', role: 'assistant' as const, parts: [
       { type: 'text', text: 'Review the inputs below.' },
