@@ -127,6 +127,49 @@ describe('anonymous operation chat transport', () => {
     expect(body).not.toContain('tool_call')
   })
 
+  it('uses the first-turn native loop to normalize discovery and retain model explanation', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
+    const backend = convexTestWithMarketComponents()
+    await admitDiscoveredToolFixture(backend)
+    const answer = '**Timezone Converter** converts a local time between locations. Next: inspect its Tool card.'
+    const model = mockModel({ contentSteps: [
+      [{ type: 'tool-call', toolCallId: 'semantic-search', toolName: 'registry_tools_search', input: JSON.stringify({ query: 'timezone conversion', source: 'current' }) }],
+      [{ type: 'text', text: answer }],
+    ] })
+    const calls = vi.spyOn(model, 'doStream')
+    const observedQueries: string[] = []
+    const body = await backend.action(async ctx => {
+      const observedCtx = new Proxy(ctx, { get(target, property, receiver) {
+        if (property === 'runAction') return (...args: Parameters<ActionCtx['runAction']>) => {
+          if (getFunctionName(args[0]) === 'capabilityToolCatalog:searchInternal') observedQueries.push((args[1] as { query: string }).query)
+          return Reflect.apply(target.runAction, target, args)
+        }
+        return Reflect.get(target, property, receiver) as unknown
+      } }) as ActionCtx
+      return await (await streamAnonymousChatResponse(observedCtx, [{ role: 'user', content: 'I have clients in Perth and New York; help me align a local appointment time.' }], model)).text()
+    })
+    expect(calls.mock.calls[0]?.[0].tools).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'registry_tools_search' })]))
+    expect(observedQueries).toContain('timezone conversion')
+    expect(observedQueries).not.toContain('I have clients in Perth and New York; help me align a local appointment time.')
+    expect(body).toContain('semantic-search')
+    expect(body).toContain(answer)
+  })
+
+  it('keeps a context-grounded text-only guest follow-up without forcing another Tool', async () => {
+    const backend = convexTestWithMarketComponents()
+    const answer = 'A city forecast covers the weather for a specific location.'
+    const model = mockModel({ content: [{ type: 'text', text: answer }] })
+    const calls = vi.spyOn(model, 'doStream')
+    const body = await backend.action(async ctx => (await streamAnonymousChatResponse(ctx, [
+      { role: 'user', content: 'What is a city forecast?' },
+      { role: 'assistant', content: 'A city forecast is a prediction of weather for a location.' },
+      { role: 'user', content: 'Explain that in a sentence.' },
+    ], model)).text())
+    expect(calls.mock.calls[0]?.[0].toolChoice).toEqual({ type: 'auto' })
+    expect(body).toContain(answer)
+    expect(body).not.toContain('Search could not be completed')
+  })
+
   it('writes only one explanation after the immediate search cards', async () => {
     vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const backend = convexTestWithMarketComponents()

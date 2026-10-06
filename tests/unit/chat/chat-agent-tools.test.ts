@@ -253,6 +253,26 @@ describe('Tool chat Agent tools', () => {
       outcome: TOOL_CURRENCY.summary, quoteable: true }])
   })
 
+  it('reads an external detail without resolving or admitting its listing', async () => {
+    const id = `registry:${'c'.repeat(64)}`
+    const input = { fields: [{ name: 'q', path: 'q', location: 'queryParams', source: 'schema', type: 'string', required: true }], schemaJson: '{"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"q":{"type":"string"}}}' }
+    const runQuery = vi.fn(async () => ({ kind: 'found', item: { entry: { resource: 'https://provider.example/search', title: 'Search the web', description: 'Searches web pages', provider: 'Provider', input, output: { fields: [] }, prices: [] } } }))
+    const runAction = vi.fn(async () => { throw new Error('Read-only detail must not resolve or admit supply') })
+    const result = await invokeTool(createChatAgent(mockModel()), 'registry.tools.describe', toolCtx({ runQuery, runAction }), { toolRef: id })
+    const output: unknown = typeof result === 'string' ? JSON.parse(result) : result
+    expect(output).toMatchObject({ kind: 'external', tool: { id, toolRef: id, title: 'Search the web', access: 'external_listing', input } })
+    expect(runQuery).toHaveBeenCalledOnce()
+    expect(runAction).not.toHaveBeenCalled()
+  })
+
+  it('rejects a substituted reference before reading an explicitly selected detail', async () => {
+    const selected = `operation:v1:${'c'.repeat(64)}`
+    const runAction = vi.fn(async () => notFound)
+    const result = await invokeTool(createChatAgent(mockModel()), 'registry.tools.describe', toolCtx({ runAction }), { toolRef: OPERATION_REF }, [{ role: 'user', content: `Inspect Tool ${selected} with this exact title: "Selected Tool".` }])
+    expect(result).toMatchObject({ kind: 'chat_tool_refused', reason: 'selected_tool_mismatch' })
+    expect(runAction).not.toHaveBeenCalled()
+  })
+
   it('exports the canonical tools and bounded Agent defaults', () => {
     const agent = createChatAgent(mockModel(), AUTHORITY)
 

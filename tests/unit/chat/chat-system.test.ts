@@ -80,6 +80,37 @@ describe('anonymous chat recovery', () => {
 })
 
 describe('transcript projector', () => {
+  it('bounds visible choices across multiple completed searches to four', () => {
+    const [turn] = projectTranscriptTurns([{ id: 'many-searches', role: 'assistant', parts: ['a', 'b'].map(prefix => ({
+      type: 'tool-registry_tools_search', state: 'output-available', output: {
+        kind: 'match', results: Array.from({ length: 4 }, (_, index) => ({
+          toolRef: `operation:v1:${prefix}${String(index).repeat(63)}`, title: `Lookup ${prefix}${index}`,
+        })),
+      },
+    })) }])
+    if (turn === undefined) throw new Error('Missing search turn')
+    expect(projectGenerativeTurn(turn).options.options).toHaveLength(4)
+  })
+
+  it('keeps the latest explicit detail authoritative when a broad search finishes later', () => {
+    const choice = { toolRef, title: 'Lookup', source: 'current' }
+    const [turn] = projectTranscriptTurns([{ id: 'detail-search-order', role: 'assistant', parts: [
+      { type: 'tool-registry_tools_describe', state: 'output-available', output: {
+        kind: 'found', tool: { ...choice, readiness: 'ready', summary: 'Earlier detail' },
+      } },
+      { type: 'tool-registry_tools_describe', state: 'output-available', output: {
+        kind: 'found', tool: { ...choice, readiness: 'unavailable', summary: 'Latest detail' },
+      } },
+      { type: 'tool-registry_tools_search', state: 'output-available', output: {
+        kind: 'match', results: [{ ...choice, access: 'ae_callable', readiness: 'ready', summary: 'Broad search' }],
+      } },
+    ] }])
+    if (turn === undefined) throw new Error('Missing detail turn')
+    const options = projectGenerativeTurn(turn).options.options
+    expect(options).toMatchObject([{ id: toolRef, readiness: 'unavailable', outcome: 'Latest detail' }])
+    expect(options[0]?.quoteable === true).toBe(false)
+  })
+
   it('retains external listing identities as guest lookup hints without granting Call access', () => {
     const messages = [{ id: 'external-search', role: 'assistant' as const, parts: [{
       type: 'tool-registry_tools_search', state: 'output-available', output: {
