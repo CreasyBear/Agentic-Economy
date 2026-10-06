@@ -9,6 +9,7 @@ const runtime = vi.hoisted(() => ({ detail: undefined as unknown }))
 vi.mock('convex/react', () => ({ useQuery: () => runtime.detail }))
 
 import { ToolPanel } from '@/components/ae/chat/tool-panel/ToolPanel'
+import { ChatTranscript } from '@/components/ae/chat/ChatTranscript'
 import type { ToolPanelProps } from '@/components/ae/chat/tool-panel/tool-panel.contracts'
 import {
   PublicToolRegistrySchemaVersion,
@@ -101,6 +102,26 @@ function makeProps(overrides: Partial<ToolPanelProps> = {}): ToolPanelProps {
 afterEach(() => {
   cleanup()
   runtime.detail = undefined
+})
+
+it('places active input review after the answer and before Tool evidence without submitting a Call', () => {
+  runtime.detail = undefined
+  const onRunTool = vi.fn(async () => ({ kind: 'submitted' as const }))
+  render(<ChatTranscript messages={[{ id: 'answer', role: 'assistant', parts: [
+    { type: 'tool-registry_tools_search', state: 'output-available', output: {
+      kind: 'match', results: [{ toolRef: TOOL_REF, title: 'Lookup', source: 'current',
+        access: 'ae_callable', readiness: 'ready' }],
+    } },
+    { type: 'text', text: '**Lookup supports your request.**' },
+  ] }]} onRunTool={onRunTool} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Review inputs' }))
+  const answer = screen.getByRole('region', { name: 'Answer' })
+  const panel = screen.getByRole('region', { name: 'Review Lookup' })
+  const options = screen.getByRole('region', { name: 'Options' })
+  expect(answer.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+  expect(panel.compareDocumentPosition(options) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+  expect(screen.getAllByRole('region', { name: 'Review Lookup' })).toHaveLength(1)
+  expect(onRunTool).not.toHaveBeenCalled()
 })
 
 it('keeps loading detail in the loading view without Run or credit callbacks', () => {

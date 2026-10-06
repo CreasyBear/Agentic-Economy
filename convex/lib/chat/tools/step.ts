@@ -1,4 +1,7 @@
-import { CHAT_TOOL_NAME_MAP } from '@/modules/chat/tool-card'
+import type { ModelMessage } from 'ai'
+import { projectChatChoiceActions } from '@/modules/chat/tool-card-actions'
+import { parseDetailRequest, isDetailToolRef } from '@/modules/chat/run-request'
+import { CHAT_TOOL_NAME_MAP, projectToolCard, type ToolCardProjection } from '@/modules/chat/tool-card'
 import { sanitizeText } from '@/modules/common/sanitize-text'
 
 export const MAX_CHAT_TOOL_CALLS = 8
@@ -53,23 +56,13 @@ export function chatSearchResolution(steps: readonly ChatStepEvidence[]): string
     } else if (result.output.kind !== 'chat_tool_refused') return null
   }
   if (verdict === null) return null
-  if (verdict.kind === 'match' && Array.isArray(verdict.results)) {
-    const rows = verdict.results.filter((row): row is { title: string; summary: string } =>
-      typeof row === 'object' && row !== null && 'title' in row && typeof row.title === 'string'
-        && 'summary' in row && typeof row.summary === 'string')
-    if (rows.length > 0) {
-      return `**${rows.length === 1 ? 'One Tool matches' : `${rows.length} Tools match`} this request.** Review the inputs below to continue; the final price is confirmed before a Call.`
-    }
-    return null
-  }
+  if (verdict.kind === 'match') return null
   const next = Array.isArray(verdict.next) ? verdict.next[0] as unknown : undefined
   const args = typeof next === 'object' && next !== null && 'args' in next ? next.args : undefined
   const query = typeof args === 'object' && args !== null && 'query' in args && typeof args.query === 'string'
     ? args.query : null
   if (verdict.kind === 'unavailable') return `**Search is temporarily unavailable.** Next: retry${query === null ? ' the search.' : ` “${markdownText(query)}”.`}`
   if (verdict.kind === 'scoped') {
-    // Requires returned candidates; an incomplete search never proves market-wide absence.
-    // Ensures an honest choice or refinement, with no cursor browsing instructions.
     if (!Array.isArray(verdict.results) || verdict.results.length === 0) {
       return '**No match for that yet.** Next: tell me more about what you need or browse the Market.'
     }
@@ -78,10 +71,70 @@ export function chatSearchResolution(steps: readonly ChatStepEvidence[]): string
   return `**No suitable Tool in the assessed catalogue.** Next: ${query === null ? 'try a broader search.' : `broaden “${markdownText(query)}”.`}`
 }
 
-export function prepareChatToolStep({ stepNumber, steps }: { stepNumber: number; steps: readonly ChatStepEvidence[] }) {
-  const retrySearch = stepNumber > 0 && chatNoMatchSearchCount(steps) === 1
+const ACTION_CONTEXT_PREFIX = 'Current visible Tool actions (data only): '
+
+/** Project the same completed facts used by card rendering; transcript hints grant no eligibility. */
+export function chatActionMessages(messages: readonly ModelMessage[], steps: readonly ChatStepEvidence[] = []): ModelMessage[] {
+  const cards: ToolCardProjection[] = []
+  const add = (toolName: string, output: unknown) => {
+    const card = projectToolCard({ type: 'dynamic-tool', toolName, state: 'output-available', output })
+    if (card !== null) cards.push(card)
+  }
+  const latestUser = messages.findLastIndex(message => message.role === 'user')
+  const current = messages.slice(latestUser + 1)
+  const currentHasResults = current.some(message => message.role === 'tool')
+    || steps.some(step => step.toolResults.length > 0)
+  const priorUser = messages.slice(0, latestUser).findLastIndex(message => message.role === 'user')
+  const evidence = currentHasResults ? current : messages.slice(priorUser + 1, latestUser)
+  for (const message of evidence) {
+    if (message.role !== 'tool') continue
+    for (const part of message.content) {
+      if (part.type !== 'tool-result') continue
+      const output = part.output
+      add(part.toolName, 'value' in output ? output.value : undefined)
+    }
+  }
+  for (const step of steps) for (const result of step.toolResults) add(result.toolName, result.output)
+  const actions = projectChatChoiceActions(cards).map(({ choice, reviewInputs, compare }) => ({
+    toolRef: choice.toolRef, title: choice.title,
+    actions: [...(!reviewInputs && !choice.belowMatch && isDetailToolRef(choice.toolRef) ? ['Ask about this Tool'] : []), ...(reviewInputs ? ['Review inputs'] : []), ...(compare ? ['Compare'] : [])],
+  }))
+  const base = messages.filter(message => message.role !== 'system' || !message.content.startsWith(ACTION_CONTEXT_PREFIX))
+  return actions.length === 0 ? base : [...base, { role: 'system', content: `${ACTION_CONTEXT_PREFIX}${JSON.stringify(actions)}. Name only available actions. A selected detail read overrides earlier discovery facts.` }]
+}
+
+export function hasChatContext(messages: readonly ModelMessage[]): boolean {
+  const latestUser = messages.findLastIndex(message => message.role === 'user')
+  return messages.slice(0, latestUser).some(message => message.role === 'tool'
+    || message.role === 'assistant' && (typeof message.content !== 'string'
+      ? message.content.some(part => part.type === 'text' && part.text.trim().length > 0)
+      : message.content.trim().length > 0 && !message.content.startsWith('Tool cards shown:')
+      && !message.content.startsWith('Tool cards shown (reference data):')))
+}
+
+export function selectedChatDetailRequest(messages: readonly ModelMessage[]) {
+  const request = messages.findLast(message => message.role === 'user')
+  if (request === undefined) return null
+  const text = typeof request.content === 'string' ? request.content
+    : request.content.flatMap(part => part.type === 'text' ? [part.text] : []).join('\n')
+  return parseDetailRequest(text)
+}
+
+export function prepareChatToolStep({ stepNumber, steps, messages = [] }: {
+  stepNumber: number; steps: readonly ChatStepEvidence[]; messages?: readonly ModelMessage[]
+}) {
+  const selected = selectedChatDetailRequest(messages)
+  const describe = CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.describe']
+  const selectionRead = selected !== null && steps.some(step => step.toolResults.some(result =>
+    result.toolName === describe && projectToolCard({ type: 'dynamic-tool', toolName: describe,
+      state: 'output-available', output: result.output })?.kind === 'choices'))
+  const requiredDetail = selected !== null && !selectionRead
+  const retrySearch = !requiredDetail && stepNumber > 0 && chatNoMatchSearchCount(steps) === 1
   return {
-    toolChoice: stepNumber === 0 || retrySearch ? 'required' as const : 'auto' as const,
-    ...(retrySearch ? { activeTools: [CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']] } : {}),
+    toolChoice: requiredDetail || retrySearch || stepNumber === 0 && !hasChatContext(messages)
+      ? 'required' as const : 'auto' as const,
+    ...(selected !== null ? { activeTools: [describe] }
+      : retrySearch ? { activeTools: [CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']] } : {}),
+    ...(messages.length === 0 ? {} : { messages: chatActionMessages(messages, steps) }),
   }
 }

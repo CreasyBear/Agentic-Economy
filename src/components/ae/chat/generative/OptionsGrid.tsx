@@ -14,7 +14,7 @@ export function OptionsGrid({ view, onSelect, onCompare, onReview, openToolRef, 
             recommended={view.recommendedId === option.id}
             compared={view.comparedIds.includes(option.id)}
             selected={view.selectedId === option.id}
-            multipleOptions={view.options.length > 1}
+            multipleOptions={view.options.filter(option => option.selectable).length > 1}
             readOnly={readOnly}
             {...(onSelect === undefined ? {} : { onSelect })}
             {...(onCompare === undefined ? {} : { onCompare })}

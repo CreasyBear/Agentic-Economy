@@ -108,6 +108,23 @@ describe('anonymous chat recovery', () => {
 })
 
 describe('transcript projector', () => {
+  it('projects comparison-only results as the same current choices used by model actions', () => {
+    const refs = [toolRef, `operation:v1:${'b'.repeat(64)}`]
+    const [turn] = projectTranscriptTurns([{ id: 'compare-only', role: 'assistant', parts: [{
+      type: 'tool-registry_tools_compare', state: 'output-available', output: { kind: 'ok',
+        tools: refs.map((reference, index) => ({ toolRef: reference, title: `Lookup ${index}`,
+          access: 'ae_callable', readiness: 'ready' })),
+      },
+    }] }])
+    if (turn === undefined) throw new Error('Missing comparison turn')
+    const view = projectGenerativeTurn(turn)
+    expect(view.options.options.map(option => option.id)).toEqual(refs)
+    expect(view.comparison?.options.map(option => option.id)).toEqual(refs)
+    expect(projectChatChoiceActions(turn.tools)).toMatchObject(refs.map(reference => ({
+      choice: { toolRef: reference }, toolId: 'registry.tools.compare', reviewInputs: true, compare: true,
+    })))
+  })
+
   it('bounds visible choices across multiple completed searches to four', () => {
     const [turn] = projectTranscriptTurns([{ id: 'many-searches', role: 'assistant', parts: ['a', 'b'].map(prefix => ({
       type: 'tool-registry_tools_search', state: 'output-available', output: {
@@ -154,9 +171,9 @@ describe('transcript projector', () => {
     if (turn === undefined) throw new Error('Missing detail turn')
     const options = projectGenerativeTurn(turn).options.options
     expect(options).toMatchObject([{ id: toolRef, readiness: 'unavailable', outcome: 'Latest detail' }])
-    expect(options[0]?.quoteable === true).toBe(false)
+    expect(options[0]?.reviewInputs === true).toBe(false)
     expect(projectChatChoiceActions(turn.tools)).toMatchObject([{ toolId: 'registry.tools.describe',
-      reviewInputs: false, compare: true, choice: { toolRef, readiness: 'unavailable' } }])
+      reviewInputs: false, compare: false, choice: { toolRef, readiness: 'unavailable' } }])
   })
 
   it.each(['id with spaces', 'id\nwith-control', 'x'.repeat(201)])('excludes unbounded external identity %s from transport', id => {
@@ -178,16 +195,16 @@ describe('transcript projector', () => {
     const [turn] = projectTranscriptTurns(messages)
     if (turn === undefined) throw new Error('Missing external listing turn')
     expect(projectGenerativeTurn(turn).options.options).toMatchObject([{ id: 'registry:keyword-gap' }])
-    expect(projectGenerativeTurn(turn).options.options[0]).not.toHaveProperty('quoteable', true)
+    expect(projectGenerativeTurn(turn).options.options[0]).not.toHaveProperty('reviewInputs', true)
     expect(projectAnonymousTranscript(messages)).toEqual([])
     expect(toTransportMessages(messages)[0]?.parts).toEqual([{ type: 'text',
       text: `Tool cards shown (reference data): ${JSON.stringify([{ title: 'Keyword gap', toolRef: 'registry:keyword-gap' }])}` }])
   })
 
   it.each([
-    { previous: 'unavailable', current: 'ready', quoteable: true },
-    { previous: 'ready', current: 'unavailable', quoteable: false },
-  ] as const)('uses later $current detail instead of $previous search evidence for the same Tool', ({ previous, current, quoteable }) => {
+    { previous: 'unavailable', current: 'ready', reviewInputs: true },
+    { previous: 'ready', current: 'unavailable', reviewInputs: false },
+  ] as const)('uses later $current detail instead of $previous search evidence for the same Tool', ({ previous, current, reviewInputs }) => {
     const [turn] = projectTranscriptTurns([{ id: 'search-and-detail', role: 'assistant', parts: [
       { type: 'tool-registry_tools_search', state: 'output-available', output: {
         kind: 'match', results: [{ toolRef, title: 'Web Search', source: 'current',
@@ -202,7 +219,7 @@ describe('transcript projector', () => {
     const { options } = projectGenerativeTurn(turn).options
     expect(options).toHaveLength(1)
     expect(options[0]).toMatchObject({ id: toolRef, readiness: current, outcome: 'Current detail from the catalogue.' })
-    expect(options[0]?.quoteable === true).toBe(quoteable)
+    expect(options[0]?.reviewInputs === true).toBe(reviewInputs)
   })
 
   it('retains public card identities for follow-up requests without exposing them in saved prose', () => {
@@ -446,13 +463,13 @@ describe('transcript projector', () => {
     })
     const transcript = turns[0]
     if (transcript === undefined) throw new Error('missing_transcript')
-    const unquoteable = projectGenerativeTurn({
+    const unavailableOptions = projectGenerativeTurn({
       ...transcript,
       tools: transcript.tools.map((card) => card.kind === 'choices' && card.toolId === 'registry.tools.search'
         ? { ...card, choices: card.choices.map((choice) => ({ ...choice, callable: false })) }
         : card),
     })
-    expect(unquoteable.options).not.toHaveProperty('recommendedId')
+    expect(unavailableOptions.options).not.toHaveProperty('recommendedId')
     expect(search?.kind === 'choices' ? search.count : undefined).toBe(1)
     expect(inspection?.kind === 'inspect' ? inspection.facts : undefined).toEqual([
       { label: 'Decision price', value: 'A$1.99' },

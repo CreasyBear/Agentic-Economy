@@ -42,17 +42,31 @@ describe('completed chat facts', () => {
     expect(answer).toContain('Do not send another Call')
   })
 
+  it('lets a completed selected detail control recovery after broader search facts', () => {
+    const toolRef = `operation:v1:${'a'.repeat(64)}`
+    const search = CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']
+    const describe = CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.describe']
+    const answer = completedChatFacts([{ toolResults: [
+      { toolName: search, output: { kind: 'match', results: [{ toolRef, title: 'Old ready choice', source: 'current', access: 'ae_callable', readiness: 'ready' }] } },
+      { toolName: describe, output: { kind: 'found', tool: { toolRef, title: 'Current unavailable detail', healthStatus: 'degraded' } } },
+    ] }])
+    expect(answer).toContain('Current unavailable detail')
+    expect(answer).not.toContain('Old ready choice')
+    expect(answer).not.toContain('Review inputs')
+    expect(answer).not.toContain('Compare')
+  })
+
   it('answers from a saved search when narration never arrived', () => {
     const search = CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']
     const answer = factsFromSavedTurn([{
       role: 'tool',
       content: [{
         type: 'tool-result', toolName: search, toolCallId: 'search-1',
-        output: { type: 'json', value: { kind: 'match', results: [{ title: 'Weather Current', summary: 'Live city weather' }] } },
+        output: { type: 'json', value: { kind: 'match', results: [{ id: `operation:v1:${'a'.repeat(64)}`, toolRef: `operation:v1:${'a'.repeat(64)}`, source: 'current', access: 'ae_callable', readiness: 'ready', title: 'Weather Current', summary: 'Live city weather' }] } },
       }],
     }])
-    expect(answer).toContain('One Tool matches this request')
-    expect(answer).toContain('Review the inputs below')
+    expect(answer).toContain('Weather Current')
+    expect(answer).toContain('Review inputs')
     expect(answer).not.toMatch(/couldn't finish/i)
   })
 })

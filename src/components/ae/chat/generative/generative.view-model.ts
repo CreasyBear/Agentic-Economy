@@ -1,6 +1,8 @@
 import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import type { ToolObjectView } from '@/components/ae/shared/object-family.contracts'
 import { toolCardState, toolChoiceReadinessLabel, type ToolCardProjection, type ToolCardRecommendation } from '@/modules/chat/tool-card'
+import { projectChatChoiceActions } from '@/modules/chat/tool-card-actions'
+import { isDetailToolRef } from '@/modules/chat/run-request'
 import type {
   ComparisonCellView, ComparisonRowView, ComparisonTableView, OptionView,
   OptionsGridView, SourcesInlineView, WorkDisclosureView,
@@ -18,7 +20,7 @@ export function projectOptionsFromCard(
   recommendation?: ToolCardRecommendation,
 ): OptionsGridView {
   if (card.kind !== 'choices') return { options: [], comparedIds: [] }
-  const options = card.choices.map((choice): OptionView => {
+  const options = projectChatChoiceActions([card]).map(({ choice, reviewInputs }): OptionView => {
     const object = listings.find(({ listing }) => listing.canonicalToolRef.kind === 'present' && listing.canonicalToolRef.value === choice.toolRef)
     const listing = object?.listing
     const readiness = listing?.facts.readiness
@@ -61,16 +63,15 @@ export function projectOptionsFromCard(
       ...(seller === undefined ? {} : { seller }),
       selectable: !choice.belowMatch
         && (listing === undefined || listing.canonicalToolRef.kind === 'present'),
-      // Describing an admitted Tool can open input review. The panel still reads
-      // fresh detail and validates authority before offering a Call.
-      ...((choice.callable === true || (card.toolId === 'registry.tools.describe' && choice.readiness !== 'unavailable'))
-        && !choice.belowMatch ? { quoteable: true } : {}),
+      detailRequestable: isDetailToolRef(choice.toolRef),
+      ...(choice.access === 'external_listing' ? { source: 'External listing · not callable through Agentic Economy' } : {}),
+      ...(reviewInputs ? { reviewInputs: true } : {}),
       ...(Object.keys(facts).length === 0 ? {} : { facts }),
     }
   })
   const recommendedOption = recommendation === undefined
     ? undefined
-    : options.find((option) => option.id === recommendation.toolRef && option.quoteable === true)
+    : options.find((option) => option.id === recommendation.toolRef && option.reviewInputs === true)
   return {
     comparedIds: [],
     ...(recommendedOption === undefined || recommendation === undefined ? {} : {
@@ -116,7 +117,7 @@ export function projectWorkFromCards(cards: readonly ToolCardProjection[]): Work
   const summary = [
     found.size > 0 ? `Found ${found.size} tool${found.size === 1 ? '' : 's'}` : '',
     external.size > 0 ? `${external.size} external listing${external.size === 1 ? '' : 's'} to inspect` : '',
-    searched.length > 0 && found.size === 0 && external.size === 0 ? 'No Tool established' : '',
+    searched.length > 0 && found.size === 0 && external.size === 0 ? 'Search found no matching Tools' : '',
     latestComparison?.kind === 'choices' ? `Compared ${latestComparison.choices.length}` : '',
   ].filter(Boolean).join(' · ') || `${cards.length} step${cards.length === 1 ? '' : 's'}`
   return {

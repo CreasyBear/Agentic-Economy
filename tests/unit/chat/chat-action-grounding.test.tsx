@@ -7,7 +7,9 @@ import { projectGenerativeTurn } from '@/components/ae/chat/presentation'
 import { AnswerBlock } from '@/components/ae/chat/generative/AnswerBlock'
 import { OptionsGrid } from '@/components/ae/chat/generative/OptionsGrid'
 import { ChatTranscript } from '@/components/ae/chat/ChatTranscript'
-import { chatSearchResolution } from '../../../convex/lib/chat/tools/step'
+import { chatActionMessages } from '../../../convex/lib/chat/tools/step'
+import { completedChatFacts } from '../../../convex/lib/chat/generate/completedFacts'
+import { formatDetailRequest } from '@/modules/chat/run-request'
 
 afterEach(cleanup)
 
@@ -33,19 +35,47 @@ const selectedMessages = [{ id: 'selected', role: 'assistant' as const, parts: [
   },
 }] }]
 
-it('carries the selected reference and bounded title through the existing text callback', () => {
+it('carries exact detail identity through the callback while displaying a friendly question', () => {
   const onSuggest = vi.fn()
-  render(<ChatTranscript messages={selectedMessages} onSuggest={onSuggest} />)
+  const { rerender } = render(<ChatTranscript messages={selectedMessages} onSuggest={onSuggest} />)
   fireEvent.click(screen.getByRole('button', { name: 'Ask about this Tool' }))
   expect(onSuggest).toHaveBeenCalledExactlyOnceWith(
     `Inspect Tool ${selectedRef} with this exact title: "Shared title".`,
   )
+  rerender(<ChatTranscript messages={[{ id: 'question', role: 'user', parts: [{
+    type: 'text', text: onSuggest.mock.calls[0]?.[0],
+  }] }]} />)
+  expect(screen.getByRole('article', { name: 'You' })).toHaveTextContent('Tell me more about Shared title')
+  expect(screen.getByRole('article', { name: 'You' })).not.toHaveTextContent(selectedRef)
 })
 
 it('offers no enabled Ask action when the transcript has no suggestion handler', () => {
   render(<ChatTranscript messages={selectedMessages} />)
   const ask = screen.queryByRole('button', { name: 'Ask about this Tool' })
   if (ask !== null) expect(ask).toBeDisabled()
+})
+
+it.each(['answered', 'failed', 'unanswered'] as const)('keeps selected detail uneditable when %s while preserving retry', state => {
+  const request = formatDetailRequest(selectedRef, 'Shared title')
+  const onEditQuestion = vi.fn(), onRetryQuestion = vi.fn()
+  const failure = { type: 'data-chat-failure', data: { reason: 'generation_failed' } }
+  const { rerender } = render(<ChatTranscript onEditQuestion={onEditQuestion} onRetryQuestion={onRetryQuestion}
+    messages={[{ id: 'question', role: 'user', parts: [{ type: 'text', text: request },
+      ...(state === 'failed' ? [failure] : [])] },
+    ...(state === 'unanswered' ? [] : [{ id: 'answer', role: 'assistant' as const,
+      parts: [{ type: 'text', text: '**The selected Tool details.**' }, ...(state === 'failed' ? [failure] : [])] }])]} />)
+  expect(screen.queryByRole('button', { name: /Edit/iu })).not.toBeInTheDocument()
+  expect(onEditQuestion).not.toHaveBeenCalled()
+  if (state === 'unanswered') {
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(onRetryQuestion).toHaveBeenCalledOnce()
+  }
+  rerender(<ChatTranscript onEditQuestion={onEditQuestion} messages={[
+    { id: 'ordinary', role: 'user', parts: [{ type: 'text', text: 'Explain this Tool' }] },
+    { id: 'answer', role: 'assistant', parts: [{ type: 'text', text: '**Tool details.**' }] },
+  ]} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Edit question' }))
+  expect(onEditQuestion).toHaveBeenCalledExactlyOnceWith('Explain this Tool')
 })
 
 it.each(['found', 'external'])('discloses %s external inspection and never promotes it to input review', kind => {
@@ -94,7 +124,7 @@ it('keeps legacy opaque external listings inspectable without an invalid detail 
 it.each([
   { readiness: 'unavailable', access: 'setup_required', canReview: false },
   { readiness: 'ready', access: 'ae_callable', canReview: true },
-] as const)('keeps search narration consistent with the $readiness Tool card', ({ readiness, access, canReview }) => {
+] as const)('keeps model guidance and fallback narration consistent with the $readiness Tool card', ({ readiness, access, canReview }) => {
   const output = {
     kind: 'match',
     results: [{
@@ -105,8 +135,10 @@ it.each([
     }],
   }
   const toolName = CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']
-  const markdown = chatSearchResolution([{ toolResults: [{ toolName, output }] }])
+  const steps = [{ toolResults: [{ toolName, output }] }]
+  const markdown = completedChatFacts(steps)
   if (markdown === null) throw new Error('Search did not produce an answer')
+  const modelActions = JSON.stringify(chatActionMessages([], steps))
   const card = projectToolCard({ type: `tool-${toolName}`, state: 'output-available', output })
   if (card === null) throw new Error('Search did not produce a Tool card')
   const turn = projectGenerativeTurn({ id: 'serp', role: 'assistant', text: markdown, tools: [card], blocks: [] })
@@ -116,10 +148,15 @@ it.each([
   </>)
   expect(screen.getByRole('link', { name: 'Web Search (SERP)' })).toHaveAttribute('href', `/tools/operation%3Av1%3A${'a'.repeat(64)}`)
   const answer = screen.getByRole('region', { name: 'Answer' })
+  expect(modelActions).not.toContain('Compare')
   if (canReview) {
+    expect(modelActions).toContain('Review inputs')
+    expect(modelActions).not.toContain('Ask about this Tool')
+    expect(screen.queryByRole('button', { name: 'Ask about this Tool' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Review inputs' })).toBeEnabled()
     expect(answer).toHaveTextContent(/review (?:the )?inputs/iu)
   } else {
+    expect(modelActions).not.toContain('Review inputs')
     expect(screen.getByRole('button', { name: 'Ask about this Tool' })).toBeEnabled()
     expect(screen.queryByRole('button', { name: 'Review inputs' })).not.toBeInTheDocument()
     expect(answer).not.toHaveTextContent(/review (?:the )?inputs/iu)

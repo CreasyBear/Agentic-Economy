@@ -85,6 +85,13 @@ const admitHttp = makeFunctionReference<'mutation', {
   serviceAuth: CustomerRequestServiceAssertion
 }, Readonly<{ ok: boolean; retryAfter?: number }>>('rateLimit:admitHttp')
 
+function streamedText(body: string): string {
+  return body.split('\n').filter(line => line.startsWith('data: {'))
+    .map(line => JSON.parse(line.slice(6)) as UIMessageChunk)
+    .filter((chunk): chunk is Extract<UIMessageChunk, { type: 'text-delta' }> => chunk.type === 'text-delta')
+    .map(chunk => chunk.delta).join('')
+}
+
 describe('anonymous operation chat transport', () => {
   it.each([
     { narration: '**Timezone Converter** converts between timezones. Next: review its inputs.', expected: 'converts between timezones' },
@@ -152,7 +159,7 @@ describe('anonymous operation chat transport', () => {
     expect(observedQueries).toContain('timezone conversion')
     expect(observedQueries).not.toContain('I have clients in Perth and New York; help me align a local appointment time.')
     expect(body).toContain('semantic-search')
-    expect(body).toContain(answer)
+    expect(streamedText(body)).toContain(answer)
   })
 
   it('keeps a context-grounded text-only guest follow-up without forcing another Tool', async () => {
@@ -166,28 +173,30 @@ describe('anonymous operation chat transport', () => {
       { role: 'user', content: 'Explain that in a sentence.' },
     ], model)).text())
     expect(calls.mock.calls[0]?.[0].toolChoice).toEqual({ type: 'auto' })
-    expect(body).toContain(answer)
+    expect(streamedText(body)).toContain(answer)
     expect(body).not.toContain('Search could not be completed')
   })
 
-  it('writes only one explanation after the immediate search cards', async () => {
+  it('writes only the native final explanation after completed search cards', async () => {
     vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const backend = convexTestWithMarketComponents()
     await admitDiscoveredToolFixture(backend)
     const answer = '**Timezone Converter** may fit this request. Next: review its inputs.'
-    const model = mockModel({ content: [{ type: 'text', text: answer }] })
+    const model = mockModel({ contentSteps: [
+      [{ type: 'tool-call', toolCallId: 'native-search', toolName: 'registry_tools_search', input: JSON.stringify({ query: 'timezone conversion', source: 'current' }) }],
+      [{ type: 'text', text: answer }],
+    ] })
     const body = await backend.action(async ctx => {
       const response = await streamAnonymousChatResponse(ctx,
         [{ role: 'user', content: 'Find a timezone converter' }], model)
       return await response.text()
     })
     expect(body.match(/"type":"text-start"/gu)).toHaveLength(1)
-    expect(body).toContain(answer)
-    expect(body).toContain('immediate-search')
+    expect(streamedText(body)).toContain(answer)
+    expect(body).toContain('native-search')
   })
 
   it('does not turn unsupported lookup results into a verified Tool recommendation', async () => {
-    // Exercise model-led recovery when immediate catalogue lookup cannot run.
     vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', undefined)
     const backend = convexTestWithMarketComponents()
     const model = mockModel({ contentSteps: [
@@ -205,7 +214,7 @@ describe('anonymous operation chat transport', () => {
     expect(calls.mock.calls[0]?.[0].toolChoice).toEqual({ type: 'required' })
     expect(calls.mock.lastCall?.[0].tools).toBeUndefined()
   })
-  it('rejects invented Tool recommendations after immediate retrieval', async () => {
+  it('rejects an unsupported first-turn recommendation without completed facts', async () => {
     vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const backend = convexTestWithMarketComponents()
     const inventedRef = `operation:v1:${'a'.repeat(64)}`
@@ -218,9 +227,9 @@ describe('anonymous operation chat transport', () => {
       return await response.text()
     })
     expect(calls).toHaveBeenCalledOnce()
-    expect(calls.mock.lastCall?.[0].tools).toBeUndefined()
+    expect(calls.mock.lastCall?.[0].tools).toBeDefined()
     expect(body).not.toContain(inventedRef)
-    expect(body).toContain('registry_tools_search')
+    expect(body).toContain('Search could not be completed')
   })
   it('reads a guest next page without a model-supplied query or cursor', async () => {
     const backend = convexTestWithMarketComponents()
@@ -242,7 +251,6 @@ describe('anonymous operation chat transport', () => {
   })
 
   it('streams a single fallback message when the required lookup yields no answer', async () => {
-    // Exercise model-led recovery when immediate catalogue lookup cannot run.
     vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', undefined)
     const backend = convexTestWithMarketComponents()
     const model = mockModel({ contentSteps: [
@@ -257,7 +265,7 @@ describe('anonymous operation chat transport', () => {
       return await response.text()
     })
     expect(calls.mock.calls[0]?.[0].toolChoice).toEqual({ type: 'required' })
-    expect(calls.mock.lastCall?.[0].tools).toBeUndefined()
+    expect(calls.mock.lastCall?.[0].tools).toBeDefined()
     expect(body.match(/"type":"start"/gu)).toHaveLength(1)
     expect(body.match(/"type":"finish"/gu)).toHaveLength(1)
   })
@@ -271,12 +279,11 @@ describe('anonymous operation chat transport', () => {
       return await response.text()
     })
     expect(calls).toHaveBeenCalledOnce()
-    expect(calls.mock.lastCall?.[0].tools).toBeUndefined()
+    expect(calls.mock.lastCall?.[0].tools).toBeDefined()
     expect(body.match(/"type":"start"/gu)).toHaveLength(1)
     expect(body.match(/"type":"finish"/gu)).toHaveLength(1)
   })
   it('does not present exploratory planning as the guest answer', async () => {
-    // Exercise model-led recovery when immediate catalogue lookup cannot run.
     vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', undefined)
     const backend = convexTestWithMarketComponents()
     const model = mockModel({ contentSteps: [
@@ -298,17 +305,21 @@ describe('anonymous operation chat transport', () => {
       .map(line => JSON.parse(line.slice(6)) as UIMessageChunk)
       .filter((chunk): chunk is Extract<UIMessageChunk, { type: 'text-delta' }> => chunk.type === 'text-delta')
       .map(chunk => chunk.delta).join('')
-    expect(calls).toHaveBeenCalledTimes(3)
+    expect(calls).toHaveBeenCalledTimes(2)
     expect(text).not.toContain('Let me search another page.')
     expect(text).toContain('Weather Current')
     expect(text).toContain('health')
     expect(body.match(/"type":"start"/gu)).toHaveLength(1)
   })
-  it('returns immediate Tool facts instead of exploratory planning', async () => {
+  it('returns completed native Tool facts instead of exploratory planning', async () => {
     vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const backend = convexTestWithMarketComponents()
     await admitDiscoveredToolFixture(backend)
-    const model = mockModel({ content: [{ type: 'text', text: 'Let me search another page for a timezone Tool.' }] })
+    const model = mockModel({ contentSteps: [
+      [{ type: 'tool-call', toolCallId: 'native-search', toolName: 'registry_tools_search', input: JSON.stringify({ query: 'timezone conversion', source: 'current' }) }],
+      [{ type: 'text', text: 'Let me search another page for a timezone Tool.' }],
+      [{ type: 'text', text: 'Let me search another page for a timezone Tool.' }],
+    ] })
     const calls = vi.spyOn(model, 'doStream')
     const body = await backend.action(async ctx => {
       const response = await streamAnonymousChatResponse(ctx,
@@ -319,11 +330,11 @@ describe('anonymous operation chat transport', () => {
       .map(line => JSON.parse(line.slice(6)) as UIMessageChunk)
       .filter((chunk): chunk is Extract<UIMessageChunk, { type: 'text-delta' }> => chunk.type === 'text-delta')
       .map(chunk => chunk.delta).join('')
-    expect(calls).toHaveBeenCalledOnce()
+    expect(calls).toHaveBeenCalledTimes(3)
     expect(text).not.toContain('Let me search another page')
-    expect(text).toContain('One Tool matches this request')
+    expect(text).toContain('Timezone Converter')
     expect(body).toContain('Timezone')
-    expect(calls.mock.calls[0]?.[0].tools).toBeUndefined()
+    expect(calls.mock.calls[0]?.[0].tools).toBeDefined()
     expect(body.match(/"type":"start"/gu)).toHaveLength(1)
   })
   it('rejects non-answer control tokens after model-led recovery', async () => {
@@ -389,7 +400,7 @@ describe('anonymous operation chat transport', () => {
     expect(attempts).toBe(2)
   })
 
-  it('returns retrieved Tool facts when the catalogue explanation fails', async () => {
+  it('reports failure when the initial model fails before any completed lookup', async () => {
     vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const backend = convexTestWithMarketComponents()
     await admitDiscoveredToolFixture(backend)
@@ -400,8 +411,7 @@ describe('anonymous operation chat transport', () => {
         [{ role: 'user', content: 'Describe the timezone Tool' }], model)
       return await response.text()
     })
-    expect(body).toContain('Timezone')
-    expect(body).not.toContain('chat_stream_failed')
+    expect(body).toContain('data-chat-failure')
     expect(body).not.toContain('injected_post_tool_model_failure')
     expect(attempts).toHaveBeenCalledOnce()
   })
@@ -471,10 +481,7 @@ describe('anonymous operation chat transport', () => {
     ]))
 
     expect(streamed.body).not.toContain('A weather Operation is available.')
-    expect(streamed.queries).toEqual([
-      'x402DirectoryIndex:searchCompactInternal',
-      'x402DirectoryIndex:status',
-    ])
+    expect(streamed.queries).toEqual([])
     expect(streamed.mutations).toEqual([])
     expect(anonymousThreads.page).toEqual([])
     expect(sentinelThreads.page).toEqual([])

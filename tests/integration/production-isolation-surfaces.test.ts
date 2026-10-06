@@ -4,7 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { api, internal } from '../../convex/_generated/api'
 import type { IndexedSource } from '../../convex/lib/market/directoryIndex/contracts'
 import { reconcileReadyItems } from '../../convex/lib/capabilitySupply/facilitatorDiscovery/readyItems'
-import { retrieveImmediateTools } from '../../convex/lib/chat/tools/immediate'
 import { createChatAgent } from '../../convex/lib/chat/tools/agent'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { admitFacilitatorDiscoveryItems } from '@/modules/capability-supply/server'
@@ -81,7 +80,7 @@ describe('production surface isolation', () => {
     expect(await backend.run(ctx => ctx.db.query('capabilityPublications').collect())).toEqual([])
   })
 
-  it('hides sandbox listings across directory reads and both chat search paths even when the query requests sandbox', async () => {
+  it('hides sandbox listings across directory reads and native chat search even when the query requests sandbox', async () => {
     const backend = convexTestWithMarketComponents()
     await backend.mutation(internal.workloadCron.ensurePlatformWorkloadIdentities, {})
     const workload = await backend.query(internal.workloadCron.admit, { name: 'refresh Agentic Economy API registry' })
@@ -122,14 +121,6 @@ describe('production surface isolation', () => {
       .toEqual({ kind: 'not_found' })
     expect(await backend.query(internal.x402DirectoryIndex.firstEligiblePage, { generation }))
       .toEqual(['https://provider.test/base'])
-    const immediate = await backend.action(ctx => retrieveImmediateTools(ctx, 'sandbox weather'))
-    expect(immediate).toMatchObject({ kind: 'scoped', results: [{
-      title: 'Sandbox weather base', provider: 'provider.test',
-      host: 'provider.test', resourcePath: '/base', networkLabel: 'Base',
-      sourcePrice: '0.001 USDC', access: 'external_listing', readiness: 'unverified',
-      next: [{ action: 'describe-external', authority: 'public' }],
-    }] })
-    if (immediate?.kind === 'scoped') expect(immediate.results[0]).not.toHaveProperty('toolRef')
     const search = await backend.action(async ctx => {
       const agent = createChatAgent(mockModel())
       const tool = agent.options.tools?.registry_tools_search
@@ -140,7 +131,7 @@ describe('production surface isolation', () => {
       ])
     })
     expect(search).toMatchObject({ kind: 'scoped', results: [{ title: 'Sandbox weather base' }] })
-    expect(JSON.stringify([immediate, search])).not.toContain('base-sepolia')
+    expect(JSON.stringify(search)).not.toContain('base-sepolia')
   })
 
   it('refuses valid raw-key x402 ticket issuance and execution before any external consequence', async () => {

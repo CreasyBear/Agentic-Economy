@@ -26,16 +26,25 @@ already contain those links, and remove controls that do not apply real filters.
 Describe results also render their Tool card. Search and list retrieval stay within
 the four-card display bound so continuation cannot skip unseen results. Selecting
 two to four cards compares their reported facts immediately without another model
-request. A malformed model response containing control syntax is not a completed
-answer: preserve actual Tool evidence, replace the invalid prose and settle the
-turn through existing failure recovery when no usable evidence remains.
+request. Lead each reply with its answer, then active input review or the recorded
+Quote/Call result, supporting Tool evidence, and collapsed work details. After a
+completed Call with a recorded reference, earlier choices may collapse under
+Tool evidence; pending, approval-required, refused and uncertain results stay
+visible. Cards retain their exact detail links and attributed facts. Ask about
+this Tool submits the exact read-only selection while preserving another composer
+draft; its user message displays the selected title without transport syntax.
+This reuses the existing panels, callbacks and state owners, adding only display
+grouping and native disclosure. A malformed model response containing control
+syntax is not a completed answer: preserve actual Tool evidence, replace the
+invalid prose and settle the turn through existing failure recovery when no
+usable evidence remains.
 
 Use the installed Convex Agent tool loop for initial discovery and follow-ups.
 Carry at most four bounded Tool or external listing titles and references as
 untrusted lookup hints in the existing guest transcript;
 fresh detail reads remain authoritative, and persisted display prose stays clean.
-Write one explanation after the cards, including when the model falls back to
-catalogue facts. Signed-in history already retains its Tool context. All final
+Write one answer before the decision and evidence, including when the model falls
+back to catalogue facts. Signed-in history already retains its Tool context. All final
 answer instructions must agree that cards own the catalogue and comparison table.
 Chat has no pagination. A reply must provide
 a supported recommendation, explain that the returned evidence is insufficient,
@@ -104,7 +113,10 @@ verify these through the actual owner and guest surfaces after local tests.
 **Failure strategy.** Model timeout, invalid model output and unavailable reads
 are recoverable at the stream/read boundary. Chat provides a basic guarantee:
 completed facts can remain, but no unproven completion or automatic purchase
-retry is inferred. Cancellation terminates generation and must not save a new
+retry is inferred. Preserve each completed Tool call and result once: repair
+existing SDK message status and append only absent parts, retaining signed
+continuation data. Recovery never reexecutes a Tool to rebuild the transcript.
+Cancellation terminates generation and must not save a new
 completed answer. Broken internal invariants fail the turn through existing
 diagnostics rather than becoming a successful catalogue response. Reference
 validation is read-only and changes no market state on failure.
