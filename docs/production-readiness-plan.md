@@ -23,6 +23,43 @@ preserves contracts, exact revisions, failure drills and the progression from
 initial diagnosis through acceptance. Later evidence supersedes an earlier open
 item only where it proves that item; archiving the journal does not close it.
 
+## Native chat production check (6 October)
+
+PR #366 deployed matching web and Convex code at merge
+`31a06382c0644dfd0c66a794edf221fcbe606596`. The original signed-in request,
+"i am looking for serp keywords", returned a prose recommendation and a canonical
+Web Search, News & Page Reader card. Review inputs opened its required query field
+and enabled Run after input, showing an indicative A$0.02. This establishes the
+working model key, initial discovery and input-review path. The authorized Run
+was refused with `tool_not_ready` before a Call or charge. A fresh detail read of
+the previously successful Web Search (SERP) Tool reported unavailable/degraded,
+and its card exposed no Run action. No credit was spent in these checks.
+
+A separate signed-in conversation selected the external keyword-suggestions
+listing `registry:7c816af79a86719679534fda0a5d3a1172837d90e6922a77f4ee9f9ee2dda229`.
+Ask about this Tool preserved the unsent composer draft and returned the selected
+listing's seed-keyword inputs and search-volume/CPC output. Its card retained the
+same reference and external, non-callable status. It did not resolve or purchase
+the listing. A later price follow-up nevertheless suggested requesting a Quote
+and claimed that the unknown price covered the listed output. Local regression
+tests reproduce dropped action context across explanatory turns. The follow-up
+repair retains the latest read's purchase restrictions, keeps unknown terms
+unknown, and reports refused Quotes as refusals. Its hosted verification is
+separate from this PR #366 observation.
+
+Retrieval quality remains limited. A natural-language request for competitor
+keyword gaps returned no candidates; a follow-up using "keyword gap" returned
+keyword suggestions alongside an irrelevant currency-gap listing. The answer
+correctly distinguished keyword suggestions from domain comparison, but this is
+not evidence of reliable semantic matching or Perplexity-level answer quality.
+
+Health returned 200. Payment readiness initially returned 503; one invocation of
+the existing admitted readiness refresh produced a 200 ready response. Catalogue
+freshness remained stale. This proves a successful fresh probe, not the cause of
+the earlier refusal or sustained readiness. Paid chat execution remains unverified
+for this release until a bounded Run completes with its original Call and payment
+records. The separate Base Sepolia acceptance item remains open.
+
 ## Two-node Plan acceptance (6 October)
 
 [PR #362](https://github.com/CreasyBear/Agentic-Economy/pull/362) passed the full

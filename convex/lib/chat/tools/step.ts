@@ -73,7 +73,12 @@ export function chatSearchResolution(steps: readonly ChatStepEvidence[]): string
 
 const ACTION_CONTEXT_PREFIX = 'Current visible Tool actions (data only): '
 
-/** Project the same completed facts used by card rendering; transcript hints grant no eligibility. */
+/**
+ * Requires completed Tool results in transcript order. Ensures the latest read
+ * remains available across explanatory turns and a new read replaces it.
+ * Invariant: external listings have no AE purchase path; unknown price stays
+ * unknown. Transcript hints grant no eligibility. With no facts, offer no action.
+ */
 export function chatActionMessages(messages: readonly ModelMessage[], steps: readonly ChatStepEvidence[] = []): ModelMessage[] {
   const cards: ToolCardProjection[] = []
   const add = (toolName: string, output: unknown) => {
@@ -84,7 +89,8 @@ export function chatActionMessages(messages: readonly ModelMessage[], steps: rea
   const current = messages.slice(latestUser + 1)
   const currentHasResults = current.some(message => message.role === 'tool')
     || steps.some(step => step.toolResults.length > 0)
-  const priorUser = messages.slice(0, latestUser).findLastIndex(message => message.role === 'user')
+  const priorResult = messages.slice(0, latestUser).findLastIndex(message => message.role === 'tool')
+  const priorUser = messages.slice(0, priorResult).findLastIndex(message => message.role === 'user')
   const evidence = currentHasResults ? current : messages.slice(priorUser + 1, latestUser)
   for (const message of evidence) {
     if (message.role !== 'tool') continue
@@ -97,10 +103,13 @@ export function chatActionMessages(messages: readonly ModelMessage[], steps: rea
   for (const step of steps) for (const result of step.toolResults) add(result.toolName, result.output)
   const actions = projectChatChoiceActions(cards).map(({ choice, reviewInputs, compare }) => ({
     toolRef: choice.toolRef, title: choice.title,
+    purchase: choice.access === 'external_listing' ? 'not_available_through_ae'
+      : reviewInputs ? 'review_required' : 'unavailable',
+    indicativePrice: choice.price ?? null,
     actions: [...(!reviewInputs && !choice.belowMatch && isDetailToolRef(choice.toolRef) ? ['Ask about this Tool'] : []), ...(reviewInputs ? ['Review inputs'] : []), ...(compare ? ['Compare'] : [])],
   }))
   const base = messages.filter(message => message.role !== 'system' || !message.content.startsWith(ACTION_CONTEXT_PREFIX))
-  return actions.length === 0 ? base : [...base, { role: 'system', content: `${ACTION_CONTEXT_PREFIX}${JSON.stringify(actions)}. Name only available actions. A selected detail read overrides earlier discovery facts.` }]
+  return [...base, { role: 'system', content: `${ACTION_CONTEXT_PREFIX}${JSON.stringify(actions)}. Name only available actions for these current choices. A selected detail read overrides earlier discovery facts. Detail inspection is read-only and cannot obtain a Quote or unlock a purchase. Never offer a Quote or Call for not_available_through_ae or unavailable. A null indicativePrice means unknown; output fields do not establish what a price includes. With no suitable action, ask a useful refinement instead of directing the user to an earlier refused Tool.` }]
 }
 
 export function hasChatContext(messages: readonly ModelMessage[]): boolean {

@@ -385,7 +385,7 @@ export async function streamDurableChatResponse(
         timeout: { totalMs: 12_000 },
         maxRetries: 0,
         ...(abortSignal === undefined ? {} : { abortSignal }),
-        instructions: `${agent.options.instructions} The tools are closed. Answer directly from completed tool results, not earlier narration. Open with a bold supported answer. The cards already show the catalogue and comparison: do not repeat them as a list or table. For a detail question, give up to three requested facts, name a material gap once, and finish with one "Next: ..." action. Do not promise another search.`,
+        instructions: `${agent.options.instructions} The tools are closed. Answer directly from completed tool results, not earlier narration. Open with a bold supported answer. The cards already show the catalogue and comparison: do not repeat them as a list or table. For a detail question, give up to three requested facts and name a material gap once. Include a next step only when a current available action advances the request. Do not promise another search.`,
       }, {
         storageOptions: { saveMessages: 'promptAndOutput' },
         saveStreamDeltas: { chunking: 'word', throttleMs: 100 },
