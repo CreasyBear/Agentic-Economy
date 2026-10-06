@@ -443,9 +443,7 @@ import type * as lib_chat_anonymous_request from "../lib/chat/anonymous/request.
 import type * as lib_chat_anonymous_stream from "../lib/chat/anonymous/stream.js";
 import type * as lib_chat_generate_completedFacts from "../lib/chat/generate/completedFacts.js";
 import type * as lib_chat_generate_contracts from "../lib/chat/generate/contracts.js";
-import type * as lib_chat_generate_immediateTurn from "../lib/chat/generate/immediateTurn.js";
 import type * as lib_chat_generate_modelCost from "../lib/chat/generate/modelCost.js";
-import type * as lib_chat_generate_recommend from "../lib/chat/generate/recommend.js";
 import type * as lib_chat_generate_run from "../lib/chat/generate/run.js";
 import type * as lib_chat_generate_stream from "../lib/chat/generate/stream.js";
 import type * as lib_chat_shares_contracts from "../lib/chat/shares/contracts.js";
@@ -464,7 +462,6 @@ import type * as lib_chat_tools_purchase from "../lib/chat/tools/purchase.js";
 import type * as lib_chat_tools_read from "../lib/chat/tools/read.js";
 import type * as lib_chat_tools_search from "../lib/chat/tools/search.js";
 import type * as lib_chat_tools_step from "../lib/chat/tools/step.js";
-import type * as lib_chat_tools_suitability from "../lib/chat/tools/suitability.js";
 import type * as lib_chat_turns_contentRetention from "../lib/chat/turns/contentRetention.js";
 import type * as lib_chat_turns_contracts from "../lib/chat/turns/contracts.js";
 import type * as lib_chat_turns_errors from "../lib/chat/turns/errors.js";
@@ -1250,9 +1247,7 @@ declare const fullApi: ApiFromModules<{
   "lib/chat/anonymous/stream": typeof lib_chat_anonymous_stream;
   "lib/chat/generate/completedFacts": typeof lib_chat_generate_completedFacts;
   "lib/chat/generate/contracts": typeof lib_chat_generate_contracts;
-  "lib/chat/generate/immediateTurn": typeof lib_chat_generate_immediateTurn;
   "lib/chat/generate/modelCost": typeof lib_chat_generate_modelCost;
-  "lib/chat/generate/recommend": typeof lib_chat_generate_recommend;
   "lib/chat/generate/run": typeof lib_chat_generate_run;
   "lib/chat/generate/stream": typeof lib_chat_generate_stream;
   "lib/chat/shares/contracts": typeof lib_chat_shares_contracts;
@@ -1271,7 +1266,6 @@ declare const fullApi: ApiFromModules<{
   "lib/chat/tools/read": typeof lib_chat_tools_read;
   "lib/chat/tools/search": typeof lib_chat_tools_search;
   "lib/chat/tools/step": typeof lib_chat_tools_step;
-  "lib/chat/tools/suitability": typeof lib_chat_tools_suitability;
   "lib/chat/turns/contentRetention": typeof lib_chat_turns_contentRetention;
   "lib/chat/turns/contracts": typeof lib_chat_turns_contracts;
   "lib/chat/turns/errors": typeof lib_chat_turns_errors;

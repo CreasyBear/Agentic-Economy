@@ -71,6 +71,7 @@ vi.mock('../presentation', async (importOriginal) => {
 
 import { useChatSession } from './useChatSession'
 import { readAnonymousSession, saveAnonymousSession } from './anonymous-session'
+import { formatDetailRequest } from '@/modules/chat/run-request'
 
 const baseProps = {
   threadId: null as string | null,
@@ -136,6 +137,37 @@ describe('useChatSession', () => {
     act(() => result.current.transcript.onEditQuestion?.('Find Sydney weather'))
     expect(result.current.composer.prompt).toBe('Find Sydney weather')
     expect(sendMessageMutationMock).not.toHaveBeenCalled()
+  })
+
+  it('submits selected detail once with its exact reference and preserves an unrelated composer draft', async () => {
+    authStateRef.current = { isAuthenticated: true, isLoading: false }
+    const { result } = renderHook(() => useChatSession({ ...baseProps, threadId: 'thread-owned' }))
+    const request = formatDetailRequest(`registry:${'a'.repeat(64)}`, 'Outside lookup')
+    act(() => result.current.composer.onPromptChange('A draft for another question'))
+    await act(async () => {
+      const ask = result.current.transcript.onSuggest
+      ask?.(request)
+      ask?.(request)
+    })
+    expect(sendMessageMutationMock).toHaveBeenCalledOnce()
+    expect(sendMessageMutationMock).toHaveBeenCalledWith({ data: expect.objectContaining({
+      threadId: 'thread-owned', prompt: request,
+    }) })
+    expect(result.current.composer.prompt).toBe('A draft for another question')
+    expect(result.current.composer.prompt).not.toContain('Inspect Tool')
+    expect(sendMessagesMock).not.toHaveBeenCalled()
+  })
+
+  it('keeps selected detail out of recovery editing and preserves its original text for retry', async () => {
+    const { result } = renderHook(() => useChatSession(baseProps))
+    const request = formatDetailRequest(`registry:${'a'.repeat(64)}`, 'Outside lookup')
+    act(() => result.current.composer.onPromptChange('Keep this draft'))
+    await act(async () => result.current.transcript.onSuggest?.(request))
+    expect(result.current.composer.onEditLast).toBeUndefined()
+    act(() => result.current.transcript.onEditQuestion?.(request))
+    expect(result.current.composer.prompt).toBe('Keep this draft')
+    expect(result.current.lastUserText()).toBe(request)
+    expect(sendMessagesMock).toHaveBeenCalledOnce()
   })
 
   it('loads the signed next page in the same thread without exposing its cursor or clearing a draft', async () => {

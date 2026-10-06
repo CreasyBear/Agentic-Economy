@@ -30,7 +30,8 @@ export type OptionView = Readonly<{
   readiness: 'ready' | 'unverified' | 'unavailable'
   seller?: Readonly<{ kind: 'provider' | 'host'; name: string }>
   selectable: boolean
-  quoteable?: boolean
+  detailRequestable?: boolean
+  reviewInputs?: boolean
   source?: string
   facts?: Readonly<Record<string, Readonly<{ value: string; source?: string }>>>
 }>

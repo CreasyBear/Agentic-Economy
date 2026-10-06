@@ -49,7 +49,7 @@ import { ToolPanel } from './tool-panel/ToolPanel'
 
 import { RecoveryNotice } from './recovery/RecoveryNotice'
 import { isRecord } from '@/modules/common/is-record'
-import { parseRunRequest } from '@/modules/chat/run-request'
+import { formatDetailRequest, parseDetailRequest, parseRunRequest } from '@/modules/chat/run-request'
 
 function readPersistedFailure(parts: readonly unknown[]): ChatPersistedFailure | undefined {
   for (const part of parts) {
@@ -268,6 +268,7 @@ export function ChatTranscript({
               const failure = failuresByTurn.get(turn.id)
               const canEditPrompt = previousPrompt !== undefined && onEditQuestion !== undefined
                 && parseRunRequest(previousPrompt) === null
+                && parseDetailRequest(previousPrompt) === null
               const selected = comparedByTurn[turn.id] ?? []
               const writing = generating && index === turns.length - 1
               const userPanelChoice = scopedPanelSelection.selectedByTurn[turn.id]
@@ -275,11 +276,11 @@ export function ChatTranscript({
                 : userPanelChoice === null ? undefined : userPanelChoice
               const activePanelOption = readOnly || view === null
                 ? undefined
-                : view.options.options.find(option => option.id === panelRef && option.quoteable)
+                : view.options.options.find(option => option.id === panelRef && option.reviewInputs)
               const closingRef = scopedPanelSelection.closingByTurn[turn.id]
               const closingPanelOption = readOnly || view === null || closingRef === undefined
                 ? undefined
-                : view.options.options.find(option => option.id === closingRef && option.quoteable)
+                : view.options.options.find(option => option.id === closingRef && option.reviewInputs)
               const panelOption = activePanelOption ?? closingPanelOption
               const panelOpen = activePanelOption !== undefined
               const panelId = panelOption === undefined ? undefined : `tool-panel-${turn.id}-${panelOption.id}`
@@ -287,112 +288,131 @@ export function ChatTranscript({
                 const ids = current[turn.id] ?? []
                 return { ...current, [turn.id]: ids.includes(id) ? ids.filter(value => value !== id) : ids.length < 4 ? [...ids, id] : ids }
               })
+              const detailRequest = turn.role === 'user' ? parseDetailRequest(turn.text) : null
+              const displayText = detailRequest === null ? turn.text : `Tell me more about ${detailRequest.title}`
+              const lastCall = turn.tools.findLast(card => card.toolId === 'tool.call')
+              const collapseEvidence = !bundle?.root && lastCall?.kind === 'execute'
+                && lastCall.state === 'completed' && lastCall.callRef !== undefined
+                && view !== null && (view.options.options.length > 0 || view.comparison !== null)
+              const supportingEvidence = view === null ? null : (
+                <>
+                  {bundle?.root ? <ChatOpenUiBundle node={bundle.root} tools={turn.tools}
+                    {...(onContinueSearch === undefined ? {} : { onContinueSearch })}
+                    {...(onRepeatSearch === undefined ? {} : { onRepeatSearch })}
+                    signedThread={ownerChatThreadId !== undefined}
+                    {...(continuation?.kind === 'choices' && continuation.next?.action === 'next-page'
+                      ? { cursorToRedact: continuation.next.args.cursor } : {})} /> : null}
+                  {view.options.options.length > 0 || view.comparison !== null ? null : <SourcesInline view={view.sources} />}
+                  {view.options.options.length === 0 ? null : (
+                    <>
+                      <OptionsGrid
+                        view={{ ...view.options, comparedIds: readOnly ? [] : selected }}
+                        {...(panelOpen && activePanelOption !== undefined ? { openToolRef: activePanelOption.id } : {})}
+                        {...(panelId === undefined ? {} : { panelId })}
+                        {...(readOnly ? { readOnly: true } : {
+                          onReview: (id: string) => openPanel(turn.id, id),
+                          ...(onSuggest === undefined ? {} : { onSelect: (id: string) => {
+                            const option = view.options.options.find(entry => entry.id === id)
+                            if (option?.detailRequestable) onSuggest(formatDetailRequest(option.id, option.name.slice(0, 200)))
+                          } }),
+                          onCompare: toggleCompare,
+                        })}
+                      />
+                      {readOnly || selected.length === 0 ? null : selected.length === 1
+                        ? <p role="status" className="text-sm text-muted-foreground">Choose one more Tool to compare.</p>
+                        : <ComparisonTable view={projectComparison(view.options.options.filter(option => selected.includes(option.id)))} />}
+                    </>
+                  )}
+                  {view.comparison ? <ComparisonTable view={view.comparison} /> : null}
+                  {continuation?.kind === 'choices' && continuation.next?.action === 'next-page'
+                    && !(bundle?.root && bundle.consumed.has(continuationIndex))
+                    ? <SearchNext next={continuation.next}
+                      {...(onContinueSearch === undefined ? {} : { onContinueSearch })}
+                      {...(onRepeatSearch === undefined ? {} : { onRepeatSearch })}
+                      signedThread={ownerChatThreadId !== undefined} /> : null}
+                </>
+              )
               return (
               <MessageScrollerItem key={turn.id} messageId={turn.id} scrollAnchor={turn.role === 'user'} className="min-w-0">
-                <ArcAiChatMessage role={turn.role} text={turn.text}>
+                <ArcAiChatMessage role={turn.role} text={displayText}>
                       {view === null ? (
                         <>
                           {readOnly || failure === undefined ? null : (
                             <RecoveryNotice reason={failure.reason} className="w-full max-w-prose"
-                              {...(turn.text.length > 0 && parseRunRequest(turn.text) === null && onEditQuestion !== undefined
+                              {...(turn.text.length > 0 && parseRunRequest(turn.text) === null
+                                && parseDetailRequest(turn.text) === null && onEditQuestion !== undefined
                                 ? { onEdit: () => onEditQuestion(turn.text) } : {})}
                               {...(failure.callRefs === undefined ? {} : { callRefs: failure.callRefs })}
                               {...(onNewChat === undefined ? {} : { onNewChat })} />
                           )}
                         </>
                       ) : (
-                        <div className="grid w-full min-w-0 gap-3">
-                          {writing ? <AnswerBlock view={{ markdown: prose, streaming: true }} /> : null}
-                          {writing ? null : <AnswerBlock view={{ markdown: prose }} />}
-                          {view.options.options.length === 0 && broadenStatus?.kind === 'status'
-                            && broadenStatus.next?.action === 'broaden' ? (
-                              <div className="flex flex-wrap items-center gap-2">
-                                <SearchNext next={broadenStatus.next} signedThread={ownerChatThreadId !== undefined} />
-                              </div>
-                            ) : null}
-                          {readOnly || failure === undefined ? null : (
-                            <RecoveryNotice reason={failure.reason} className="w-full max-w-prose"
-                              {...(failure.callRefs === undefined ? {} : { callRefs: failure.callRefs })}
-                              {...(canEditPrompt ? { onEdit: () => {
-                                if (previousPrompt !== undefined) onEditQuestion?.(previousPrompt)
-                              } } : {})}
-                              {...(onNewChat === undefined ? {} : { onNewChat })} />
-                          )}
+                        <div className="arc-market arc-chat arc-answer-turn">
+                          <div className="arc-answer-decision">
+                            {writing ? <AnswerBlock view={{ markdown: prose, streaming: true }} /> : null}
+                            {writing ? null : <AnswerBlock view={{ markdown: prose }} />}
+                            {view.options.options.length === 0 && broadenStatus?.kind === 'status'
+                              && broadenStatus.next?.action === 'broaden' ? (
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <SearchNext next={broadenStatus.next} signedThread={ownerChatThreadId !== undefined} />
+                                </div>
+                              ) : null}
+                            {readOnly || failure === undefined ? null : (
+                              <RecoveryNotice reason={failure.reason} className="w-full max-w-prose"
+                                {...(failure.callRefs === undefined ? {} : { callRefs: failure.callRefs })}
+                                {...(canEditPrompt ? { onEdit: () => {
+                                  if (previousPrompt !== undefined) onEditQuestion?.(previousPrompt)
+                                } } : {})}
+                                {...(onNewChat === undefined ? {} : { onNewChat })} />
+                            )}
+                            {panelOption === undefined || panelId === undefined ? null : (
+                              <ErrorBoundary
+                                key={`${panelScope}:${turn.id}:${panelOption.id}:${panelOpen}`}
+                                fallback={
+                                  <section id={panelId} data-open={panelOpen} aria-hidden={!panelOpen}
+                                    aria-label="Tool input" inert={!panelOpen}
+                                    className="grid gap-3 rounded-card border border-border bg-card p-4">
+                                    <p role="status" className="text-sm text-muted-foreground">{chatToolPanel.unavailable}</p>
+                                    <Button type="button" variant="secondary" className="min-h-touch"
+                                      onClick={() => closePanel(turn.id, panelOption.id, panelId)}>{chatToolPanel.cancel}</Button>
+                                  </section>
+                                }
+                              >
+                                <ToolPanel key={`${panelScope}:${turn.id}:${panelOption.id}`} panelId={panelId}
+                                  option={panelOption} message={previousPrompt ?? ''} open={panelOpen}
+                                  {...(panelOption.id === view.options.recommendedId && view.options.recommendedBy !== undefined
+                                    ? { recommendedBy: view.options.recommendedBy } : {})}
+                                  runMode={ownerChatEnabled && ownerChatThreadId !== undefined && onRunTool !== undefined ? 'run' : 'add_credit'}
+                                  generating={generating}
+                                  focusOnOpen={panelOpen && typeof userPanelChoice === 'string'}
+                                  onRun={intent => onRunTool === undefined
+                                    ? Promise.resolve({ kind: 'not_submitted', reason: 'chat_unavailable' })
+                                    : onRunTool(intent.toolRef, intent.input)}
+                                  onAddCredit={intent => onAddCredit?.(undefined, intent)}
+                                  onClose={() => closePanel(turn.id, panelOption.id, panelId)} />
+                              </ErrorBoundary>
+                            )}
+                            {turn.tools.map((card, cardIndex) => {
+                              if (bundle?.root && bundle.consumed.has(cardIndex)) return null
+                              if (card.kind === 'clarify') {
+                                const key = clarifyKey(turn.id, cardIndex)
+                                return <ChatTranscriptClarify key={key} card={card} answer={clarify.answers.get(key)}
+                                  hidePending={onClarifyAnswer !== undefined && clarify.pending?.key === key} />
+                              }
+                              return card.toolId === 'tool.quote' || card.toolId === 'tool.call'
+                                ? <ToolCard key={`${turn.id}-${card.toolId}-${cardIndex}`} projection={card} {...{ onAddCredit }} />
+                                : null
+                            })}
+                          </div>
+                          {collapseEvidence ? (
+                            <details className="arc-tool-evidence">
+                              <summary>Tool evidence</summary>
+                              <div className="arc-tool-evidence-content">{supportingEvidence}</div>
+                            </details>
+                          ) : supportingEvidence}
                           <WorkDisclosure view={view.work} />
-                          {bundle?.root ? <ChatOpenUiBundle node={bundle.root} tools={turn.tools}
-                            {...(onContinueSearch === undefined ? {} : { onContinueSearch })}
-                            {...(onRepeatSearch === undefined ? {} : { onRepeatSearch })}
-                            signedThread={ownerChatThreadId !== undefined}
-                            {...(continuation?.kind === 'choices' && continuation.next?.action === 'next-page'
-                              ? { cursorToRedact: continuation.next.args.cursor } : {})} /> : null}
-                          {view.options.options.length > 0 || view.comparison !== null ? null : <SourcesInline view={view.sources} />}
-                          {view.options.options.length === 0 ? null : (
-                            <>
-                              <OptionsGrid
-                                view={{ ...view.options, comparedIds: readOnly ? [] : selected }}
-                                {...(panelOpen && activePanelOption !== undefined ? { openToolRef: activePanelOption.id } : {})}
-                                {...(panelId === undefined ? {} : { panelId })}
-                                {...(readOnly ? { readOnly: true } : {
-                                  onReview: (id: string) => openPanel(turn.id, id),
-                                  onSelect: (id: string) => {
-                                    const option = view.options.options.find(entry => entry.id === id)
-                                    if (option) onSuggest?.(`Tell me more about ${option.name}`)
-                                  },
-                                  onCompare: toggleCompare,
-                                })}
-                              />
-                              {panelOption === undefined || panelId === undefined ? null : (
-                                <ErrorBoundary
-                                  key={`${panelScope}:${turn.id}:${panelOption.id}:${panelOpen}`}
-                                  fallback={
-                                    <section id={panelId} data-open={panelOpen} aria-hidden={!panelOpen}
-                                      aria-label="Tool input" inert={!panelOpen}
-                                      className="grid gap-3 rounded-card border border-border bg-card p-4">
-                                      <p role="status" className="text-sm text-muted-foreground">{chatToolPanel.unavailable}</p>
-                                      <Button type="button" variant="secondary" className="min-h-touch"
-                                        onClick={() => closePanel(turn.id, panelOption.id, panelId)}>{chatToolPanel.cancel}</Button>
-                                    </section>
-                                  }
-                                >
-                                  <ToolPanel key={`${panelScope}:${turn.id}:${panelOption.id}`} panelId={panelId}
-                                    option={panelOption} message={previousPrompt ?? ''} open={panelOpen}
-                                    {...(panelOption.id === view.options.recommendedId && view.options.recommendedBy !== undefined
-                                      ? { recommendedBy: view.options.recommendedBy } : {})}
-                                    runMode={ownerChatEnabled && ownerChatThreadId !== undefined && onRunTool !== undefined ? 'run' : 'add_credit'}
-                                    generating={generating}
-                                    focusOnOpen={panelOpen && typeof userPanelChoice === 'string'}
-                                    onRun={intent => onRunTool === undefined
-                                      ? Promise.resolve({ kind: 'not_submitted', reason: 'chat_unavailable' })
-                                      : onRunTool(intent.toolRef, intent.input)}
-                                    onAddCredit={intent => onAddCredit?.(undefined, intent)}
-                                    onClose={() => closePanel(turn.id, panelOption.id, panelId)} />
-                                </ErrorBoundary>
-                              )}
-                              {readOnly || selected.length === 0 ? null : selected.length === 1
-                                ? <p role="status" className="text-sm text-muted-foreground">Choose one more Tool to compare.</p>
-                                : <ComparisonTable view={projectComparison(view.options.options.filter(option => selected.includes(option.id)))} />}
-                            </>
-                          )}
-                          {view.comparison ? <ComparisonTable view={view.comparison} /> : null}
-                          {continuation?.kind === 'choices' && continuation.next?.action === 'next-page'
-                            && !(bundle?.root && bundle.consumed.has(continuationIndex))
-                            ? <SearchNext next={continuation.next}
-                              {...(onContinueSearch === undefined ? {} : { onContinueSearch })}
-                              {...(onRepeatSearch === undefined ? {} : { onRepeatSearch })}
-                              signedThread={ownerChatThreadId !== undefined} /> : null}
-                          {turn.tools.map((card, cardIndex) => {
-                            if (bundle?.root && bundle.consumed.has(cardIndex)) return null
-                            if (card.kind === 'clarify') {
-                              const key = clarifyKey(turn.id, cardIndex)
-                              return <ChatTranscriptClarify key={key} card={card} answer={clarify.answers.get(key)}
-                                hidePending={onClarifyAnswer !== undefined && clarify.pending?.key === key} />
-                            }
-                            return card.toolId === 'tool.quote' || card.toolId === 'tool.call'
-                              ? <ToolCard key={`${turn.id}-${card.toolId}-${cardIndex}`} projection={card} {...{ onAddCredit }} />
-                              : null
-                          })}
                           {!readOnly && onSuggest && !writing ? <FollowUps view={view.followUps} onPick={onSuggest} /> : null}
-                          {writing ? null : <MessageActions view={{ canCopy: prose.trim().length > 0 && onCopyAnswer !== undefined, canEditQuestion: previousPrompt !== undefined && onEditQuestion !== undefined }}
+                          {writing ? null : <MessageActions view={{ canCopy: prose.trim().length > 0 && onCopyAnswer !== undefined, canEditQuestion: canEditPrompt }}
                             onCopy={() => onCopyAnswer?.(prose)}
                             onEditQuestion={() => { if (previousPrompt) onEditQuestion?.(previousPrompt) }} />}
                         </div>
@@ -418,7 +438,8 @@ export function ChatTranscript({
               <UnansweredQuestion
                 question={turns.findLast((turn) => turn.role === 'user')?.text ?? ''}
                 onRetry={onRetryQuestion}
-                {...(onEditQuestion === undefined ? {} : { onEdit: onEditQuestion })}
+                {...(onEditQuestion === undefined || parseDetailRequest(turns.findLast(turn => turn.role === 'user')?.text ?? '') !== null
+                  ? {} : { onEdit: onEditQuestion })}
               />
             )}
             {thinking ? (

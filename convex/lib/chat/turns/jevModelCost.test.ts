@@ -1,31 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { callJevSystemOne } from '@/modules/decision-engine/public'
 import { serializeToolSearchResult } from '@/modules/capability-supply/public'
-import { projectToolSearchChoices } from '@/modules/registry/tool-choice-contracts'
 import { ERC20_QUERY, jevSystemOneResponse, misorderedSearchResult } from '../../../../tests/helpers/tool-search-rerank-fixtures'
 import { presentSearch } from '../../capabilitySupply/toolCatalog/presentation'
-import { recommendTool } from '../generate/recommend'
 import { createJevModelCostObserver } from './jevModelCost'
 
 const binding = { turnRef: 'turn:jev', threadId: 'thread:jev', promptMessageId: 'prompt:jev' }
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
 describe('chat Jev attribution through the SDK boundary', () => {
-  it.each(['noMatch', 'unavailable'] as const)('records a %s search without keeping the query or invoking a model', async kind => {
-    const query = 'private search need'
-    const source = misorderedSearchResult(query)
-    const base = projectToolSearchChoices(source, undefined, { verdict: 'matched', nearMisses: [] })
-    const catalogue = { ...base, kind, results: [] as [], reason: 'source_unavailable' as const,
-      pagination: { limit: 8, hasMore: false } }
-    const fetcher = vi.fn<typeof fetch>()
-    vi.stubGlobal('fetch', fetcher)
-    const result = await recommendTool({ catalogue, promptText: query, ownerId: 'account:jev', ...binding, searchLatencyMs: 120 })
-    expect(result).toMatchObject({ recommendation: null, decision: { offered: [], fit: [], latencyMs: 120,
-      tier: kind === 'noMatch' ? 'no_match' : 'selection_unavailable' } })
-    expect(JSON.stringify(result)).not.toContain(query)
-    expect(fetcher).not.toHaveBeenCalled()
-  })
-
   it('waits for the bound begin mutation and projects only usage, never a price or payload', async () => {
     const begin = Promise.withResolvers<null>()
     const runMutation = vi.fn().mockReturnValueOnce(begin.promise).mockResolvedValue(null)
@@ -72,24 +55,6 @@ describe('chat Jev attribution through the SDK boundary', () => {
     expect(fetcher).toHaveBeenCalledOnce()
     expect(runMutation.mock.calls[0]?.[1]).toMatchObject({ ...binding, purpose: 'discovery_rerank', source: 'jev', requestedModel: '~typesafe/jev-latest' })
     expect(runMutation.mock.calls[1]?.[1]).toMatchObject({ ...binding, model: '~typesafe/jev-latest', inputTokens: 180, outputTokens: 0, accounting: { status: 'unpriced', reason: 'jev_usage_only' } })
-  })
-
-  it('binds immediate recommendation to the actual discovery attempt and keeps failure retries zero', async () => {
-    vi.stubEnv('AE_JEV_DISCOVERY_ENABLED', 'true')
-    vi.stubEnv('OPENROUTER_API_KEY', 'sk-or-test')
-    vi.stubEnv('TYPESAFE_API_KEY', '')
-    const source = misorderedSearchResult(ERC20_QUERY)
-    const catalogue = projectToolSearchChoices(source, undefined, { verdict: 'matched', nearMisses: [] })
-    const runMutation = vi.fn().mockResolvedValue(null)
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response('private upstream body', { status: 503 }))
-    vi.stubGlobal('fetch', fetcher)
-    await expect(recommendTool({ catalogue, promptText: ERC20_QUERY, ownerId: 'account:jev', ...binding, modelCostBinding: binding }, { runMutation }))
-      .resolves.toEqual({ recommendation: null, decision: null })
-    expect(fetcher).toHaveBeenCalledOnce()
-    expect(runMutation.mock.calls[0]?.[1]).toMatchObject({ ...binding, purpose: 'discovery_recommendation', requestedModel: '~typesafe/jev-latest' })
-    expect(runMutation.mock.calls[1]?.[1]).toEqual({ ...binding, requestRef: runMutation.mock.calls[0]?.[1].requestRef,
-      accounting: { status: 'unpriced', reason: 'request_failed' },
-    })
   })
 
   it('creates no rows for disabled discovery', async () => {

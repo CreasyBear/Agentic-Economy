@@ -14,7 +14,7 @@ import {
   withdrawOwnerMarketDemand,
 } from '@/modules/market-demand/market-demand.functions'
 import type { ChatNeedActions } from '@/modules/chat/tool-card'
-import { formatRunRequest, parseRunRequest, type RunIntent } from '@/modules/chat/run-request'
+import { formatRunRequest, parseDetailRequest, parseRunRequest, type RunIntent } from '@/modules/chat/run-request'
 import type { RegistryNextAction } from '@/modules/registry/tool-choice-contracts'
 
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
@@ -589,7 +589,8 @@ export function useChatSession({
       ...(recovery === undefined ? {} : { recovery }),
       ...((recovery === 'rate_limited' || !isAuthenticated) && retryableClientTurn?.prompt === prompt
         && parseRunRequest(prompt) === null ? { onRetry: retryComposerRequest } : {}),
-      onEditLast: () => focusPrompt(lastUserText() ?? prompt),
+      ...(parseDetailRequest(lastUserText() ?? prompt) === null
+        ? { onEditLast: () => focusPrompt(lastUserText() ?? prompt) } : {}),
       onNewChat: startNewChat,
       ...(isAuthenticated ? {} : { onStop: stopAnonymousSend }),
       onPromptChange: (value) => {
@@ -635,10 +636,15 @@ export function useChatSession({
           .then(() => setStatus('Answer copied.'), () => setError('Copy failed. Select the answer and copy it manually.'))
       },
       ...(composerDisabled || promptTooLong ? {} : {
-        onSuggest: (nextPrompt) => focusPrompt(nextPrompt),
+        onSuggest: (nextPrompt) => {
+          if (parseDetailRequest(nextPrompt) !== null) void submit(false, nextPrompt, undefined, true)
+          else focusPrompt(nextPrompt)
+        },
         onStarter: (nextPrompt) => { void submit(false, nextPrompt) },
         onRefine: (nextPrompt) => { void submit(false, nextPrompt) },
-        onEditQuestion: (previousPrompt) => focusPrompt(previousPrompt),
+        onEditQuestion: (previousPrompt) => {
+          if (parseDetailRequest(previousPrompt) === null) focusPrompt(previousPrompt)
+        },
         ...(unansweredQuestion.length === 0 ? {} : { onRetryQuestion: () => retryLastRequest() }),
       }),
     },
