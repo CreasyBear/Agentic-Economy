@@ -37,6 +37,11 @@
   - `TaxProfileForm`'s `ui/input` fields: these are the stabilised Base UI fields.
   - `ui/collapsible`, `ui/dialog`, `ui/dropdown-menu`, `ui/command`, `ui/radio-group`, `ui/select`, `ui/switch`, `ui/checkbox`, `ui/tooltip` and `ui/accordion`: all are Base UI primitives (Base UI stays) or have no free Arc counterpart.
 
+- **E4 audits (2026-10-07).**
+  - A static review against the Arc Pro accessibility and motion checklists found one P2: the receipt showed Result/Request tabs with empty panels for calls that hadn't completed. Fixed: the tabs now render only when both panels have content.
+  - The full suite exposed a double-announce problem. Arc `Badge` keeps the outgoing label while it animates out, so a badge inside a live region could briefly hold both words. Fixed for the admin readiness badge by keying it on status.
+  - A 390px browser pass on `/market`, `/status`, `/about`, `/for-providers` and an invalid Tool page, with and without reduced motion, found no page overflow and no main-content targets under 24px. The market tab strip scrolls horizontally inside its own container.
+  - Signed-in surfaces still need a browser pass once `npm run dev:local` can start. It requires `AE_E2E_OWNER_EMAIL`.
 ## 2. Baseline and interpretation
 
 - Catalog snapshot: **236 = 128 Free + 108 Pro**. Vendored entries: **49 = 28 primitives + 21 blocks; 31 Free entries + 18 Pro entries representing 17 distinct Pro origins**, because the local `marketplace-dashboard` is a second derivative of `metrics-dashboard`. Source: `docs/operations/arc-audit-2026-10-06.md` §§Inventory. `ProviderListing` is another **AE derivative of Pro `product-listing`**, not an Arc catalog ID (`src/components/ae/shared/arc-pro/market/ProviderListing.tsx:1-9`).
