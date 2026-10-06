@@ -10,7 +10,7 @@ import './ConsentEvidenceComposition.css'
 function ConnectionProblemAlert({ code, technicalReference }: Readonly<{ code: string; technicalReference?: string }>) {
   const presentation = presentConnectionProblem({ code, ...(technicalReference === undefined ? {} : { instance: technicalReference }) })
   return (
-    <AeAlert tone="danger" title={presentation.heading} className="arc-market arc-consent-outcome"><div className="arc-consent-outcome-body">
+    <AeAlert id="consent-outcome-heading" tabIndex={-1} tone="danger" title={presentation.heading} className="arc-market arc-consent-outcome"><div className="arc-consent-outcome-body">
         <p>{presentation.outcome}</p>
         <p>{presentation.nextAction}</p>
         {presentation.technicalReference === undefined ? null : (
@@ -30,7 +30,7 @@ export function ConsentOutcomeView({
 }: ConsentOutcomeViewProps) {
   if (phase === 'approved') {
     return (
-      <AeAlert role="alert" tone="info" title={`Access approved for ${clientName}`} className="arc-market arc-consent-outcome"><div className="arc-consent-outcome-body">Return there to continue. Check the Agents page for authenticated access and Tool results.</div></AeAlert>
+      <AeAlert id="consent-outcome-heading" tabIndex={-1} role="alert" tone="success" title={`Access approved for ${clientName}`} className="arc-market arc-consent-outcome"><div className="arc-consent-outcome-body">Return there to continue. Check the Agents page for authenticated access and Tool results.</div></AeAlert>
     )
   }
   if (phase === 'denied') {

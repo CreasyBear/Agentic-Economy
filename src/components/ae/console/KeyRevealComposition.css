@@ -76,27 +76,6 @@
   scrollbar-width: thin;
 }
 
-.arc-market.arc-key-reveal-drawer .arc-key-warning {
-  display: grid;
-  min-width: 0;
-  grid-template-columns: var(--space-4) minmax(0, 1fr);
-  align-items: start;
-  gap: var(--space-1) var(--space-3);
-  border: 1px solid var(--ae-warning-ring);
-  border-radius: var(--radius-control);
-  padding: var(--space-3) var(--space-4);
-  background: var(--ae-warning-subtle);
-  color: var(--ae-warning-foreground);
-  font-size: var(--text-sm);
-  line-height: var(--leading-body);
-}
-
-.arc-market.arc-key-reveal-drawer .arc-key-warning > svg {
-  width: var(--space-4);
-  height: var(--space-4);
-  color: var(--warning);
-}
-
 .arc-market.arc-key-reveal-drawer .arc-key-secret-group {
   display: grid;
   min-width: 0;

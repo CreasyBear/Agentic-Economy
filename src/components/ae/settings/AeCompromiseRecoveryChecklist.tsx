@@ -38,7 +38,7 @@ export function AeCompromiseRecoveryChecklist() {
         title="If you suspect compromise"
         description="Review independent sources. Opening this checklist does not revoke access."
       >
-        <AeAlert role="alert" tone="info" title="This page does not mark the account contained" className="arc-security-warning">
+        <AeAlert role="alert" tone="warning" title="This page does not mark the account contained" className="arc-security-warning">
             Resetting MFA alone does not revoke existing sessions, Agent credentials,
             Provider connection authority.
             <p className="arc-security-financial-impact">

@@ -207,8 +207,8 @@ export function AeKeyRevealDialog({
         </div>
 
         <div data-ae-key-reveal-scroll className="arc-key-reveal-scroll overflow-y-auto">
-          <AeAlert role="alert" tone="info" title="This secret will never be shown again." className="arc-key-warning">
-              This secret will never be shown again. Store it securely.
+          <AeAlert role="alert" tone="warning" title="This secret will never be shown again.">
+              Store it securely.
             </AeAlert>
 
           <div className="arc-key-secret-group">

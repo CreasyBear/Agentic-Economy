@@ -78,9 +78,9 @@ describe('AeKeyRevealDialog (W-27)', () => {
     expect(screen.getByText('Save the one-time secret and configure your client.')).toBeInTheDocument()
     expect(screen.getByText('Research Bot')).toBeInTheDocument()
     expect(screen.getByText('Sandbox')).toBeInTheDocument()
-    expect(
-      screen.getByText('This secret will never be shown again. Store it securely.'),
-    ).toBeInTheDocument()
+    const guardrail = screen.getByRole('alert')
+    expect(guardrail).toHaveTextContent('This secret will never be shown again.')
+    expect(guardrail).toHaveTextContent('Store it securely.')
 
     expect(screen.getByText(MASKED_SECRET_DISPLAY)).toBeInTheDocument()
     expect(document.body.textContent).not.toContain(baseReveal.secret)

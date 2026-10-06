@@ -150,7 +150,7 @@ export function AeMonthlySpendCeilingCard({
     }
     if (resolvedSettings.enabled && percent >= 90 && percent < 100) {
       return (
-        <AeAlert role="alert" tone="info" title={`Approaching monthly limit (${percent}%)`} className="border-warning-ring bg-warning-subtle text-warning-foreground" />
+        <AeAlert role="alert" tone="warning" title={`Approaching monthly limit (${percent}%)`} />
       )
     }
     if (resolvedSettings.enabled && percent >= 100) {
