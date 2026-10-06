@@ -185,9 +185,11 @@ export async function streamDurableChatResponse(
           clarificationRequested = true
         }
         if (args.trustedChatAuthority?.applicationRef === 'ae-owner-chat'
-          && step.toolResults.some(result => result.toolName === CHAT_TOOL_NAME_MAP.canonicalToProvider['tool.call']
-            && typeof result.output === 'object' && result.output !== null
-            && 'kind' in result.output && result.output.kind === 'needs_authority')) {
+          && step.toolResults.some(result => typeof result.output === 'object' && result.output !== null
+            && 'kind' in result.output && (
+              (result.toolName === CHAT_TOOL_NAME_MAP.canonicalToProvider['tool.call'] && result.output.kind === 'needs_authority')
+              || (result.toolName === CHAT_TOOL_NAME_MAP.canonicalToProvider['tool.plan.run'] && result.output.kind === 'awaiting_approval')
+            ))) {
           ownerApprovalPending = true
         }
         await modelCost.onStepEnd(step)

@@ -1,3 +1,6 @@
+import { internal } from '../../../_generated/api'
+import type { ActionCtx } from '../../../_generated/server'
+import type { PreparedFinancialSubjects } from './contracts'
 import { financialEnvironmentMatches } from '../../money/formance/contracts'
 import { v } from 'convex/values'
 
@@ -66,4 +69,31 @@ export async function prepareSpendingPeriodsHandler(
     authorityDigest: authority.policyDigest,
     now,
   })
+}
+
+
+/** Shared acknowledgement loop for the existing Quote path and aggregate Plan Holds. */
+export async function synchronizeSpendingPeriods(
+  ctx: ActionCtx, subjects: PreparedFinancialSubjects, principal: Infer<typeof principalValue>, toolRef: string,
+): Promise<Infer<typeof spendingPeriodPreparationResult>> {
+  let spendingPeriods = subjects.spendingPeriods
+  let commands = [...subjects.spendingPeriodCommands]
+  if (spendingPeriods === undefined) return { kind: 'refused', reason: 'spending_period_missing' }
+  for (let round = 0; round < 2 && commands.length > 0; round += 1) {
+    for (const command of commands) {
+      const adjusted = await ctx.runAction(internal.moneyFormance.adjustSpendingPeriod, { ...command, expectedEnvironment: subjects.expectedEnvironment })
+      const count = command.previousLimitUnits === command.targetLimitUnits ? 0 : 1
+      if (adjusted.kind !== 'completed' || adjusted.transactionRefs.length !== count) return { kind: 'refused', reason: 'spending_period_command_pending' }
+      const acknowledged = await ctx.runMutation(internal.agentSpendingPeriods.acknowledge, {
+        expectedEnvironment: subjects.expectedEnvironment, command, transactionRefs: [...adjusted.transactionRefs],
+      })
+      if (acknowledged.kind === 'conflict') return { kind: 'refused', reason: 'spending_period_command_pending' }
+    }
+    const refreshed = await ctx.runMutation(internal.capabilityQuotes.prepareSpendingPeriods, { principal, toolRef })
+    if (refreshed.kind === 'refused') return refreshed
+    spendingPeriods = refreshed.spendingPeriods
+    commands = [...refreshed.commands]
+  }
+  return commands.length > 0 ? { kind: 'refused', reason: 'spending_period_command_pending' }
+    : { kind: 'prepared', spendingPeriods, commands: [] }
 }

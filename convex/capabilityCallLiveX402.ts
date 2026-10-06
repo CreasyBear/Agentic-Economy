@@ -35,7 +35,8 @@ const liveRequirementResult = v.union(
  * State mutations and public action entrypoints remain in the default runtime.
  */
 export const inspect = internalAction({
-  args: { toolRef: v.string(), input: jsonObject, principal: principalValue, callRef: v.optional(v.string()) },
+  args: { toolRef: v.string(), input: jsonObject, principal: principalValue, callRef: v.optional(v.string()),
+    planNode: v.optional(v.object({ planRef: v.string(), nodeId: v.string() })) },
   returns: liveRequirementResult,
   handler: async (ctx, args): Promise<Infer<typeof liveRequirementResult>> => {
     const snapshot = await ctx.runQuery(
@@ -60,6 +61,12 @@ export const inspect = internalAction({
           principal: args.principal, toolRef: args.toolRef,
         })
         if (principal === null || principal.environment !== operation.runtimeEnvironment) return false
+        if (args.planNode !== undefined) {
+          if (args.callRef !== undefined) return false
+          return await ctx.runQuery(internal.capabilityPlans.readNodeProbeAdmission, {
+            ...args.planNode, principal: args.principal, toolRef: args.toolRef, input: args.input,
+          })
+        }
         if (args.callRef !== undefined) {
           if (principal.authorityMode !== 'approval_required') return false
           return await ctx.runQuery(internal.capabilityCalls.readX402UnpaidProbeAdmission, {

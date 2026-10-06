@@ -1,3 +1,4 @@
+import { Link } from '@tanstack/react-router'
 import { createContext, useContext } from 'react'
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
@@ -200,7 +201,9 @@ function cardBody(projection: ToolCardProjection, onAddCredit?: ToolCardProps['o
       return null
     case 'status': {
       if (projection.state === 'attention') {
-        return <AeAlert tone="info" title={projection.summary} role="alert" />
+        return <AeAlert tone="info" role="alert" title={projection.summary}>
+          {projection.planRef === undefined ? null : <Link to="/plans/$planRef" params={{ planRef: projection.planRef }} className="mt-2 block underline">Review Plan</Link>}
+        </AeAlert>
       }
       const funding = projection.funding
       const reason = safeRecoveryReason(projection.recoveryReason, 'tool_unavailable')

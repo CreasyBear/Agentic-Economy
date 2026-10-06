@@ -924,6 +924,222 @@
     "kind": "mutation"
   },
   {
+    "visibility": "internal",
+    "module": "capabilityPlanDrafts",
+    "method": "importMercator",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityPlanDrafts",
+    "method": "suggest",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityPlans",
+    "method": "admitNode",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityPlans",
+    "method": "attachHold",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityPlans",
+    "method": "attachRemainder",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityPlans",
+    "method": "authenticateQuote",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityPlans",
+    "method": "beginRun",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityPlans",
+    "method": "cancel",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityPlans",
+    "method": "cancelOwner",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityPlans",
+    "method": "claimHold",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityPlans",
+    "method": "claimHoldRecovery",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityPlans",
+    "method": "continueRun",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityPlans",
+    "method": "deadline",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityPlans",
+    "method": "decideOwner",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityPlans",
+    "method": "failPreparation",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityPlans",
+    "method": "finish",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityPlans",
+    "method": "freezeRemainder",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityPlans",
+    "method": "get",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityPlans",
+    "method": "listOwner",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityPlans",
+    "method": "prepareNode",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityPlans",
+    "method": "prepareNodeSubjects",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityPlans",
+    "method": "prepareRun",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityPlans",
+    "method": "prepareTerminal",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityPlans",
+    "method": "quote",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityPlans",
+    "method": "quotePlanHandler",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityPlans",
+    "method": "readNodeAuthority",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityPlans",
+    "method": "readNodeProbeAdmission",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityPlans",
+    "method": "readOutstandingPlanExposure",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityPlans",
+    "method": "readOwner",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityPlans",
+    "method": "readProgress",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityPlans",
+    "method": "readQuoteMaterial",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityPlans",
+    "method": "readStartNode",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityPlans",
+    "method": "run",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityPlans",
+    "method": "startNode",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityPlans",
+    "method": "startWorkflow",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityPlans",
+    "method": "workflowComplete",
+    "kind": "mutation"
+  },
+  {
     "visibility": "public",
     "module": "capabilityProcure",
     "method": "checkpointQuote",
@@ -1957,6 +2173,36 @@
   },
   {
     "visibility": "internal",
+    "module": "chatPlans",
+    "method": "authenticateQuote",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "chatPlans",
+    "method": "beginRun",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "chatPlans",
+    "method": "get",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "chatPlans",
+    "method": "quote",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "chatPlans",
+    "method": "run",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
     "module": "chatQuote",
     "method": "quote",
     "kind": "action"
@@ -2792,6 +3038,12 @@
   {
     "visibility": "internal",
     "module": "moneyFormance",
+    "method": "readPlanRemainder",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyFormance",
     "method": "readSpendingPeriod",
     "kind": "action"
   },
@@ -2834,6 +3086,12 @@
   {
     "visibility": "internal",
     "module": "moneyFormance",
+    "method": "releasePlanRemainder",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyFormance",
     "method": "remedyPaidCall",
     "kind": "action"
   },
@@ -2841,6 +3099,12 @@
     "visibility": "internal",
     "module": "moneyFormance",
     "method": "reserveManagedCall",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyFormance",
+    "method": "reservePlanHold",
     "kind": "action"
   },
   {

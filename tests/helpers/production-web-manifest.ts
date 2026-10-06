@@ -8,6 +8,7 @@ export const productionWebManifestFixture = Object.freeze({
   AE_DEPLOYMENT_ENVIRONMENT: 'production',
   AE_CANONICAL_BASE_URL: 'https://ae.example',
   CONVEX_URL: 'https://convex.example',
+  VITE_CONVEX_URL: 'https://convex.example',
   AE_CONVEX_SERVER_FUNCTION_TOKEN: 'server-function-test-token-long-enough',
   VITE_CLERK_PUBLISHABLE_KEY: 'pk_live_test',
   CLERK_SECRET_KEY: 'sk_live_test',

@@ -1,11 +1,63 @@
 import { v, type Infer } from 'convex/values'
 import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
-import { x402PaymentProfileForEnvironment } from '@/modules/capability-supply/public'
-import { directoryNetwork, directoryEntryMatchesFilters, x402DirectoryIndexInputSchema } from '@/modules/market/x402-directory-index'
+import { sourceRouteRef, x402PaymentProfileForEnvironment } from '@/modules/capability-supply/public'
+import { directoryNetwork, directoryEntryMatchesFilters, directoryProviderKey, x402DirectoryIndexInputSchema } from '@/modules/market/x402-directory-index'
 import { env, type QueryCtx } from '../../../_generated/server'
 import { coverageValue, directoryEntryValue, indexedEntryValue, unavailableValue } from './contracts'
 import { admittedToolRef } from './browse'
+import { readCurrentPublishedTool } from '../../capabilitySupply/currentTool/reads'
 import { activeDirectoryGeneration, canonicalSlugForToolRef, directoryCoverage, indexedDirectoryEntry, storedDirectoryEntry } from './rows'
+
+/**
+ * Resolve a Mercator route through one active directory resource, then join
+ * its sourceRouteRef to a current publication. A serviceId is never a ToolRef.
+ * Both source identity formats are needed: Coinbase x402 and provider OpenAPI
+ * rows share this directory index, and provider rows use synthetic resource keys.
+ */
+export async function admittedToolRefForMercatorRoute(
+  ctx: QueryCtx,
+  selector: Readonly<{ providerHost: string; method: string; path: string }>,
+): Promise<string | undefined> {
+  const host = directoryProviderKey(selector.providerHost)
+  if (!host || /:\d+$/u.test(selector.providerHost) || !/^\/(?!\/)[^?#\\]*$/u.test(selector.path)
+    || (selector.method !== 'GET' && selector.method !== 'POST')) return undefined
+  let origin: URL
+  try {
+    origin = new URL(`https://${host}`)
+  } catch {
+    return undefined
+  }
+  if (origin.hostname !== host || origin.host !== host || origin.username || origin.password
+    || origin.pathname !== '/' || origin.search || origin.hash) return undefined
+  const generation = await activeDirectoryGeneration(ctx)
+  if (generation === null) return undefined
+  const endpoint = new URL(selector.path, origin)
+  if (endpoint.pathname !== selector.path || endpoint.search || endpoint.hash) return undefined
+  const endpointUrl = endpoint.toString()
+  const sourceMethod = selector.method === 'GET' ? 'get' : 'post'
+  const refs = [
+    sourceRouteRef({
+      sourceKind: 'x402', sourceSelector: {}, sourceDescriptorJson: JSON.stringify({ method: selector.method }), endpointUrl,
+    }),
+    sourceRouteRef({
+      sourceKind: 'openapi_http', sourceSelector: { method: sourceMethod, path: selector.path },
+      sourceDescriptorJson: '{}', endpointUrl,
+    }),
+  ].filter((ref): ref is string => ref !== undefined)
+  const matches = (await Promise.all(refs.map((ref) => ctx.db.query('marketDirectorySearchEntries')
+    .withIndex('by_generation_and_sourceRouteRef', (q) => q.eq('generation', generation.generation).eq('sourceRouteRef', ref))
+    .filter((q) => q.eq(q.field('network'), '*'))
+    .take(2)))).flat()
+  const match = matches[0]
+  const environment = deploymentPaymentEnvironment(env)
+  if (matches.length !== 1 || match?.sourceRouteRef === undefined || environment === undefined) return undefined
+  const publications = await ctx.db.query('capabilityPublications')
+    .withIndex('by_sourceRouteRef_and_disposition', q => q.eq('sourceRouteRef', match.sourceRouteRef).eq('disposition', 'current'))
+    .filter(q => q.eq(q.field('runtimeEnvironment'), environment)).take(2)
+  const publication = publications[0]
+  if (publications.length !== 1 || publication === undefined) return undefined
+  return await readCurrentPublishedTool(ctx, publication.toolRef, Date.now()) === undefined ? undefined : publication.toolRef
+}
 
 export const resourceArgs = v.object({ resource: v.string() })
 export const resourceReturns = v.union(unavailableValue, v.object({ kind: v.literal('not_found') }), v.object({ kind: v.literal('found'), coverage: coverageValue, item: indexedEntryValue }))

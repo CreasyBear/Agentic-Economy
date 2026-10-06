@@ -156,6 +156,18 @@ workflow.
 The exact Tool versions considered, which are viable or excluded, and why.
 Keep the source of the facts and caller-specific restrictions visible.
 
+**Plan**:
+A buyer-authored, frozen dependency graph of 1–10 Nodes, each bound to an
+admitted Tool version.
+Its Nodes specify inputs and declared data flows; an agent proposes the
+graph, and AE validates it before purchase. A Plan is not a Provider-authored
+package sold as one Tool, an aggregate SKU, or the agent's larger task.
+
+**Node**:
+One Tool purchase within a Plan, with its own price Ceiling and, if admitted,
+its own ordinary Quote, Call and receipt. A failed or skipped Node is not
+silently retried as a new purchase; successful sibling Calls remain distinct.
+
 **Quote**:
 The expiring decision returned by inspection for one Customer's Agent, Account,
 applicable authorization version, Tool version and normalised input. It binds
@@ -170,14 +182,43 @@ A qualified quote supplied by an upstream Provider or source for upstream
 service terms. It remains distinct from the customer-facing Quote issued by AE;
 it may be linked as evidence or input without becoming that Quote.
 
+**Plan Quote (one AUD commitment)**:
+The expiring, customer-bound commitment for a frozen Plan, with one exact
+approved AUD total made from per-Node Ceilings and disclosed data flows.
+Quoting alone places no Hold or Call. The buyer authorizes that exact total;
+each admitted Node still uses its own Tool Quote and Call, rather than an
+aggregate purchase or guaranteed all-or-nothing outcome.
+
+**Hold**:
+Capacity reserved once against the Account's Prepaid balance, spending periods
+and applicable exposure for an authorized Plan. Funding and an Available
+balance provide capacity, not authority to spend: authority must be recorded
+before a Hold, and each Node draws from held capacity without reserving it
+again. Only provably unused capacity is released; uncertain money awaits
+reconciliation.
+
 **Call**:
 One accepted use of a Tool version under a Quote and the applicable supported
 authorization path. That path is commonly a Spending policy, but a supported
 request authorization/Approval may apply without making a standing policy a
-universal prerequisite. The Call retains the existing execution identity and
-links attempts, Provider observations, output, usage, Charge, delivery, payment
-and recovery. Logs, Usage and Spend are views of the same Call, not independent
+universal prerequisite. A Plan Node's admitted purchase is still an individual
+Call under its own Quote, with its own receipt and outcome, not a second Plan
+purchase record. The Call retains the existing execution identity and links
+attempts, Provider observations, output, usage, Charge, delivery, payment and
+recovery. Logs, Usage and Spend are views of the same Call, not independent
 records that can disagree about its identity.
+
+**untyped_ref**:
+A Plan data-flow reference whose declared output schema lacks enough type
+evidence to establish static compatibility. It is disclosed in the Plan Quote,
+not inferred safe from examples; the resolved input must still pass the
+destination Tool's schema and bounds before any Call reservation.
+
+**reconciliation_required**:
+A Plan state when a Hold movement or admitted Call's financial outcome is
+uncertain. Stop new Node admissions and observe or reconcile the existing
+effect; do not retry a possibly dispatched purchase or release disputed
+capacity until its outcome is financially conclusive.
 
 **Action execution**:
 An administrative or runtime execution of an AE action. Its controls, attempts

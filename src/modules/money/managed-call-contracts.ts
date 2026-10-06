@@ -5,6 +5,18 @@ import { promotionalCreditAllocationValue } from './promotional-credit-contracts
 /** Existing Call recipes retain their immutable schema/command identity as refunds evolve. */
 export const MANAGED_CALL_FORMANCE_SCHEMA_VERSION = 'v1.5.0' as const
 
+export const planCallAllocationValue = v.object({
+  planRef: v.string(), planDigest: v.string(), approvedTotalUnits: v.string(),
+  nodeId: v.string(), nodeCeilingUnits: v.string(),
+})
+
+export const planHoldBookingValue = v.object({
+  planRef: v.string(), planDigest: v.string(), idempotencyKey: v.string(),
+  accountRef: v.string(), principalRef: v.string(), legalCustomerRef: v.string(),
+  legalCustomerGeneration: v.number(), approvedTotalUnits: v.string(), spendingPeriods: spendingPeriodsValue,
+  promotionalCreditAllocation: v.optional(promotionalCreditAllocationValue),
+})
+
 /** Frozen financial identity shared by Call consequences and settled-sale reports. */
 export const managedCallBookingValue = v.object({
   callRef: v.string(),
@@ -33,4 +45,5 @@ export const managedCallBookingValue = v.object({
   x402RequirementDigest: v.string(),
   spendingPeriods: v.optional(spendingPeriodsValue),
   promotionalCreditAllocation: v.optional(promotionalCreditAllocationValue),
+  planAllocation: v.optional(planCallAllocationValue),
 })

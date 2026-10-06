@@ -1,3 +1,5 @@
+import { partitionPromotionalCreditAllocation } from '@/modules/money/public'
+import type { Plan } from '../plans/planState'
 import { readAgentPaymentAdmission } from '../../money/treasury/paymentAdmission'
 import { claimPromotionalCredit } from '../../money/promotionalCredit/allocation'
 import type { PromotionalCreditAllocation } from '@/modules/money/public'
@@ -148,9 +150,16 @@ async function persistReservedCall(
   commitment: CommitmentRow | null,
   formanceFinancialState?: 'reservation_pending',
   promotionalCreditAllocation?: PromotionalCreditAllocation,
+  plan?: Plan,
 ): Promise<void> {
   await ctx.db.insert('capabilityCalls', {
     ...reservation,
+    ...(plan === undefined || commitment?.planNodeId === undefined ? {} : {
+      planRef: plan.planRef, planNodeId: commitment.planNodeId, planAllocation: {
+        planRef: plan.planRef, planDigest: plan.planDigest, approvedTotalUnits: plan.approvedTotalAudUnits,
+        nodeId: commitment.planNodeId, nodeCeilingUnits: plan.nodes.find(node => node.nodeId === commitment.planNodeId)?.ceilingAudUnits ?? '0',
+      },
+    }),
     ...(args.turnRef === undefined ? {} : { chatTurnRef: args.turnRef }),
     ...(args.toolJson === undefined ? {} : { toolJson: args.toolJson }),
     ...(args.inputJson === undefined ? {} : { inputJson: args.inputJson }),
@@ -182,6 +191,7 @@ async function attachCallToTurn(ctx: MutationCtx, turn: Doc<'chatTurns'>, callRe
 export async function reserveHandler(
   ctx: MutationCtx,
   args: ReserveArgs,
+  plan?: Plan,
 ): Promise<ReserveResult> {
   const turnRef = args.turnRef
   const turn = turnRef === undefined ? null : await ctx.db.query('chatTurns')
@@ -223,6 +233,9 @@ export async function reserveHandler(
   }
 
   const commitment = await loadReservationCommitment(ctx, args)
+  if (commitment?.planRef !== plan?.planRef || (plan !== undefined && (plan.state !== 'running' || plan.holdReservationRefs === undefined
+    || plan.authority === undefined || plan.terminationIntent !== undefined || plan.runDeadlineAt <= args.now
+    || commitment?.planNodeId === undefined || !plan.nodes.some(node => node.nodeId === commitment.planNodeId)))) return { kind: 'conflict' }
   if (!commitmentMatchesReservation(commitment, args)) return { kind: 'conflict' }
 
   const grantDecision = await loadReservationGrant(ctx, args)
@@ -244,10 +257,10 @@ export async function reserveHandler(
     }
   }
 
-  const periodRefusal = await spendingPeriodAdmissionRefusal(ctx, args, commitment, normalizedGrant)
+  const periodRefusal = plan === undefined ? await spendingPeriodAdmissionRefusal(ctx, args, commitment, normalizedGrant) : null
   if (periodRefusal !== null) return periodRefusal
 
-  const organizationSpendRefusal = await organizationMonthlySpendReserveRefusal(ctx, args, commitment)
+  const organizationSpendRefusal = plan === undefined ? await organizationMonthlySpendReserveRefusal(ctx, args, commitment) : null
   if (organizationSpendRefusal !== null) return organizationSpendRefusal
 
   const admissionRefusal = await rateAndConcurrencyRefusal(ctx, args, normalizedGrant)
@@ -255,7 +268,12 @@ export async function reserveHandler(
   const paidPeriodAwareCall = commitment !== null
     && commitment.decisionAudUnits !== '0'
     && commitment.spendingPeriods !== undefined
-  const promotion = paidPeriodAwareCall && commitment.formanceSchemaVersion === 'v1.5.0'
+  const planCredit = plan?.holdRemainingCreditAllocation === undefined || commitment === null ? undefined
+    : partitionPromotionalCreditAllocation(plan.holdRemainingCreditAllocation, commitment.decisionAudUnits)
+  if (plan !== undefined && paidPeriodAwareCall && planCredit === undefined) return {
+    kind: 'refused', code: 'commercial_policy_unavailable', retryable: false,
+  }
+  const promotion = plan === undefined && paidPeriodAwareCall && commitment.formanceSchemaVersion === 'v1.5.0'
     ? await claimPromotionalCredit(ctx, {
       accountRef: args.ownerId, environment: args.environment,
       amountUnits: commitment.decisionAudUnits, now: Date.now(),
@@ -270,8 +288,12 @@ export async function reserveHandler(
     reservation,
     commitment,
     paidPeriodAwareCall ? 'reservation_pending' : undefined,
-    promotion?.allocation,
+    planCredit?.allocated ?? promotion?.allocation,
+    plan,
   )
+  if (plan !== undefined && planCredit !== undefined) await ctx.db.patch(plan._id, {
+    holdRemainingCreditAllocation: { ...planCredit.remaining, grants: [...planCredit.remaining.grants] }, updatedAt: args.now,
+  })
   if (turn !== null) await attachCallToTurn(ctx, turn, reservation.callRef)
   await recordMarketEvidenceFact(ctx, 'ae_invocation', reservation.callRef, args.now, {
     toolRef: reservation.toolRef,

@@ -10,22 +10,26 @@ import {
   LEGACY_FORMANCE_SCHEMA_VERSION,
   PERIOD_FORMANCE_SCHEMA_VERSION,
   PROMOTIONAL_FORMANCE_SCHEMA_VERSION,
+  PLAN_FORMANCE_SCHEMA_VERSION,
   FORMANCE_SCHEMA_VERSION,
-  FORMANCE_TEMPLATE_NAMES,
+  PLAN_FORMANCE_TEMPLATE_NAMES,
   type FormanceMoneyTemplate,
   type FormanceSchemaData,
   PACKAGE4_FORMANCE_SCHEMA,
   PERIOD_FORMANCE_SCHEMA,
   PROMOTIONAL_FORMANCE_SCHEMA,
   FORMANCE_SCHEMA,
+  PLAN_FORMANCE_SCHEMA,
   PACKAGE4_FORMANCE_SCHEMA_DIGEST,
   PERIOD_FORMANCE_SCHEMA_DIGEST,
   PROMOTIONAL_FORMANCE_SCHEMA_DIGEST,
   FORMANCE_SCHEMA_DIGEST,
+  PLAN_FORMANCE_SCHEMA_DIGEST,
   LEGACY_FORMANCE_SCHEMA_READBACK_DIGEST,
   PERIOD_FORMANCE_SCHEMA_READBACK_DIGEST,
   PROMOTIONAL_FORMANCE_SCHEMA_READBACK_DIGEST,
   FORMANCE_SCHEMA_READBACK_DIGEST,
+  PLAN_FORMANCE_SCHEMA_READBACK_DIGEST,
   schemaReadbackDigest,
 } from '../formance-schema'
 import {
@@ -57,18 +61,22 @@ export async function installPackage4FormanceSchema(
   const startedAt = Date.now()
   try {
     const current = await readSchema(context, FORMANCE_SCHEMA_VERSION)
+    const plan = await readSchema(context, PLAN_FORMANCE_SCHEMA_VERSION)
     const promotional = await readSchema(context, PROMOTIONAL_FORMANCE_SCHEMA_VERSION)
     const period = await readSchema(context, PERIOD_FORMANCE_SCHEMA_VERSION)
     const legacy = await readSchema(context, LEGACY_FORMANCE_SCHEMA_VERSION)
     if (current.kind === 'setup_required') return current
+    if (plan.kind === 'setup_required') return plan
     if (promotional.kind === 'setup_required') return promotional
     if (period.kind === 'setup_required') return period
     if (legacy.kind === 'setup_required') return legacy
     if (current.kind !== 'ready' && current.code !== 'formance_schema_absent') return current
+    if (plan.kind !== 'ready' && plan.code !== 'formance_schema_absent') return plan
     if (promotional.kind !== 'ready' && promotional.code !== 'formance_schema_absent') return promotional
     if (period.kind !== 'ready' && period.code !== 'formance_schema_absent') return period
     if (legacy.kind !== 'ready' && legacy.code !== 'formance_schema_absent') return legacy
-    if (current.kind === 'ready' && promotional.kind === 'ready' && period.kind === 'ready' && legacy.kind === 'ready') {
+    if (current.kind === 'ready' && plan.kind === 'ready' && promotional.kind === 'ready'
+      && period.kind === 'ready' && legacy.kind === 'ready') {
       recordMetric('install_schema', 'replayed', startedAt)
       return Object.freeze({
         kind: 'completed',
@@ -95,6 +103,10 @@ export async function installPackage4FormanceSchema(
     if (current.kind !== 'ready') {
       const installedCurrent = await insertSchemaVersion(context, FORMANCE_SCHEMA_VERSION)
       if (installedCurrent.kind !== 'ready') return installedCurrent
+    }
+    if (plan.kind !== 'ready') {
+      const installedPlan = await insertSchemaVersion(context, PLAN_FORMANCE_SCHEMA_VERSION)
+      if (installedPlan.kind !== 'ready') return installedPlan
     }
     const installed = await readSchema(context, FORMANCE_SCHEMA_VERSION)
     if (installed.kind !== 'ready') return installed
@@ -340,13 +352,12 @@ export async function readFormancePeriodSpend(
         return Object.freeze({ kind: 'unavailable', code: 'formance_spend_window_too_large' })
       }
       for (const transaction of page.data) {
-        if (transaction.reverted || transaction.template !== 'BUYER_SALE_SETTLED') continue
+        if (transaction.reverted || !['BUYER_SALE_SETTLED', 'PLAN_NODE_SETTLED_AUD'].includes(transaction.template ?? '')) continue
         let transactionSpend = 0n
         for (const posting of transaction.postings) {
           if (posting.asset !== AUD_ASSET
-            || !/^calls:[a-f0-9]{64}:buyer_reserved$/u.test(posting.source)
-            || (posting.destination !== 'platform:revenue:sales'
-              && posting.destination !== 'platform:tax:gst')) continue
+            || !/^legal_customers:[a-f0-9]{64}:exposure_reserved$/u.test(posting.source)
+            || posting.destination !== posting.source.replace(':exposure_reserved', ':exposure_settled')) continue
           const units = formanceSafeUnitsFromSdk(posting.amount)
           if (units === undefined) {
             return Object.freeze({ kind: 'setup_required', code: 'formance_unsafe_integer' })
@@ -438,7 +449,7 @@ export async function readFormanceStatementPage(
     const transactionRefs: string[] = []
     let exactAmountUnits = 0n
     for (const transaction of page.data) {
-      if (transaction.reverted || transaction.template !== 'BUYER_SALE_SETTLED') continue
+      if (transaction.reverted || !['BUYER_SALE_SETTLED', 'PLAN_NODE_SETTLED_AUD'].includes(transaction.template ?? '')) continue
       if (transaction.reference === undefined || !COMMAND_REFERENCE_PATTERN.test(transaction.reference)) {
         return Object.freeze({ kind: 'setup_required', code: 'formance_statement_transaction_invalid' })
       }
@@ -455,6 +466,11 @@ export async function readFormanceStatementPage(
         transactionUnits += BigInt(units)
       }
       if (transactionUnits === 0n) {
+        // Promotional redemption has exposure but no purchased consideration to invoice.
+        if (transaction.postings.some(posting => posting.asset === AUD_ASSET
+          && /^legal_customers:[a-f0-9]{64}:exposure_reserved$/u.test(posting.source)
+          && posting.destination === posting.source.replace(':exposure_reserved', ':exposure_settled')
+          && posting.amount > 0n)) continue
         return Object.freeze({ kind: 'setup_required', code: 'formance_statement_transaction_invalid' })
       }
       exactAmountUnits += transactionUnits
@@ -521,6 +537,7 @@ export function historyTransactionEffect(transaction: LedgerHistoryTransaction, 
   const reserved = callDigest !== undefined && DIGEST_PATTERN.test(callDigest) ? `calls:${callDigest}:buyer_reserved` : undefined
   const promoReserved = callDigest !== undefined && DIGEST_PATTERN.test(callDigest) ? `calls:${callDigest}:buyer_promo_reserved` : undefined
   const isPromotional = (address: string) => new RegExp(`^accounts:${accountDigest}:promo:[a-f0-9]{64}:available$`, 'u').test(address)
+  const isPlanHold = (address: string) => /^plans:[a-f0-9]{64}:hold$/u.test(address)
   let credit = 0n
   let document = 0n
   for (const posting of transaction.postings) {
@@ -534,27 +551,27 @@ export function historyTransactionEffect(transaction: LedgerHistoryTransaction, 
       || (/^calls:[a-f0-9]{64}:buyer_promo_reserved$/u.test(address) && address !== promoReserved)
       || (/^accounts:[a-f0-9]{64}:promo:[a-f0-9]{64}:available$/u.test(address) && !isPromotional(address)))) return undefined
     const amount = BigInt(units)
-    if (posting.destination === available || posting.destination === reserved || posting.destination === promoReserved || isPromotional(posting.destination)) credit += amount
-    if (posting.source === available || posting.source === reserved || posting.source === promoReserved || isPromotional(posting.source)) credit -= amount
+    if (posting.destination === available || posting.destination === reserved || posting.destination === promoReserved || isPromotional(posting.destination) || isPlanHold(posting.destination)) credit += amount
+    if (posting.source === available || posting.source === reserved || posting.source === promoReserved || isPromotional(posting.source) || isPlanHold(posting.source)) credit -= amount
     if (/^adjustments:[a-f0-9]{64}:buyer$/u.test(posting.destination)) document += amount
     if (/^adjustments:[a-f0-9]{64}:buyer$/u.test(posting.source)) document -= amount
   }
   const kinds: Partial<Record<FormanceMoneyTemplate, AccountHistoryEntry['kind']>> = {
     FUNDING_SETTLED: 'funding', FUNDING_REVERSED: 'funding_reversal',
-    BUYER_SALE_SETTLED: 'call_spend', BUYER_SALE_REFUNDED: 'call_refund', CALL_PROMO_REFUNDED: 'promotional_refund', BUYER_ADJUSTED: 'document_adjustment',
+    BUYER_SALE_SETTLED: 'call_spend', PLAN_NODE_SETTLED_AUD: 'call_spend', BUYER_SALE_REFUNDED: 'call_refund', CALL_PROMO_REFUNDED: 'promotional_refund', BUYER_ADJUSTED: 'document_adjustment',
     PROMO_GRANTED: 'promotional_grant', PROMO_EXPIRED: 'promotional_expiry', CALL_PROMO_SETTLED: 'promotional_use',
   }
   const template = transaction.template
-  const known = FORMANCE_TEMPLATE_NAMES.find((value) => value === template)
+  const known = PLAN_FORMANCE_TEMPLATE_NAMES.find((value) => value === template)
   let kind = known === undefined ? 'unmapped' : kinds[known]
-  if ((template === 'BUYER_SALE_SETTLED' || template === 'BUYER_SALE_REFUNDED') && credit === 0n && document === 0n && !transaction.reverted) return null
+  if ((template === 'BUYER_SALE_SETTLED' || template === 'PLAN_NODE_SETTLED_AUD' || template === 'BUYER_SALE_REFUNDED') && credit === 0n && document === 0n && !transaction.reverted) return null
   if (((kind === 'funding' || kind === 'promotional_grant' || kind === 'call_refund' || kind === 'promotional_refund') && (credit <= 0n || document !== 0n))
     || ((kind === 'funding_reversal' || kind === 'call_spend' || kind === 'promotional_expiry' || kind === 'promotional_use') && (credit >= 0n || document !== 0n))
     || (kind === 'document_adjustment' && (credit !== 0n || document === 0n))) kind = 'unmapped'
   // Only known zero-effect internal legs can be omitted. Unknown bookings stay
   // visible and mark coverage partial, even if their credit effect is zero.
   if (kind === undefined && credit === 0n && document === 0n && !transaction.reverted) return null
-  const sourceDigest = template === 'BUYER_SALE_SETTLED' || template === 'CALL_PROMO_SETTLED' || template === 'BUYER_SALE_REFUNDED' || template === 'CALL_PROMO_REFUNDED'
+  const sourceDigest = template === 'BUYER_SALE_SETTLED' || template === 'PLAN_NODE_SETTLED_AUD' || template === 'CALL_PROMO_SETTLED' || template === 'BUYER_SALE_REFUNDED' || template === 'CALL_PROMO_REFUNDED'
     ? transaction.metadata.call_digest
     : transaction.metadata.command_digest
   return {
@@ -667,6 +684,7 @@ export type SupportedFormanceSchemaVersion =
   | typeof PERIOD_FORMANCE_SCHEMA_VERSION
   | typeof PROMOTIONAL_FORMANCE_SCHEMA_VERSION
   | typeof FORMANCE_SCHEMA_VERSION
+  | typeof PLAN_FORMANCE_SCHEMA_VERSION
 
 function schemaDefinition(version: SupportedFormanceSchemaVersion): Readonly<{
   version: SupportedFormanceSchemaVersion
@@ -695,12 +713,19 @@ function schemaDefinition(version: SupportedFormanceSchemaVersion): Readonly<{
             digest: PROMOTIONAL_FORMANCE_SCHEMA_DIGEST,
             readbackDigest: PROMOTIONAL_FORMANCE_SCHEMA_READBACK_DIGEST,
           }
-        : {
-            version,
-            schema: FORMANCE_SCHEMA,
-            digest: FORMANCE_SCHEMA_DIGEST,
-            readbackDigest: FORMANCE_SCHEMA_READBACK_DIGEST,
-          }
+        : version === PLAN_FORMANCE_SCHEMA_VERSION
+          ? {
+              version,
+              schema: PLAN_FORMANCE_SCHEMA,
+              digest: PLAN_FORMANCE_SCHEMA_DIGEST,
+              readbackDigest: PLAN_FORMANCE_SCHEMA_READBACK_DIGEST,
+            }
+          : {
+              version,
+              schema: FORMANCE_SCHEMA,
+              digest: FORMANCE_SCHEMA_DIGEST,
+              readbackDigest: FORMANCE_SCHEMA_READBACK_DIGEST,
+            }
 }
 
 async function insertSchemaVersion(

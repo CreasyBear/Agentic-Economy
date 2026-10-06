@@ -28,6 +28,7 @@ export { readFormanceTreasuryAudit, matchTreasuryProviderSettlement, matchTreasu
 } from '../../../../src/modules/money/formance-treasury-audit'
 export { bookFormanceTreasuryBatch } from '../../../../src/modules/money/formance-treasury'
 export {
+  reservePlanHold, readPlanHoldRemainder, releasePlanRemainder,
   readFormanceAccountCreditBalance,
   grantFormancePromotionalCredit,
   expireFormancePromotionalCredit,

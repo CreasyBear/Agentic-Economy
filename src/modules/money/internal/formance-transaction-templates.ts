@@ -1,4 +1,7 @@
-import { digestReference, digestValue, stripDigest } from './formance-digest'
+import { digestReference, digestValue, stripDigest, planHoldAccountAddress, planPromotionalHoldAccountAddress } from './formance-digest'
+import type { Infer } from 'convex/values'
+import type { managedCallBookingValue } from '../managed-call-contracts'
+import { PLAN_FORMANCE_SCHEMA_VERSION } from '../formance-schema'
 import { currentUtcDayBounds, currentUtcMonthBounds } from '@/modules/common/freshness'
 
 import {
@@ -48,34 +51,7 @@ export type FormanceCapacitySync = Readonly<{
   externalEvidenceDigest: string
 }>
 
-export type FormanceManagedCallBooking = Readonly<{
-  callRef: string
-  quoteRef: string
-  idempotencyKey: string
-  accountRef: string
-  principalRef: string
-  agentBudgetGeneration: number
-  legalCustomerRef: string
-  legalCustomerGeneration: number
-  treasuryRef: string
-  treasuryGeneration: number
-  toolRef: string
-  providerRef: string
-  authorityGeneration: number
-  policyGeneration: number
-  buyerAmountUnits: string
-  buyerRevenueUnits: string
-  buyerTaxUnits: string
-  providerAmountUnits: string
-  quoteDigest: string
-  inputDigest: string
-  policyDigest: string
-  rateEvidenceDigest: string
-  treasuryEvidenceDigest: string
-  x402RequirementDigest: string
-  spendingPeriods?: FormanceManagedCallSpendingPeriods
-  promotionalCreditAllocation?: PromotionalCreditAllocation
-}>
+export type FormanceManagedCallBooking = Readonly<Infer<typeof managedCallBookingValue>>
 
 export type FormanceManagedCallSpendingPeriod = Readonly<{
   periodStartAt: number
@@ -152,7 +128,7 @@ export function prepareFormanceManagedCallReservation(
     return refused('formance_managed_call_input_invalid')
   }
   return preparedBulk([
-    managedCallCommand(input, 'reserve-aud', 'CALL_RESERVED_AUD', {
+    managedCallCommand(input, 'reserve-aud', input.planAllocation === undefined ? 'CALL_RESERVED_AUD' : 'PLAN_NODE_ALLOCATED_AUD', input.planAllocation === undefined ? {
       account_available: accounts.accountAvailable,
       call_reserved: accounts.callReserved,
       legal_available: accounts.legalAvailable,
@@ -161,6 +137,9 @@ export function prepareFormanceManagedCallReservation(
       exposure_amount: amounts.buyer,
       ...managedCallGenerationBudgetVariables(input, accounts, amounts, 'reserve'),
       ...managedCallPeriodVariables(input, accounts, amounts, 'reserve'),
+    } : {
+      plan_hold: planHoldAccountAddress({ ...input.planAllocation, accountRef: input.accountRef }),
+      call_reserved: accounts.callReserved, buyer_amount: amounts.purchased,
     }),
     managedCallCommand(input, 'reserve-usdc', 'CALL_RESERVED_USDC', {
       source: accounts.treasuryAvailable,
@@ -188,7 +167,7 @@ export function prepareFormanceManagedCallRelease(
     return refused('formance_managed_call_input_invalid')
   }
   return preparedBulk([
-    managedCallCommand(input.booking, 'release-aud', 'CALL_RELEASED_AUD', {
+    managedCallCommand(input.booking, 'release-aud', input.booking.planAllocation === undefined ? 'CALL_RELEASED_AUD' : 'PLAN_NODE_RELEASED_AUD', {
       account_available: accounts.accountAvailable,
       call_reserved: accounts.callReserved,
       legal_available: accounts.legalAvailable,
@@ -218,7 +197,7 @@ export function prepareFormanceManagedCallSettlement(
     return refused('formance_managed_call_input_invalid')
   }
   return preparedBulk([
-    managedCallCommand(input.booking, 'settle-buyer', 'BUYER_SALE_SETTLED', {
+    managedCallCommand(input.booking, 'settle-buyer', input.booking.planAllocation === undefined ? 'BUYER_SALE_SETTLED' : 'PLAN_NODE_SETTLED_AUD', {
       call_reserved: accounts.callReserved,
       revenue: 'platform:revenue:sales',
       tax: 'platform:tax:gst',
@@ -260,7 +239,7 @@ export function prepareFormancePaidCallRemedy(
   const provider = settlement.bulk.commands[1]
   if (provider === undefined) return refused('formance_managed_call_input_invalid')
   return preparedBulk([
-    managedCallCommand(input.booking, 'release-aud', 'CALL_RELEASED_AUD', {
+    managedCallCommand(input.booking, 'release-aud', input.booking.planAllocation === undefined ? 'CALL_RELEASED_AUD' : 'PLAN_NODE_RELEASED_AUD', {
       account_available: accounts.accountAvailable,
       call_reserved: accounts.callReserved,
       legal_available: accounts.legalAvailable,
@@ -626,7 +605,9 @@ export function promotionalCallCommands(
       : stage === 'release' ? 'CALL_PROMO_RELEASED' : 'CALL_PROMO_SETTLED'
     const destination = stage === 'reserve' ? reserved
       : stage === 'release' ? grantAccount : 'platform:expense:marketing'
-    const source = stage === 'reserve' ? grantAccount : reserved
+    const hold = input.planAllocation === undefined ? grantAccount
+      : planPromotionalHoldAccountAddress({ ...input.planAllocation, accountRef: input.accountRef }, grant.grantRef)
+    const source = stage === 'reserve' ? hold : reserved
     return managedCallCommand(input, `${stage}-promo`, template, {
       source, destination, amount: `AUD/6 ${grant.amountUnits}`,
     }, externalEvidenceDigest, grant.grantRef)
@@ -652,7 +633,7 @@ export function managedCallAmounts(input: FormanceManagedCallBooking) {
 }
 
 /** Frozen split is checked before any command can be constructed. */
-export function validPromotionalCreditAllocation(input: FormanceManagedCallBooking): boolean {
+export function validPromotionalCreditAllocation(input: Readonly<{ buyerAmountUnits: string; promotionalCreditAllocation?: PromotionalCreditAllocation }>): boolean {
   const allocation = input.promotionalCreditAllocation
   if (allocation === undefined) return true
   if (allocation.version !== 'ae.promotional-credit-allocation:v1'
@@ -715,6 +696,19 @@ export function managedCallSemantic(input: FormanceManagedCallBooking): boolean 
     && validPromotionalCreditAllocation(input)
     && (input.promotionalCreditAllocation === undefined || input.spendingPeriods !== undefined)
     && (input.spendingPeriods === undefined || validManagedCallSpendingPeriods(input))
+    && validPlanCallAllocation(input)
+}
+
+/** A Plan node must use the original period-aware booking and stay within its frozen ceiling. */
+function validPlanCallAllocation(input: FormanceManagedCallBooking): boolean {
+  const plan = input.planAllocation
+  if (plan === undefined) return true
+  return input.spendingPeriods !== undefined
+    && boundedReference(plan.planRef) && boundedReference(plan.nodeId) && SHA256.test(plan.planDigest)
+    && canonicalFormanceUnits(plan.approvedTotalUnits) !== undefined
+    && canonicalFormanceUnits(plan.nodeCeilingUnits) !== undefined
+    && BigInt(input.buyerAmountUnits) <= BigInt(plan.nodeCeilingUnits)
+    && BigInt(plan.nodeCeilingUnits) <= BigInt(plan.approvedTotalUnits)
 }
 
 export function managedCallCommand(
@@ -735,7 +729,7 @@ export function managedCallCommand(
   return Object.freeze({
     commandRef: formanceReference(identity, stage.includes('-promo-') ? 'promo-call' : stage),
     idempotencyKey: idempotencyDigest,
-    schemaVersion: input.promotionalCreditAllocation !== undefined
+    schemaVersion: input.planAllocation !== undefined ? PLAN_FORMANCE_SCHEMA_VERSION : input.promotionalCreditAllocation !== undefined
       ? PROMOTIONAL_FORMANCE_SCHEMA_VERSION
       : input.spendingPeriods === undefined
         ? LEGACY_FORMANCE_SCHEMA_VERSION
@@ -746,7 +740,7 @@ export function managedCallCommand(
       account_digest: digestReference('account', input.accountRef),
       call_digest: digestReference('call', input.callRef),
       command_digest: digestValue('managed-call-command', {
-        format: input.promotionalCreditAllocation !== undefined
+        format: input.planAllocation !== undefined ? 'ae.formance-managed-call:v4' : input.promotionalCreditAllocation !== undefined
           ? 'ae.formance-managed-call:v3'
           : input.spendingPeriods === undefined
             ? 'ae.formance-managed-call:v1'

@@ -1,3 +1,4 @@
+import { planNodeValue, readNodeMaterial } from '../plans/nodeMaterial'
 import { v, type Infer } from 'convex/values'
 
 import { degradeBackend } from '@/lib/observability/degrade-backend'
@@ -53,13 +54,14 @@ export const issueQuoteArgs = {
   turnRef: v.optional(v.string()),
   liveX402Requirement: v.optional(liveX402RequirementValue),
   formance: formanceFinancialSnapshot,
+  planNode: v.optional(planNodeValue),
 }
 
 export const issueQuoteResult = quoteResult
 
 export async function issueQuoteHandler(
   ctx: MutationCtx,
-  args: QuoteArgs & Readonly<{ turnRef?: string; formance: Infer<typeof formanceFinancialSnapshot> }>,
+  args: QuoteArgs & Readonly<{ turnRef?: string; planNode?: Infer<typeof planNodeValue>; formance: Infer<typeof formanceFinancialSnapshot> }>,
 ): Promise<QuoteResult> {
   // The coordinating action has already consumed this source-write admission in
   // prepareFinancialSubjects. Internal mutations must not consume the same nonce twice.
@@ -111,6 +113,15 @@ export async function issueQuoteHandler(
   if (currentDigest === undefined) return refuse(args, 'tool_not_current', false, {
     capabilityId: operation.contract.ref.capabilityId,
   })
+
+  const planned = args.planNode === undefined ? undefined : await readNodeMaterial(ctx, args.planNode)
+  if (planned !== undefined && (planned.kind !== 'ready' || planned.node.toolRef !== args.toolRef
+    || planned.plan.principalId !== authority.principal.principalId || planned.plan.credentialId !== authority.principal.credentialId
+    || planned.inputDigest !== canonicalDigest(args.input))) return refuse(args, 'input_invalid', false)
+  const parentPlan = planned?.kind === 'ready' ? planned.plan : undefined
+  if (parentPlan?.holdBooking !== undefined && (canonicalDigest(args.formance.spendingPeriods ?? null) !== canonicalDigest(parentPlan.holdBooking.spendingPeriods)
+    || args.formance.legalCustomerRef !== parentPlan.holdBooking.legalCustomerRef
+    || args.formance.legalCustomerGeneration !== parentPlan.holdBooking.legalCustomerGeneration)) return refuse(args, 'inspection_unavailable', false)
 
   // Re-read after the coordinating action's external inspection; a mid-request pause must win.
   const paymentPricing = normalizePricingConfig(operation.pricingConfig)
@@ -166,16 +177,17 @@ export async function issueQuoteHandler(
       })
     : refuse(args, 'tool_unsupported', false, { reason: 'Invalid upstream USDC amount.' })
   if (!/^(?:0|[1-9]\d*)$/u.test(pricing.price.units)) return refuse(args, 'pricing_setup_required', false)
+  if (planned?.kind === 'ready' && BigInt(pricing.price.units) > BigInt(planned.node.ceilingAudUnits)) return refuse(args, 'budget_exceeded', false)
   const buyerSale = { revenueUnits: pricing.price.units, taxUnits: '0' }
   const paid = pricing.price.units !== '0'
-  const organizationMonthlyAdmission = quoteOrganizationMonthlySpendAdmission(
+  const organizationMonthlyAdmission = parentPlan === undefined ? quoteOrganizationMonthlySpendAdmission(
     args,
     pricing.price.units,
     args.formance.organizationMonthlySpend,
-  )
+  ) : undefined
   if (organizationMonthlyAdmission !== undefined) return quoteRefusal(organizationMonthlyAdmission)
   const spendingPeriods = paid ? args.formance.spendingPeriods : undefined
-  const periodAdmission = await quotePaidPeriodAdmission(ctx, args, {
+  const periodAdmission = parentPlan === undefined ? await quotePaidPeriodAdmission(ctx, args, {
     paid,
     formance: args.formance,
     principalId: authority.principal.principalId,
@@ -184,7 +196,7 @@ export async function issueQuoteHandler(
     priceUnits: pricing.price.units,
     spendingPeriods,
     now,
-  })
+  }) : undefined
   if (periodAdmission !== undefined) return quoteRefusal(periodAdmission)
   const liveX402Admission = quoteLiveX402IsCurrent(args, pricing, args.liveX402Requirement, now)
   if (liveX402Admission !== undefined) return quoteRefusal(liveX402Admission)
@@ -195,7 +207,7 @@ export async function issueQuoteHandler(
   }
 
   const balanceUnits = args.formance.accountAvailableUnits
-  if (BigInt(balanceUnits) < BigInt(pricing.price.units)) {
+  if (parentPlan === undefined && BigInt(balanceUnits) < BigInt(pricing.price.units)) {
     return quoteRefusal(quoteFundingContinuation(args, {
       balanceUnits,
       priceUnits: pricing.price.units,
@@ -206,7 +218,7 @@ export async function issueQuoteHandler(
       budgetGeneration: grantReadback.budget.generation,
     }))
   }
-  if (BigInt(args.formance.legalExposureAvailableUnits) < BigInt(pricing.price.units)) {
+  if (parentPlan === undefined && BigInt(args.formance.legalExposureAvailableUnits) < BigInt(pricing.price.units)) {
     return refuse(args, 'budget_exceeded', false, { reason: 'account_limit' })
   }
   const treasury = args.formance.treasury
@@ -219,13 +231,13 @@ export async function issueQuoteHandler(
 
   const normalizedInput = structuredClone(args.input)
   const inputDigest = canonicalDigest(normalizedInput as never)
-  const expiresAt = quoteExpiresAt(now, {
+  const expiresAt = Math.min(parentPlan?.runDeadlineAt ?? Number.MAX_SAFE_INTEGER, quoteExpiresAt(now, {
     commitmentTtlMs: policyGate.controls.operations.commitmentTtlMs,
     authorityExpiresAt: authority.expiresAt,
     toolValidUntil: operation.readiness.validUntil,
     rateEvidenceExpiresAt: pricing.rateEvidence?.expiresAt,
-    spendingPeriods,
-  })
+    ...(parentPlan === undefined ? { spendingPeriods } : {}),
+  }))
   if (expiresAt <= now) return refuse(args, 'inspection_unavailable', true, { reason: 'spending_period_expired' })
   const { evidenceDigest, quoteRef } = quoteEvidenceMaterial({
     now,
@@ -258,6 +270,7 @@ export async function issueQuoteHandler(
   }
   if (existingCommitment === null) await ctx.db.insert('capabilityQuotes', {
     quoteRef,
+    ...(args.planNode === undefined ? {} : { planRef: args.planNode.planRef, planNodeId: args.planNode.nodeId }),
     principalId: authority.principal.principalId,
     accountRef: authority.principal.ownerId,
     credentialId: authority.principal.credentialId,

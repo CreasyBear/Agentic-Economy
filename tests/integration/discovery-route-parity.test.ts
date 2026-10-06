@@ -7,6 +7,14 @@ import {
   toolChoiceListOutputSchema,
   toolChoiceSearchOutputSchema,
 } from '@/modules/registry/tool-choice-contracts'
+import { TOOL_PLAN_QUOTE_ROUTE_CONTRACT } from '@/modules/capability-execution/plan/quote.actions'
+import { PLAN_RUNTIME_ROUTES } from '@/modules/capability-execution/plan/runtime.actions'
+import { FEEDBACK_ROUTE_CONTRACT } from '@/modules/actions/feedback.actions'
+import { Route as FeedbackRoute } from '@/routes/api.v1.feedback'
+import { Route as PlanQuoteRoute } from '@/routes/api.v1.tools.plans.quote'
+import { Route as PlanRunRoute } from '@/routes/api.v1.tools.plans.run'
+import { Route as PlanCancelRoute } from '@/routes/api.v1.tools.plans.cancel'
+import { Route as PlanGetRoute } from '@/routes/api.v1.tools.plans.$planRef'
 import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
 import { brandNonEmpty } from '@/modules/common/ids'
 import { isRecord } from '@/modules/common/is-record'
@@ -186,6 +194,7 @@ describe('discovery route parity', () => {
       TOOL_MARKET_SEARCH_PATH,
       TOOL_MARKET_DESCRIBE_PATH,
       TOOL_MARKET_COMPARE_PATH,
+      ...AUTHENTICATED_ROUTE_CASES.map(route => new URL(route.path, origin).pathname),
       '/api/v1/release',
       '/api/v1/catalogue-status',
     ].sort()
@@ -270,7 +279,7 @@ function advertisedRoute(url: string): AdvertisedRoute {
   const marketRoute = TOOL_MARKET_ACTION_ENTRIES.find((entry) => entry.pathTemplate === path)
   return {
     url,
-    method: marketRoute?.method ?? 'GET',
+    method: marketRoute?.method ?? AUTHENTICATED_ROUTE_CASES.find(route => route.path === decodeURIComponent(path))?.method ?? 'GET',
   }
 }
 type RouteHandler = (context: Readonly<{
@@ -329,6 +338,14 @@ const MARKET_TOOL_DETAIL_WIRE_DESCRIPTOR = {
   navigation: [],
 } as const
 
+const AUTHENTICATED_ROUTE_CASES = [
+  { ...TOOL_PLAN_QUOTE_ROUTE_CONTRACT, route: PlanQuoteRoute },
+  { ...PLAN_RUNTIME_ROUTES.run, route: PlanRunRoute },
+  { ...PLAN_RUNTIME_ROUTES.get, route: PlanGetRoute },
+  { ...PLAN_RUNTIME_ROUTES.cancel, route: PlanCancelRoute },
+  { ...FEEDBACK_ROUTE_CONTRACT, route: FeedbackRoute },
+] as const
+
 const MARKET_TOOL_ROUTE_CASES: readonly MarketToolRouteCase[] = [
   {
     path: TOOL_MARKET_LIST_PATH,
@@ -365,6 +382,21 @@ async function resolveAdvertisedRoute(route: AdvertisedRoute, state: DiscoverySo
 
   if (marketRoute !== undefined) {
     return route.method === marketRoute.method && await resolveMarketToolRoute(route)
+  }
+
+  const authenticatedRoute = AUTHENTICATED_ROUTE_CASES.find(candidate => candidate.path === decodeURIComponent(path))
+  if (authenticatedRoute !== undefined) {
+    if (route.method !== authenticatedRoute.method) return false
+    const planRef = '00000000-0000-4000-8000-000000000001'
+    const requestUrl = new URL(authenticatedRoute.path.replace('{planRef}', planRef), parsed.origin)
+    const response = await routeHandler(authenticatedRoute.route, authenticatedRoute.method)({
+      request: new Request(requestUrl, { method: authenticatedRoute.method,
+        ...(authenticatedRoute.method === 'POST' ? { headers: { 'content-type': 'application/json' }, body: '{}' } : {}) }),
+      params: authenticatedRoute.path.includes('{planRef}') ? { planRef } : {},
+    })
+    const body: unknown = await response.json()
+    return response.status === 401 && response.headers.get('content-type')?.includes('application/problem+json') === true
+      && isRecord(body) && body.status === 401 && typeof body.detail === 'string'
   }
 
 

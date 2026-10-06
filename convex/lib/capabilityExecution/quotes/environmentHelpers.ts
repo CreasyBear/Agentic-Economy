@@ -32,7 +32,7 @@ export function cdpX402CustodyEnvironment(): StringEnvironment {
 }
 
 export async function readOrganizationMonthlySpendSnapshotForQuote(
-  ctx: { runAction: ActionCtx['runAction'] },
+  ctx: Pick<ActionCtx, 'runAction' | 'runQuery'>,
   subjects: PreparedFinancialSubjects,
 ): Promise<Infer<typeof formanceFinancialSnapshot>['organizationMonthlySpend']> {
   if (subjects.organizationMonthlySpendBudget === undefined) return undefined
@@ -42,9 +42,13 @@ export async function readOrganizationMonthlySpendSnapshotForQuote(
     periodStartAt,
     periodEndAt,
   })
+  const held = await ctx.runQuery(internal.capabilityPlans.readOutstandingPlanExposure, {
+    accountRef: subjects.accountRef, organizationMonth: new Date(periodStartAt).toISOString().slice(0, 7),
+  })
   return {
     enabled: true,
     ceilingUnits: subjects.organizationMonthlySpendBudget.ceilingUnits,
+    heldPlanExposure: held.kind === 'available' ? { kind: 'known', units: held.units } : { kind: 'unavailable' },
     ...(accountSpend.kind === 'available'
       ? { monthSpendUnits: accountSpend.spendUnits }
       : accountSpend.kind === 'empty'

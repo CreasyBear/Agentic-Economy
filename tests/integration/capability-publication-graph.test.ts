@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { api, internal } from '../../convex/_generated/api'
 import { eligibleSupplyPorts } from '../../convex/capabilitySupplyEligiblePorts'
 import { capabilitySupplyGraphPorts } from '../../convex/lib/capabilitySupply/graphPorts/ports'
+import { capabilityContractV2, objectSchema } from '../fixtures/capability-contract-v2'
 import {
   convexTestWithMarketComponents,
   ownerAdmin,
@@ -30,18 +31,32 @@ describe('capability publication graph', () => {
     )
     await registerProviderConnection(backend, first.businessId, 'graph-one')
     await registerProviderConnection(backend, second.businessId, 'graph-two')
+    const firstInput = capabilityPublicationInput(first.businessId, 'graph-one')
+    const secondInput = capabilityPublicationInput(second.businessId, 'graph-two')
+    const sharedSchema = objectSchema({ request: { type: 'string', minLength: 1 } }, ['request'])
+    for (const [input, suffix] of [[firstInput, 'graph-one'], [secondInput, 'graph-two']] as const) {
+      input.source.documentJson = JSON.stringify(capabilityContractV2({
+        capabilityId: `independent.${suffix}.lookup`, name: `${suffix} lookup`,
+        inputSchema: sharedSchema, outputSchema: sharedSchema,
+        customerAnnotations: [
+          { annotationId: 'request', document: 'input', pointer: '/request', label: 'Request', role: 'request' },
+          { annotationId: 'result', document: 'output', pointer: '/request', label: 'Result', role: 'completion_evidence' },
+        ],
+        evidence: [{ evidenceId: 'result', outputPointer: '/request', purpose: 'completion' }],
+      }))
+    }
     const firstPublished = await first.owner.mutation(
       api.capabilitySupply.publishPreparedCapability,
       await preparedPublicationArgs(
         backend,
-        capabilityPublicationInput(first.businessId, 'graph-one'),
+        firstInput,
       ),
     )
     const secondPublished = await second.owner.mutation(
       api.capabilitySupply.publishPreparedCapability,
       await preparedPublicationArgs(
         backend,
-        capabilityPublicationInput(second.businessId, 'graph-two'),
+        secondInput,
       ),
     )
     if ('reason' in firstPublished)
@@ -98,6 +113,13 @@ describe('capability publication graph', () => {
     if (graph.kind !== 'available')
       throw new Error(`capability_graph_unavailable:${graph.reason}`)
     expect(graph.nodes).toHaveLength(2)
+    expect(graph.nodes.every(node => node.admittedToolRef?.startsWith('operation:v1:'))).toBe(true)
+    expect(graph.edges.filter(edge => edge.kind === 'schema_compatible')).toEqual([
+      { kind: 'schema_compatible', from: firstPublished.publicationRef, to: secondPublished.publicationRef,
+        inputMappings: [{ inputKey: 'request', outputPointer: '/request' }] },
+      { kind: 'schema_compatible', from: secondPublished.publicationRef, to: firstPublished.publicationRef,
+        inputMappings: [{ inputKey: 'request', outputPointer: '/request' }] },
+    ])
     expect(JSON.stringify(graph)).not.toContain('credentialRef')
     expect(JSON.stringify(graph)).not.toContain('_KEY')
   })

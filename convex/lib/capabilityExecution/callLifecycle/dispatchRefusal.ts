@@ -202,7 +202,7 @@ export async function refuseUnclaimedHandler(
 function hasBuyerFormanceRefs(row: CallRow): boolean {
   const refs = row.formanceReservationRefs
   return refs !== undefined
-    && refs.length === 3
+    && refs.length === 3 + (row.promotionalCreditAllocation?.grants.length ?? 0)
     && refs.every((ref) => ref.trim().length > 0)
 }
 

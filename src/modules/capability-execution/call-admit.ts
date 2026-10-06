@@ -9,6 +9,7 @@ import {
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import type { SpendingPolicyAuthorityBasis } from '@/modules/action-execution/runtime'
+import type { PlanNodeAuthorityBasis } from './plan/contracts'
 import { currentToolDigest } from './current-tool-quote'
 import {
   toolEnvironmentMismatchNextAction,
@@ -53,7 +54,7 @@ export type CallGrantDecision =
 export type CallAuthorityDecision =
   | Readonly<{
       kind: 'approved'
-      basis: Readonly<{ kind: 'approval_required'; authorityRef: string }> | SpendingPolicyAuthorityBasis
+      basis: Readonly<{ kind: 'approval_required'; authorityRef: string }> | SpendingPolicyAuthorityBasis | PlanNodeAuthorityBasis
       expiresAt: string
     }>
   | Readonly<{

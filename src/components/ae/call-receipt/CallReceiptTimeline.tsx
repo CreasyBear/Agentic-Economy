@@ -1,3 +1,4 @@
+import { useId } from 'react'
 import { AeStatusStepper } from '@/components/ae/shared/status-stepper/AeStatusStepper'
 import type { CallReceiptStageView } from '@/modules/capability-execution/call-receipt-view'
 
@@ -5,6 +6,7 @@ import { machineLabel } from './call-receipt-format'
 import './ReceiptComposition.css'
 
 export function CallReceiptTimeline({ stages }: Readonly<{ stages: readonly CallReceiptStageView[] }>) {
+  const headingId = useId()
   const currentStage = stages.findIndex((stage) => stage.state === 'current')
   const nextStage = stages.findIndex((stage) => stage.state === 'pending' || stage.state === 'attention')
   const current = currentStage >= 0 ? currentStage : nextStage >= 0 ? nextStage : stages.length
@@ -17,9 +19,9 @@ export function CallReceiptTimeline({ stages }: Readonly<{ stages: readonly Call
   }))
 
   return (
-    <section className="arc-market arc-call-timeline" aria-labelledby="receipt-progress-title">
+    <section className="arc-market arc-call-timeline" aria-labelledby={headingId}>
       <div className="grid gap-intra">
-        <h2 id="receipt-progress-title" className="arc-call-heading">What happened</h2>
+        <h2 id={headingId} className="arc-call-heading">What happened</h2>
         <p className="arc-call-context">Recorded progress for this exact call. A pending stage is not claimed as complete.</p>
       </div>
       <AeStatusStepper

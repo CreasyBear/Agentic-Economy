@@ -1,3 +1,6 @@
+import { planSuggestInputSchema, mercatorImportInputSchema, planDraftResultSchema } from '@/modules/capability-execution/plan/draft.schemas'
+import { toolPlanQuoteAction } from '@/modules/capability-execution/plan/quote.actions'
+import { toolPlanRunAction, toolPlanGetAction } from '@/modules/capability-execution/plan/runtime.actions'
 import { z } from 'zod'
 import { callInputSchema, callResultSchema } from '@/modules/capability-execution/call-contracts'
 import { toolQuoteInputSchema, toolQuoteResultSchema } from '@/modules/capability-execution/quote'
@@ -68,6 +71,15 @@ const chatContracts = {
   'registry.tools.compare': registryToolsCompareContract,
   'tool.quote': chatToolQuoteContract,
   'tool.call': chatCallContract,
+  'tool.plan.suggest': { id: 'tool.plan.suggest', summary: 'Read editable Plan drafts from currently admitted schema-compatible Tool edges.',
+    boundaries: ['Drafts are untyped suggestions, never approval or a purchase. Fill required inputs and quote the edited Plan before any run.'],
+    surfaces: ['chat'], schema: planSuggestInputSchema, outputSchema: planDraftResultSchema },
+  'tool.plan.import': { id: 'tool.plan.import', summary: 'Convert a supplied Mercator flow and Provider host map into an editable Plan draft.',
+    boundaries: ['Each exact host, method and path must resolve uniquely to an admitted Tool. A serviceId never establishes local identity. No Quote, Hold or Call is created.'],
+    surfaces: ['chat'], schema: mercatorImportInputSchema, outputSchema: planDraftResultSchema },
+  'tool.plan.quote': { ...toolPlanQuoteAction, id: 'tool.plan.quote', surfaces: ['chat'] },
+  'tool.plan.run': { ...toolPlanRunAction, id: 'tool.plan.run', surfaces: ['chat'] },
+  'tool.plan.get': { ...toolPlanGetAction, id: 'tool.plan.get', surfaces: ['chat'] },
   'chat.clarify': {
     id: 'chat.clarify',
     summary: 'Ask one clarifying question with exactly three short choices when a search would be a guess, then wait for the answer.',

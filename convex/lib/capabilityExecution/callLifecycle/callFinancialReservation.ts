@@ -15,7 +15,7 @@ function currentUtcMonthWindow(): { periodStartAt: number; periodEndAt: number }
   }
 }
 
-async function readOrganizationMonthlySpendForReserve(
+export async function readOrganizationMonthlySpendForReserve(
   ctx: ActionCtx,
   ownerId: string,
 ): Promise<ReserveArgs['organizationMonthlySpend']> {
@@ -25,6 +25,11 @@ async function readOrganizationMonthlySpendForReserve(
   )
   if (!budgetRow.enabled) return undefined
   const { periodStartAt, periodEndAt } = currentUtcMonthWindow()
+  // Capture held exposure before the external read; admission compares it again.
+  const organizationMonth = new Date(periodStartAt).toISOString().slice(0, 7)
+  const held = await ctx.runQuery(internal.capabilityPlans.readOutstandingPlanExposure, {
+    accountRef: ownerId, organizationMonth,
+  })
   const accountSpend = await ctx.runAction(internal.moneyFormance.readPeriodSpend, {
     accountRef: ownerId,
     periodStartAt,
@@ -33,6 +38,8 @@ async function readOrganizationMonthlySpendForReserve(
   return {
     enabled: true,
     ceilingUnits: budgetRow.ceilingUnits,
+    organizationMonth,
+    ...(held.kind === 'available' ? { planExposureDigest: held.digest } : {}),
     ...(accountSpend.kind === 'available'
       ? { monthSpendUnits: accountSpend.spendUnits }
       : accountSpend.kind === 'empty'

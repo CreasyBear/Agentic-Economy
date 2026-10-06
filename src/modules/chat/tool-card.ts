@@ -1,6 +1,6 @@
+import { projectChatPlan, storedPlanReference } from './tool-card-plan'
 import type { z } from 'zod'
 import { boundaryCauseKind, captureBackendException, degradeBackend } from '@/lib/observability/degrade-backend'
-import { providerSafeActionToolName } from '@/modules/actions/tool-contract'
 import { isBoundedJsonValue, type JsonValue } from '@/modules/common/bounded-json'
 import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import { chatClarifyInputSchema, storedClarifyAnswer } from '@/modules/chat/agent-turn.contracts'
@@ -35,40 +35,9 @@ import type {
   OwnerMarketDemandWithdrawResult,
 } from '@/modules/market-demand/market-demand.functions'
 
-export const CHAT_TOOL_IDS = [
-  'registry.tools.list',
-  'registry.tools.search',
-  'registry.tools.describe',
-  'registry.tools.compare',
-  'tool.quote',
-  'tool.call',
-  'chat.clarify',
-] as const
-
-export type ChatToolId = (typeof CHAT_TOOL_IDS)[number]
-
-const canonicalToProvider = Object.freeze(Object.fromEntries(
-  CHAT_TOOL_IDS.map((toolId) => [toolId, providerSafeActionToolName(toolId)]),
-)) as Readonly<Record<ChatToolId, string>>
-
-const providerToCanonical = Object.freeze(Object.fromEntries(
-  CHAT_TOOL_IDS.map((toolId) => [canonicalToProvider[toolId], toolId]),
-)) as Readonly<Record<string, ChatToolId>>
-
-export const CHAT_TOOL_NAME_MAP = Object.freeze({
-  canonicalToProvider,
-  providerToCanonical,
-})
-
-export const CHAT_TOOL_TITLES: Readonly<Record<ChatToolId, string>> = {
-  'registry.tools.list': 'Browse Tools',
-  'registry.tools.search': 'Search tools',
-  'registry.tools.describe': 'Tool details',
-  'registry.tools.compare': 'Compare tools',
-  'tool.quote': 'Confirm purchase terms',
-  'tool.call': 'Call',
-  'chat.clarify': 'Preparing a question',
-}
+import { CHAT_TOOL_IDS, CHAT_TOOL_NAME_MAP, CHAT_TOOL_TITLES, type ChatToolId } from './tool-ids'
+export { CHAT_TOOL_IDS, CHAT_TOOL_NAME_MAP, CHAT_TOOL_TITLES, type ChatToolId } from './tool-ids'
+const { providerToCanonical } = CHAT_TOOL_NAME_MAP
 
 export type ToolChoiceRow = Readonly<{
   toolRef: string
@@ -140,7 +109,7 @@ export function parseChatQuoteInput(toolRef: string, draft: string): Record<stri
 
 export type ToolCardProjection =
   | (CardChrome & { kind: 'working' })
-  | (CardChrome & { kind: 'status'; state: 'refused' | 'error' | 'attention'; summary: string; recoveryReason?: string; next?: RegistryNextAction; saveNeed?: ChatSaveNeed; funding?: { units: string; exponent: number } })
+  | (CardChrome & { kind: 'status'; state: 'refused' | 'error' | 'attention'; summary: string; planRef?: string; recoveryReason?: string; next?: RegistryNextAction; saveNeed?: ChatSaveNeed; funding?: { units: string; exponent: number } })
   | (CardChrome & {
       kind: 'choices'
       state: 'complete'
@@ -664,6 +633,11 @@ function projectLiveBody(toolId: ChatToolId, output: Record<string, unknown>, in
     }
     case 'tool.quote':
     case 'tool.call':
+    case 'tool.plan.suggest':
+    case 'tool.plan.import':
+    case 'tool.plan.quote':
+    case 'tool.plan.run':
+    case 'tool.plan.get':
     case 'chat.clarify':
       return statusCard(toolId, 'error', 'Tool unavailable')
     default: {
@@ -691,7 +665,9 @@ function projectStoredCard(part: Record<string, unknown>): ToolCardProjection | 
     const funding = toolId === 'tool.quote' && state === 'refused' && isRecord(part.funding)
       ? exactAmountSchema.safeParse({ ...part.funding, currency: 'AUD' })
       : undefined
+    const planRef = storedPlanReference(toolId, part.planRef)
     return {
+      ...(planRef === undefined ? {} : { planRef }),
       ...statusCard(toolId, state, stringField(part.summary) ?? (state === 'refused' ? 'Request refused' : 'Tool unavailable'), stringField(part.recoveryReason)),
       ...(funding?.success && funding.data.currency === 'AUD'
         ? { funding: { units: funding.data.units, exponent: funding.data.exponent } }
@@ -823,6 +799,10 @@ export function projectToolCard(part: unknown): ToolCardProjection | null {
   const kind = output?.kind
   if (kind === 'error') return statusCard(toolId, 'error', 'Tool unavailable', 'tool_unavailable')
   if (kind === 'unavailable' && toolId !== 'registry.tools.search') return statusCard(toolId, 'error', 'Tool unavailable', 'tool_unavailable')
+  if (toolId === 'tool.plan.suggest' || toolId === 'tool.plan.import' || toolId === 'tool.plan.quote' || toolId === 'tool.plan.run' || toolId === 'tool.plan.get') {
+    if (kind === 'chat_tool_refused') return statusCard(toolId, 'refused', 'Plan request refused', stringField(output?.reason))
+    return { ...chrome(toolId), ...projectChatPlan(toolId, output) }
+  }
   if (toolId === 'tool.call') {
     if (kind === 'chat_tool_refused') {
       const reason = typeof output?.reason === 'string' ? REFUSAL_SUMMARIES[output.reason] : undefined
@@ -910,6 +890,7 @@ export function serializeToolCard(card: ToolCardProjection): Record<string, unkn
         title: card.title,
         state: card.state,
         summary: card.summary,
+        ...(card.planRef === undefined ? {} : { planRef: card.planRef }),
         ...(card.recoveryReason === undefined ? {} : { recoveryReason: card.recoveryReason }),
         ...(card.next === undefined ? {} : { next: card.next }),
         ...(card.saveNeed === undefined ? {} : { saveNeed: card.saveNeed }),

@@ -126,6 +126,7 @@ export const commercialPolicyControlValue = v.union(
     paidCallReportsPerDay: v.optional(v.number()),
     fundingServiceFeeBps: v.number(),
     buyerPricingMarginBps: v.number(),
+    planRateToleranceBps: v.optional(v.number()),
     commitmentTtlMs: v.number(),
     formanceSdkVersion: v.string(),
     formanceSdkArtifactDigest: v.string(),

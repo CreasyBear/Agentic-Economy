@@ -5,11 +5,13 @@ import { TOOL_QUOTE_ROUTE_CONTRACT } from '@/modules/capability-execution/quote.
 
 import { ACCOUNT_COMMAND_DESCRIPTORS, accountCommandDescriptor } from './account'
 import { callCommandDescriptor } from './call'
+import { planQuoteCommandDescriptor, planRunCommandDescriptor, planGetCommandDescriptor, planCancelCommandDescriptor } from './plan'
 import { historyCommandDescriptor } from './history'
 import { MARKET_TOOL_COMMAND_DESCRIPTORS } from './market-tools'
 import { SUPPLY_COMMAND_DESCRIPTORS } from './supply'
 import { MARKET_REQUEST_COMMAND_DESCRIPTORS } from './request'
 import { SAVED_COMMAND_DESCRIPTORS } from './saved'
+import { feedbackCommandDescriptor } from './feedback'
 
 export type CliActionAdapterDescriptor = Readonly<{
   actionId: string
@@ -24,6 +26,11 @@ export type CliActionAdapterDescriptor = Readonly<{
  * `cli` declaration without adding its adapter makes conformance fail.
  */
 export const CLI_ACTION_ADAPTERS: readonly CliActionAdapterDescriptor[] = Object.freeze([
+  feedbackCommandDescriptor,
+  planQuoteCommandDescriptor,
+  planRunCommandDescriptor,
+  planGetCommandDescriptor,
+  planCancelCommandDescriptor,
   ...MARKET_TOOL_COMMAND_DESCRIPTORS.map(({ actionId, command, path }) => ({
     actionId,
     command,

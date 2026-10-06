@@ -83,7 +83,7 @@ describe('action registry', () => {
   })
 
 
-  it('limits chat to discovery, Quote, and Call actions', () => {
+  it('limits chat to discovery, Quotes, Plans and Calls', () => {
     const exposed = listActions().filter((action) => action.surfaces.includes('chat')).map((action) => action.id)
     expect(exposed).toEqual([
       'registry.tools.list',
@@ -91,6 +91,9 @@ describe('action registry', () => {
       'registry.tools.describe',
       'registry.tools.compare',
       'tool.quote',
+      'tool.plan.quote',
+      'tool.plan.run',
+      'tool.plan.get',
       'tool.call',
     ])
     expect(exposed).not.toContain('tool.procure')

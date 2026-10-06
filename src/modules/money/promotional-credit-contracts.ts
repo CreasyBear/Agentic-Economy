@@ -54,3 +54,31 @@ export const accountCreditBalanceValue = v.union(
 )
 export type AccountCreditBalance = Infer<typeof accountCreditBalanceValue>
 export type EligiblePromotionalGrant = Infer<typeof eligiblePromotionalGrantValue>
+
+/** Partition already reserved credit without touching grant availability again.
+ * Original grant identity/expiry and total units are conserved; invalid or
+ * insufficient pools refuse before the caller writes a node reservation. */
+export function partitionPromotionalCreditAllocation(pool: PromotionalCreditAllocation, requestedUnits: string):
+  { allocated: PromotionalCreditAllocation; remaining: PromotionalCreditAllocation } | undefined {
+  const valid = (value: string) => /^(?:0|[1-9]\d{0,15})$/u.test(value) && BigInt(value) <= BigInt(Number.MAX_SAFE_INTEGER)
+  if (pool.version !== 'ae.promotional-credit-allocation:v1' || !valid(pool.purchasedUnits)
+    || !valid(requestedUnits) || pool.grants.length > MAX_PROMOTIONAL_GRANTS_PER_CALL
+    || new Set(pool.grants.map(grant => grant.grantRef)).size !== pool.grants.length
+    || pool.grants.some(grant => !grant.grantRef.trim() || !valid(grant.amountUnits)
+      || grant.amountUnits === '0' || !Number.isSafeInteger(grant.expiresAt) || grant.expiresAt <= 0)) return undefined
+  let needed = BigInt(requestedUnits)
+  const allocated: PromotionalCreditAllocation['grants'] = []
+  const remaining: PromotionalCreditAllocation['grants'] = []
+  for (const grant of pool.grants) {
+    const available = BigInt(grant.amountUnits)
+    const taken = available < needed ? available : needed
+    if (taken > 0n) allocated.push({ ...grant, amountUnits: taken.toString() })
+    if (available > taken) remaining.push({ ...grant, amountUnits: (available - taken).toString() })
+    needed -= taken
+  }
+  if (needed > BigInt(pool.purchasedUnits)) return undefined
+  return {
+    allocated: { version: pool.version, purchasedUnits: needed.toString(), grants: allocated },
+    remaining: { version: pool.version, purchasedUnits: (BigInt(pool.purchasedUnits) - needed).toString(), grants: remaining },
+  }
+}

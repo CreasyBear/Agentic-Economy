@@ -75,6 +75,7 @@ import { Route as OperatorOwnerOperationsRouteImport } from './routes/_operator/
 import { Route as OperatorOwnerSettingsRouteImport } from './routes/_operator/owner.settings'
 import { Route as OperatorOwnerTeamRouteImport } from './routes/_operator/owner.team'
 import { Route as OperatorOwnerWorkspaceRouteImport } from './routes/_operator/owner.workspace'
+import { Route as OperatorPlansPlanRefRouteImport } from './routes/_operator/plans.$planRef'
 import { Route as ApiAdminMetricsExportRouteImport } from './routes/api.admin.metrics-export'
 import { Route as ApiBusinessesSlugRouteImport } from './routes/api.businesses.$slug'
 import { Route as ApiBusinessesSearchRouteImport } from './routes/api.businesses.search'
@@ -92,6 +93,7 @@ import { Route as ApiV1AccountRouteImport } from './routes/api.v1.account'
 import { Route as ApiV1BusinessesRouteImport } from './routes/api.v1.businesses'
 import { Route as ApiV1CallsRouteImport } from './routes/api.v1.calls'
 import { Route as ApiV1CatalogueStatusRouteImport } from './routes/api.v1.catalogue-status'
+import { Route as ApiV1FeedbackRouteImport } from './routes/api.v1.feedback'
 import { Route as ApiV1MarketMetricsRouteImport } from './routes/api.v1.market-metrics'
 import { Route as ApiV1MarketRequestsRouteImport } from './routes/api.v1.market-requests'
 import { Route as ApiV1RegistryRouteImport } from './routes/api.v1.registry'
@@ -163,6 +165,10 @@ import { Route as ApiV1SupplyConnectionsRevokeRouteImport } from './routes/api.v
 import { Route as ApiV1SupplyOffboardingStatusRouteImport } from './routes/api.v1.supply.offboarding.status'
 import { Route as ApiV1SupplySourcesPreviewRouteImport } from './routes/api.v1.supply.sources.preview'
 import { Route as ApiV1SupplyToolsListRouteImport } from './routes/api.v1.supply.tools.list'
+import { Route as ApiV1ToolsPlansPlanRefRouteImport } from './routes/api.v1.tools.plans.$planRef'
+import { Route as ApiV1ToolsPlansCancelRouteImport } from './routes/api.v1.tools.plans.cancel'
+import { Route as ApiV1ToolsPlansQuoteRouteImport } from './routes/api.v1.tools.plans.quote'
+import { Route as ApiV1ToolsPlansRunRouteImport } from './routes/api.v1.tools.plans.run'
 import { Route as OperatorOwnerSupplyConnectionsOauthCallbackRouteImport } from './routes/_operator/owner.supply.connections.oauth.callback'
 import { Route as ApiV1AccountFundingSessionsPublicFundingSessionIdRouteImport } from './routes/api.v1.account.funding-sessions.public.$fundingSessionId'
 
@@ -501,6 +507,11 @@ const OperatorOwnerWorkspaceRoute = OperatorOwnerWorkspaceRouteImport.update({
   path: '/owner/workspace',
   getParentRoute: () => OperatorRoute,
 } as any)
+const OperatorPlansPlanRefRoute = OperatorPlansPlanRefRouteImport.update({
+  id: '/plans/$planRef',
+  path: '/plans/$planRef',
+  getParentRoute: () => OperatorRoute,
+} as any)
 const ApiAdminMetricsExportRoute = ApiAdminMetricsExportRouteImport.update({
   id: '/api/admin/metrics-export',
   path: '/api/admin/metrics-export',
@@ -588,6 +599,11 @@ const ApiV1CallsRoute = ApiV1CallsRouteImport.update({
 const ApiV1CatalogueStatusRoute = ApiV1CatalogueStatusRouteImport.update({
   id: '/api/v1/catalogue-status',
   path: '/api/v1/catalogue-status',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1FeedbackRoute = ApiV1FeedbackRouteImport.update({
+  id: '/api/v1/feedback',
+  path: '/api/v1/feedback',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiV1MarketMetricsRoute = ApiV1MarketMetricsRouteImport.update({
@@ -981,6 +997,26 @@ const ApiV1SupplyToolsListRoute = ApiV1SupplyToolsListRouteImport.update({
   path: '/api/v1/supply/tools/list',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiV1ToolsPlansPlanRefRoute = ApiV1ToolsPlansPlanRefRouteImport.update({
+  id: '/api/v1/tools/plans/$planRef',
+  path: '/api/v1/tools/plans/$planRef',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1ToolsPlansCancelRoute = ApiV1ToolsPlansCancelRouteImport.update({
+  id: '/api/v1/tools/plans/cancel',
+  path: '/api/v1/tools/plans/cancel',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1ToolsPlansQuoteRoute = ApiV1ToolsPlansQuoteRouteImport.update({
+  id: '/api/v1/tools/plans/quote',
+  path: '/api/v1/tools/plans/quote',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1ToolsPlansRunRoute = ApiV1ToolsPlansRunRouteImport.update({
+  id: '/api/v1/tools/plans/run',
+  path: '/api/v1/tools/plans/run',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OperatorOwnerSupplyConnectionsOauthCallbackRoute =
   OperatorOwnerSupplyConnectionsOauthCallbackRouteImport.update({
     id: '/owner/supply/connections/oauth/callback',
@@ -1058,6 +1094,7 @@ export interface FileRoutesByFullPath {
   '/owner/settings': typeof OperatorOwnerSettingsRouteWithChildren
   '/owner/team': typeof OperatorOwnerTeamRoute
   '/owner/workspace': typeof OperatorOwnerWorkspaceRoute
+  '/plans/$planRef': typeof OperatorPlansPlanRefRoute
   '/api/admin/metrics-export': typeof ApiAdminMetricsExportRoute
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
@@ -1075,6 +1112,7 @@ export interface FileRoutesByFullPath {
   '/api/v1/businesses': typeof ApiV1BusinessesRouteWithChildren
   '/api/v1/calls': typeof ApiV1CallsRouteWithChildren
   '/api/v1/catalogue-status': typeof ApiV1CatalogueStatusRoute
+  '/api/v1/feedback': typeof ApiV1FeedbackRoute
   '/api/v1/market-metrics': typeof ApiV1MarketMetricsRoute
   '/api/v1/market-requests': typeof ApiV1MarketRequestsRouteWithChildren
   '/api/v1/registry': typeof ApiV1RegistryRouteWithChildren
@@ -1148,6 +1186,10 @@ export interface FileRoutesByFullPath {
   '/api/v1/supply/offboarding/status': typeof ApiV1SupplyOffboardingStatusRoute
   '/api/v1/supply/sources/preview': typeof ApiV1SupplySourcesPreviewRoute
   '/api/v1/supply/tools/list': typeof ApiV1SupplyToolsListRoute
+  '/api/v1/tools/plans/$planRef': typeof ApiV1ToolsPlansPlanRefRoute
+  '/api/v1/tools/plans/cancel': typeof ApiV1ToolsPlansCancelRoute
+  '/api/v1/tools/plans/quote': typeof ApiV1ToolsPlansQuoteRoute
+  '/api/v1/tools/plans/run': typeof ApiV1ToolsPlansRunRoute
   '/owner/supply/connections/oauth/callback': typeof OperatorOwnerSupplyConnectionsOauthCallbackRoute
   '/api/v1/account/funding-sessions/public/$fundingSessionId': typeof ApiV1AccountFundingSessionsPublicFundingSessionIdRoute
 }
@@ -1215,6 +1257,7 @@ export interface FileRoutesByTo {
   '/owner/settings': typeof OperatorOwnerSettingsRouteWithChildren
   '/owner/team': typeof OperatorOwnerTeamRoute
   '/owner/workspace': typeof OperatorOwnerWorkspaceRoute
+  '/plans/$planRef': typeof OperatorPlansPlanRefRoute
   '/api/admin/metrics-export': typeof ApiAdminMetricsExportRoute
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
@@ -1232,6 +1275,7 @@ export interface FileRoutesByTo {
   '/api/v1/businesses': typeof ApiV1BusinessesRouteWithChildren
   '/api/v1/calls': typeof ApiV1CallsRouteWithChildren
   '/api/v1/catalogue-status': typeof ApiV1CatalogueStatusRoute
+  '/api/v1/feedback': typeof ApiV1FeedbackRoute
   '/api/v1/market-metrics': typeof ApiV1MarketMetricsRoute
   '/api/v1/market-requests': typeof ApiV1MarketRequestsRouteWithChildren
   '/api/v1/registry': typeof ApiV1RegistryRouteWithChildren
@@ -1305,6 +1349,10 @@ export interface FileRoutesByTo {
   '/api/v1/supply/offboarding/status': typeof ApiV1SupplyOffboardingStatusRoute
   '/api/v1/supply/sources/preview': typeof ApiV1SupplySourcesPreviewRoute
   '/api/v1/supply/tools/list': typeof ApiV1SupplyToolsListRoute
+  '/api/v1/tools/plans/$planRef': typeof ApiV1ToolsPlansPlanRefRoute
+  '/api/v1/tools/plans/cancel': typeof ApiV1ToolsPlansCancelRoute
+  '/api/v1/tools/plans/quote': typeof ApiV1ToolsPlansQuoteRoute
+  '/api/v1/tools/plans/run': typeof ApiV1ToolsPlansRunRoute
   '/owner/supply/connections/oauth/callback': typeof OperatorOwnerSupplyConnectionsOauthCallbackRoute
   '/api/v1/account/funding-sessions/public/$fundingSessionId': typeof ApiV1AccountFundingSessionsPublicFundingSessionIdRoute
 }
@@ -1374,6 +1422,7 @@ export interface FileRoutesById {
   '/_operator/owner/settings': typeof OperatorOwnerSettingsRouteWithChildren
   '/_operator/owner/team': typeof OperatorOwnerTeamRoute
   '/_operator/owner/workspace': typeof OperatorOwnerWorkspaceRoute
+  '/_operator/plans/$planRef': typeof OperatorPlansPlanRefRoute
   '/api/admin/metrics-export': typeof ApiAdminMetricsExportRoute
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
@@ -1391,6 +1440,7 @@ export interface FileRoutesById {
   '/api/v1/businesses': typeof ApiV1BusinessesRouteWithChildren
   '/api/v1/calls': typeof ApiV1CallsRouteWithChildren
   '/api/v1/catalogue-status': typeof ApiV1CatalogueStatusRoute
+  '/api/v1/feedback': typeof ApiV1FeedbackRoute
   '/api/v1/market-metrics': typeof ApiV1MarketMetricsRoute
   '/api/v1/market-requests': typeof ApiV1MarketRequestsRouteWithChildren
   '/api/v1/registry': typeof ApiV1RegistryRouteWithChildren
@@ -1464,6 +1514,10 @@ export interface FileRoutesById {
   '/api/v1/supply/offboarding/status': typeof ApiV1SupplyOffboardingStatusRoute
   '/api/v1/supply/sources/preview': typeof ApiV1SupplySourcesPreviewRoute
   '/api/v1/supply/tools/list': typeof ApiV1SupplyToolsListRoute
+  '/api/v1/tools/plans/$planRef': typeof ApiV1ToolsPlansPlanRefRoute
+  '/api/v1/tools/plans/cancel': typeof ApiV1ToolsPlansCancelRoute
+  '/api/v1/tools/plans/quote': typeof ApiV1ToolsPlansQuoteRoute
+  '/api/v1/tools/plans/run': typeof ApiV1ToolsPlansRunRoute
   '/_operator/owner/supply/connections/oauth/callback': typeof OperatorOwnerSupplyConnectionsOauthCallbackRoute
   '/api/v1/account/funding-sessions/public/$fundingSessionId': typeof ApiV1AccountFundingSessionsPublicFundingSessionIdRoute
 }
@@ -1533,6 +1587,7 @@ export interface FileRouteTypes {
     | '/owner/settings'
     | '/owner/team'
     | '/owner/workspace'
+    | '/plans/$planRef'
     | '/api/admin/metrics-export'
     | '/api/businesses/$slug'
     | '/api/businesses/search'
@@ -1550,6 +1605,7 @@ export interface FileRouteTypes {
     | '/api/v1/businesses'
     | '/api/v1/calls'
     | '/api/v1/catalogue-status'
+    | '/api/v1/feedback'
     | '/api/v1/market-metrics'
     | '/api/v1/market-requests'
     | '/api/v1/registry'
@@ -1623,6 +1679,10 @@ export interface FileRouteTypes {
     | '/api/v1/supply/offboarding/status'
     | '/api/v1/supply/sources/preview'
     | '/api/v1/supply/tools/list'
+    | '/api/v1/tools/plans/$planRef'
+    | '/api/v1/tools/plans/cancel'
+    | '/api/v1/tools/plans/quote'
+    | '/api/v1/tools/plans/run'
     | '/owner/supply/connections/oauth/callback'
     | '/api/v1/account/funding-sessions/public/$fundingSessionId'
   fileRoutesByTo: FileRoutesByTo
@@ -1690,6 +1750,7 @@ export interface FileRouteTypes {
     | '/owner/settings'
     | '/owner/team'
     | '/owner/workspace'
+    | '/plans/$planRef'
     | '/api/admin/metrics-export'
     | '/api/businesses/$slug'
     | '/api/businesses/search'
@@ -1707,6 +1768,7 @@ export interface FileRouteTypes {
     | '/api/v1/businesses'
     | '/api/v1/calls'
     | '/api/v1/catalogue-status'
+    | '/api/v1/feedback'
     | '/api/v1/market-metrics'
     | '/api/v1/market-requests'
     | '/api/v1/registry'
@@ -1780,6 +1842,10 @@ export interface FileRouteTypes {
     | '/api/v1/supply/offboarding/status'
     | '/api/v1/supply/sources/preview'
     | '/api/v1/supply/tools/list'
+    | '/api/v1/tools/plans/$planRef'
+    | '/api/v1/tools/plans/cancel'
+    | '/api/v1/tools/plans/quote'
+    | '/api/v1/tools/plans/run'
     | '/owner/supply/connections/oauth/callback'
     | '/api/v1/account/funding-sessions/public/$fundingSessionId'
   id:
@@ -1848,6 +1914,7 @@ export interface FileRouteTypes {
     | '/_operator/owner/settings'
     | '/_operator/owner/team'
     | '/_operator/owner/workspace'
+    | '/_operator/plans/$planRef'
     | '/api/admin/metrics-export'
     | '/api/businesses/$slug'
     | '/api/businesses/search'
@@ -1865,6 +1932,7 @@ export interface FileRouteTypes {
     | '/api/v1/businesses'
     | '/api/v1/calls'
     | '/api/v1/catalogue-status'
+    | '/api/v1/feedback'
     | '/api/v1/market-metrics'
     | '/api/v1/market-requests'
     | '/api/v1/registry'
@@ -1938,6 +2006,10 @@ export interface FileRouteTypes {
     | '/api/v1/supply/offboarding/status'
     | '/api/v1/supply/sources/preview'
     | '/api/v1/supply/tools/list'
+    | '/api/v1/tools/plans/$planRef'
+    | '/api/v1/tools/plans/cancel'
+    | '/api/v1/tools/plans/quote'
+    | '/api/v1/tools/plans/run'
     | '/_operator/owner/supply/connections/oauth/callback'
     | '/api/v1/account/funding-sessions/public/$fundingSessionId'
   fileRoutesById: FileRoutesById
@@ -2003,6 +2075,7 @@ export interface RootRouteChildren {
   ApiV1BusinessesRoute: typeof ApiV1BusinessesRouteWithChildren
   ApiV1CallsRoute: typeof ApiV1CallsRouteWithChildren
   ApiV1CatalogueStatusRoute: typeof ApiV1CatalogueStatusRoute
+  ApiV1FeedbackRoute: typeof ApiV1FeedbackRoute
   ApiV1MarketMetricsRoute: typeof ApiV1MarketMetricsRoute
   ApiV1MarketRequestsRoute: typeof ApiV1MarketRequestsRouteWithChildren
   ApiV1RegistryRoute: typeof ApiV1RegistryRouteWithChildren
@@ -2038,6 +2111,10 @@ export interface RootRouteChildren {
   ApiV1SupplyOffboardingStatusRoute: typeof ApiV1SupplyOffboardingStatusRoute
   ApiV1SupplySourcesPreviewRoute: typeof ApiV1SupplySourcesPreviewRoute
   ApiV1SupplyToolsListRoute: typeof ApiV1SupplyToolsListRoute
+  ApiV1ToolsPlansPlanRefRoute: typeof ApiV1ToolsPlansPlanRefRoute
+  ApiV1ToolsPlansCancelRoute: typeof ApiV1ToolsPlansCancelRoute
+  ApiV1ToolsPlansQuoteRoute: typeof ApiV1ToolsPlansQuoteRoute
+  ApiV1ToolsPlansRunRoute: typeof ApiV1ToolsPlansRunRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -2504,6 +2581,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OperatorOwnerWorkspaceRouteImport
       parentRoute: typeof OperatorRoute
     }
+    '/_operator/plans/$planRef': {
+      id: '/_operator/plans/$planRef'
+      path: '/plans/$planRef'
+      fullPath: '/plans/$planRef'
+      preLoaderRoute: typeof OperatorPlansPlanRefRouteImport
+      parentRoute: typeof OperatorRoute
+    }
     '/api/admin/metrics-export': {
       id: '/api/admin/metrics-export'
       path: '/api/admin/metrics-export'
@@ -2621,6 +2705,13 @@ declare module '@tanstack/react-router' {
       path: '/api/v1/catalogue-status'
       fullPath: '/api/v1/catalogue-status'
       preLoaderRoute: typeof ApiV1CatalogueStatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/feedback': {
+      id: '/api/v1/feedback'
+      path: '/api/v1/feedback'
+      fullPath: '/api/v1/feedback'
+      preLoaderRoute: typeof ApiV1FeedbackRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/v1/market-metrics': {
@@ -3120,6 +3211,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1SupplyToolsListRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/v1/tools/plans/$planRef': {
+      id: '/api/v1/tools/plans/$planRef'
+      path: '/api/v1/tools/plans/$planRef'
+      fullPath: '/api/v1/tools/plans/$planRef'
+      preLoaderRoute: typeof ApiV1ToolsPlansPlanRefRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/tools/plans/cancel': {
+      id: '/api/v1/tools/plans/cancel'
+      path: '/api/v1/tools/plans/cancel'
+      fullPath: '/api/v1/tools/plans/cancel'
+      preLoaderRoute: typeof ApiV1ToolsPlansCancelRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/tools/plans/quote': {
+      id: '/api/v1/tools/plans/quote'
+      path: '/api/v1/tools/plans/quote'
+      fullPath: '/api/v1/tools/plans/quote'
+      preLoaderRoute: typeof ApiV1ToolsPlansQuoteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/tools/plans/run': {
+      id: '/api/v1/tools/plans/run'
+      path: '/api/v1/tools/plans/run'
+      fullPath: '/api/v1/tools/plans/run'
+      preLoaderRoute: typeof ApiV1ToolsPlansRunRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_operator/owner/supply/connections/oauth/callback': {
       id: '/_operator/owner/supply/connections/oauth/callback'
       path: '/owner/supply/connections/oauth/callback'
@@ -3228,6 +3347,7 @@ interface OperatorRouteChildren {
   OperatorOwnerSettingsRoute: typeof OperatorOwnerSettingsRouteWithChildren
   OperatorOwnerTeamRoute: typeof OperatorOwnerTeamRoute
   OperatorOwnerWorkspaceRoute: typeof OperatorOwnerWorkspaceRoute
+  OperatorPlansPlanRefRoute: typeof OperatorPlansPlanRefRoute
   OperatorAdminIndexRoute: typeof OperatorAdminIndexRoute
   OperatorOwnerIndexRoute: typeof OperatorOwnerIndexRoute
   OperatorAdminAgentsPrincipalRefRoute: typeof OperatorAdminAgentsPrincipalRefRoute
@@ -3258,6 +3378,7 @@ const OperatorRouteChildren: OperatorRouteChildren = {
   OperatorOwnerSettingsRoute: OperatorOwnerSettingsRouteWithChildren,
   OperatorOwnerTeamRoute: OperatorOwnerTeamRoute,
   OperatorOwnerWorkspaceRoute: OperatorOwnerWorkspaceRoute,
+  OperatorPlansPlanRefRoute: OperatorPlansPlanRefRoute,
   OperatorAdminIndexRoute: OperatorAdminIndexRoute,
   OperatorOwnerIndexRoute: OperatorOwnerIndexRoute,
   OperatorAdminAgentsPrincipalRefRoute: OperatorAdminAgentsPrincipalRefRoute,
@@ -3483,6 +3604,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1BusinessesRoute: ApiV1BusinessesRouteWithChildren,
   ApiV1CallsRoute: ApiV1CallsRouteWithChildren,
   ApiV1CatalogueStatusRoute: ApiV1CatalogueStatusRoute,
+  ApiV1FeedbackRoute: ApiV1FeedbackRoute,
   ApiV1MarketMetricsRoute: ApiV1MarketMetricsRoute,
   ApiV1MarketRequestsRoute: ApiV1MarketRequestsRouteWithChildren,
   ApiV1RegistryRoute: ApiV1RegistryRouteWithChildren,
@@ -3518,6 +3640,10 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1SupplyOffboardingStatusRoute: ApiV1SupplyOffboardingStatusRoute,
   ApiV1SupplySourcesPreviewRoute: ApiV1SupplySourcesPreviewRoute,
   ApiV1SupplyToolsListRoute: ApiV1SupplyToolsListRoute,
+  ApiV1ToolsPlansPlanRefRoute: ApiV1ToolsPlansPlanRefRoute,
+  ApiV1ToolsPlansCancelRoute: ApiV1ToolsPlansCancelRoute,
+  ApiV1ToolsPlansQuoteRoute: ApiV1ToolsPlansQuoteRoute,
+  ApiV1ToolsPlansRunRoute: ApiV1ToolsPlansRunRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

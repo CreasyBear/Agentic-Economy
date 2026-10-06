@@ -93,6 +93,14 @@ export const acceptedAuthorityValue = v.union(
     grantEvidenceRef: v.string(),
   }),
   v.object({
+    kind: v.literal('plan_node'),
+    planRef: v.string(),
+    planAuthorityDigest: v.string(),
+    nodeId: v.string(),
+    resolvedInputDigest: v.string(),
+    ceilingAudUnits: v.string(),
+  }),
+  v.object({
     kind: v.literal('customer_request_authorization_use'),
     requestAuthorizationRef: v.string(),
     requestAuthorizationDigest: v.string(),

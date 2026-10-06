@@ -1,6 +1,6 @@
 # Deployment map
 
-**Last verified:** 5 October 2026, after PR #360. This is a dated inventory;
+**Last verified:** 6 October 2026, after PR #363. This is a dated inventory;
 resolve current provider identities and source revisions before mutations.
 [TODOS.md](../../TODOS.md) owns work; [readiness](../production-readiness-plan.md)
 owns acceptance and its limits.
@@ -25,10 +25,23 @@ stack is approved. Resolve provider identities afresh before mutations.
 
 | Surface | Verified source / identity |
 | --- | --- |
-| Production web | `/api/v1/release` reports main merge `2e57694066a335f35cd826c7bf07db1a033632e1` after PR #360 |
-| Production Convex | `cautious-zebra-473`; source `6bd8d7697ba5fbc3917f81c2283af7273dd3dc31`, deployed 13:25:59 UTC |
+| Production web | `/api/v1/release` reports `8750f8a8d5deed57a0b0291fe97f691bbf9451be`; Vercel `dpl_B2HSzpMyq4L45yEL6omrdnrL1Zca` after PR #363 |
+| Production Convex | `cautious-zebra-473`; source `5d4e32c04ccf17790a411b089e0fad91f6f1c742`, deployed 6 October at 03:59:41 UTC |
 | Chat/MCP acceptance baseline | PR #359 runtime tree `bf8e246d28121e3753ade6dad12421f6ab10d2b1`; web `81124766527c30f0cf3b6ee941a9ad7f2088e163` and Vercel `dpl_3xt4Wjed5sfTMg8gASAVTJE2xUS4` |
-| CLI distribution | `@agentic-economy/cli` 0.2.1 confirmed in the public npm registry; hosted download and current/legacy MCP separately verified at 13:30 UTC |
+| CLI distribution | Hosted and npm 0.3.1 archives verified byte-for-byte after PR #363, including installed CLI smoke. PR #364 prepares 0.3.2 with optional product feedback; its release PR records deployment and registry readback. |
+| Plan ledger | Additive v1.7.0 installed/read back at 03:55:24 UTC; digest `sha256:c47ed17051aecfc2b0ad86bbeabc385d841a04774667098528ed5ffb1ff740a4` |
+
+[PR #362](https://github.com/CreasyBear/Agentic-Economy/pull/362) adds bounded
+buyer-side Plans. Backend, web and full gate share tree
+`5425af4304077d960bc61c14ee92c709d3d94f82`. The production two-node acceptance
+completed with both Calls settled, unused credit released, zero Hold balances
+and same-key replay across CLI/MCP/HTTP. The [readiness record](../production-readiness-plan.md#two-node-plan-acceptance-6-october)
+separates this proof from native approval/partial/uncertainty tests.
+
+Recovery retains prior web `dpl_JeYPMLKhndnnB6GaxKVxw9SbF5L4` and main source
+`453b6f60d8f16c8cf2a555c43a56b75fb86bf62c`. After these paid Calls, preserve the
+additive schema and financial records; any financial correction is fix-forward.
+The operator's retained recovery bundle is `plan-quotes-362` dated 6 October.
 
 [PR #359](https://github.com/CreasyBear/Agentic-Economy/pull/359) is the final
 chat walkthrough release, following [#357](https://github.com/CreasyBear/Agentic-Economy/pull/357)

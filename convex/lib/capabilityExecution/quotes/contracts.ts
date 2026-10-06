@@ -171,6 +171,10 @@ export const formanceFinancialSnapshot = v.object({
     enabled: v.boolean(),
     ceilingUnits: v.optional(v.string()),
     monthSpendUnits: v.optional(v.string()),
+    heldPlanExposure: v.union(
+      v.object({ kind: v.literal('known'), units: v.string() }),
+      v.object({ kind: v.literal('unavailable') }),
+    ),
   })),
 })
 

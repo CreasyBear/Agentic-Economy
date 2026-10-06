@@ -58,6 +58,42 @@ export function formanceCommandPostingsMatch(
       legs = [['revenue', 'account_available', 'revenue_amount'], ['tax', 'account_available', 'tax_amount'],
         ['legal_settled', 'legal_available', 'exposure_amount']]
       break
+    case 'PLAN_HOLD_RESERVED_AUD':
+      legs = [
+        ['account_available', 'plan_hold', 'buyer_amount'],
+        ['legal_available', 'legal_reserved', 'exposure_amount'],
+        ['daily_available', 'daily_reserved', 'daily_amount'],
+        ['monthly_available', 'monthly_reserved', 'monthly_amount'],
+      ]
+      break
+    case 'PLAN_NODE_ALLOCATED_AUD':
+      legs = [['plan_hold', 'call_reserved', 'buyer_amount']]
+      break
+    case 'PLAN_NODE_SETTLED_AUD':
+      legs = [
+        ['call_reserved', 'revenue', 'revenue_amount'],
+        ['call_reserved', 'tax', 'tax_amount'],
+        ['legal_reserved', 'legal_settled', 'exposure_amount'],
+        ['daily_reserved', 'daily_spent', 'daily_amount'],
+        ['monthly_reserved', 'monthly_spent', 'monthly_amount'],
+      ]
+      break
+    case 'PLAN_NODE_RELEASED_AUD':
+      legs = [
+        ['call_reserved', 'account_available', 'buyer_amount'],
+        ['legal_reserved', 'legal_available', 'exposure_amount'],
+        ['daily_reserved', 'daily_available', 'daily_amount'],
+        ['monthly_reserved', 'monthly_available', 'monthly_amount'],
+      ]
+      break
+    case 'PLAN_REMAINDER_RELEASED_AUD':
+      legs = [
+        ['plan_hold', 'account_available', 'buyer_amount'],
+        ['legal_reserved', 'legal_available', 'exposure_amount'],
+        ['daily_reserved', 'daily_available', 'daily_amount'],
+        ['monthly_reserved', 'monthly_available', 'monthly_amount'],
+      ]
+      break
     case 'CALL_PROMO_SETTLED':
     case 'CALL_RESERVED_USDC':
     case 'CALL_PROMO_RESERVED':

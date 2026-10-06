@@ -1,8 +1,11 @@
+import type { Infer } from 'convex/values'
+import { planNodeValue } from '../plans/nodeMaterial'
 import { MANAGED_CALL_FORMANCE_SCHEMA_VERSION } from '@/modules/money/public'
 import { recordJourneyOutcome, recordQuoteJourney } from '@/lib/observability/journey'
 import { internal } from '../../../_generated/api'
 import type { ActionCtx } from '../../../_generated/server'
 import { bindPersistedManagedX402RequirementRef, inspectLiveX402RequirementRef } from '../liveX402Requirement/requirementRef'
+import { synchronizeSpendingPeriods } from './prepareSpendingPeriods'
 import { spendingPeriodPreparationIsRetryable } from './quoteValuation'
 import { readOrganizationMonthlySpendSnapshotForQuote } from './environmentHelpers'
 import { refuse } from './refusalHelpers'
@@ -35,9 +38,10 @@ export async function quoteActionCore(
   args: QuoteArgs,
   subjects: FinancialSubjectsResult,
   turnRef?: string,
+  planNode?: Infer<typeof planNodeValue>,
 ): Promise<QuoteResult> {
   try {
-    const result = await evaluateQuoteAction(ctx, args, subjects, turnRef)
+    const result = await evaluateQuoteAction(ctx, args, subjects, turnRef, planNode)
     recordQuoteJourney(result)
     return result
   } catch (cause) {
@@ -51,46 +55,19 @@ async function evaluateQuoteAction(
   args: QuoteArgs,
   subjects: FinancialSubjectsResult,
   turnRef?: string,
+  planNode?: Infer<typeof planNodeValue>,
 ): Promise<QuoteResult> {
   if (subjects.kind === 'refused') return refuse(args, subjects.code, subjects.code !== 'input_invalid' && subjects.code !== 'grant_not_found' && subjects.code !== 'tool_unsupported'
     && (subjects.code !== 'inspection_unavailable' || spendingPeriodPreparationIsRetryable(subjects.reason)), {
     ...(subjects.reason === undefined ? {} : { reason: subjects.reason }),
   })
   let spendingPeriods = subjects.spendingPeriods
-  if (subjects.financialMode === 'formance') {
-    if (spendingPeriods === undefined) return refuse(args, 'inspection_unavailable', true)
-    let commands = [...subjects.spendingPeriodCommands]
-    // A pending command is an externally observable control effect. Apply at
-    // most two rounds, re-preparing after each acknowledgement so an
-    // interrupted prior revision and one current policy change can recover
-    // without turning Quote creation into an unbounded retry loop.
-    for (let round = 0; round < 2 && commands.length > 0; round += 1) {
-      for (const command of commands) {
-        const adjusted = await ctx.runAction(internal.moneyFormance.adjustSpendingPeriod, { ...command, expectedEnvironment: subjects.expectedEnvironment })
-        const expectedReferenceCount = command.previousLimitUnits === command.targetLimitUnits ? 0 : 1
-        if (adjusted.kind !== 'completed' || adjusted.transactionRefs.length !== expectedReferenceCount) {
-          return refuse(args, 'inspection_unavailable', true)
-        }
-        const acknowledged = await ctx.runMutation(internal.agentSpendingPeriods.acknowledge, {
-          expectedEnvironment: subjects.expectedEnvironment,
-          command,
-          transactionRefs: [...adjusted.transactionRefs],
-        })
-        if (acknowledged.kind === 'conflict') return refuse(args, 'inspection_unavailable', true)
-      }
-      const refreshed = await ctx.runMutation(internal.capabilityQuotes.prepareSpendingPeriods, {
-        principal: args.principal,
-        toolRef: args.toolRef,
-      })
-      if (refreshed.kind === 'refused') {
-        return refuse(args, 'inspection_unavailable', spendingPeriodPreparationIsRetryable(refreshed.reason), { reason: refreshed.reason })
-      }
-      spendingPeriods = refreshed.spendingPeriods
-      commands = [...refreshed.commands]
-    }
-    if (commands.length > 0) return refuse(args, 'inspection_unavailable', true)
+  if (subjects.financialMode === 'formance' && planNode === undefined) {
+    const prepared = await synchronizeSpendingPeriods(ctx, subjects, args.principal, args.toolRef)
+    if (prepared.kind === 'refused') return refuse(args, 'inspection_unavailable', spendingPeriodPreparationIsRetryable(prepared.reason), { reason: prepared.reason })
+    spendingPeriods = prepared.spendingPeriods
   }
-  const persistedQuote = subjects.x402QuoteSource === 'persisted'
+  const persistedQuote = planNode === undefined && subjects.x402QuoteSource === 'persisted'
   const live = persistedQuote
     ? await ctx.runAction(bindPersistedManagedX402RequirementRef, {
         toolRef: args.toolRef,
@@ -100,6 +77,7 @@ async function evaluateQuoteAction(
         principal: args.principal,
         toolRef: args.toolRef,
         input: args.input,
+        ...(planNode === undefined ? {} : { planNode }),
       })
   if (live.kind === 'operation_not_found') {
     return refuse(args, 'tool_not_found', false)
@@ -115,6 +93,7 @@ async function evaluateQuoteAction(
     return await ctx.runMutation(internal.capabilityQuotes.issueQuote, {
       ...args,
       ...(turnRef === undefined ? {} : { turnRef }),
+      ...(planNode === undefined ? {} : { planNode }),
       formance: {
         policyDigest: subjects.policyDigest,
         accountRef: subjects.accountRef,
@@ -203,6 +182,7 @@ async function evaluateQuoteAction(
     {
       ...args,
       ...(turnRef === undefined ? {} : { turnRef }),
+      ...(planNode === undefined ? {} : { planNode }),
       ...(live.kind === 'observed' ? { liveX402Requirement: live.requirement } : {}),
       formance: {
         policyDigest: subjects.policyDigest,

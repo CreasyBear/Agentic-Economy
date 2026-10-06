@@ -1,3 +1,4 @@
+import type { OwnerPlanSummary } from '@/modules/capability-execution/plan/owner.contracts'
 import type { ActivityReturnScope } from '@/lib/call-recovery/activity-return-scope'
 import type { UsageReconciliation } from '@/modules/money/public'
 import type {
@@ -20,6 +21,7 @@ export type ActivityLoaderResult =
       calls: Awaited<ReturnType<typeof readOwnerCallsServer>>
       usage: Awaited<ReturnType<typeof readOwnerUsageServer>> | Readonly<{ kind: 'unavailable'; code: 'source_unavailable' }>
       spend: Awaited<ReturnType<typeof readOwnerSpendServer>> | Readonly<{ kind: 'unavailable'; code: 'source_unavailable' }> | Readonly<{ kind: 'not_requested' }>
+      plans?: readonly OwnerPlanSummary[]
       reconciliation?: UsageReconciliation
       periodStart: string
       periodStartAt: number

@@ -59,6 +59,7 @@ const AE_MCP_INSTRUCTIONS = [
   'Account tools show identity, balance and activity. Provider tools appear only for credentials with provider authority.',
   'Select `/mcp?readonly=1` for discover and read-only account tools, without buying or other writes.',
   'Operations are returned as data, not registered as individual MCP tools. See `/glossary.md` for AE vocabulary.',
+  'When AE gets in your way, lacks needed functionality, or the user has product feedback, optionally call the listed `ae_feedback_submit` tool. Send specific expected versus actual behaviour and relevant product tools/errors, without credentials, personal information, Customer business data or copied Tool payloads. The text goes to the AE team through PostHog. Send when the issue occurs, then continue working; feedback is not an end-of-task requirement. Tell the user only after acceptance and summarize the report in one sentence. Skip disabled or unavailable feedback; do not automatically retry.',
   'The server’s /SKILL.md contains the full maintained operating contract. Never send credentials or private task input to an alternate server or public support issue.',
 ].join(' ')
 export type McpAccessTier = Readonly<{
@@ -187,7 +188,7 @@ function mcpToolRefusalResult(action: AnyAction, result: unknown, refusal: McpTo
   const code = /^[a-z][a-z0-9_:-]{0,95}$/u.test(refusal.code) ? refusal.code : 'action_refused'
   const kind = code === 'tool_not_found' || (isRecord(result) && result.kind === 'not_found') ? 'NOT_FOUND'
     : code === 'capacity_exceeded' ? 'RESOURCE_EXHAUSTED'
-      : code === 'source_unavailable' || (isRecord(result) && result.kind === 'unavailable') ? 'UNAVAILABLE'
+      : code === 'source_unavailable' || code === 'feedback_unavailable' || (isRecord(result) && result.kind === 'unavailable') ? 'UNAVAILABLE'
         : 'FAILED_PRECONDITION'
   const projected = projectMcpJourneyProblem(buildProblem({
     kind,

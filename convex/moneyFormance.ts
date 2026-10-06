@@ -30,6 +30,12 @@ import {
   grantPromotionalCreditHandler, expirePromotionalCreditHandler,
 } from './lib/money/formance/postings'
 
+import { planHoldArgs, planRemainderResult, planReleaseArgs, reservePlanHoldHandler, readPlanRemainderHandler, releasePlanRemainderHandler } from './lib/money/formance/planPostings'
+
+export const reservePlanHold = internalAction({ args: planHoldArgs, returns: moneyResult, handler: reservePlanHoldHandler })
+export const readPlanRemainder = internalAction({ args: planHoldArgs, returns: planRemainderResult, handler: readPlanRemainderHandler })
+export const releasePlanRemainder = internalAction({ args: planReleaseArgs, returns: moneyResult, handler: releasePlanRemainderHandler })
+
 export const health = internalAction({ args: {}, returns: healthResult, handler: healthHandler })
 export const installSchema = internalAction({ args: {}, returns: installationResult, handler: installSchemaHandler })
 export const readPeriodSpend = internalAction({

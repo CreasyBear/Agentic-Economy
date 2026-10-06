@@ -1,3 +1,7 @@
+import { planSuggestInputSchema, mercatorImportInputSchema } from '@/modules/capability-execution/plan/draft.schemas'
+import { internal } from '../../../_generated/api'
+import { planQuoteInputSchema } from '@/modules/capability-execution/plan/parse'
+import { planReferenceInputSchema, parsePlanReadback } from '@/modules/capability-execution/plan/runtime.schemas'
 import { createTool, type ToolCtx } from '@convex-dev/agent'
 import type { ActionCtx } from '../../../_generated/server'
 import { makeFunctionReference } from 'convex/server'
@@ -43,7 +47,56 @@ function pause(ms: number): Promise<void> {
 export function createPurchaseTools(authority: TrustedChatAuthority & { kind: 'agent_key' }, reserve: ReserveChatTool) {
   const toolQuoteContract = contractFor('tool.quote')
   const callContract = contractFor('tool.call')
+  const planQuoteContract = contractFor('tool.plan.quote')
+  const planRunContract = contractFor('tool.plan.run')
+  const planGetContract = contractFor('tool.plan.get')
   return {
+      [CHAT_TOOL_NAME_MAP.canonicalToProvider['tool.plan.suggest']]: createTool({
+        description: descriptionFor(contractFor('tool.plan.suggest')), inputSchema: planSuggestInputSchema,
+        execute: async (ctx: ToolCtx) => {
+          const denied = reserve('tool.plan.suggest')
+          if (denied !== null) return denied
+          const result: unknown = JSON.parse(await ctx.runQuery(internal.capabilityPlanDrafts.suggest, {}))
+          return projectedModelFacingOutput('tool.plan.suggest', contractFor('tool.plan.suggest').outputSchema, () => result)
+        },
+      }),
+      [CHAT_TOOL_NAME_MAP.canonicalToProvider['tool.plan.import']]: createTool({
+        description: descriptionFor(contractFor('tool.plan.import')), inputSchema: mercatorImportInputSchema,
+        execute: async (ctx: ToolCtx, input: z.infer<typeof mercatorImportInputSchema>) => {
+          const denied = reserve('tool.plan.import')
+          if (denied !== null) return denied
+          const result: unknown = JSON.parse(await ctx.runQuery(internal.capabilityPlanDrafts.importMercator, { inputJson: JSON.stringify(input) }))
+          return projectedModelFacingOutput('tool.plan.import', contractFor('tool.plan.import').outputSchema, () => result)
+        },
+      }),
+      [CHAT_TOOL_NAME_MAP.canonicalToProvider['tool.plan.quote']]: createTool({
+        description: descriptionFor(planQuoteContract), inputSchema: planQuoteInputSchema,
+        execute: async (ctx: ToolCtx, input: z.infer<typeof planQuoteInputSchema>) => {
+          const denied = reserve('tool.plan.quote')
+          if (denied !== null) return denied
+          const result = await ctx.runAction(internal.chatPlans.quote, { authority: { ...authority, scopes: [...authority.scopes] }, planJson: JSON.stringify(input.plan) })
+          return projectedModelFacingOutput('tool.plan.quote', planQuoteContract.outputSchema, () => result)
+        },
+      }),
+      [CHAT_TOOL_NAME_MAP.canonicalToProvider['tool.plan.run']]: createTool({
+        description: `${descriptionFor(planRunContract)} Obtain the sealed Plan with ${CHAT_TOOL_NAME_MAP.canonicalToProvider['tool.plan.quote']}.`,
+        inputSchema: planReferenceInputSchema.extend({ approvedTotalAudUnits: z.string().regex(/^(?:0|[1-9]\d{0,30})$/u) }),
+        execute: async (ctx: ToolCtx, input: { planRef: string; approvedTotalAudUnits: string }) => {
+          const denied = reserve('tool.plan.run')
+          if (denied !== null) return denied
+          const result = await ctx.runAction(internal.chatPlans.run, { ...input, authority: { ...authority, scopes: [...authority.scopes] } })
+          return projectedModelFacingOutput('tool.plan.run', planRunContract.outputSchema, () => result)
+        },
+      }),
+      [CHAT_TOOL_NAME_MAP.canonicalToProvider['tool.plan.get']]: createTool({
+        description: descriptionFor(planGetContract), inputSchema: planReferenceInputSchema,
+        execute: async (ctx: ToolCtx, input: { planRef: string }) => {
+          const denied = reserve('tool.plan.get')
+          if (denied !== null) return denied
+          const result = await ctx.runQuery(internal.chatPlans.get, { authority: { ...authority, scopes: [...authority.scopes] }, planRef: input.planRef })
+          return projectedModelFacingOutput('tool.plan.get', planGetContract.outputSchema, () => parsePlanReadback(result))
+        },
+      }),
       [CHAT_TOOL_NAME_MAP.canonicalToProvider['tool.quote']]: createTool({
         description: descriptionFor(toolQuoteContract),
         inputSchema: chatToolQuoteInputSchema as z.ZodType<ToolQuoteInput>,

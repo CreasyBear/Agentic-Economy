@@ -220,6 +220,10 @@ export type OrganizationMonthlySpendAdmissionSnapshot = Readonly<{
   enabled: boolean
   ceilingUnits?: string | undefined
   monthSpendUnits?: string | undefined
+  heldPlanExposure: Readonly<
+    | { kind: 'known'; units: string }
+    | { kind: 'unavailable' }
+  >
 }>
 
 export function quoteOrganizationMonthlySpendAdmission(
@@ -232,6 +236,7 @@ export function quoteOrganizationMonthlySpendAdmission(
     enabled: true,
     ceilingUnits: snapshot.ceilingUnits,
     monthSpendUnits: snapshot.monthSpendUnits,
+    heldPlanExposure: snapshot.heldPlanExposure,
     requestUnits,
   })
   switch (fence.kind) {
@@ -382,4 +387,3 @@ export function quoteExpiresAt(
       : Math.min(input.spendingPeriods.daily.periodEndAt, input.spendingPeriods.monthly.periodEndAt),
   )
 }
-

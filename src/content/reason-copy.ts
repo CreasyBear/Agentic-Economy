@@ -128,6 +128,8 @@ const TYPED_REASON_COPY = {
 >
 
 export const REASON_COPY: Record<string, string> = {
+  feedback_disabled: 'Product feedback is disabled on this server. Skip feedback and continue your task.',
+  feedback_unavailable: 'Feedback ingestion was not confirmed. Do not automatically retry; continue your task.',
   source_changed: 'The source changed after preview. Discover endpoints again, then review the current facts.',
   candidate_changed: 'The source changed after preview. Discover endpoints again, then review the current facts.',
   connection_required: 'The source connection is unavailable. Reconnect it, then submit again.',

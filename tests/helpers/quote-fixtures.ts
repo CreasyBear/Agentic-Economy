@@ -214,12 +214,14 @@ export async function publishCurrentTool(
   backend: ConvexFixtureBackend,
   suffix: string,
   environment: 'production' | 'sandbox' = 'production',
+  amountUnits = '1200',
 ): Promise<PublishedQuoteTool> {
   const { businessId, owner, canonicalAccountRef } = await publishedBusinessOwner(backend, suffix)
   await seedCatalogOffering(backend, businessId, suffix, '/lookup', 'POST')
   const source = capabilityPublicationInput(businessId, suffix)
   const { sourceWrite: _sourceWrite, sourceWriteRequest: _sourceWriteRequest, ...publication } = await preparedPublicationArgs(backend, {
     ...source,
+    offering: { ...source.offering, presentation: { ...source.offering.presentation, price: { kind: 'fixed', amount: { currency: 'AUD', units: amountUnits, exponent: 2 } } } },
     binding: { ...source.binding, authority: { kind: 'public_upstream' } },
   })
   const published = await owner.mutation(
