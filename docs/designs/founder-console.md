@@ -82,3 +82,73 @@ The consolidation source also runs `npm run check` and the full `npm run gate`.
 Final source counts, backend/web identities and hosted desktop/mobile observations
 belong to its release PR and [deployment map](../operations/deployments.md).
 Historical isolated-branch test runs do not establish the combined release.
+
+## Approved trial access
+
+Joel approved both email invitations and public signup with manual grants on
+6 October 2026: A$10 per trial, expiring 30 days after activation. Public signup
+does not grant credit. An invitation is an offer to a verified email address,
+not an Account or an Admin membership. Existing Accounts can receive the same
+trial through an explicit Admin command.
+
+**Approval and claim contract.** Requires the existing owner-Admin permission,
+source-write admission, fresh MFA, evidence and applicable second approval.
+Ensures one immutable offer per email/environment and at most one trial per
+Account/environment across both routes. The reviewed command explicitly approves
+both promotional funding and temporary purchase access; neither is inferred from
+the other. An invitation claim requires a current canonical personal Account
+owner and a primary email verified by Clerk's backend. The browser supplies no
+email, user identity, amount, duration or Account authority. On mismatch, expiry,
+inactive ownership or conflicting prior claim, refuse without creating credit.
+
+**Money and access contract.** Activation atomically binds the offer to the
+Account, current owner, one promotional grant and a frozen 30-day expiry. A$10 is
+10,000,000 AUD ledger units. The existing Formance grant, allocation, refund and
+expiry workers remain authoritative; credit becomes available only after a
+confirmed posting. Trial grants retain their original approved-offer authority,
+never a synthesized promotional-grant Admin command. Duplicate/concurrent claims
+and worker retries preserve the same grant and posting reference. Missing or
+altered authority refuses booking. The expiry does not extend on retry. Temporary
+purchase access ends at that same expiry and cannot survive an ownership change.
+Global payment pauses, current readiness, canonical Agent delegation, Spending
+policies and ordinary purchase authorization continue to apply. A generic credit
+grant does not open purchase access.
+
+**Delivery and recovery contract.** Clerk application invitations use the
+existing Clerk service and the application's sign-up route, returning to a small
+trial-activation page. Approval, email delivery, activation and confirmed credit
+are separate facts. Record the send attempt before contacting Clerk; an uncertain
+send may only reconcile the matching invitation, never blindly send again.
+Provider rejection/unknown delivery remains visible to Admins. The recipient can
+also sign in through the public route and activate an approved email offer; email
+delivery itself is not funding authority. No automatic public-signup credit and
+no recipient Admin role are introduced.
+
+**Structure decision.** Keep one additive offer table, one Admin command and
+bounded trial handlers. This adds persisted approval/claim/delivery states and
+Clerk action boundaries, but removes the need for fake Accounts, duplicated
+balances, global payment access or forged Admin receipts. Existing command sheets,
+ledger workers and payment admission remain the real callers. A second ledger,
+new email service, generic entitlement framework and signup webhook are rejected.
+
+**Interaction decision.** Accounts shows one email field with fixed A$10/30-day
+terms; the Account detail shows the same fixed grant action. Existing Admin review
+supplies evidence and approval. Trial status shows delivery, activation, booking
+and expiry directly, avoiding remembered references or implicit success. The
+recipient sees one activation action and its actual result, with a balance link
+after booking. Signup without an offer explains that credit requires approval.
+
+**Verification.** Exercise verified and unverified claims, public signup without
+approval, stale ownership, cross-Account/environment attempts, simultaneous
+manual/invite claims, repeated grants, altered approval receipts, lost posting
+acknowledgements, delivery uncertainty, expiry and global pause/readiness refusal.
+UI checks cover recipient/terms review, fixed amounts, denied Admin actions and
+pending/error results. External delivery and real ledger writes require separate
+hosted evidence; mocked provider responses prove only local boundary behavior.
+
+Production Clerk environment readback on 7 October AWST confirms public signup
+and no allowlist restriction. No Clerk setting change was needed. The trial
+entry preserves `/trial` through sign-in/signup, keeps session middleware and
+private caching, and renders its public explanation without a Convex client.
+Real invitation delivery and a production grant remain untested because no
+recipient was selected for this implementation request.

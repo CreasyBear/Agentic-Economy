@@ -55,6 +55,7 @@ export type AdminCommandAction =
   | 'verify_capability_source_authority'
   | 'change_commercial_policy'
   | 'grant_promotional_credit'
+  | 'issue_trial'
   | 'set_payments_paused'
   | 'change_treasury_thresholds'
 
@@ -67,6 +68,7 @@ export const ADMIN_ACTION_PERMISSION = {
   verify_capability_source_authority: 'register_capability_supply',
   change_commercial_policy: 'manage_commercial_policy',
   grant_promotional_credit: 'grant_promotional_credit',
+  issue_trial: 'grant_promotional_credit',
   set_payments_paused: 'manage_commercial_policy',
   change_treasury_thresholds: 'manage_commercial_policy',
 } as const satisfies Record<AdminCommandAction, AdminAction>
@@ -78,6 +80,7 @@ export type AdminProposableAction =
   | 'grant_admin_membership'
   | 'revoke_admin_membership'
   | 'grant_promotional_credit'
+  | 'issue_trial'
 
 export type AdminReasonCodeByAction = {
   review_call_content: 'alpha_quality' | 'failure_investigation'
@@ -93,6 +96,7 @@ export type AdminReasonCodeByAction = {
   verify_capability_source_authority: 'evidence_verified' | 'evidence_insufficient'
   change_commercial_policy: 'pricing_update' | 'correction'
   grant_promotional_credit: 'onboarding' | 'correction'
+  issue_trial: 'onboarding'
   set_payments_paused: 'operational_pause' | 'operational_resume' | 'correction'
   change_treasury_thresholds: 'threshold_update' | 'correction'
 }
@@ -139,6 +143,10 @@ export type AdminActionInput = {
     expiresAt: number
     control: CommercialPolicyControl
   }
+  issue_trial: {
+    environment: 'sandbox' | 'production'
+    recipient: { kind: 'email'; email: string } | { kind: 'account'; accountRef: string }
+  }
   grant_promotional_credit: {
     accountRef: string
     environment: 'sandbox' | 'production'
@@ -158,6 +166,7 @@ export type AdminSuccessCodeByAction = {
   verify_capability_source_authority: 'source_authority_verified' | 'source_authority_insufficient'
   change_commercial_policy: 'commercial_policy_changed'
   grant_promotional_credit: 'promotional_credit_granted'
+  issue_trial: 'trial_approved'
 }
 
 export type AdminAuthorityDenialReason = Extract<
@@ -186,6 +195,7 @@ export type AdminActionRefusalCodes = {
   verify_capability_source_authority: 'publication_not_found' | 'source_authority_not_reviewable'
   change_commercial_policy: 'policy_not_found' | 'proof_stale' | 'proof_replayed' | 'authority_mismatch' | 'commercial_policy_deployment_profile_invalid'
   grant_promotional_credit: 'account_not_found' | 'promotional_credit_invalid' | 'environment_mismatch'
+  issue_trial: 'account_not_found' | 'environment_mismatch' | 'trial_recipient_invalid' | 'trial_already_approved'
 }
 
 export type AdminApprovalRefusalCode =

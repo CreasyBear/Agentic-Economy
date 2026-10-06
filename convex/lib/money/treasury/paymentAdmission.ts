@@ -1,3 +1,4 @@
+import { accountHasTrialAccess } from '../trials/authority'
 import { readPaymentReadiness } from '../readiness/store'
 import type { Doc } from '../../../_generated/dataModel'
 import type { QueryCtx } from '../../../_generated/server'
@@ -23,16 +24,22 @@ export async function readPaymentsAudience(ctx: Pick<QueryCtx, 'db'>, environmen
 }
 
 /** An active canonical human identity and active Admin membership establish the launch role. */
-export async function rootIssuerIsActiveAdmin(ctx: Pick<QueryCtx, 'db'>, principalRef: string): Promise<boolean> {
+async function readActiveClerkHuman(ctx: Pick<QueryCtx, 'db'>, principalRef: string) {
   const principal = await ctx.db.query('principals')
     .withIndex('by_principalRef', (q) => q.eq('principalRef', principalRef)).unique()
-  if (principal?.lifecycle !== 'active' || principal.kind !== 'human') return false
+  if (principal?.lifecycle !== 'active' || principal.kind !== 'human') return null
   const bindings = await ctx.db.query('externalIdentityBindings')
     .withIndex('by_principalRef_and_lifecycle', (q) => q.eq('principalRef', principalRef).eq('lifecycle', 'active'))
     .filter((q) => q.eq(q.field('providerNamespace'), 'clerk/user')).take(2)
   const binding = bindings[0]
   if (bindings.length !== 1 || binding === undefined
-    || binding.providerState.kind !== 'known' || binding.providerState.value !== 'active') return false
+    || binding.providerState.kind !== 'known' || binding.providerState.value !== 'active') return null
+  return binding
+}
+
+export async function rootIssuerIsActiveAdmin(ctx: Pick<QueryCtx, 'db'>, principalRef: string): Promise<boolean> {
+  const binding = await readActiveClerkHuman(ctx, principalRef)
+  if (binding === null) return false
   const memberships = await ctx.db.query('adminMemberships')
     .withIndex('by_tokenIdentifier_and_state', (q) => q.eq('tokenIdentifier', binding.providerIdentifier).eq('state', 'active')).take(2)
   return memberships.length === 1
@@ -40,7 +47,7 @@ export async function rootIssuerIsActiveAdmin(ctx: Pick<QueryCtx, 'db'>, princip
 
 /**
  * Requires: the caller has validated canonical Agent authority; now is that admission's server timestamp.
- * Ensures: paused refuses; production needs fresh matching readiness; audience then requires a live authorized issuer.
+ * Ensures: paused refuses; production needs fresh matching readiness; audience then requires a live authorized issuer or explicitly approved Account trial.
  * Invariant: readiness never changes authority, and accepted Call replay stays outside this new-purchase gate.
  * Invariant: ancestor traversal is bounded, in-account, generation-pinned and cycle-free; no legacy owner token authorizes.
  * On violation: payments_admins_only, with no writes, credentials or purchase effects.
@@ -87,7 +94,10 @@ export async function readAgentPaymentAdmission(
       || child.actorPrincipalRef !== grant.subjectPrincipalRef)) return refuse
     if (grant.parentGrantRef === undefined) {
       if (grant.parentGeneration !== undefined || grant.actorPrincipalRef !== ownership.ownerPrincipalRef) return refuse
-      return await rootIssuerIsActiveAdmin(ctx, grant.actorPrincipalRef) ? { kind: 'allowed' } : refuse
+      if (await rootIssuerIsActiveAdmin(ctx, grant.actorPrincipalRef)) return { kind: 'allowed' }
+      return await readActiveClerkHuman(ctx, grant.actorPrincipalRef) !== null
+        && await accountHasTrialAccess(ctx, { environment: input.environment, accountRef: input.accountRef, ownerPrincipalRef: grant.actorPrincipalRef, now })
+        ? { kind: 'allowed' } : refuse
     }
     if (grant.parentGeneration === undefined) return refuse
     child = grant

@@ -25,11 +25,18 @@ stack is approved. Resolve provider identities afresh before mutations.
 
 | Surface | Verified source / identity |
 | --- | --- |
-| Production web | `/api/v1/release` reports `31a06382c0644dfd0c66a794edf221fcbe606596`; Vercel `dpl_74cZ5bj8Za5pHjK8UHZsfxYRhXy8` after PR #366 |
-| Production Convex | `cautious-zebra-473`; deployed PR #366 candidate `23d9dbb6c438eaf8cd67344d69919a1a06400c7b`, identical tree to merged source `31a06382c0644dfd0c66a794edf221fcbe606596`; release revision read back after deployment |
+| Production web | `/api/v1/release` reports `1cfe08489f3f3d3dfc36d2a37619c509e4924034` after PR #367 |
+| Production Convex | `cautious-zebra-473`; deployed PR #367 candidate `04f2d41901ec143a88b07f67925c657695a9af31`, identical tree to merged source `1cfe08489f3f3d3dfc36d2a37619c509e4924034`; release revision read back after deployment |
 | Chat/MCP acceptance baseline | PR #359 runtime tree `bf8e246d28121e3753ade6dad12421f6ab10d2b1`; web `81124766527c30f0cf3b6ee941a9ad7f2088e163` and Vercel `dpl_3xt4Wjed5sfTMg8gASAVTJE2xUS4` |
 | CLI distribution | Hosted and npm 0.3.1 archives verified byte-for-byte after PR #363, including installed CLI smoke. PR #364 prepares 0.3.2 with optional product feedback; its release PR records deployment and registry readback. |
 | Plan ledger | Additive v1.7.0 installed/read back at 03:55:24 UTC; digest `sha256:c47ed17051aecfc2b0ad86bbeabc385d841a04774667098528ed5ffb1ff740a4` |
+
+[PR #367](https://github.com/CreasyBear/Agentic-Economy/pull/367) retains price
+and purchase restrictions across chat follow-ups. Fresh production follow-ups
+confirmed unknown terms stay unknown and an external listing cannot be quoted.
+Its full gate passed before deployment. Rollback is PR #366 web
+`dpl_74cZ5bj8Za5pHjK8UHZsfxYRhXy8` and backend revision
+`31a06382c0644dfd0c66a794edf221fcbe606596`. No financial rollback is implied.
 
 [PR #366](https://github.com/CreasyBear/Agentic-Economy/pull/366) restores the
 native Convex Agent loop for guest and signed-in chat. The exact runtime tree

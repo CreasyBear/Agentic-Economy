@@ -13,6 +13,7 @@ import { timestampIso } from '@/lib/ui/format-time'
 import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import '../../RecordWorkspaceComposition.css'
 import { PurchaseActivity } from '../../activity/PurchaseActivity'
+import { AdminTrialAccess } from '../../actions/AdminTrialAccess'
 import { ADMIN_OBJECT_PAGE_COPY, formatPerthTimestamp } from '../object-pages.contracts'
 
 export type WorkspaceObjectViewProps = Readonly<{
@@ -129,6 +130,7 @@ export function WorkspaceObjectView({ view, grant = null }: WorkspaceObjectViewP
             )}
           </AeSection>
         )}
+        {grant === null ? null : <AdminTrialAccess accountRef={view.ref} />}
       </div>
       <PurchaseActivity search={{ account: view.ref, range: 'last_30' }} compact />
     </AeOperatorPage>
