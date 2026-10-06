@@ -56,7 +56,7 @@ export function AeActionLink(props: AeActionLinkProps) {
     return (
       <button
         {...buttonProps}
-        type={type}
+        type={type === 'submit' ? 'submit' : type === 'reset' ? 'reset' : 'button'}
         disabled={disabled}
         aria-busy={pending || ariaBusy || undefined}
         aria-disabled={pending || ariaDisabled || undefined}

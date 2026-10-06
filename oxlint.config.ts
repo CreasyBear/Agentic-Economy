@@ -63,6 +63,13 @@ export default defineConfig({
   },
   overrides: [
     {
+      files: ['src/components/arc/**/*'],
+      rules: {
+        // Preserve upstream vendor bytes for equivalent Number/global spellings.
+        'unicorn/prefer-number-properties': 'off',
+      },
+    },
+    {
       files: ['tests/**/*', 'tools/**/*'],
       rules: {
         '@typescript-eslint/no-explicit-any': 'off',

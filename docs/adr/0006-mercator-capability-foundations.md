@@ -9,7 +9,15 @@ decision_owner: "Joel Chan"
 
 ## Outcome and authority
 
-Aecon has a substantial identity, authority, single-Tool purchase and durable Call foundation. It does **not** yet establish Mercator parity for caller-composed dependency graphs, conventional asynchronous provider completion, or selective multi-node results. Preserve the existing foundation; build buyer-side Plans over the current Call lifecycle, and close conventional async completion and selective multi-node-result gaps as separate slices. Make the actual contracts usable through customer and developer documentation.
+Aecon has a substantial identity, authority, single-Tool purchase and durable Call foundation. It does **not** yet establish Mercator parity for caller-composed dependency graphs, conventional asynchronous provider completion, or selective multi-node results. Preserve the existing foundation; build buyer-side Plans over the current Call lifecycle, and close conventional async completion and selective multi-node-result gaps as separate slices. Make the actual contracts usable through customer and developer documentation. Reuse maintained Provider/protocol SDKs and qualify their fit before adding an adapter.
+
+Current numbered requirements and item dispositions now live in the
+[Mercator maturity register](../operations/mercator-maturity-register.md),
+MM-001–MM-060, created at Joel’s request on 5 October 2026. It is the one item
+register under #256; this ADR retains dated evidence and the proposed design.
+The register supersedes this ADR’s coarse coverage rows as the current closure
+checklist. Literal rails, incentives and embedded surfaces remain required/open
+for an unqualified parity claim; no silent scope reduction is approved.
 
 Audience: engineering, product and documentation owners. Status home: [Wayfinder #256](https://github.com/CreasyBear/Agentic-Economy/issues/256) and [TODOS.md](../../TODOS.md). This is the foundation/parity decision attachment, not another delivery register. [PRODUCT.md](../../PRODUCT.md), [CONTEXT.md](../../CONTEXT.md) and current source remain authoritative. The foundation review and initial factual docs are authorised; buyer-side Plan direction is accepted in the 2026-10-05 decision below, while other proposed runtime changes retain their own approval gates. No payments, permissions, secrets, subscriptions or deployment are changed.
 
@@ -101,6 +109,8 @@ Mercator documents wallet ownership, OAuth connections with approved spending li
 
 ## Capability coverage
 
+These are dated baseline findings. Follow [MM-001–MM-060](../operations/mercator-maturity-register.md) for current item status, full acceptance and literal-surface requirements.
+
 `Supported` means source supports the bounded feature shown; runtime evidence is explicitly qualified. `Partial` means a material part exists. `Missing` means the current inspected public/source contract lacks the stated feature. `Unknown` means no adequate evidence. Protocol- or brand-specific implementations can differ while covering the same customer job; literal payment-rail parity is separately identified.
 
 | Capability | Mercator baseline / evidence | Aecon status and evidence | Gap / dependency |
@@ -140,7 +150,7 @@ Priority is relative to **claiming capability parity**, not a new P0 production 
 | Slice | Problem / owner / dependency | Recommended supported implementation | Acceptance proof |
 | --- | --- | --- | --- |
 | **F1 — P2: foundation docs and contract conformance** | Docs + authority + protocol owners. First; reuse #256, surviving intent from #187, current action schemas. | Maintain [foundations guide](../foundations.md); add Fumadocs to existing TanStack app only after dependency/build trial. Generate API reference from current action/OpenAPI builder, MCP tool names from actions, installation from released CLI artifacts. | Four persona walkthroughs; schema-valid examples; no invented capability; auth/scope/expiry/rotation and two-Account negative cases; generation drift/link/build checks. |
-| **F2 — P1: one conventional asynchronous Tool** | Capability-supply/execution owners; F1 contract vocabulary. Separate adapter/evidence slice; not a prerequisite for buyer Plans. | Add a declared provider-job completion adapter around start/status/result using existing Workpool or Workflow and durable effect state. Official provider SDK where it fits; protocol-specific code behind one adapter, not provider branches in Call orchestration. | One admitted asynchronous fixture and one separately authorised real provider journey. Persist handle before polling; restart continues same job; queued JSON never completes; malformed/status/output/expired auth/SSRF tests; no second start after unknown; cancellation races preserve truth. |
+| **F2 — P1: one conventional asynchronous Tool** | Capability-supply/execution owners; F1 contract vocabulary. Qualify supported integration fit (MM-057). Separate adapter/evidence slice; not a prerequisite for buyer Plans. | Prefer the actual Provider’s maintained SDK for start/read/result and verified callbacks. Map its original handle and validated final output onto existing Call/effect state, dispatch Workpool and completion hooks; use Workflow only when persistent event waiting or composition is needed. No new generic service-job lifecycle, TaskManager or polling engine. Protocol-specific adaptation stays at the current supply boundary. | One admitted asynchronous fixture and one separately authorised real provider journey. Persist handle before polling; restart continues same job; queued JSON never completes; malformed/status/output/expired auth/SSRF tests; no second start after unknown; cancellation races preserve truth. |
 | **F3 — P1: bounded multi-Tool procurement contract and execution** | Market/contract + authority + execution + finance owners; accepted buyer-side Plan direction. Existing Call pending/reconciliation is sufficient; F2 is separate, not a prerequisite. Reuse ADR 0004 machinery where compatible, not retired #202/#204 engine. | Inspect-only frozen Plan over exact Tool refs, bounded JSON Pointer/map operators, aggregate ceilings; execute through current Call/effect/economic ports and installed Workflow. No arbitrary transforms or runtime planning. | 1–10 node limits, DAG/ref/schema checks, exact quote/Plan binding, aggregate concurrency budget race, stable per-node keys, ready-node parallelism, restart, revoked authority, frozen-Ceiling refusal and unknown dispatch. Two-node output-to-input proof and adversarial negatives; a validator-only slice cannot close execution parity. |
 | **F4 — P1: partial results, artifacts and financial readback** | Execution + content/data + finance owners; F3. | Per-node output refs and statuses, typed pointer reads, bounded inline/binary/artifact retrieval, retention policy, existing Charge/refund/obligation joins. Public accounting share only with a separate disclosed policy. | Sibling failure keeps completed output and charges; dependents skip; selective read does not rerun; wrong Account/Agent denied; retained artifacts survive worker restart; expiry/purge respects legal evidence; refund pending remains independent of terminal execution. |
 | **F5 — P1: supply, routing and installed-client acceptance** | Supply/market/DX + product owners; F1–F4, provider entitlement and capped-runtime authorisation. Related #196, #185; existing #279/#288 retain their own launch gates. | Admit heterogeneous real supply through importers, official protocols and current owner funnel; evaluate Jev versus deterministic selection using a preregistered task corpus. Use documented REST, two installed MCP/CLI harnesses and the customer app. | At least two independently owned providers, synchronous and asynchronous work, a mapped graph and partial failure; no founder/database repair. Record relevance, success, turns, latency, cost and repeat-use; one guide-led ordinary-user/admin/provider/integrator journey each. No benchmark or unlimited availability claim from a few runs. |
@@ -172,6 +182,110 @@ Pin graph and contract generations at Quote. Every deferred Node must have a fro
 
 The installed `@convex-dev/workflow` 0.4.6 and `@convex-dev/workpool` 0.4.10 already support durable steps, delay, parallel execution and configured retries. [Official Workflow](https://github.com/get-convex/workflow), [Convex guidance](https://docs.convex.dev/agents/workflows) and [Workpool](https://www.convex.dev/components/workpool) support reuse **[Layer 1]**. Workflow mutation replay does not make network effects exactly once: action retries are explicit and must obey the existing durable Call claim/reconcile boundary. Store content once behind refs; Workflow arguments/results should carry IDs to avoid replay bandwidth and memory growth.
 
+## Reuse-first integration fit
+
+Joel clarified that the proposal must not hand-roll commodity lifecycle or
+protocol infrastructure. This supersedes any reading of F2 as a new job engine.
+The maintained SDK owns its wire protocol; Convex owns durable scheduling and
+waiting; existing Call/effect/authority/economic records own AE’s purchase and
+recovery. Only the mapping between those contracts is application work.
+MM-057–MM-060 in the [canonical register](../operations/mercator-maturity-register.md#mm-057)
+record this requested integration qualification separately from Mercator parity.
+Mercator’s public material inspected here does not establish MCP Events, the
+2026 Tasks extension or A2A; no such capability is inferred.
+
+### Inspected substrate and supported alternatives
+
+Current pins are [package.json](../../package.json): `@convex-dev/workflow` 0.4.6,
+`@convex-dev/workpool` 0.4.10, `@modelcontextprotocol/server` 2.3.0,
+`@modelcontextprotocol/client` 2.0.0 and legacy `@modelcontextprotocol/sdk` 1.30.0.
+Workflow/Workpool are already registered in
+[convex.config.ts](../../convex/convex.config.ts). The installed SDK exports and
+component APIs were inspected against original documentation/examples below.
+`standardwebhooks` 1.0.0 is present transitively in [package-lock.json](../../package-lock.json),
+but is not a declared root dependency or an application Events integration.
+`parallel-web`, `@fal-ai/client` and `@a2a-js/sdk` are not installed. They are
+candidate maintained integrations requiring a pinned fit trial, not delivered
+features. Nothing was installed or executed against a paid provider.
+
+| Requirement | Supported component and actual fit | Evidence and limits | Minimal AE integration / genuine alternative |
+| --- | --- | --- | --- |
+| Accepted purchase, durable dispatch and final completion | Existing Call/effect state plus installed Workpool; current authority-bound workId replay and completion hook. | [dispatchEnqueue](../../convex/lib/capabilityExecution/callLifecycle/dispatchEnqueue.ts) enqueues `capabilityCallWorker.run` with `capabilityCalls.completeWork`; [marketDispatchWorkpool](../../convex/marketDispatchWorkpool.ts) bounds parallelism/retries. A work item finishing is not proof of final Provider output. | Persist the original Provider handle and project final schema-valid output through current completion authority. Keep status/receipts/refunds on existing records. No second job store or TaskManager. |
+| Short bounded observations versus persistent waits/composition | Workpool delayed enqueue for a single observation; Workflow durable steps, sleep, awaitEvent/sendEvent and journal for true multi-step waits/graphs. | [official Workpool README](https://github.com/get-convex/workpool), [Workflow README](https://github.com/get-convex/workflow), and inspected installed client APIs. [Provider offboarding](../../convex/capabilityProviderOffboarding.ts) already uses Workflow. Cancellation cannot undo an external effect; replay/retries are not external exactly-once semantics. | Prefer Workpool for one existing Call’s bounded observation. Use Workflow when callback waiting/dependency scheduling needs a persistent continuation. Do not add a queue, timer daemon or universal workflow abstraction. |
+| Conventional asynchronous API Provider | Official `parallel-web` taskRun create/read/result, or `@fal-ai/client` queue submit/status/result/cancel, according to the admitted Provider. | [Parallel quickstart](https://docs.parallel.ai/task-api/task-quickstart), [original TypeScript enrichment example](https://docs.parallel.ai/task-api/examples/task-enrichment), [fal queue API](https://fal.ai/docs/documentation/model-apis/inference/queue). Parallel’s example loops up to an hour; fal subscribe polls for convenience, and a cancel acknowledgement can still race completion. Neither SDK is installed. | Reuse SDK calls in bounded existing workers and persist the handle before observation. Prefer a supported, verified Provider completion webhook where practical; bounded polling is a fallback. Do not copy a long-running loop into one Convex action. Validate final output and media retention against the Tool contract. |
+| Contracted remote Agent that actually speaks A2A | Official maintained `@a2a-js/sdk` client, documented protocol 1.0 with optional 0.3 compatibility; AgentCard discovery, task reads/cancel/stream/push where advertised. | [official SDK](https://github.com/a2aproject/a2a-js), [A2A specification](https://a2a-protocol.org/latest/specification/), [original push sample](https://github.com/a2aproject/a2a-js/tree/main/src/samples/agents/push-notification-agent). SDK is not installed; in-memory sample stores and HTTP/demo-token callbacks are not production recovery or callback-security proof. | Use a client-only supply adapter for a verified A2A Provider. A2A task/context/artifact refs map to existing Calls and content; authority/payment remain AE-owned. An ordinary HTTP or MCP Tool remains a valid alternative. Do not add an AE AgentExecutor/server runtime, new Agent state database or default TaskStore. |
+| MCP core tools/resources notifications | Installed official server createMcpHandler, handler.notify/bus; client.listen and SDK filtering/acknowledgement/stream teardown. | [2026 core subscription specification](https://modelcontextprotocol.io/specification/2026-07-28/basic/patterns/subscriptions), [SDK guide](https://github.com/modelcontextprotocol/typescript-sdk/blob/main/docs/clients/subscriptions.md), [original server](https://github.com/modelcontextprotocol/typescript-sdk/blob/main/examples/subscriptions/server.ts) / [client](https://github.com/modelcontextprotocol/typescript-sdk/blob/main/examples/subscriptions/client.ts). Default server bus is in memory; supported types concern tools/prompts/resources, not arbitrary domain webhooks. Manual client streams need explicit reconnect. | Current [mcp-api.ts](../../src/lib/server/mcp-api.ts) advertises tools.listChanged false and creates a handler per request. Qualify the needed notification and handler/bus lifetime; retain per-request Server/principal isolation, sharing only an authorised publisher/bus. Use supported shared pub/sub only if required by deployment. SDK owns SSE/filters. This is not ChatGPT Events or durable event replay. |
+| ChatGPT Work domain-event subscriptions and HTTPS callback delivery | Official OpenAI Events handler/example contract plus StandardWebhooks signing; installed SDK’s extension registration seam, existing Convex workers and notification patterns. | [OpenAI MCP Events](https://developers.openai.com/plugins/build/mcp-events) implements a **webhook + callback-verification subset** of the [draft Events proposal](https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/main/docs/design-sketch-proposal.md). It supports Work web, Work desktop with Cloud selected and dots; broader local/Codex/client support is not established. [StandardWebhooks JS](https://github.com/standard-webhooks/standard-webhooks/tree/main/libraries/javascript) supplies signing/verification, not an application subscription store. No AE events/list/subscribe/unsubscribe implementation was found. | Declare/pin the maintained signing package if selected, reuse the official three methods and SDK extension seam. AE supplies only permitted event schemas, owner/filter/callback-secret/expiry/cursor records, authorised state projection and existing Workpool delivery wiring. This is unavoidable application integration, not a custom event/signature/queue engine. Current REST status remains a legitimate fallback for clients without Events. |
+| Durable delivery, replay and current authority | Existing Convex notification Workpool/dedup/ownership recheck pattern, plus a retained event identity and the chosen standard’s cursor semantics. | [notificationWorkpool](../../convex/notificationWorkpool.ts), [enqueue](../../convex/lib/principalAccount/notifications/enqueue.ts), [delivery](../../convex/lib/principalAccount/notifications/delivery.ts). These currently deliver email, not MCP callbacks. Completion has Account/lifecycle/preference checks; retries are bounded. A 2xx callback only acknowledges receipt, not completed Agent work. | Reuse scheduling/retry primitives and authority checks, with typed subscription metadata and the minimal protocol envelope. Stable IDs and read-after-event recovery map back to authorised Calls. Expired/truncated history must disclose a replay gap; no guarantee of exactly-once or ordering. |
+| Safe callback network connection and credential isolation | Existing network-guard DNS lookup with Undici, current principal/Account authority and Provider credential boundaries. | [existing guarded connection](../../src/modules/capability-supply/internal/cdp-x402-custody-readiness.ts) uses createGuardedLookup and Undici, no redirects and bounded requests against a fixed CDP origin. This does not itself prove safe arbitrary subscription destinations. | Apply the maintained guarded connector with callback-specific public-address/TLS/redirect/timeout/body rules and tests. Verify a fresh signed one-use challenge before first delivery; recheck resource/Account authority at send. Signing secrets remain server-private. No custom DNS resolver or token issuer. |
+| Asynchronous MCP Tasks | Negotiated `io.modelcontextprotocol/tasks` extension **only when a maintained adapter and the consuming client are verified**; existing durable Call/status/result fallback meanwhile. | [Tasks overview](https://modelcontextprotocol.io/extensions/tasks/overview), [2026-07-28 draft](https://tasks.extensions.modelcontextprotocol.io/specification/2026-07-28/tasks), [migration SEP](https://modelcontextprotocol.io/seps/2663-tasks-extension), [maintained client matrix](https://modelcontextprotocol.io/extensions/client-matrix). Installed legacy task schemas and extension seams do not prove a complete 2026 adapter; no turnkey maintained runtime/example was established by the inspected SDK tree. Client matrix has no Tasks/Events support proof. | Preserve existing Call IDs and authority. Qualify a maintained adapter, then project task creation/get/update/cancel and terminal output without a second store. If unavailable, retain REST/polling and mark MM-060 blocked. Do not implement the draft wire protocol or a custom task engine just to fill the row. |
+
+Source motivation for RF3/RF5 is exact: [mcp-api.ts:506](../../src/lib/server/mcp-api.ts#L506)
+contains `capabilities: { tools: { listChanged: false } }`; [serveMcp:802](../../src/lib/server/mcp-api.ts#L802)
+constructs `const handler = createMcpHandler(() => server, {` per request. The
+adjacent invariant says `no instance or authority is shared between requests`.
+Do not weaken that isolation to copy a single-process SDK sample.
+[marketDispatchWorkpool.ts:8](../../convex/marketDispatchWorkpool.ts#L8) has
+`retryActionsByDefault: true`: this is scheduler policy, not permission to repeat
+an uncertain paid start. The existing effect claim/reconciliation must gate it.
+
+### Protocol boundaries that must remain explicit
+
+Core `subscriptions/listen` is a negotiated notification stream. ChatGPT Events
+uses `events/list`, `events/subscribe` and `events/unsubscribe` at the authenticated
+MCP endpoint, followed by HTTPS callbacks. The general Events proposal also
+discusses polling and streaming, but the inspected ChatGPT implementation does
+not support those modes or gap/termination notifications. They are different
+client surfaces; SDK support for one must not be presented as support for the
+other. Neither event delivery nor OAuth connection grants purchase authority.
+
+The 2026 Tasks extension is a draft and **not wire-compatible** with the legacy
+2025-11-25 experimental Tasks contract. Its resultType task admission, tasks/get,
+tasks/update, tasks/cancel and task subscription semantics must be negotiated;
+legacy tasks/result, tasks/list and notifications/tasks/status shapes are not
+the same integration. A tool’s completed isError result and a failed JSON-RPC
+request also differ. Do not silently convert states or claim actual host support
+from old SDK type declarations. This does not invalidate existing negotiated
+legacy support; its version remains explicit.
+
+Webhook acceptance proof includes authority-bound idempotent subscription,
+callback verification, restart/renew/revoke, signed bounded event envelopes,
+stable dedup identity, fresh retry signatures, out-of-order recovery and terminal
+410/413 handling. StandardWebhooks supplies the cryptography; Workpool supplies
+bounded scheduling. Provider webhooks have their own documented security and
+retry rules, and are not automatically StandardWebhooks compatible. A summary
+event plus an authorised read tool is preferable to publishing private full
+results. External event payload text is data, never trusted instructions.
+
+### Engineering review of the reuse decision
+
+This follow-up applies Wayfinder and the installed `/plan-eng-review` inline
+architecture, code-quality, test and performance sections to each substantive
+integration issue. Delegated-session recommendations are selected for this
+authorised documentation scope; implementation remains awaiting direction.
+
+| Issue / section | Recommended decision and genuine alternative | Acceptance and remaining concern |
+| --- | --- | --- |
+| RF1 — architecture: a new job lifecycle would duplicate Call/Workpool. | Existing Call projection + maintained Provider SDK. Workpool for bounded observations; Workflow for durable waits/graphs. | MM-021/MM-022/MM-057: original handle, validated result and restart without second start; exact SDK/Provider entitlement still unproved. |
+| RF2 — architecture/contracts: contracted Agent does not imply A2A, MCP or a new AE runtime. | A2A client only when Provider AgentCard/versions/capabilities support it; HTTP/Provider SDK or MCP remains valid for other supply. | MM-057: pinned counterparty fit and current Account/effect mapping; no production authority from demo-token samples. |
+| RF3 — architecture/security: core streams do not implement ChatGPT Events. | Official Events three-handler contract + StandardWebhooks + existing Workpool; SDK core streams separately for tools/resources. REST reads for unsupported clients. | MM-058/MM-059: actual host + verification/renew/revoke/duplicate/restart + connection-time network negatives. Callback state is necessary integration, not a new broker. |
+| RF4 — code-quality/contracts: old task declarations can conceal an unsupported draft integration. | Negotiate a maintained 2026 extension adapter when verified; otherwise existing Call/status/result. No custom wire engine. | MM-060: named client and adapter versions, terminal/input/cancel semantics. Lack of verified support blocks this optional integration, not the baseline async Call capability. |
+| RF5 — tests/authority: scheduler and webhook retries can duplicate paid starts or disclose revoked results. | Existing effect idempotency/reconcile and current authority at release/read/send; stable delivery IDs, bounded read-after-event recovery. | MM-023/MM-024/MM-058: response loss, signing rotation, duplicate/out-of-order/revoke, restart and unsafe callback tests; 2xx is receipt, not execution completion. |
+| RF6 — performance: copy-pasted SDK examples can hold an action open or grow a replay journal. | Small scheduled observations, event waits when supported, refs instead of large payloads; SDK stream lifecycle management. | MM-020/MM-040/MM-057–MM-059: bound retries, time, bytes and retained event history; measure load in the real client before any delivery/SLA claim. |
+
+Next concrete preparation slice is **MM-057**: select one actually admitted or
+fixture Provider, pin its maintained SDK/version and prove the existing Call
+mapping. The first runtime correction remains **MM-022**, after bounded direction,
+using that evidence. ChatGPT Events is its own client-qualified integration; it
+must not hold up conventional async result recovery. No runtime, dependency,
+subscription, secret, production setting, payment or deployment changed here.
+
+Original docs/examples were read on 5 October 2026, with sanitised URL/status/time/
+SHA-256 snapshots retained in the delegated task’s `evidence/reuse-review`.
+Public documentation, inspected exports/source and reproduced behaviour remain
+separate evidence layers. No client interoperability or paid result was reproduced
+in this follow-up. The required docs revision check is recorded with the register.
+
 ## Engineering review: substantive issues and choices
 
 The installed Wayfinder Delivery and `/plan-eng-review` were run for this bounded preparation, including Step 0, architecture, code quality, tests and performance. The dispatch is delegated; the skill's spawned-session rule selects recommended non-destructive planning options and records them below. These are recommendations, not Joel's runtime direction approval. No separate reviewer/subagent ran.
@@ -183,7 +297,7 @@ Step 0: reuse the current IAM, action registry, Call state machines, economic le
 | Issue / evidence / confidence | Recommended choice and alternative | Consequence / proof |
 | --- | --- | --- |
 | **A1, F1:** wallet, key and actor are different. `principalKindValue` has human/organisation/agent/workload; Account schema has separate membership/ownership. 10/10. | Keep canonical Principal/Account/credential separation **[Layer 1]**. Alternative: model each connection as the customer identity. | Preserves history and isolation; costs a clearer guide. Rotation and cross-Account cases must pass. |
-| **A2, F2:** `return continuation === undefined ? ... disposition: 'succeeded'` in [normaliser lines 365–370](../../src/modules/capability-supply/internal/route-transport-http-json.ts); queued 202 fixture reproduced. 10/10. | Explicit supported start/status/result completion adapter **[Layer 1]**. Alternative: treat any 2xx as final or force providers to emit AE headers. | Enables conventional async APIs; adds handle/observation state. Keep acceptance and final result distinct. |
+| **A2, F2:** `return continuation === undefined ? ... disposition: 'succeeded'` in [normaliser lines 365–370](../../src/modules/capability-supply/internal/route-transport-http-json.ts); queued 202 fixture reproduced. 10/10. | Maintained Provider SDK plus existing Call/Workpool completion projection **[Layer 1]**; qualify before adding the minimal supply adapter. Alternative: treat any 2xx as final or force providers to emit AE headers. | Enables conventional async APIs; persists only the required handle/observation projection on existing state. Keep acceptance and final result distinct. |
 | **A3, F3:** `callInputSchema` accepts only `quoteRef` and `idempotencyKey` in [Call contracts lines 103–106](../../src/modules/capability-execution/call-contracts.ts); ADR 0004 is proposed package supply. 10/10. | Bounded procurement graph over exact Tools, using Workflow **[Layer 1]**. Alternative: only fixed Provider packages. | Closes caller composition while retaining the wider planner outside AE; the buyer-side Plan contract is accepted by the 2026-10-05 decision ([RFC](../designs/2026-10-05-plan-quotes-rfc.md#13-accepted-decisions--2026-10-05)); runtime still requires W3 proof. |
 | **A4, F3/F4:** `DelegationGrant` owns budget/generation and `CallDispatchPort` owns one Tool/grant in [authority contracts](../../src/modules/authority/delegation/contracts.ts), [Call application](../../src/modules/capability-execution/call-authority.ts). 9/10. | Atomically reserve aggregate authority then release bounded child effects; preserve separate buyer/provider/refund facts. Alternative: recursively buy with unrestricted owner authority. | Prevents concurrent overspend and hidden responsibility changes; finance must settle aggregate allocation before paid work. |
 | **A5, F4:** public Call routes contain status/cancel/reconcile, no node/artifact operation in [Call entry](../../src/modules/capability-execution/call-entry.ts); live OpenAPI agrees. 9/10. | Owner-bound node/result/artifact reads **[Layer 1]**. Alternative: inline all output or make job IDs bearer access. | Cached efficient recovery and isolation; storage/expiry handling needs explicit policy. |
@@ -297,7 +411,8 @@ Implementation order follows file ownership, not a dependency of F3 on F2: buyer
 | Review | Trigger | Runs | Status | Findings |
 | --- | --- | --- | --- | --- |
 | Engineering | `/plan-eng-review`, explicit delegated foundation goal | 1 | DONE_WITH_CONCERNS: preparation reviewed | Step 0; 5 architecture, 3 code quality, 4 future test groups, 3 performance issues; 145 foundation tests and 656 conformance tests passed (overlap; 24 existing conformance skips); required check passed; free graph quote and 202 fixture reproduced. |
-| Wayfinder | Installed Wayfinder Delivery | 1 | scoping/preparation complete; runtime awaiting-direction | Existing #256/TODOS reused; protected concurrent Datadog changes; five ordered slices and exact proof ceilings. |
+| Engineering follow-up | numbered register + reuse-first SDK/Events qualification | 1 | DONE_WITH_CONCERNS: documentation reviewed | Register R1–R4 and reuse RF1–RF6; 60 stable items (56 baseline + 4 integration), 45 public operations mapped; original examples and installed exports inspected. Required `npm run check` passed (76 import/standards tests plus lint/dependency/type/boundary checks); structural register validation passed. No runtime acceptance or release claimed. |
+| Wayfinder | Installed Wayfinder Delivery | 2 | scoping/preparation complete; runtime awaiting-direction | Existing #256/TODOS reused; protected concurrent Datadog changes; five ordered slices and exact proof ceilings. |
 | Independent outside voice | Not requested for this preparation | 0 | skipped | No independent or cross-model review claimed. |
 
 Five backlog choices retain the complete recommended bounded path; none was silently cut. No current shipped regression or verified production exploit is claimed. A source-only pass is insufficient to close runtime parity. Durable learning: conventional queued JSON without a declared completion adapter can normalise as success; admission must distinguish provider acceptance from final delivery.
@@ -308,6 +423,8 @@ Five backlog choices retain the complete recommended bounded path; none was sile
 - Data/result retention and provider-specific financial allocation beyond the ordinary per-Call receipts, before broad paid implementation.
 - Actual provider entitlements, including permitted resale/distribution and the applicable data terms; catalogue presence and a free Quote are insufficient.
 - Literal rail/client/incentive interoperability scope (MPP/Tempo/SPT, rewarded reviews/social grants, embedded MCP App/WebMCP) and supported docs-framework version after build trial.
+
+- Exact maintained Provider/protocol adapter and real host support for Events/Tasks/A2A where chosen; MM-057 qualification precedes runtime adaptation. SDK schemas or public samples are not interoperability proof.
 
 ## Decision 2026-10-05: buyer-side Plans
 
