@@ -7,7 +7,7 @@ import { Button } from '@/components/arc/button/button'
 import buttonStyles from '@/components/arc/button/button.module.css'
 import { DecisionPanel } from '@/components/arc/chat/DecisionPanel'
 import { ProductListing } from '@/components/arc/market/ProductListing'
-import { ComparisonTable as ArcComparisonTable } from '@/components/arc/market/ComparisonTable'
+import { AeComparisonTable } from '@/components/ae/shared/comparison-table/AeComparisonTable'
 import { Badge } from '@/components/ui/badge'
 import { Spinner } from '@/components/ui/spinner'
 import { formatUtcTimestamp } from '@/lib/ui/format-time'
@@ -143,7 +143,7 @@ function CompareTable({ choices }: { choices: readonly ToolChoiceRow[] }) {
       }]
       : []),
   ]
-  return <ArcComparisonTable
+  return <AeComparisonTable
     title="Tool comparison"
     description="Compare the supplied Tool facts. Inspect a Tool for its full contract."
     columns={columns}

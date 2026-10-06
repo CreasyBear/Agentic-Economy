@@ -1,4 +1,3 @@
-// Arc Pro registry source: registry/components/stepper/stepper.tsx; upstream SHA-256: 62a86a10f72ef20ca8f28e04dad460099e2aed65084187c99d780f4bdd9b53f2
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -15,13 +14,9 @@ export interface StepperStep {
   id: string;
   label: string;
   /** A short hint under the label. */
-  description?: string | undefined;
+  description?: string;
   /** Marks the step as failed: the marker morphs into an alert and this message replaces the description. */
-  error?: string | undefined;
-  /** Explicit presentation state. Supplying any step status disables inferred completion for the whole list. */
-  status?: StepperStatus | undefined;
-  /** Exact assistive-technology state for domain records whose wording differs from the visual status. */
-  statusLabel?: string | undefined;
+  error?: string;
 }
 
 /**
@@ -30,26 +25,22 @@ export interface StepperStep {
  * people return to completed steps by click or keyboard. For a multi-step form that owns its own content, use MultiStepForm.
  */
 export interface StepperProps {
-  steps: readonly StepperStep[];
+  steps: StepperStep[];
   /** Index of the step in progress. `steps.length` marks the whole flow complete. */
   current: number;
-  orientation?: StepperOrientation | undefined;
-  /** Called with the index of a selectable step when it is chosen. Without it the stepper is a read-only indicator. */
-  onStepSelect?: ((index: number) => void) | undefined;
-  /** Overrides which steps can be reached and selected. Without it, existing status-based reachability applies. */
-  canSelectStep?: ((index: number) => boolean) | undefined;
+  orientation?: StepperOrientation;
+  /** Called with the index of a completed step when it is chosen. Without it the stepper is a read-only indicator. */
+  onStepSelect?: (index: number) => void;
   /** `current` shows only the active step's description, for tight spaces. Errors always show. */
-  details?: "all" | "current" | undefined;
+  details?: "all" | "current";
   /** Markers only; labels stay available to assistive tech. Horizontal steppers switch to this below 30rem on their own
    *  and show the current step's label underneath. */
-  compact?: boolean | undefined;
+  compact?: boolean;
   /** Accessible name for the stepper. */
-  label?: string | undefined;
+  label?: string;
   /** Announced, and shown in the compact caption, once every step is complete. */
-  completeLabel?: string | undefined;
-  /** Static live-region text for recorded progress that is not changing in real time. */
-  announceLabel?: string | undefined;
-  className?: string | undefined;
+  completeLabel?: string;
+  className?: string;
 }
 
 type GlyphKind = "number" | "check" | "error";
@@ -66,7 +57,7 @@ const glyphRest = { opacity: 1, scale: 1, filter: blur(0) };
 
 /** Text that rises in with a small blur when it changes. Its slot springs to the new height, so a message that wraps
  *  eases the steps below it down instead of pushing them; unrelated resizes (fonts, container width) follow exactly. */
-function SwapText({ text, className, reduced }: { text: string | undefined; className: string | undefined; reduced: boolean }) {
+function SwapText({ text, className, reduced }: { text?: string; className: string; reduced: boolean }) {
   const inner = useRef<HTMLSpanElement>(null);
   const armedUntil = useRef(0);
   const height = useMotionValue<number | "auto">("auto");
@@ -86,7 +77,7 @@ function SwapText({ text, className, reduced }: { text: string | undefined; clas
   return <motion.span className={styles.slot} style={{ height }}>
     <span ref={inner} className={styles.slotInner}>
       <AnimatePresence mode="popLayout" initial={false}>
-        {text ? <motion.span key={`${className ?? ""}:${text}`} className={className} initial={reduced ? false : textFrom} animate={textRest} exit={{ ...textGone, transition: reduced ? still : leave }} transition={reduced ? still : settle}>{text}</motion.span> : null}
+        {text ? <motion.span key={`${className}:${text}`} className={className} initial={textFrom} animate={textRest} exit={{ ...textGone, transition: reduced ? still : leave }} transition={reduced ? still : settle}>{text}</motion.span> : null}
       </AnimatePresence>
     </span>
   </motion.span>;
@@ -97,13 +88,13 @@ function Glyph({ kind, number, delay, reduced }: { kind: GlyphKind; number: numb
   const pop = reduced ? still : { scale: { ...motionTokens.spring.snappy, delay }, opacity: { duration: motionTokens.duration.fast, delay }, filter: { duration: motionTokens.duration.fast, delay } };
   const exit = { ...glyphFrom, transition: reduced ? still : leave };
   const draw = reduced ? still : { duration: motionTokens.duration.standard, ease: motionTokens.ease.enter, delay: delay + .04 };
-  if (kind === "number") return <motion.span className={styles.glyph} initial={reduced ? glyphRest : glyphFrom} animate={glyphRest} exit={exit} transition={pop}>{number}</motion.span>;
-  return <motion.svg className={`${styles.glyph} ${styles.icon}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" initial={reduced ? glyphRest : glyphFrom} animate={glyphRest} exit={exit} transition={pop}>
+  if (kind === "number") return <motion.span className={styles.glyph} initial={glyphFrom} animate={glyphRest} exit={exit} transition={pop}>{number}</motion.span>;
+  return <motion.svg className={`${styles.glyph} ${styles.icon}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" initial={glyphFrom} animate={glyphRest} exit={exit} transition={pop}>
     {kind === "check"
-      ? <motion.path d="M5.5 12.5l4.25 4.25L18.5 8" initial={{ pathLength: reduced ? 1 : 0 }} animate={{ pathLength: 1 }} transition={draw} />
+      ? <motion.path d="M5.5 12.5l4.25 4.25L18.5 8" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={draw} />
       : <>
-        <motion.path d="M12 6.75v6.5" initial={{ pathLength: reduced ? 1 : 0 }} animate={{ pathLength: 1 }} transition={draw} />
-        <motion.circle cx={12} cy={17.4} r={1.4} fill="currentColor" stroke="none" initial={{ scale: reduced ? 1 : 0 }} animate={{ scale: 1 }} transition={reduced ? still : { ...motionTokens.spring.snappy, delay: delay + .16 }} />
+        <motion.path d="M12 6.75v6.5" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={draw} />
+        <motion.circle cx={12} cy={17.4} r={1.4} fill="currentColor" stroke="none" initial={{ scale: 0 }} animate={{ scale: 1 }} transition={reduced ? still : { ...motionTokens.spring.snappy, delay: delay + .16 }} />
       </>}
   </motion.svg>;
 }
@@ -112,7 +103,7 @@ function Glyph({ kind, number, delay, reduced }: { kind: GlyphKind; number: numb
 function Marker({ number, kind, current, glyphDelay, ringDelay, reduced }: { number: number; kind: GlyphKind; current: boolean; glyphDelay: number; ringDelay: number; reduced: boolean }) {
   return <span className={styles.marker} aria-hidden="true">
     <AnimatePresence initial={false}>
-      {current ? <motion.span key="ring" className={styles.ring} initial={reduced ? { opacity: 1, scale: 1 } : { opacity: 0, scale: .6 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: .6, transition: reduced ? still : leave }}
+      {current ? <motion.span key="ring" className={styles.ring} initial={{ opacity: 0, scale: .6 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: .6, transition: reduced ? still : leave }}
         transition={reduced ? still : { scale: { ...motionTokens.spring.snappy, delay: ringDelay }, opacity: { duration: motionTokens.duration.fast, delay: ringDelay } }} /> : null}
     </AnimatePresence>
     <span className={styles.disc}>
@@ -123,18 +114,10 @@ function Marker({ number, kind, current, glyphDelay, ringDelay, reduced }: { num
 
 const statusText: Record<StepperStatus, string> = { complete: "Completed", current: "", upcoming: "Not started", error: "Error" };
 
-export function Stepper({ steps, current, orientation = "horizontal", onStepSelect, canSelectStep, details = "all", compact = false, label = "Progress", completeLabel = "All steps complete", announceLabel, className }: StepperProps) {
+export function Stepper({ steps, current, orientation = "horizontal", onStepSelect, details = "all", compact = false, label = "Progress", completeLabel = "All steps complete", className }: StepperProps) {
   const reduced = useReducedMotion() ?? false;
   const count = steps.length;
-  const hasExplicitStatuses = steps.some((step) => step.status !== undefined);
   const active = Math.min(Math.max(Math.round(current), 0), count);
-  const statusAt = (index: number): StepperStatus => {
-    const step = steps[index];
-    if (!step) return "upcoming";
-    if (step.status !== undefined) return step.status;
-    if (hasExplicitStatuses) return step.error ? "error" : index === active ? "current" : "upcoming";
-    return step.error ? "error" : index < active ? "complete" : index === active ? "current" : "upcoming";
-  };
   // Remember where progress came from, so a jump across several steps fills or drains its connectors one after another.
   const [travel, setTravel] = useState({ to: active, from: active });
   if (travel.to !== active) setTravel({ to: active, from: travel.to });
@@ -148,17 +131,8 @@ export function Stepper({ steps, current, orientation = "horizontal", onStepSele
   const ringDelay = reduced ? 0 : Math.max(0, Math.abs(active - from) - 1) * gap + .12;
   const interactive = Boolean(onStepSelect);
   const vertical = orientation === "vertical";
-  const done = hasExplicitStatuses
-    ? count > 0 && steps.every((_, index) => statusAt(index) === "complete")
-    : active >= count;
-  const explicitCurrent = hasExplicitStatuses ? steps.findIndex((_, index) => statusAt(index) === "current") : -1;
-  const displayIndex = explicitCurrent >= 0 ? explicitCurrent : active;
-  const now = done ? undefined : steps[displayIndex];
-  const liveText = announceLabel ?? (done
-    ? completeLabel
-    : now
-      ? `Step ${displayIndex + 1} of ${count}: ${now.label}${hasExplicitStatuses && now.statusLabel ? `, ${now.statusLabel}` : ""}`
-      : `${steps.filter((_, index) => statusAt(index) === "complete").length} of ${count} steps complete`);
+  const done = active >= count;
+  const now = done ? undefined : steps[active];
 
   /** Arrow keys move between the steps you can reach; Home and End jump to the first and the current one. */
   function onKeyDown(event: KeyboardEvent<HTMLOListElement>) {
@@ -178,40 +152,34 @@ export function Stepper({ steps, current, orientation = "horizontal", onStepSele
   return <Root className={classes} aria-label={label} role={interactive ? undefined : "group"}>
     <ol className={styles.list} style={vertical ? undefined : { gridTemplateColumns: count > 1 ? `repeat(${count - 1}, minmax(0, 1fr)) auto` : "auto" }} onKeyDown={interactive ? onKeyDown : undefined}>
       {steps.map((step, index) => {
-        const status = statusAt(index);
-        const isCurrent = status === "current";
-        const canSelect = canSelectStep?.(index);
-        const defaultReachable = hasExplicitStatuses ? status === "complete" || isCurrent : index <= active;
-        const defaultClickable = hasExplicitStatuses ? status === "complete" : index < active;
-        const reachable = canSelectStep ? canSelect === true : defaultReachable;
-        const clickable = interactive && (canSelectStep ? canSelect === true : defaultClickable);
+        const isCurrent = index === active;
+        const status: StepperStatus = step.error ? "error" : index < active ? "complete" : isCurrent ? "current" : "upcoming";
+        const clickable = interactive && index < active;
         const detail = step.error ?? (details === "all" || isCurrent ? step.description : undefined);
-        const kind: GlyphKind = status === "error" ? "error" : status === "complete" ? "check" : "number";
-        const statusAnnouncement = step.statusLabel ?? statusText[status];
-        const connectorComplete = hasExplicitStatuses ? status === "complete" : index < active;
+        const kind: GlyphKind = step.error ? "error" : index < active ? "check" : "number";
         const content: ReactNode = <>
           <Marker number={index + 1} kind={kind} current={isCurrent} glyphDelay={delayAt(index)} ringDelay={ringDelay} reduced={reduced} />
           <span className={styles.text}>
             <span className={styles.label}>{step.label}</span>
-            {step.statusLabel ? <span className={styles.srOnly}>{step.statusLabel}</span> : statusAnnouncement ? <span className={styles.srOnly}>, {statusAnnouncement}</span> : null}
+            {statusText[status] ? <span className={styles.srOnly}>, {statusText[status]}</span> : null}
             <SwapText text={detail} className={step.error ? styles.error : styles.description} reduced={reduced} />
           </span>
         </>;
         return <li key={step.id} className={styles.item} data-status={status}>
           {index < count - 1 ? <span className={styles.connector} aria-hidden="true">
-            <motion.span key={orientation} className={styles.fill} initial={false} animate={vertical ? { scaleY: connectorComplete ? 1 : 0 } : { scaleX: connectorComplete ? 1 : 0 }} transition={reduced ? still : { ...motionTokens.spring.smooth, delay: delayAt(index) }} />
+            <motion.span key={orientation} className={styles.fill} initial={false} animate={vertical ? { scaleY: index < active ? 1 : 0 } : { scaleX: index < active ? 1 : 0 }} transition={reduced ? still : { ...motionTokens.spring.smooth, delay: delayAt(index) }} />
           </span> : null}
           {interactive
-            ? <button type="button" className={styles.head} data-clickable={clickable || undefined} data-reachable={reachable || undefined} aria-current={isCurrent ? "step" : undefined} aria-disabled={clickable ? undefined : true} tabIndex={clickable ? undefined : -1} onClick={clickable ? () => onStepSelect?.(index) : undefined}>{content}</button>
+            ? <button type="button" className={styles.head} data-clickable={clickable || undefined} data-reachable={index <= active || undefined} aria-current={isCurrent ? "step" : undefined} aria-disabled={clickable ? undefined : true} tabIndex={clickable ? undefined : -1} onClick={clickable ? () => onStepSelect?.(index) : undefined}>{content}</button>
             : <span className={styles.head} aria-current={isCurrent ? "step" : undefined}>{content}</span>}
         </li>;
       })}
     </ol>
     {vertical ? null : <span className={styles.caption} aria-hidden="true">
-      <SwapText text={now?.label ?? (done ? completeLabel : label)} className={styles.captionLabel} reduced={reduced} />
+      <SwapText text={now?.label ?? completeLabel} className={styles.captionLabel} reduced={reduced} />
       <SwapText text={now?.error ?? now?.description} className={now?.error ? styles.error : styles.description} reduced={reduced} />
     </span>}
-    <span className={styles.srOnly} aria-live="polite">{liveText}</span>
+    <span className={styles.srOnly} aria-live="polite">{now ? `Step ${active + 1} of ${count}: ${now.label}` : completeLabel}</span>
   </Root>;
 }
 

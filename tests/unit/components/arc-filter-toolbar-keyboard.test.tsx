@@ -33,25 +33,26 @@ describe('Arc filter toolbar focus and presence', () => {
     expect(screen.queryByRole('button', { name: 'Clear all' })).toBeNull()
   })
 
-  it('keeps focus on the toolbar after clearing when there is no extra action', () => {
-    render(<Applied action={false} />)
+  it('returns focus to an available action after clearing all applied filters', () => {
+    render(<Applied />)
     const clear = screen.getByRole('button', { name: 'Clear all' })
     act(() => clear.focus())
     fireEvent.click(clear)
-    expect(screen.getByRole('group', { name: 'Active filters' })).toHaveFocus()
-    expect(screen.queryByRole('button')).toBeNull()
+    expect(screen.getByRole('button', { name: 'More filters' })).toHaveFocus()
+    expect(screen.queryByRole('button', { name: 'Clear all' })).toBeNull()
     expect(screen.getByText('No filters applied')).toBeInTheDocument()
   })
 
-  it('exposes only the current menu step and restores trigger focus on Escape', () => {
+  it('exposes only the current menu step and restores trigger focus on Escape', async () => {
     render(<FilterToolbar filters={[]} onRemove={() => {}} addFilter={{ fields: [{ id: 'price', label: 'Price', options: ['Any price', 'Under 1 USDC'] }], onAdd: () => {} }} />)
-    expect(screen.queryByRole('dialog')).toBeNull()
     const add = screen.getByRole('button', { name: 'Add filter' })
+    expect(add).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByRole('dialog')).toHaveAttribute('inert')
     act(() => add.focus())
     fireEvent.keyDown(add, { key: 'ArrowDown' })
     fireEvent.click(screen.getByRole('menuitem', { name: 'Price' }))
     expect(screen.queryByRole('menuitem', { name: 'Price' })).toBeNull()
-    expect(screen.getByRole('dialog', { name: 'Price' })).toBeInTheDocument()
+    expect(await screen.findByRole('dialog', { name: 'Price' })).toBeInTheDocument()
     expect(screen.getAllByRole('menu')).toHaveLength(1)
     expect(screen.getByRole('menuitemradio', { name: 'Any price' })).toHaveFocus()
     fireEvent.click(screen.getByRole('button', { name: 'Back to fields' }))
@@ -59,7 +60,7 @@ describe('Arc filter toolbar focus and presence', () => {
     expect(screen.getByRole('menuitem', { name: 'Price' })).toHaveFocus()
     fireEvent.click(screen.getByRole('menuitem', { name: 'Price' }))
     fireEvent.keyDown(screen.getByRole('menuitemradio', { name: 'Any price' }), { key: 'Escape' })
-    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(screen.getByRole('dialog')).toHaveAttribute('inert')
     expect(add).toHaveFocus()
   })
 })

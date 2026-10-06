@@ -1,5 +1,4 @@
-/* Retained AeRecordHeader-specific composition. Shared AePageHeader now
- * renders the installed Arc PageHeader block and its own source stylesheet. */
+/* Kept for the compact operator header, independent of the shared record page-header compound. */
 .arc-record-header { display: flex; min-width: 0; min-height: 64px; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-4) var(--space-6); padding-block: var(--space-4); color: var(--foreground); }
 .arc-record-header-intro { display: flex; min-width: 0; flex: 1 1 0; align-items: flex-start; gap: var(--space-4); }
 .arc-record-header .arc-page-header-intro { display: grid; justify-items: start; min-width: 0; gap: var(--space-2); }

@@ -1,6 +1,5 @@
-// Arc registry source: registry/components/radio-cards/radio-cards.tsx; upstream SHA-256: 42ee5f16c802c61f1d18cff383f74d488a940a586be74bdf53e342474290134f
-// AE adaptation: narrow indexed options and use a fixed measurement tuple for strict indexed access.
 "use client";
+// arc-patch: Guard strict indexed access without changing runtime behavior.
 
 import { forwardRef, useCallback, useId, useImperativeHandle, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { CSSProperties, HTMLAttributes, KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
@@ -67,7 +66,7 @@ export const RadioCards = forwardRef<HTMLDivElement, RadioCardsProps>(function R
   const [internal, setInternal] = useState<string | null>(defaultValue);
   const selected = value !== undefined ? value : internal;
   const selectedIndex = options.findIndex(option => option.value === selected);
-  const usable = (option: RadioCardOption | undefined) => option !== undefined && !disabled && !option.disabled;
+  const usable = (option: RadioCardOption | undefined): option is RadioCardOption => option !== undefined && !disabled && !option.disabled;
   const tabStop = selectedIndex >= 0 && usable(options[selectedIndex]) ? selectedIndex : options.findIndex(usable);
 
   const select = (next: string) => {
@@ -110,7 +109,7 @@ export const RadioCards = forwardRef<HTMLDivElement, RadioCardsProps>(function R
     if (event.key === " " || event.key === "Enter") {
       event.preventDefault();
       const option = options[index];
-      if (option && usable(option)) select(option.value);
+      if (usable(option)) select(option.value);
       return;
     }
     if (!step && event.key !== "Home" && event.key !== "End") return;
@@ -122,7 +121,7 @@ export const RadioCards = forwardRef<HTMLDivElement, RadioCardsProps>(function R
     for (let tries = 0; tries < count; tries++) {
       at = (at + dir + count) % count;
       const option = options[at];
-      if (option && usable(option)) { cards()[at]?.focus(); select(option.value); return; }
+      if (usable(option)) { cards()[at]?.focus(); select(option.value); return; }
     }
   };
 

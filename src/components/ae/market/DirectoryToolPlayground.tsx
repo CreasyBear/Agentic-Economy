@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/arc/button/button'
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty'
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/arc/tabs/Tabs'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/arc/tabs/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
 import { AeToolInputForm } from '../shared/tool-input-form/AeToolInputForm'
@@ -62,7 +62,7 @@ function PlaygroundEditor({ entry, toolRef, inputSchemaJson, inputExampleJson }:
           {initialValue !== undefined ? <Button type="button" variant="secondary" size="sm" onClick={() => setInputText(initialText)}>Load example</Button> : null}
         </div>
         <p className="text-sm text-muted-foreground">{canonical ? 'Prepare the request your agent will send.' : 'Explore the input published by this Provider.'}</p>
-        <Tabs animateContent={false} value={mode === 'form' && (!formAvailable || value === undefined) ? 'json' : mode} onValueChange={setMode}>
+        <Tabs value={mode === 'form' && (!formAvailable || value === undefined) ? 'json' : mode} onValueChange={setMode}>
           <TabsList aria-label="Input format">
             <TabsTrigger value="form" disabled={!formAvailable || value === undefined}>Form</TabsTrigger>
             <TabsTrigger value="json">JSON</TabsTrigger>

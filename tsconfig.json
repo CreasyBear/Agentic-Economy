@@ -27,6 +27,7 @@
       "@/routes/developers.discovery": [
         "./src/routes/_operator/developers.discovery"
       ],
+      "next/image": ["./src/lib/arc/next-image.tsx"],
       "@/*": ["./src/*"],
       "~/*": ["./src/*"]
     },

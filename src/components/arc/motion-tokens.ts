@@ -1,7 +1,3 @@
-/**
- * Arc UI foundation source: https://uiarc.dev/r/arc-foundation.json
- * Upstream registry/motion-tokens.ts SHA-256: 13af43b57ed38e5b72cfc06ff0ccc39b0593721f04840e73532893593cc61491
- */
 /** Motion presets are shared by the gallery and future registry consumers. */
 export const motionTokens = {
   duration: { instant: 0.12, fast: 0.16, exit: 0.18, standard: 0.24, considered: 0.48 },

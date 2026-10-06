@@ -53,9 +53,7 @@ export function ProviderRemovalDisputesTable({ rows, onCloseDispute }: ProviderR
         columns={disputeColumns(onCloseDispute)}
         rows={[...rows]}
         rowKey="disputeRef"
-        animateRows={false}
         caption={PROVIDER_OBJECT_COPY.removalDisputesTitle}
-        ariaLabel={PROVIDER_OBJECT_COPY.removalDisputesTitle}
         emptyMessage={PROVIDER_OBJECT_COPY.noRemovalDisputes}
       />
     </section>

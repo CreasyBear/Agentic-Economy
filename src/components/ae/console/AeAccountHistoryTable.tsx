@@ -8,11 +8,11 @@ import {
   AeOperatorSortableHeader,
   AeRecordTable,
 } from '@/components/ae/operator/AeOperatorDataTable'
-import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
+import { AeEmptyState } from '@/components/ae/shared/arc/empty-state/AeEmptyState'
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button as ArcButton } from '@/components/arc/button/button'
-import { Drawer, DrawerContent } from '@/components/arc/drawer/Drawer'
+import { Drawer, DrawerContent } from '@/components/ae/shared/arc/drawer/AeDrawerContent'
 import { Skeleton } from '@/components/arc/skeleton/skeleton'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { formatTimestamp } from '@/lib/ui/format-time'

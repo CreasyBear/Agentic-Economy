@@ -1,4 +1,3 @@
-/* Arc free skeleton source, retrieved 2026-10-03. Upstream SHA-256: ae0d4d0496b4d768e086ba54a184bf7083228f7c61bce5f177d0047461b72a5d. */
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, type CSSProperties, type ReactNode } from "react";
@@ -18,7 +17,7 @@ export interface SkeletonProps {
 }
 
 /** Follows its content height. After `morphKey` changes, the height springs from the old size to the new one and then returns to auto, so passive reflows (a resize, a font swap) follow instantly. It clips only while moving, so focus rings stay visible at rest. */
-function HeightFrame({ className, busy, reduce, children }: { className?: string | undefined; busy: boolean; reduce: boolean | null; children: ReactNode }) {
+function HeightFrame({ className, busy, reduce, children }: { className?: string; busy: boolean; reduce: boolean | null; children: ReactNode }) {
   const frame = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
   const height = useMotionValue<number | "auto">("auto");
@@ -31,7 +30,7 @@ function HeightFrame({ className, busy, reduce, children }: { className?: string
     let controls: AnimationPlaybackControls | undefined;
     const settle = () => { height.jump("auto"); if (frame.current) Object.assign(frame.current.style, { overflow: "", height: "auto" }); };
     const observer = new ResizeObserver(([entry]) => {
-      const next = entry?.borderBoxSize?.[0]?.blockSize ?? node.offsetHeight;
+      const next = entry.borderBoxSize?.[0]?.blockSize ?? node.offsetHeight;
       const current = height.get();
       const from = typeof current === "number" ? current : last;
       last = next;

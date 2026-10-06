@@ -1,4 +1,3 @@
-/* Actual Arc source retrieved 2026-10-03. SHA-256: 88d0ae55bb3e241f529912a4802bbf014e4ba437025acc90ab13e012702273c5 */
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";

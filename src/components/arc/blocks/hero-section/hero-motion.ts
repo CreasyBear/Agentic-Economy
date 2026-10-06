@@ -1,5 +1,3 @@
-/* Actual Arc Hero section registry source retrieved 2026-10-03. hero-motion.ts SHA-256: 13b3c25c7316aa0f222a1ec393027ac02f20f59194d638d17961a59868a04a21
- * Installed content path; native link and heading identity ports preserve host semantics. */
 import { useSyncExternalStore } from "react";
 import { useReducedMotion } from "motion/react";
 import type { Transition, Variants } from "motion/react";

@@ -1,7 +1,7 @@
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeSupplyEarningsCard } from '@/components/ae/supply/earnings-card/AeSupplyEarningsCard'
 import { Button as ArcButton } from '@/components/arc/button/button'
-import { Drawer, DrawerContent } from '@/components/arc/drawer/Drawer'
+import { Drawer, DrawerContent } from '@/components/ae/shared/arc/drawer/AeDrawerContent'
 import { Skeleton } from '@/components/arc/skeleton/skeleton'
 import '../supply/earnings-card/EarningsComposition.css'
 import { UnavailableSummary } from './ProviderWorkspaceSharedUi'

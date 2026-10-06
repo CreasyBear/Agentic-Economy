@@ -1,5 +1,3 @@
-/* Actual Arc Hero section registry source retrieved 2026-10-03. hero-content.tsx SHA-256: bc1b5672c25bc4ae6c1785c3b98206ee38d275d9775f277bac4e1742d3e9abf5
- * Installed content path; native link and heading identity ports preserve host semantics. */
 "use client";
 
 import { useEffect, useState } from "react";
@@ -14,8 +12,6 @@ import styles from "./hero-content.module.css";
 
 export interface HeroAction {
   label: string;
-  /** Keep the host router navigation while Arc owns action presentation. */
-  renderLink?: (props: Readonly<{ className: string; children: ReactNode; onClick: (() => void) | undefined }>) => ReactNode;
   href?: string;
   onClick?: () => void;
   /** Opens in a new tab and shows an outward arrow. */
@@ -34,8 +30,6 @@ export interface HeroContentProps {
   layout: "centered" | "split" | "minimal";
   announcement?: HeroAction | null;
   title: string;
-  /** Preserve an existing page heading anchor and named section. */
-  titleId?: string;
   description?: string;
   primaryAction?: HeroAction | null;
   secondaryAction?: HeroAction | null;
@@ -56,7 +50,6 @@ export function ActionLink({ action, kind, className }: { action: HeroAction; ki
   }, [done]);
   const cls = [styles.action, styles[kind], className].filter(Boolean).join(" ");
   const icon = action.external ? <ArrowUpRight size={16} strokeWidth={1.75} aria-hidden="true" /> : kind === "primary" ? <ArrowRight className={styles.arrow} size={16} strokeWidth={1.75} aria-hidden="true" /> : null;
-  if (action.renderLink) return action.renderLink({ className: cls, children: <>{action.label}{icon}</>, onClick: action.onClick });
   if (action.href) return <a className={cls} href={action.href} onClick={action.onClick} {...(action.external ? { target: "_blank", rel: "noopener noreferrer" } : {})}>{action.label}{icon}</a>;
   return <Button variant={kind} size="lg" className={[styles.button, className].filter(Boolean).join(" ")} onClick={() => { action.onClick?.(); if (action.doneLabel) setDone(true); }}>
     {done ? <><Check size={16} strokeWidth={1.75} aria-hidden="true" />{action.doneLabel}</> : <>{action.label}{icon}</>}
@@ -67,11 +60,11 @@ export function ActionLink({ action, kind, className }: { action: HeroAction; ki
  * The hero with your own content: announcement, headline, description, actions, an optional install line, and an
  * optional visual beside the copy. Use it when none of the three designed variants fits the product.
  */
-export function HeroContent({ layout, announcement, title, description, primaryAction, secondaryAction, install, media, meta, titleId, animateIn = true, className }: HeroContentProps) {
+export function HeroContent({ layout, announcement, title, description, primaryAction, secondaryAction, install, media, meta, animateIn = true, className }: HeroContentProps) {
   const item = heroRise;
   const command = install?.[0];
   // Reduced motion: Motion skips every transform (rise, zoom, tilt entrance); opacity still fades briefly.
-  return <MotionConfig reducedMotion="user"><section className={["arc-market", shell.hero, styles.hero, styles[layout], className].filter(Boolean).join(" ")} aria-labelledby={titleId}>
+  return <MotionConfig reducedMotion="user"><section className={[shell.hero, styles.hero, styles[layout], className].filter(Boolean).join(" ")}>
     <div className={styles.inner}>
       <motion.div className={styles.copy} variants={heroGroup} initial={animateIn ? "hidden" : false} animate="shown">
         {announcement && <motion.div variants={item}>
@@ -79,7 +72,7 @@ export function HeroContent({ layout, announcement, title, description, primaryA
             ? <a className={styles.announcement} href={announcement.href} onClick={announcement.onClick}>{announcement.label}<ArrowRight className={styles.arrow} size={14} strokeWidth={1.75} aria-hidden="true" /></a>
             : <button type="button" className={styles.announcement} onClick={announcement.onClick}>{announcement.label}<ArrowRight className={styles.arrow} size={14} strokeWidth={1.75} aria-hidden="true" /></button>}
         </motion.div>}
-        <motion.h1 id={titleId} variants={item} className={[shell.title, styles.title].join(" ")}>{title}</motion.h1>
+        <motion.h1 variants={item} className={[shell.title, styles.title].join(" ")}>{title}</motion.h1>
         {description && <motion.p variants={item} className={[shell.description, styles.description].join(" ")}>{description}</motion.p>}
         {(primaryAction || secondaryAction) && <motion.div variants={item} className={styles.actions}>
           {primaryAction && <ActionLink action={primaryAction} kind="primary" />}

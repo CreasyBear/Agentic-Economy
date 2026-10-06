@@ -1,5 +1,5 @@
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/arc/tabs/Tabs'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/arc/tabs/tabs'
 
 import './CreditComposition.css'
 
@@ -33,7 +33,7 @@ export function AeOwnerCredit(props: AeOwnerCreditProps) {
           </AlertDescription>
         </Alert>
       ) : null}
-      <Tabs defaultValue={defaultSection} animateContent={false} className="arc-credit-tabs">
+      <Tabs defaultValue={defaultSection} className="arc-credit-tabs">
         <TabsList
           aria-label="Credit sections"
           className="arc-credit-tabs__list"

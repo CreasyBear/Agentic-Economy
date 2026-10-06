@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 
-import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
+import { AeEmptyState } from '@/components/ae/shared/arc/empty-state/AeEmptyState'
+import { AeApproximateQuotaMeter } from '@/components/ae/shared/usage-meter/AeApproximateQuotaMeter'
 import {
   AeOperatorSortableHeader,
   AeRecordTable,
@@ -9,7 +10,6 @@ import {
 import { Badge } from '@/components/ui/badge'
 import arcButton from '@/components/arc/button/button.module.css'
 import SegmentedControl from '@/components/arc/segmented-control/segmented-control'
-import UsageMeter from '@/components/arc/usage-meter/usage-meter'
 import { stagedListPhase, useFirstLoadPending } from '@/components/ui/data-state'
 import { InlineEditField } from '@/components/ui/inline-edit-field'
 import { formatRelativeTime, formatTimestamp, timestampIso } from '@/lib/ui/format-time'
@@ -156,12 +156,9 @@ export function AeAgentDirectoryTable({
           return (
             <div className="arc-agent-directory-utilization">
               <span className="arc-agent-directory-money">{spendText}</span>
-              <UsageMeter
-                compact
+              <AeApproximateQuotaMeter
                 label="UTC month utilization"
-                limit={100}
-                decimals={0}
-                segments={[{ id: 'settled', label: 'Settled spend', value: utilization.percent }]}
+                percentage={utilization.percent}
                 limitState={utilization.limitState}
                 summary={`${utilization.percent}% (${spendText}). ${thresholdText}`}
               />

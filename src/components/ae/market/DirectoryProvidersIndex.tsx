@@ -1,9 +1,10 @@
 import { Link } from '@tanstack/react-router'
 import { ArrowRight, StoreIcon } from 'lucide-react'
-import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
+import { AeEmptyState } from '@/components/ae/shared/arc/empty-state/AeEmptyState'
 import { toDirectoryProviderRow } from '@/modules/market/directory-card.view-model'
 import type { X402DirectoryFacet, X402DirectoryProvidersPage } from '@/modules/market/x402-directory-catalogue'
-import { SortableDataTable, type DataColumn } from '@/components/arc/sortable-data-table/sortable-data-table'
+import { AeSortableDataTable } from '@/components/ae/shared/sortable-data-table/AeSortableDataTable'
+import type { AeDataColumn } from '@/components/ae/shared/sortable-data-table/sortable-data-table.contracts'
 import '@/components/arc/market/ProductListing.css'
 import '@/components/arc/market/ProviderListing.css'
 import { MARKET_LINK_STATE } from './market-return-context'
@@ -29,7 +30,7 @@ export function DirectoryProvidersIndex({ result }: DirectoryProvidersIndexProps
     provider,
     model: toDirectoryProviderRow(provider),
   }))
-  const columns: DataColumn<ProviderRow>[] = [
+  const columns: AeDataColumn<ProviderRow>[] = [
     {
       key: 'provider',
       label: 'Provider',
@@ -84,7 +85,7 @@ export function DirectoryProvidersIndex({ result }: DirectoryProvidersIndexProps
     <header className="arc-provider-index-heading"><h2>Providers</h2><p>{ranked ? 'Sorted by the busiest Tool. Calls, payers, and price belong to that Tool. The count is the whole host.' : 'Open a host to see the Tools they list. Counts cover the whole indexed catalogue.'}</p></header>
     {result.page.length === 0
       ? <p role="status" className="arc-provider-index-empty">No Providers on this page.</p>
-      : <SortableDataTable rows={rows} columns={columns} rowKey="key" ariaLabel="Providers" caption="Indexed Providers. Tool counts cover the whole host. Price, calls and payers describe the busiest Tool over 30 days, reported by Coinbase Bazaar." animateRows={false} rowClassName="arc-listing-row" />}
+      : <AeSortableDataTable rows={rows} columns={columns} rowKey="key" ariaLabel="Providers" caption="Indexed Providers. Tool counts cover the whole host. Price, calls and payers describe the busiest Tool over 30 days, reported by Coinbase Bazaar." animateRows={false} rowClassName="arc-listing-row" />}
     <nav aria-label="Provider catalogue pages" className="arc-provider-pagination"><Link to={marketPath} search={{ view: 'providers' }}>First page</Link>{!result.isDone && <Link to={marketPath} search={{ view: 'providers', providerCursor: result.continueCursor }}>Next Providers<ArrowRight size={16} aria-hidden="true" /></Link>}</nav>
   </section>
 }

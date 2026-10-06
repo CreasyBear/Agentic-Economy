@@ -21,7 +21,6 @@ export function AgentFactsDisclosure({
             type="button"
             variant="ghost"
             size="md"
-            labelLayout="between"
             className="arc-agent-disclosure-trigger"
           >
             {label}

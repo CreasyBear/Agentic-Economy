@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Button } from '@/components/arc/button/button'
+import { AeActionLink } from '@/components/ae/shared/action-link/AeActionLink'
 import {
   Dialog,
   DialogContent,
@@ -67,7 +68,7 @@ export function AeAgentJsonAffordance({ agentJsonUrl, query }: AeAgentJsonAfford
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogTrigger
           render={
-            <Button type="button" variant="secondary" size="md" labelLayout="wrap" onClick={() => void openPreview()}>
+            <Button type="button" variant="secondary" size="md" onClick={() => void openPreview()}>
               <CodeIcon aria-hidden="true" />
               Agent-readable data
             </Button>
@@ -91,20 +92,20 @@ export function AeAgentJsonAffordance({ agentJsonUrl, query }: AeAgentJsonAfford
             </div>
           ) : null}
           <DialogFooter className="arc-agent-json-actions">
-            <Button type="button" variant="ghost" size="md" labelLayout="wrap" onClick={() => setPreviewOpen(false)}>
+            <AeActionLink type="button" variant="ghost" size="md" labelLayout="wrap" onAction={() => setPreviewOpen(false)}>
               Cancel
-            </Button>
-            <Button
+            </AeActionLink>
+            <AeActionLink
               type="button"
               variant="primary"
               size="md"
               labelLayout="wrap"
               disabled={preview.status !== 'ready' || copied}
-              onClick={() => void confirmCopy()}
+              onAction={() => void confirmCopy()}
             >
               {copied ? <CheckIcon aria-hidden="true" /> : <CodeIcon aria-hidden="true" />}
               {copied ? 'Copied to clipboard' : 'Confirm and copy data'}
-            </Button>
+            </AeActionLink>
           </DialogFooter>
           <span className="sr-only" role="status" aria-live="polite">
             {copied ? `Agent-readable data for ${query} copied to clipboard` : ''}

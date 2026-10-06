@@ -7,7 +7,7 @@ import { useEffect, useRef } from 'react'
 
 import { Button as ArcButton } from '@/components/arc/button/button'
 import buttonStyles from '@/components/arc/button/button.module.css'
-import { Drawer, DrawerContent, DrawerTrigger } from '@/components/arc/drawer/Drawer'
+import { Drawer, DrawerContent, DrawerTrigger } from '@/components/ae/shared/arc/drawer/AeDrawerContent'
 import { AeCommandPanel } from '@/components/ae/command-panel'
 import { AeNetworkHealthBanner, AeNetworkHealthIndicator } from '@/components/ae/layout/AeNetworkHealthIndicator'
 import { useOperatorFrameChrome } from '@/components/ae/layout/AeOperatorPage'
@@ -140,8 +140,8 @@ export function AeAppHeader({
               <div className={chatFrame ? 'hidden sm:block' : ''}><AeCommandPanel /></div>
               <div className={chatFrame ? 'hidden sm:block' : ''}><ThemeToggle /></div>
               <Link to="/sign-in/$" params={{ _splat: '' }} className={cn(buttonStyles.button, buttonStyles.ghost, buttonStyles.md, 'arc-app-header__desktop-sign-in hidden md:inline-flex')}>Sign in</Link>
-              {!chatFrame ? <DrawerTrigger
-                render={
+              {!chatFrame ? (
+                <DrawerTrigger asChild>
                   <ArcButton
                     type="button"
                     variant="ghost"
@@ -151,8 +151,8 @@ export function AeAppHeader({
                   >
                     <MenuIcon aria-hidden="true" />
                   </ArcButton>
-                }
-              /> : null}
+                </DrawerTrigger>
+              ) : null}
             </div>
           </div>
           <DrawerContent

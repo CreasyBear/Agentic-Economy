@@ -3,9 +3,9 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { Button as ArcButton } from "@/components/arc/button/button";
-import { Drawer, DrawerContent, DrawerTrigger } from "@/components/arc/drawer/Drawer";
-import { SortableDataTable } from "@/components/arc/sortable-data-table/sortable-data-table";
-import type { DataColumn } from "@/components/arc/sortable-data-table/sortable-data-table";
+import { Drawer, DrawerContent, DrawerTrigger } from "@/components/ae/shared/arc/drawer/AeDrawerContent";
+import { AeSortableDataTable } from "@/components/ae/shared/sortable-data-table/AeSortableDataTable";
+import type { AeDataColumn } from "@/components/ae/shared/sortable-data-table/sortable-data-table.contracts";
 import type { SearchResult } from "@/modules/registry/tool-choice-contracts";
 import { directoryDate } from "./directory-presentation";
 
@@ -61,7 +61,7 @@ export function CanonicalSearchResults({ results, renderActions }: CanonicalSear
   if (selectedIdentity !== null && selected === undefined) setSelectedIdentity(null);
 
   const rows = [...results];
-  const columns: DataColumn<SearchResult>[] = [
+  const columns: AeDataColumn<SearchResult>[] = [
     {
       key: "title",
       label: "Tool",
@@ -104,10 +104,17 @@ export function CanonicalSearchResults({ results, renderActions }: CanonicalSear
       sortable: false,
       render: (_value, item) => <div className="arc-canonical-actions">
         {renderActions(item)}
-        <DrawerTrigger
-          onClick={() => setSelectedIdentity(identity(item))}
-          render={<ArcButton type="button" variant="secondary" size="sm" aria-label={`Inspect ${item.title}`}>Inspect</ArcButton>}
-        />
+        <DrawerTrigger asChild>
+          <ArcButton
+            type="button"
+            variant="secondary"
+            size="sm"
+            aria-label={`Inspect ${item.title}`}
+            onClick={() => setSelectedIdentity(identity(item))}
+          >
+            Inspect
+          </ArcButton>
+        </DrawerTrigger>
       </div>,
     },
   ];
@@ -117,7 +124,7 @@ export function CanonicalSearchResults({ results, renderActions }: CanonicalSear
       open={selected !== undefined}
       onOpenChange={open => { if (!open) setSelectedIdentity(null); }}
     >
-      <SortableDataTable
+      <AeSortableDataTable
         rows={rows}
         columns={columns}
         rowKey={identity}

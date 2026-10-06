@@ -4,7 +4,6 @@ import { createContext, use, useCallback, useEffect, useLayoutEffect, useMemo, u
 import type { ReactNode } from 'react'
 import { Link } from '@tanstack/react-router'
 import { ADMIN_NAVIGATION, activeRoleNavigationHref } from './app-shell/app-shell.contracts'
-import '@/components/arc/foundation.css'
 
 import type { OperatorBreadcrumbItem } from '@/components/ae/layout/AeOperatorBreadcrumbs'
 import type { OperatorRole } from '@/lib/operator/roles'

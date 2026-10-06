@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router'
-import Button from '@/components/arc/button/button'
+import { AeActionLink } from '@/components/ae/shared/action-link/AeActionLink'
 import type { ToolObjectView } from './object-family.contracts'
 import { ToolFacts } from './ToolFacts'
 import './ProviderCatalogueComposition.css'
@@ -30,8 +30,8 @@ export function ToolListingCard({ view, onSave, saved, onCompare, comparing, com
       </div>
       {onSave === undefined && onCompare === undefined ? null : (
         <footer className="arc-provider-actions">
-          {onSave === undefined ? null : <Button type="button" variant="ghost" size="md" labelLayout="wrap" aria-pressed={saved === true} onClick={onSave}>{saved ? 'Saved' : 'Save'}</Button>}
-          {onCompare === undefined ? null : <Button type="button" variant="ghost" size="md" labelLayout="wrap" aria-label={`${comparing ? 'Remove' : 'Add'} ${view.title} ${comparing ? 'from' : 'to'} comparison`} disabled={compareDisabled === true} aria-pressed={comparing === true} onClick={onCompare}>{comparing ? 'Comparing' : 'Compare'}</Button>}
+          {onSave === undefined ? null : <AeActionLink type="button" variant="ghost" size="md" labelLayout="wrap" aria-pressed={saved === true} onAction={onSave}>{saved ? 'Saved' : 'Save'}</AeActionLink>}
+          {onCompare === undefined ? null : <AeActionLink type="button" variant="ghost" size="md" labelLayout="wrap" aria-label={`${comparing ? 'Remove' : 'Add'} ${view.title} ${comparing ? 'from' : 'to'} comparison`} disabled={compareDisabled === true} aria-pressed={comparing === true} onAction={onCompare}>{comparing ? 'Comparing' : 'Compare'}</AeActionLink>}
         </footer>
       )}
     </article>

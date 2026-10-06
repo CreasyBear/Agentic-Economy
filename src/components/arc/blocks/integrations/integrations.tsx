@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
-import { Drawer, DrawerContent } from "@/components/arc/drawer/Drawer";
+import { Drawer, DrawerContent } from "@/components/arc/drawer/drawer";
 import { SearchField } from "@/components/arc/search-field/search-field";
 import styles from "./integrations.module.css";
 

@@ -14,6 +14,9 @@ export interface EmptyStateProps {
   className?: string;
   /** Optional accessible label for the state region. */
   label?: string;
+  // arc-patch: preserve caller-owned live-region and title semantics.
+  role?: "status" | "alert";
+  titleAs?: "h2" | "h3" | "p";
 }
 
 const exitFast: Transition = { duration: motionTokens.duration.fast, ease: [...motionTokens.ease.standard] };
@@ -50,7 +53,7 @@ function HeightFrame({ reduce, morphKey, children }: { reduce: boolean | null; m
     let controls: AnimationPlaybackControls | undefined;
     const settle = () => { height.jump("auto"); if (frame.current) Object.assign(frame.current.style, { overflow: "", height: "auto" }); };
     const observer = new ResizeObserver(([entry]) => {
-      const next = entry?.borderBoxSize?.[0]?.blockSize ?? node.offsetHeight;
+      const next = entry.borderBoxSize?.[0]?.blockSize ?? node.offsetHeight;
       const current = height.get();
       const from = typeof current === "number" ? current : last;
       last = next;
@@ -68,16 +71,17 @@ function HeightFrame({ reduce, morphKey, children }: { reduce: boolean | null; m
   </motion.div>;
 }
 
-export function EmptyState({ title, description, action, icon, className, label }: EmptyStateProps) {
+export function EmptyState({ title, description, action, icon, className, label, role, titleAs = "h3" }: EmptyStateProps) {
   const reduce = useReducedMotion();
   const glyph = icon ?? <Folder width={24} height={24} strokeWidth={1.5} />;
   const enter: Transition = reduce ? { duration: motionTokens.duration.instant } : { duration: motionTokens.duration.standard, ease: [...motionTokens.ease.enter] };
   const swap: MotionProps = { initial: reduce ? { opacity: 0 } : textIn, animate: shown, exit: reduce ? fadeOut : textOut, transition: enter };
+  const Title = titleAs;
   // The result of an action morphs in place: the icon crossfades and the copy rises in while the old copy leaves.
-  return <section className={[styles.root, className].filter(Boolean).join(" ")} aria-label={label}>
+  return <section className={[styles.root, className].filter(Boolean).join(" ")} aria-label={label} role={role}>
     <div className={styles.icon} aria-hidden="true"><AnimatePresence mode="popLayout" initial={false}><Swap key={iconKey(glyph)} className={styles.glyph} initial={reduce ? { opacity: 0 } : iconIn} animate={shown} exit={reduce ? fadeOut : { ...iconIn, transition: exitFast }} transition={reduce ? enter : motionTokens.spring.snappy}>{glyph}</Swap></AnimatePresence></div>
     <HeightFrame reduce={reduce} morphKey={`${title}\n${description}`}>
-      <h3><AnimatePresence mode="popLayout" initial={false}><Swap key={title} className={styles.line} {...swap}>{title}</Swap></AnimatePresence></h3>
+      <Title className={styles.title}><AnimatePresence mode="popLayout" initial={false}><Swap key={title} className={styles.line} {...swap}>{title}</Swap></AnimatePresence></Title>
       <p><AnimatePresence mode="popLayout" initial={false}><Swap key={description} className={styles.line} {...swap}>{description}</Swap></AnimatePresence></p>
     </HeightFrame>
     {action && <div className={styles.action}>{action}</div>}

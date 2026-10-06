@@ -51,9 +51,9 @@ function firstUseCopy(firstUse: AgentFirstUseState): Readonly<{
   const observedCall = observedState?.call
   const stepperCurrent = delivered ? 3 : authenticated ? 2 : hasAccess ? 1 : 0
   const stepperSteps: StepperStep[] = [
-    { id: 'access', label: 'Approve access', status: hasAccess ? 'complete' : firstUse.kind === 'unavailable' ? 'error' : 'current', ...(firstUse.kind === 'unavailable' ? { error: 'Current evidence unavailable' } : {}) },
-    { id: 'authenticate', label: 'Authenticate the Agent', status: authenticated ? 'complete' : hasAccess ? 'current' : 'upcoming' },
-    { id: 'result', label: 'Get a Tool result', status: authenticated ? 'current' : 'upcoming' },
+    { id: 'access', label: 'Approve access', ...(firstUse.kind === 'unavailable' ? { error: 'Current evidence unavailable' } : {}) },
+    { id: 'authenticate', label: 'Authenticate the Agent' },
+    { id: 'result', label: 'Get a Tool result' },
   ]
   const currentAccess = access?.kind === 'connection_required' ? 'connection or renewal required' : access?.kind === 'browse_only' ? 'Browse only' : access?.kind === 'unavailable' ? 'unconfirmed' : access?.authenticated ? 'authenticated with the current credential' : 'approved; current credential has not authenticated'
   const callActionLabel = delivered ? 'View Tool result and receipt' : firstUse.kind === 'running' ? 'View live Call' : 'Check existing Call'

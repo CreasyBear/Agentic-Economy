@@ -866,6 +866,7 @@ describe('indexed x402 catalogue controls', () => {
     fireEvent.click(screen.getByRole('combobox', { name: /Sort results/ }))
     const option = await screen.findByRole('option', { name: 'Recently paid' })
     fireEvent.pointerDown(option, { pointerType: 'mouse' })
+    fireEvent.pointerUp(option, { pointerType: 'mouse' })
     fireEvent.click(option, { detail: 1 })
     await waitFor(() => expect(router.state.location.search).toMatchObject({ ...nativeFilters, sort: 'active' }))
     expect(router.state.location.search).not.toHaveProperty('indexCursor')

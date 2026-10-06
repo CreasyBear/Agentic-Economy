@@ -1,35 +1,15 @@
-/* Arc UI upstream SHA-256: 52486e32ea02ff3a80c20e8010cb3405edf4aa92d5b66e05adcb6172334b0ce9; source retrieved 2026-10-01. */
-// Adapted from Arc UI's comparison-table block, retrieved 2026-10-01.
-// Keep the authored matrix, responsive peer picker and motion; require real Tool facts.
-import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { useId, type CSSProperties } from 'react'
 import { LayoutGroup, motion, useReducedMotion } from 'motion/react'
-import { motionTokens } from '../lib/motion-tokens'
-import styles from './ComparisonTable.module.css'
+import { motionTokens } from '@/components/arc/lib/motion-tokens'
+import styles from './comparison-table.module.css'
+import { useAeComparisonTable } from './useAeComparisonTable'
+import type { AeComparisonTableProps, ComparisonRow } from './comparison-table.contracts'
 
-export type ComparisonColumn = Readonly<{ id: string; name: string; caption: string; action: ReactNode }>
-export type ComparisonRow = Readonly<{ id: string; feature: string; hint?: string; values: Readonly<Record<string, string>>; sources?: Readonly<Record<string, string>>; retainWhenSame?: boolean }>
-export type ComparisonSection = Readonly<{ id: string; title: string; rows: readonly ComparisonRow[] }>
-
-export function ComparisonTable({ columns, sections, title = 'Find the better fit', description = 'Compare what each Tool contributes. Prices and access stay visible when you show only differences.' }: Readonly<{ columns: readonly ComparisonColumn[]; sections: readonly ComparisonSection[]; title?: string; description?: string }>) {
+export function AeComparisonTable({ columns, sections, title = 'Find the better fit', description = 'Compare what each Tool contributes. Prices and access stay visible when you show only differences.' }: AeComparisonTableProps) {
   const reduced = Boolean(useReducedMotion())
   const uid = useId()
-  const rootRef = useRef<HTMLElement>(null)
-  const [narrow, setNarrow] = useState(false)
-  const [differencesOnly, setDifferencesOnly] = useState(false)
-  const [peer, setPeer] = useState<string>()
-  const anchor = columns[0]
-  const others = columns.slice(1)
-  // A removed or unavailable selection never leaves a stale phone column.
-  const compareWith = others.some(column => column.id === peer) ? peer : others[0]?.id
-  useEffect(() => {
-    const node = rootRef.current
-    if (!node || typeof ResizeObserver === 'undefined') return
-    const observer = new ResizeObserver(([entry]) => { if (entry) setNarrow(entry.contentRect.width < 680) })
-    observer.observe(node)
-    return () => observer.disconnect()
-  }, [])
+  const { rootRef, narrow, differencesOnly, setDifferencesOnly, compareWith, setCompareWith, anchor, others, visible } = useAeComparisonTable(columns)
   if (!anchor) return <p role="status">Select at least two available Tools to compare.</p>
-  const visible = narrow ? columns.filter(column => column.id === anchor.id || column.id === compareWith) : columns
   const differs = (row: ComparisonRow) => new Set(visible.map(column => `${row.values[column.id] ?? 'Not published'}\u0000${row.sources?.[column.id] ?? ''}`)).size > 1
   const gridStyle = { '--columns': visible.length, '--sticky-top': '0px' } as CSSProperties
   return <section ref={rootRef} className={styles.root} data-narrow={narrow || undefined} aria-label="Tool comparison matrix">
@@ -47,7 +27,7 @@ export function ComparisonTable({ columns, sections, title = 'Find the better fi
       </header>
       {narrow && others.length > 1 ? <div className={styles.picker} role="group" aria-label={`Compare ${anchor.name} with`}>
         <LayoutGroup id={`${uid}-picker`}>
-          {others.map(column => <button key={column.id} type="button" className={styles.pick} aria-pressed={column.id === compareWith} onClick={() => setPeer(column.id)}>
+          {others.map(column => <button key={column.id} type="button" className={styles.pick} aria-pressed={column.id === compareWith} onClick={() => setCompareWith(column.id)}>
             {column.id === compareWith ? <motion.span layoutId="pick" className={styles.pickHighlight} transition={reduced ? { duration: 0 } : motionTokens.spring.morph} /> : null}
             <span>{column.name}</span>
           </button>)}

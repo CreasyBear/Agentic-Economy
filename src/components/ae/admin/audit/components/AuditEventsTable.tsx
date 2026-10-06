@@ -6,7 +6,7 @@ import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeRecordTable } from '@/components/ae/operator/AeOperatorDataTable'
 import { Badge } from '@/components/arc/badge/badge'
 import { Button } from '@/components/arc/button/button'
-import { Drawer, DrawerContent } from '@/components/arc/drawer/Drawer'
+import { Drawer, DrawerContent } from '@/components/ae/shared/arc/drawer/AeDrawerContent'
 import '../../RecordWorkspaceComposition.css'
 import {
   AUDIT_COPY,

@@ -5,7 +5,7 @@ import { SearchIcon } from 'lucide-react'
 
 import { api } from '../../../../../convex/_generated/api'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
-import { Alert } from '@/components/arc/alert/alert'
+import { AeAlert as Alert } from '@/components/ae/shared/arc/alert/AeAlert'
 import { Badge } from '@/components/arc/badge/badge'
 import { EmptyState } from '@/components/arc/empty-state/empty-state'
 import { SearchField } from '@/components/arc/search-field/search-field'
@@ -85,7 +85,7 @@ function AccountsList({ search, onSearchChange }: AccountSearchProps) {
             {result.results.length} loaded{result.status === 'Exhausted' ? '' : ' · more Accounts available'}. Sorting applies to loaded Accounts.
           </p>
           <div className="ae-arc min-w-0">
-            <SortableDataTable density="compact"
+            <SortableDataTable
               rows={result.results}
               rowKey="accountRef"
               caption="Loaded Accounts"

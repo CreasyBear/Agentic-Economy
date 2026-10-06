@@ -1,12 +1,11 @@
-/* Actual Arc site-footer registry source retrieved 2026-10-03. TSX SHA-256: e65687a7e940bfd127a42e37783c05e70d1e392795aea4072553b663bc2619c3
- * Adaptations: host link, copyright, heading identity and existing leading-content ports; strict optional/index access; unused registry preview removed. */
 "use client";
 
-import { forwardRef, useId, useState } from "react";
+import { forwardRef, useId, useLayoutEffect, useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { ArrowUpRight, Check } from "lucide-react";
 import { Button } from "../../button/button";
+import SegmentedControl from "../../segmented-control/segmented-control";
 import { motionTokens } from "../../lib/motion-tokens";
 import styles from "./site-footer.module.css";
 
@@ -14,16 +13,12 @@ export type SiteFooterVariant = "columns" | "minimal" | "logo";
 
 export interface SiteFooterLink {
   label: string;
-  href?: string | undefined;
-  /** Native router or brand anchor; Arc supplies presentation and navigation callback. */
-  renderLink?: ((props: Readonly<{ className: string | undefined; children: ReactNode; onClick: () => void }>) => ReactNode) | undefined;
+  href?: string;
   /** Opens in a new tab and shows an outward arrow. */
   external?: boolean;
 }
 
 export interface SiteFooterColumn {
-  /** Preserve the existing heading anchor. */
-  id?: string;
   title: string;
   links: SiteFooterLink[];
 }
@@ -39,11 +34,7 @@ export interface SiteFooterNewsletter {
 export interface SiteFooterProps {
   /** `columns` pairs a newsletter with link columns, `minimal` is one quiet row, `logo` ends in a large fading Arc mark. */
   variant?: SiteFooterVariant;
-  brand?: { name: string; href?: string; mark?: ReactNode; renderLink?: SiteFooterLink["renderLink"] };
-  /** Existing site copyright can differ from the visible brand. */
-  copyright?: ReactNode;
-  /** Existing closing region before the footer navigation. */
-  leading?: ReactNode;
+  brand?: { name: string; href?: string; mark?: ReactNode };
   /** One short line under the brand. */
   tagline?: string;
   columns?: SiteFooterColumn[];
@@ -52,8 +43,6 @@ export interface SiteFooterProps {
   /** Small links beside the copyright, such as Privacy and Terms. */
   legal?: SiteFooterLink[];
   socials?: SiteFooterLink[];
-  /** Accessible name for the site's social destinations. */
-  socialLabel?: string;
   /** Newsletter signup. Pass null to hide it. */
   newsletter?: SiteFooterNewsletter | null;
   /** A system status link. Pass null to hide it. */
@@ -77,15 +66,14 @@ const exampleLegal: SiteFooterLink[] = [{ label: "Privacy" }, { label: "Terms" }
 const exampleSocials: SiteFooterLink[] = [{ label: "X", external: true }, { label: "GitHub", external: true }, { label: "LinkedIn", external: true }];
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
-function FooterLink({ link, onNavigate, className }: { link: SiteFooterLink; onNavigate?: ((link: SiteFooterLink) => void) | undefined; className?: string | undefined }) {
+function FooterLink({ link, onNavigate, className }: { link: SiteFooterLink; onNavigate?: (link: SiteFooterLink) => void; className?: string }) {
   const content = <>{link.label}{link.external && <ArrowUpRight className={styles.external} size={13} strokeWidth={2} aria-hidden="true" />}</>;
   const onClick = () => onNavigate?.(link);
-  if (link.renderLink) return link.renderLink({ className: className ?? styles.link, children: content, onClick });
   if (link.href) return <a className={className ?? styles.link} href={link.href} onClick={onClick} {...(link.external ? { target: "_blank", rel: "noopener noreferrer" } : {})}>{content}</a>;
   return <button type="button" className={className ?? styles.link} onClick={onClick}>{content}</button>;
 }
 
-function ArcMark({ className }: { className?: string | undefined }) {
+function ArcMark({ className }: { className?: string }) {
   return <svg className={className} viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="5.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d="M9 48V29C9 15 19 7 32 7s23 8 23 22v19" />
     <path d="M20 48V31c0-8 5-13 12-13s12 5 12 13v17" />
@@ -166,13 +154,10 @@ export const SiteFooter = forwardRef<HTMLElement, SiteFooterProps>(function Site
   variant = "columns",
   brand = { name: "Arc" },
   tagline = "Interface components that move with intent.",
-  copyright,
-  leading,
   columns = siteFooterExampleColumns,
   links,
   legal = exampleLegal,
   socials = exampleSocials,
-  socialLabel = "Social",
   newsletter = { title: "Get the monthly release notes", description: "One email a month. Unsubscribe anytime." },
   status = { label: "All systems normal", tone: "success" },
   year = new Date().getFullYear(),
@@ -181,43 +166,41 @@ export const SiteFooter = forwardRef<HTMLElement, SiteFooterProps>(function Site
 }, ref) {
   const reduced = !!useReducedMotion();
   const gradientId = useId().replace(/:/g, "");
-  const brandNode = <FooterLink link={{ label: brand.name, href: brand.href, renderLink: brand.renderLink }} onNavigate={onNavigate} className={styles.brand} />;
+  const brandNode = <FooterLink link={{ label: brand.name, href: brand.href }} onNavigate={onNavigate} className={styles.brand} />;
   const brandWithMark = <span className={styles.brandRow}>{brand.mark ?? <ArcMark className={styles.brandMark} />}{brandNode}</span>;
   const statusNode = status && (status.href
     ? <a className={styles.status} href={status.href} data-tone={status.tone ?? "success"} onClick={() => onNavigate?.({ label: status.label, href: status.href })}><span className={styles.statusDot} aria-hidden="true" />{status.label}</a>
     : <button type="button" className={styles.status} data-tone={status.tone ?? "success"} onClick={() => onNavigate?.({ label: status.label })}><span className={styles.statusDot} aria-hidden="true" />{status.label}</button>);
-  const socialNode = socials.length > 0 && <nav aria-label={socialLabel}><ul className={styles.inline}>{socials.map(link => <li key={link.label}><FooterLink link={link} onNavigate={onNavigate} /></li>)}</ul></nav>;
+  const socialNode = socials.length > 0 && <ul className={styles.inline} aria-label="Social">{socials.map(link => <li key={link.label}><FooterLink link={link} onNavigate={onNavigate} /></li>)}</ul>;
   const legalRow = <div className={styles.bottom}>
     <div className={styles.bottomStart}>
-      <span className={styles.copyright}>{copyright ?? <>© {year} {brand.name}</>}</span>
+      <span className={styles.copyright}>© {year} {brand.name}</span>
       {legal.length > 0 && <ul className={styles.inline} aria-label="Legal">{legal.map(link => <li key={link.label}><FooterLink link={link} onNavigate={onNavigate} /></li>)}</ul>}
     </div>
     <div className={styles.bottomEnd}>{statusNode}{socialNode}</div>
   </div>;
   const columnNav = <nav className={styles.columns} aria-label="Footer">
-    {columns.map(column => <section key={column.title} className={styles.column} aria-labelledby={column.id} aria-label={column.id ? undefined : column.title}>
-      <h2 id={column.id}>{column.title}</h2>
+    {columns.map(column => <div key={column.title} className={styles.column}>
+      <h2>{column.title}</h2>
       <ul>{column.links.map(link => <li key={link.label}><FooterLink link={link} onNavigate={onNavigate} /></li>)}</ul>
-    </section>)}
+    </div>)}
   </nav>;
 
   if (variant === "minimal") {
-    const rowLinks = links ?? columns.map(column => column.links[0]).filter((link): link is SiteFooterLink => link !== undefined).concat(legal.slice(0, 2));
+    const rowLinks = links ?? columns.map(column => column.links[0]).filter(Boolean).concat(legal.slice(0, 2));
     return <footer ref={ref} className={[styles.footer, styles.minimal, className].filter(Boolean).join(" ")}>
-      {leading}
       <div className={styles.minimalRow}>
         {brandWithMark}
         <nav aria-label="Footer"><ul className={styles.inline}>{rowLinks.map(link => <li key={link.label}><FooterLink link={link} onNavigate={onNavigate} /></li>)}</ul></nav>
       </div>
       <div className={styles.minimalRow}>
-        <span className={styles.copyright}>{copyright ?? <>© {year} {brand.name}. {tagline}</>}</span>
+        <span className={styles.copyright}>© {year} {brand.name}. {tagline}</span>
         <div className={styles.bottomEnd}>{statusNode}{socialNode}</div>
       </div>
     </footer>;
   }
 
   return <footer ref={ref} className={[styles.footer, variant === "logo" ? styles.logo : "", className].filter(Boolean).join(" ")}>
-    {leading}
     <div className={styles.top}>
       <div className={styles.intro}>
         {brandWithMark}
@@ -252,5 +235,36 @@ export const SiteFooter = forwardRef<HTMLElement, SiteFooterProps>(function Site
 
 SiteFooter.displayName = "SiteFooter";
 
+const variantOptions = [{ value: "columns", label: "Columns" }, { value: "minimal", label: "Minimal" }, { value: "logo", label: "Logo" }];
 
-export default SiteFooter;
+/** Preview: the footer with a switch between its three layouts and a note of the last link pressed. */
+export function SiteFooterBlock({ variant: initial = "columns" }: { variant?: SiteFooterVariant }) {
+  const [variant, setVariant] = useState<SiteFooterVariant>(initial);
+  const [last, setLast] = useState<string | null>(null);
+  const reduced = !!useReducedMotion();
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [height, setHeight] = useState<number | null>(null);
+  // The frame springs between layout heights instead of snapping; the new layout fades in where it sits.
+  useLayoutEffect(() => {
+    const node = contentRef.current;
+    if (!node) return;
+    setHeight(node.offsetHeight);
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => setHeight(node.offsetHeight));
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [variant]);
+  return <div className={styles.preview}>
+    <SegmentedControl label="Footer layout" options={variantOptions} value={variant} onValueChange={value => setVariant(value as SiteFooterVariant)} />
+    <div className={styles.frame}>
+      <motion.div className={styles.frameBody} initial={false} animate={{ height: height ?? "auto" }} transition={reduced ? { duration: 0 } : motionTokens.spring.smooth}>
+        <motion.div ref={contentRef} key={variant} initial={reduced ? false : { opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: motionTokens.duration.standard, ease: enter }}>
+          <SiteFooter variant={variant} onNavigate={link => setLast(link.label)} />
+        </motion.div>
+      </motion.div>
+    </div>
+    <p className={styles.srOnly} aria-live="polite">{last ? `Opened ${last}` : ""}</p>
+  </div>;
+}
+
+export default SiteFooterBlock;

@@ -15,6 +15,11 @@ const entry: X402DirectoryEntry = {
 }
 const canonical = { inputSchemaJson: JSON.stringify(schema), inputExampleJson: JSON.stringify({ query: 'robots', pathParams: { id: '42' } }), toolRef: 'tool:v1:example' }
 afterEach(() => { cleanup(); vi.restoreAllMocks() })
+function activateTab(name: string) {
+  const tab = screen.getByRole('tab', { name })
+  fireEvent.mouseDown(tab, { button: 0 })
+  fireEvent.click(tab)
+}
 
 describe('directory Tool playground', () => {
   it('renders maintained controls and updates the complete canonical command, preserving path inputs', async () => {
@@ -27,12 +32,12 @@ describe('directory Tool playground', () => {
   it('never treats the Provider HTTP wrapper as AE command input', () => {
     render(<DirectoryToolPlayground entry={entry} toolRef="tool:v1:example" />)
     expect(screen.queryByRole('button', { name: 'Copy prepared call command' })).toBeNull()
-    fireEvent.click(screen.getByRole('tab', { name: 'JSON' }))
+    activateTab('JSON')
     expect((screen.getByRole('textbox', { name: 'Request JSON' }) as HTMLTextAreaElement).value).toContain('"headers"')
   })
   it('disables command copy for malformed or schema-invalid JSON and restores it after correction', async () => {
     render(<DirectoryToolPlayground entry={entry} {...canonical} />)
-    fireEvent.click(screen.getByRole('tab', { name: 'JSON' }))
+    activateTab('JSON')
     const input = screen.getByRole('textbox', { name: 'Request JSON' })
     fireEvent.change(input, { target: { value: '{' } })
     expect(screen.queryByRole('button', { name: 'Copy prepared call command' })).toBeNull()
@@ -91,7 +96,7 @@ describe('directory Tool playground', () => {
     fireEvent.change(screen.getByRole('textbox', { name: 'Request JSON' }), { target: { value: '{"body":{"query":"research"}}' } })
     await waitFor(() => expect(screen.getByText('ae call \'tool:v1:exa-search\' --input \'{"body":{"query":"research"}}\' --json')).toBeTruthy())
     expect(screen.getByRole('button', { name: 'Copy prepared call command' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('tab', { name: 'Schema' }))
+    activateTab('Schema')
     const displayedSchema = screen.getByRole('tabpanel', { name: 'Schema' }).querySelector('code')?.textContent
     expect(JSON.parse(displayedSchema!)).toEqual(JSON.parse(inputSchemaJson))
   })

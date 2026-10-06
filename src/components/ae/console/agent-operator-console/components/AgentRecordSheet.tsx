@@ -63,7 +63,6 @@ export function AgentRecordSheet({
                   type="button"
                   variant="ghost"
                   size="md"
-                  labelLayout="between"
                   className="arc-agent-disclosure-trigger"
                 >
                   Technical details

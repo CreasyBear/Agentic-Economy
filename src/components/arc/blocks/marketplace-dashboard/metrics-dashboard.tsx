@@ -5,8 +5,6 @@ import { motion, useReducedMotion } from "motion/react";
 import { Download } from "lucide-react";
 import { motionTokens } from "../../lib/motion-tokens";
 import SegmentedControl from "../../segmented-control/segmented-control";
-import { LineChart } from "../../line-chart/line-chart";
-import { SlotText } from "../../slot-text/slot-text";
 import { Alert } from "../../alert/alert";
 import styles from "./metrics-dashboard.module.css";
 
@@ -38,12 +36,13 @@ const formatValue = (value: number) => countFormat.format(Math.round(value));
 const formatAxis = (value: number) => compactFormat.format(value);
 const formatDay = (date: string) => dayFormat.format(new Date(`${date}T00:00:00Z`));
 
-function niceScale(min: number, max: number, percent: boolean) {
+function niceScale(min: number, max: number, percent: boolean, integerTicks = false) {
   const lo = percent ? Math.max(0, min - (max - min) * 0.6) : 0;
   const span = max - lo || 1;
   const raw = span / 3;
   const mag = 10 ** Math.floor(Math.log10(raw));
-  const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => s >= raw) ?? raw;
+  const baseStep = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => s >= raw) ?? raw;
+  const step = integerTicks ? Math.max(1, Math.ceil(baseStep)) : baseStep;
   const start = Math.floor(lo / step) * step;
   return { min: start, max: start + step * 3, ticks: [0, 1, 2, 3].map((i) => start + step * i) };
 }
@@ -98,7 +97,7 @@ export function MetricsDashboard({ metrics, range, onRangeChange, description, n
   const rangeInfo = ranges.find((r) => r.value === range) ?? ranges[0];
   const chart = useMemo(() => {
     const values = points.flatMap((p) => p.value === null ? [] : [p.value]);
-    const scale = niceScale(0, Math.max(0, ...values), false);
+    const scale = niceScale(0, Math.max(0, ...values), false, metric.integerTicks ?? false);
     const x = (i: number) => (points.length <= 1 ? W / 2 : (i / (points.length - 1)) * W);
     const y = (v: number) => H - ((v - scale.min) / (scale.max - scale.min)) * H;
     const segments: [number, number][][] = [[]];
@@ -107,10 +106,16 @@ export function MetricsDashboard({ metrics, range, onRangeChange, description, n
       else segments[segments.length - 1]?.push([x(i), y(p.value)]);
     });
     return { scale, x, y, current: segments.filter((part) => part.length > 0).map(smoothPath).join(' '), hasValues: values.length > 0 };
-  }, [points]);
+  }, [metric.integerTicks, points]);
 
   const labelEvery = Math.ceil(points.length / (size === "sm" ? 4 : size === "md" ? 5 : 6));
   const focus = active === null ? null : points[active];
+  const completeSeries = points.length > 0 && points.every(point => point.value !== null);
+  const activePoint = focus ?? points.at(-1);
+  const activeValueText = completeSeries && activePoint !== undefined && activePoint.value !== null
+    ? `${formatDay(activePoint.date)}: ${metric.label} ${activePoint.displayValue ?? (metric.formatPoint ?? formatValue)(activePoint.value)}`
+    : undefined;
+  const activeIndex = active ?? points.length - 1;
 
   function selectRange(value: DashboardRange) { onRangeChange(value); setActive(null); }
   function inspect(event: PointerEvent<HTMLDivElement>) {
@@ -171,7 +176,7 @@ export function MetricsDashboard({ metrics, range, onRangeChange, description, n
             <button key={m.key} type="button" role="tab" id={`${uid}-${m.key}`} aria-controls={`${uid}-chart`} tabIndex={selected ? 0 : -1} data-metric-index={index} onKeyDown={(event) => onMetricKey(event, index)} aria-selected={selected} className={styles.kpi} onClick={() => { setMetricKey(m.key); setActive(null); }}>
               {selected && <motion.span layoutId={`${uid}-kpi`} className={styles.kpiIndicator} transition={reduce ? { duration: 0 } : motionTokens.spring.smooth} />}
               <span className={styles.kpiLabel}>{m.label}</span>
-              <span className={styles.kpiValue} data-exact={m.displayValue !== undefined || undefined}>{loading ? "Loading…" : m.value === null ? "Unavailable" : m.displayValue ?? <SlotText value={(m.formatPoint ?? formatValue)(m.value)} align="end" duration={.22} stagger={.005} spins={0} />}</span>
+              <span className={styles.kpiValue} data-exact={m.displayValue !== undefined || undefined}>{loading ? "Loading…" : m.value === null ? "Unavailable" : m.displayValue ?? (m.formatPoint ?? formatValue)(m.value)}</span>
               <span className={styles.metricDescription}>{m.description}</span>
             </button>
           );
@@ -187,21 +192,20 @@ export function MetricsDashboard({ metrics, range, onRangeChange, description, n
           {metric.detailHref ? <a className={styles.metricDescription} href={metric.detailHref}>View underlying purchases ↗</a> : <span className={styles.metricDescription}>Daily observations · Perth time</span>}
         </div>
 
-        {points.length > 0 && points.every(point => point.value !== null) ? <LineChart
-          label={`${metric.label}, ${(rangeInfo?.long ?? range).toLowerCase()}`}
-          data={points.map(point => ({ key: point.date, label: formatDay(point.date), axisLabel: formatDay(point.date), values: { measure: point.value ?? 0 }, ...(point.displayValue === undefined ? {} : { formattedValues: { measure: point.displayValue } }) }))}
-          series={[{ key: "measure", label: metric.label, color: "var(--signal-violet)", area: true }]}
-          height={220} legend={false} integerTicks={metric.integerTicks ?? false} formatValue={metric.formatPoint ?? formatValue} formatTick={formatAxis}
-        /> : <>
-        <div className={styles.plot}>
+        <div className={styles.plot} role="figure" aria-label={`${metric.label}, ${(rangeInfo?.long ?? range).toLowerCase()}`}>
           <div className={styles.yAxis} aria-hidden>
             {[...chart.scale.ticks].reverse().map((t) => <span key={t}>{formatAxis(t)}</span>)}
           </div>
           <div
             className={styles.chartArea}
             tabIndex={0}
-            role="img"
-            aria-label={`${metric.label}, ${(rangeInfo?.long ?? range).toLowerCase()}. Use arrow keys to inspect values.`}
+            role={completeSeries ? "slider" : "img"}
+            aria-label={completeSeries ? `${metric.label}, ${(rangeInfo?.long ?? range).toLowerCase()}, explore by date` : `${metric.label}, ${(rangeInfo?.long ?? range).toLowerCase()}. Use arrow keys to inspect values.`}
+            aria-orientation={completeSeries ? "horizontal" : undefined}
+            aria-valuemin={completeSeries ? 1 : undefined}
+            aria-valuemax={completeSeries ? points.length : undefined}
+            aria-valuenow={completeSeries && activePoint ? activeIndex + 1 : undefined}
+            aria-valuetext={activeValueText}
             onPointerMove={inspect}
             onPointerDown={inspect}
             onPointerLeave={(e) => { if (e.pointerType === "mouse") setActive(null); }}
@@ -241,7 +245,14 @@ export function MetricsDashboard({ metrics, range, onRangeChange, description, n
             })}
           </div>
         </div>
-        </>}
+        {points.length > 0 && <table className={styles.srOnly}>
+          <caption>{`${metric.label}, ${(rangeInfo?.long ?? range).toLowerCase()}`}</caption>
+          <thead><tr><th scope="col">Date</th><th scope="col">{metric.label}</th></tr></thead>
+          <tbody>{points.map(point => <tr key={point.date}>
+            <th scope="row">{formatDay(point.date)}</th>
+            <td>{point.value === null ? "No complete snapshot" : point.displayValue ?? (metric.formatPoint ?? formatValue)(point.value)}</td>
+          </tr>)}</tbody>
+        </table>}
       </div>
 
     </section>

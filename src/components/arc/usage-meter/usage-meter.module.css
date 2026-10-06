@@ -1,13 +1,5 @@
-/*
- * Arc Usage Meter source: https://uiarc.dev/r/usage-meter.json
- * Upstream file SHA-256: a5570a22c9ec41d73ad088a6dc66b3b0199b1e53ccb2c46cca5d5e86143881d1
- * Retrieved: 2026-10-03
- */
 /* Categories are steps of the accent, strongest first, so the meter reads as one allowance rather than a rainbow. Free space is the track itself. */
 .meter { --segment-0: var(--accent); --segment-1: color-mix(in oklab, var(--accent) 62%, var(--surface)); --segment-2: color-mix(in oklab, var(--accent) 36%, var(--surface)); --segment-3: color-mix(in oklab, var(--accent) 22%, var(--surface)); display: grid; min-width: 0; gap: var(--space-4); color: var(--foreground); }
-.compact { gap: 0; }
-.compact .bar { padding-block: 0; }
-.compact .track { height: 6px; }
 .top { display: flex; min-width: 0; min-height: 28px; align-items: center; justify-content: space-between; gap: var(--space-3); }
 /* A long label wraps beside the status mark instead of hiding its end. */
 .title { min-width: 0; color: var(--foreground); font-size: var(--text-base); font-weight: 500; letter-spacing: var(--tracking-body); line-height: var(--leading-body); text-wrap: balance; }

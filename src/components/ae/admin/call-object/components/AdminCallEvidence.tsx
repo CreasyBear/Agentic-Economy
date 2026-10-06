@@ -99,8 +99,6 @@ export function AdminCallEvidence({ model }: AdminCallEvidenceProps) {
               rows={[...model.view.answerModelCost.cost.requests]}
               columns={answerModelRequestColumns}
               rowKey="requestRef"
-              animateRows={false}
-              ariaLabel="Answer model requests"
               caption="Answer model requests"
               emptyMessage="No model requests recorded for this answer."
             />

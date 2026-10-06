@@ -25,6 +25,22 @@
   text-align: left;
 }
 
+/* Keep disclosure labels full-width without adding AE layout props to the vendored Button. */
+.arc-agent-disclosure .arc-agent-disclosure-trigger > span {
+  width: 100%;
+}
+
+.arc-agent-disclosure .arc-agent-disclosure-trigger > span > span {
+  width: 100%;
+}
+
+.arc-agent-disclosure .arc-agent-disclosure-trigger > span > span > span {
+  width: 100%;
+  justify-content: space-between;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .arc-agent-disclosure .arc-agent-disclosure-trigger[data-panel-open] svg {
   transform: rotate(180deg);
 }

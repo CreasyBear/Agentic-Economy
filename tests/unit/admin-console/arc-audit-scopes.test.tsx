@@ -11,15 +11,18 @@ const handlers = () => ({ onDraftChange: vi.fn(), onApply: vi.fn(), onRemove: vi
 afterEach(cleanup)
 
 describe('Arc audit scopes', () => {
-  it('removes the exact indexed chip and clears through their existing callbacks', () => {
+  it('removes the exact indexed chip and preserves clear callbacks and focus', () => {
     const callbacks = handlers()
-    render(<AuditFilterChips chips={[{ key: 'actorRef', label: 'Actor', value: 'principal:long-exact-reference' }]} draft={draft} {...callbacks} />)
-    expect(screen.getByText('principal:long-exact-reference')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Remove filter: Actor' }))
+    const { rerender } = render(<AuditFilterChips chips={[{ key: 'actorRef', label: 'Actor', value: 'principal:long-exact-reference' }]} draft={draft} {...callbacks} />)
+    const removeActor = screen.getByRole('button', { name: 'Remove Actor: principal:long-exact-reference' })
+    expect(removeActor).toBeTruthy()
+    fireEvent.click(removeActor)
     expect(callbacks.onRemove).toHaveBeenCalledWith('actorRef')
     fireEvent.click(screen.getByRole('button', { name: 'Clear all' }))
     expect(callbacks.onClear).toHaveBeenCalledOnce()
     expect(callbacks.onApply).not.toHaveBeenCalled()
+    rerender(<AuditFilterChips chips={[]} draft={draft} {...callbacks} />)
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Add filter' }))
   })
 
   it('keeps date edits as draft until the explicit form submission', async () => {

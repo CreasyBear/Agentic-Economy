@@ -6,7 +6,7 @@ import {
   fundingReturnCopy,
   type FundingReturnPageState,
 } from '@/components/ae/funding/funding-return.contracts'
-import { Button } from '@/components/arc/button/button'
+import { AeActionLink } from '@/components/ae/shared/action-link/AeActionLink'
 import buttonStyles from '@/components/arc/button/button.module.css'
 import { formatDisplayAmount } from '@/modules/money/public'
 import type { FundingReturnViewState } from '@/modules/money/funding-return.view-model'
@@ -48,9 +48,9 @@ function deriveFundingReturnPageState(
       title: 'Funding status unavailable',
       description: 'We could not confirm this payment. Do not start another payment; try checking this same payment again.',
       action: (
-        <Button type="button" size="md" labelLayout="wrap" onClick={() => { void onCheck() }}>
+        <AeActionLink type="button" size="md" labelLayout="wrap" onAction={() => { void onCheck() }}>
           Try again
-        </Button>
+        </AeActionLink>
       ),
     }
   }
@@ -67,16 +67,16 @@ function deriveFundingReturnPageState(
   const amount = formatDisplayAmount(funding.creditAmount)
   const refreshFailed = refresh === 'failed'
   const checkAction = (
-    <Button
+    <AeActionLink
       type="button"
       size="md"
       labelLayout="wrap"
       disabled={refresh === 'checking'}
-      loading={refresh === 'checking'}
-      onClick={() => { void onCheck() }}
+      pending={refresh === 'checking'}
+      onAction={() => { void onCheck() }}
     >
       {refresh === 'checking' ? 'Checking this payment…' : refreshFailed ? 'Try again' : 'Check this payment'}
-    </Button>
+    </AeActionLink>
   )
   switch (funding.state) {
     case 'ready':

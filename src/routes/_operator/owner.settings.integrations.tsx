@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useLocation, useRouter } from '@tanstack/react-router'
 
-import Button from '@/components/arc/button/button'
+import { AeActionLink } from '@/components/ae/shared/action-link/AeActionLink'
 import arcButtonStyles from '@/components/arc/button/button.module.css'
 import { AeOwnerProviderConnections } from '@/components/ae/supply/AeOwnerProviderConnections'
 import { providerConnectionTargetId } from '@/components/ae/supply/provider-connection-target'
@@ -47,7 +47,7 @@ function OwnerIntegrationsRoute() {
     ) : (
       <Alert><AlertTitle>Connections unavailable</AlertTitle><AlertDescription className="grid gap-3">
         The current provider connection readback could not be confirmed. No connection can be changed until it loads.
-        <Button type="button" variant="secondary" size="md" labelLayout="wrap" className="min-h-touch justify-self-start" onClick={() => void router.invalidate()}>Try again</Button>
+        <AeActionLink type="button" variant="secondary" size="md" labelLayout="wrap" className="min-h-touch justify-self-start" onAction={() => void router.invalidate()}>Try again</AeActionLink>
       </AlertDescription></Alert>
     )}
   </SettingsPage>

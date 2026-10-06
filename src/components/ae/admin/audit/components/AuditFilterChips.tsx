@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { XIcon } from 'lucide-react'
 
 import { Button } from '@/components/arc/button/button'
+import { AeActionLink } from '@/components/ae/shared/action-link/AeActionLink'
+import { FilterToolbar, type FilterChip } from '@/components/arc/filter-toolbar/filter-toolbar'
 import {
   CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
 } from '@/components/ui/command'
@@ -22,48 +23,44 @@ export function AuditFilterChips({
 }: AuditFilterChipsProps) {
   const [activeField, setActiveField] = useState<keyof AdminAuditFilterDraft | null>(null)
   const [eventPickerOpen, setEventPickerOpen] = useState(false)
+  const appliedFilters: FilterChip[] = chips.map((chip) => ({
+    id: chip.key,
+    label: chip.label,
+    value: chip.key === 'eventType' ? auditEventLabel(chip.value) : chip.value,
+  }))
 
   return (
     <div className="arc-market arc-audit-scopes">
-      {chips.length === 0 ? null : (
-        <div className="arc-audit-scope-chips" aria-label={AUDIT_COPY.filtersTitle}>
-          {chips.map((chip) => (
-            <button
-              key={`${chip.key}:${chip.value}`}
-              type="button"
-              onClick={() => onRemove(chip.key)}
-              aria-label={`${AUDIT_COPY.removeFilter}: ${chip.label}`}
-              className="arc-audit-scope-chip"
-            >
-              <span>{chip.label}</span>
-              <span>{chip.key === 'eventType' ? auditEventLabel(chip.value) : chip.value}</span>
-              <XIcon aria-hidden="true" className="size-4" />
-            </button>
-          ))}
-          <Button type="button" variant="ghost" size="md" onClick={onClear}>{AUDIT_COPY.clearAll}</Button>
-        </div>
-      )}
-
-      <DropdownMenu>
-        <DropdownMenuTrigger render={<Button type="button" variant="secondary" size="md" className="arc-audit-add-scope" />}>
-          {AUDIT_COPY.addFilter}
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="arc-market arc-audit-filter-menu">
-          <DropdownMenuGroup>
-            {filterFields.map((field) => (
-              <DropdownMenuItem
-                key={field}
-                onClick={() => {
-                  setActiveField(field)
-                  if (field === 'eventType') setEventPickerOpen(true)
-                }}
-              >
-                {AUDIT_COPY.fieldLabels[field]}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuGroup>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <FilterToolbar
+        filters={appliedFilters}
+        label={AUDIT_COPY.filtersTitle}
+        onRemove={(id) => {
+          const chip = chips.find((candidate) => candidate.key === id)
+          if (chip) onRemove(chip.key)
+        }}
+        onClearAll={onClear}
+      >
+        <DropdownMenu>
+          <DropdownMenuTrigger render={<Button type="button" variant="secondary" size="md" data-filter-trigger="" />}>
+            {AUDIT_COPY.addFilter}
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="arc-market arc-audit-filter-menu">
+            <DropdownMenuGroup>
+              {filterFields.map((field) => (
+                <DropdownMenuItem
+                  key={field}
+                  onClick={() => {
+                    setActiveField(field)
+                    if (field === 'eventType') setEventPickerOpen(true)
+                  }}
+                >
+                  {AUDIT_COPY.fieldLabels[field]}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </FilterToolbar>
 
       {activeField === null ? null : (
         <form
@@ -77,9 +74,9 @@ export function AuditFilterChips({
           <div className="arc-audit-scope-field">
             <Label htmlFor={`audit-${activeField}`}>{AUDIT_COPY.fieldLabels[activeField]}</Label>
             {activeField === 'eventType' ? (
-              <Button id="audit-eventType" type="button" variant="secondary" size="md" labelLayout="start" className="arc-audit-scope-event" onClick={() => setEventPickerOpen(true)}>
+              <AeActionLink id="audit-eventType" type="button" variant="secondary" size="md" labelLayout="start" className="arc-audit-scope-event" onAction={() => setEventPickerOpen(true)}>
                 {draft.eventType === '' ? AUDIT_COPY.anyEventType : auditEventLabel(draft.eventType)}
-              </Button>
+              </AeActionLink>
             ) : (
               <input
                 className="arc-audit-scope-input"

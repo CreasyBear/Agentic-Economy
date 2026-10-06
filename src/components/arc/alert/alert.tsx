@@ -15,7 +15,7 @@ export interface AlertProps extends HTMLAttributes<HTMLDivElement> {
   /** Controls presence. Hiding the alert collapses its height and fades it out. */
   open?: boolean;
   /** Shows a dismiss button. An uncontrolled alert collapses first, then calls this. */
-  onDismiss?: (() => void) | undefined;
+  onDismiss?: () => void;
 }
 type AlertBoxProps = Omit<AlertProps, "open"> & { reduce: boolean | null; animateIcon?: boolean };
 
@@ -34,7 +34,7 @@ function Swap(props: HTMLMotionProps<"span">) {
 }
 
 /** Follows its content height. After `morphKey` changes, the height springs from the old size to the new one and then returns to auto, so passive reflows (a resize, a font swap) follow instantly. It clips only while moving, so focus rings stay visible at rest. */
-function HeightFrame({ className, reduce, morphKey, children }: { className?: string | undefined; reduce: boolean | null; morphKey: string; children: ReactNode }) {
+function HeightFrame({ className, reduce, morphKey, children }: { className?: string; reduce: boolean | null; morphKey: string; children: ReactNode }) {
   const frame = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
   const height = useMotionValue<number | "auto">("auto");
@@ -47,7 +47,7 @@ function HeightFrame({ className, reduce, morphKey, children }: { className?: st
     let controls: AnimationPlaybackControls | undefined;
     const settle = () => { height.jump("auto"); if (frame.current) Object.assign(frame.current.style, { overflow: "", height: "auto" }); };
     const observer = new ResizeObserver(([entry]) => {
-      const next = entry?.borderBoxSize?.[0]?.blockSize ?? node.offsetHeight;
+      const next = entry.borderBoxSize?.[0]?.blockSize ?? node.offsetHeight;
       const current = height.get();
       const from = typeof current === "number" ? current : last;
       last = next;
@@ -71,6 +71,7 @@ function AlertBox({ tone = "info", title, children, className, reduce, onDismiss
   const hasDetails = children !== undefined && children !== null && children !== false && children !== "";
   const enter: Transition = reduce ? { duration: motionTokens.duration.instant } : { duration: motionTokens.duration.standard, ease: [...motionTokens.ease.enter] };
   const swap: MotionProps = { initial: reduce ? { opacity: 0 } : textIn, animate: shown, exit: reduce ? fadeOut : textOut, transition: enter };
+  // arc-patch: honor caller role overrides and keep rich child markup out of paragraphs.
   return <div {...props} className={[styles.alert, styles[tone], className].filter(Boolean).join(" ")} role={props.role ?? (tone === "danger" ? "alert" : "status")}>
     {/* A new tone morphs its icon in place; a newly shown alert gives the icon a small settle. */}
     <motion.span className={styles.icon} initial={animateIcon && !reduce ? iconIn : false} animate={shown} transition={motionTokens.spring.snappy}>

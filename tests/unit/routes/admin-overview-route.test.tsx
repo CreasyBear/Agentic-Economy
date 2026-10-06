@@ -43,6 +43,10 @@ vi.mock('convex/react', () => ({
 vi.mock('@tanstack/react-router', () => ({
   Link: ({ children, to }: { children: ReactNode; to: string }) => <a href={to}>{children}</a>,
   useLocation: () => ({ pathname: '/admin', hash: '' }),
+  useRouter: () => ({
+    navigate: vi.fn().mockResolvedValue(undefined),
+    preloadRoute: vi.fn().mockResolvedValue([]),
+  }),
 }))
 vi.mock('@/components/ae/admin/object-search/useAdminObjectSearch', () => ({
   useAdminObjectSearch: () => ({ state: { kind: 'idle' }, submit: vi.fn() }),

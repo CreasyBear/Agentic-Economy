@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router'
-import { Alert } from '@/components/arc/alert/alert'
+import { AeAlert as Alert } from '@/components/ae/shared/arc/alert/AeAlert'
 import { Button } from '@/components/arc/button/button'
 import { Input } from '@/components/arc/input/input'
 import { Select } from '@/components/arc/select/select'

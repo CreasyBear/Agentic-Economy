@@ -29,9 +29,9 @@ describe('shared checkbox control contracts', () => {
     expect(control).toHaveAttribute('aria-checked', 'true')
   })
 
-  it('retains an external associated label and a focusable native-button ref', () => {
+  it('uses the Arc label for the accessible name and retains a focusable native-button ref', () => {
     const ref = createRef<HTMLButtonElement>()
-    render(<><Checkbox id="saved-secret" ref={ref} /><label htmlFor="saved-secret">I saved my secret</label></>)
+    render(<Checkbox id="saved-secret" ref={ref} label="I saved my secret" />)
     const control = screen.getByRole('checkbox', { name: 'I saved my secret' })
     expect(ref.current).toBe(control)
     expect(control.tagName).toBe('BUTTON')
@@ -41,10 +41,11 @@ describe('shared checkbox control contracts', () => {
     expect(control).toHaveAttribute('aria-checked', 'true')
   })
 
-  it.each(['disabled', 'readOnly'] as const)('does not change a %s control', (guard) => {
+  it('does not change a disabled control', () => {
     const onChange = vi.fn()
-    render(<Checkbox aria-label="Permission" checked={false} onCheckedChange={onChange} {...{ [guard]: true }} />)
+    render(<Checkbox aria-label="Permission" checked={false} disabled onCheckedChange={onChange} />)
     const control = screen.getByRole('checkbox', { name: 'Permission' })
+    expect(control).toBeDisabled()
     fireEvent.click(control)
     expect(onChange).not.toHaveBeenCalled()
     expect(control).toHaveAttribute('aria-checked', 'false')
@@ -83,33 +84,28 @@ describe('shared checkbox control contracts', () => {
     expect(control).toHaveAccessibleDescription('You can change this later. Choose how often we send them.')
   })
 
-  it('preserves Base UI render, state-class, ID, ref, required, and data-slot ports', () => {
-    const ref = createRef<HTMLElement>()
+  it('preserves external form submission, ID, required state, and native button ref', () => {
+    const ref = createRef<HTMLButtonElement>()
     render(<><form id="external-form" /><Checkbox
       id="custom-control"
       ref={ref}
-      nativeButton={false}
-      render={<div data-rendered="custom" />}
-      className={(state) => state.checked ? 'caller-checked' : 'caller-unchecked'}
       defaultChecked={false}
       form="external-form"
       name="custom-choice"
       value="selected"
       required
-      compact
       aria-label="Custom control"
     /></>)
     const control = screen.getByRole('checkbox', { name: 'Custom control' })
     expect(ref.current).toBe(control)
-    expect(document.getElementById('custom-control')).toHaveAttribute('type', 'checkbox')
-    expect(control).toHaveAttribute('data-rendered', 'custom')
-    expect(control).toHaveAttribute('data-slot', 'checkbox')
+    expect(control.id).toBe('custom-control')
     expect(control).toHaveAttribute('aria-required', 'true')
-    expect(control).toHaveClass('caller-unchecked')
-    const form = document.getElementById('external-form') as HTMLFormElement
+    expect(control).toHaveAttribute('aria-checked', 'false')
+    const form = document.getElementById('external-form')
+    if (!(form instanceof HTMLFormElement)) throw new Error('external_form_missing')
     expect(new FormData(form).getAll('custom-choice')).toEqual([])
     fireEvent.click(control)
-    expect(control).toHaveClass('caller-checked')
+    expect(control).toHaveAttribute('aria-checked', 'true')
     expect(new FormData(form).getAll('custom-choice')).toEqual(['selected'])
   })
 })

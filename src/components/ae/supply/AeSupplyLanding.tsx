@@ -1,6 +1,6 @@
-import { Link } from '@tanstack/react-router'
 import { Button as ArcButton } from '@/components/arc/button/button'
-import { HeroContent } from '@/components/arc/blocks/hero-section/hero-content'
+import { RouterLinkBoundary } from '@/components/ae/shared/router-link-boundary/RouterLinkBoundary'
+import { HeroSection } from '@/components/arc/blocks/hero-section/hero-section'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { AeSiteFaq } from '@/components/ae/website'
 import { PROVIDER_FAQ } from '@/content/provider-copy'
@@ -46,27 +46,27 @@ export function AeSupplyLanding({
 }>) {
   return (
     <div className="arc-market arc-provider-landing">
-      <HeroContent
-        layout="split"
-        title="Add a Tool."
-        titleId="supply-hero"
-        description={SUPPLY_OFFER_SENTENCE}
-        primaryAction={{
-          label: 'Add Tool',
-          renderLink: ({ children, ...linkProps }) => <Link to="/owner/operations/new" {...linkProps}>{children}</Link>,
-        }}
-        animateIn={false}
-        media={(
-          <aside className="arc-provider-requirements" aria-labelledby="supply-requirements-heading">
-            <h2 className="arc-provider-requirements-title" id="supply-requirements-heading">
-              Before you sign in
-            </h2>
-            <ul className="arc-provider-requirement-list">
-              {SUPPLY_REQUIREMENTS.map((item) => <li key={item}>{item}</li>)}
-            </ul>
-          </aside>
-        )}
-      />
+      <section role="region" aria-label="Add a Tool.">
+        <RouterLinkBoundary>
+          <HeroSection
+            variant="split"
+            title="Add a Tool."
+            description={SUPPLY_OFFER_SENTENCE}
+            primaryAction={{ label: 'Add Tool', href: '/owner/operations/new' }}
+            animateIn={false}
+            media={(
+              <aside className="arc-provider-requirements" aria-labelledby="supply-requirements-heading">
+                <h2 className="arc-provider-requirements-title" id="supply-requirements-heading">
+                  Before you sign in
+                </h2>
+                <ul className="arc-provider-requirement-list">
+                  {SUPPLY_REQUIREMENTS.map((item) => <li key={item}>{item}</li>)}
+                </ul>
+              </aside>
+            )}
+          />
+        </RouterLinkBoundary>
+      </section>
       {sourceError === undefined ? null : (
         <section className="arc-provider-error" aria-label="Provider recovery">
           <div className="arc-provider-error-inner">

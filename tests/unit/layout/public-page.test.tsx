@@ -17,6 +17,10 @@ vi.mock('@tanstack/react-router', () => ({
     to: string
     reloadDocument?: boolean
   }) => <a href={to} data-reload-document={reloadDocument ? 'true' : undefined}>{children}</a>,
+  useRouter: () => ({
+    navigate: vi.fn(),
+    preloadRoute: vi.fn().mockResolvedValue(undefined),
+  }),
 }))
 
 afterEach(cleanup)

@@ -1,7 +1,7 @@
 import { useId, useState } from 'react'
 
 import { AeFactList } from '@/components/ae/data/AeFactList'
-import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
+import { AeEmptyState } from '@/components/ae/shared/arc/empty-state/AeEmptyState'
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
 import arcButtonStyles from '@/components/arc/button/button.module.css'
 import { Badge } from '@/components/ui/badge'

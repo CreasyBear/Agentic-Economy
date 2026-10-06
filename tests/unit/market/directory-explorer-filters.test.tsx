@@ -202,6 +202,17 @@ it('clears payer ranges on a threshold choice and keeps address-not-people wordi
   expect(filters.getByText('Distinct paying addresses per Tool, not people or Customers.')).toBeTruthy()
 })
 
+it('returns focus to payer choices after removing the last payer filter', () => {
+  const { filters, rerender, change, reset } = show({ adoptionBand: '2_4' })
+  openAdvanced(filters)
+  const remove = filters.getByRole('button', { name: 'Remove payer band: 2–4 paying addresses' })
+  remove.focus()
+  fireEvent.click(remove)
+  expect(change).toHaveBeenCalledWith({ adoptionBand: undefined })
+  rerender(<DirectoryDiscoveryFilters search={{}} overview={overview} onChange={change} onReset={reset} />)
+  expect(document.activeElement).toBe(screen.getByRole('group', { name: 'Payer breadth choices' }))
+})
+
 it('keeps a custom payer minimum visible and clears it through the single-choice group', () => {
   const { filters, change } = show({ minPayers30d: 37 })
   const payer = within(filters.getByRole('group', { name: 'Payer breadth · 30 days' }))

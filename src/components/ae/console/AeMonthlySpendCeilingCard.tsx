@@ -9,7 +9,7 @@ import { SettingsGroup } from '@/components/ae/settings/settings-shell/component
 import { UsageBillingMeter } from '@/components/arc/blocks/usage-billing/usage-billing'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/arc/button/button'
-import { Drawer, DrawerContent } from '@/components/arc/drawer/Drawer'
+import { Drawer, DrawerContent } from '@/components/ae/shared/arc/drawer/AeDrawerContent'
 import './MonthlySpendComposition.css'
 import { Switch } from '@/components/ui/switch'
 import { toast } from '@/lib/ui/toast'

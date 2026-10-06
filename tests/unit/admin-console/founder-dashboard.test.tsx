@@ -139,12 +139,27 @@ describe('founder marketplace dashboard', () => {
     expect(screen.getByText('2 of 7 days have completed snapshots. Range totals are withheld.')).toBeTruthy()
     fireEvent.click(screen.getByRole('tab', { name: /Delivered purchases/ }))
     const chart = screen.getByRole('img', { name: /Delivered purchases/ })
+    expect(chart.querySelector('svg path')?.getAttribute('d')?.match(/M/g)).toHaveLength(2)
     fireEvent.keyDown(chart, { key: 'Home' })
     expect(screen.queryByText('Revenue')).toBeNull()
     fireEvent.keyDown(chart, { key: 'ArrowRight' })
-    expect(screen.getByText('No complete snapshot')).toBeTruthy()
+    expect(within(chart).getByRole('status').textContent).toContain('No complete snapshot')
     fireEvent.keyDown(chart, { key: 'End' })
-    expect(screen.getByText('18')).toBeTruthy()
+    expect(within(chart).getByRole('status').textContent).toContain('18')
+  })
+
+  it('keeps an observed zero visible while a missing day stays unplotted', () => {
+    const value = { ...report(), days: [day('2026-09-28', 0), day('2026-09-30', 18)] }
+    render(<MarketplaceActivityView report={value} range="last_7" onRangeChange={vi.fn()} />)
+    fireEvent.click(screen.getByRole('tab', { name: /Delivered purchases/ }))
+    const chart = screen.getByRole('img', { name: /Delivered purchases/ })
+    const points = chart.querySelectorAll('svg circle')
+    expect(points).toHaveLength(2)
+    expect(points[0]?.getAttribute('cy')).toBe('180')
+    fireEvent.keyDown(chart, { key: 'Home' })
+    expect(within(chart).getByRole('status').textContent).toContain('0')
+    fireEvent.keyDown(chart, { key: 'ArrowRight' })
+    expect(within(chart).getByText('No complete snapshot')).toBeTruthy()
   })
 
   it('uses the server-deduplicated Account total and a real protected CSV download', () => {

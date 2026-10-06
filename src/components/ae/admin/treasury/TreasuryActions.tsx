@@ -6,7 +6,6 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/arc/button/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/arc/input/input'
-import { Label } from '@/components/ui/label'
 import { ADMIN_REFUSAL_PRESENTATION } from '@/lib/operator/admin-console/refusal-presentation'
 import { formatTimestamp } from '@/lib/ui/format-time'
 import type { AdminTreasuryView } from '@/modules/money/treasury-report'
@@ -49,7 +48,7 @@ export function TreasuryActions({ view }: { view: AdminTreasuryView }) {
       <a href="/admin/audit-events" className="underline underline-offset-4">Open the proposal in Audit</a>
     </AlertDescription></Alert> : null}
     <Dialog open={state.action !== null} onOpenChange={open => { if (!open) state.close() }}>
-      <DialogContent showCloseButton={!locked}>
+      <DialogContent className="arc-market" showCloseButton={!locked}>
         <DialogHeader>
           <DialogTitle>{thresholdAction ? 'Edit treasury thresholds' : resume ? (propose ? 'Propose resuming payments' : 'Resume payments?') : 'Pause new purchases?'}</DialogTitle>
           <DialogDescription>{thresholdAction ? 'Save fixed USDC amounts. This replaces the automatic runway-day thresholds.' : resume ? `Restore new purchases for ${audienceLabel(current.resumePaymentsOpenTo)}. ${propose || approvalRequired ? 'Another Admin owner must approve this proposal.' : 'Accepted Calls keep their existing authority.'}` : 'New purchases will pause. Accepted Calls will continue or reconcile.'}</DialogDescription>
@@ -69,8 +68,8 @@ export function TreasuryActions({ view }: { view: AdminTreasuryView }) {
           ]} />}
         </div>
         {thresholdAction ? <div className="grid gap-related">
-          <div className="grid gap-intra"><Label htmlFor="treasury-low-water">Low-water mark (USDC)</Label><Input label="Low-water mark (USDC)" labelMode="external" id="treasury-low-water" inputMode="decimal" type="text" value={state.lowWater} disabled={locked || state.targetChanged} onChange={event => state.edit('lowWater', event.target.value)} /></div>
-          <div className="grid gap-intra"><Label htmlFor="treasury-target">Target float (USDC)</Label><Input label="Target float (USDC)" labelMode="external" id="treasury-target" inputMode="decimal" type="text" value={state.target} disabled={locked || state.targetChanged} onChange={event => state.edit('target', event.target.value)} /></div>
+          <Input label="Low-water mark (USDC)" id="treasury-low-water" inputMode="decimal" type="text" value={state.lowWater} disabled={locked || state.targetChanged} onChange={event => state.edit('lowWater', event.target.value)} />
+          <Input label="Target float (USDC)" id="treasury-target" inputMode="decimal" type="text" value={state.target} disabled={locked || state.targetChanged} onChange={event => state.edit('target', event.target.value)} />
         </div> : null}
         {state.error === null ? null : <p role="alert" className="text-sm text-destructive">{state.error}</p>}
         {refused === null ? null : <p role="alert" className="text-sm text-destructive">{refused.copy}{state.targetChanged ? ' Review the current settings before submitting again.' : ''}</p>}

@@ -25,6 +25,8 @@ export const SUPPORT_FAQ_ITEMS = [
   },
 ] as const
 
+export type SupportHelpTopic = 'status' | 'connection' | 'private' | 'developer'
+
 export type SupportCallRef =
   | Readonly<{ kind: 'absent' }>
   | Readonly<{ kind: 'valid'; value: string }>

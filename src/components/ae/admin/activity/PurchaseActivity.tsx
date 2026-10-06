@@ -4,11 +4,12 @@ import { useEffect, useState } from 'react'
 import { ArrowUpRightIcon, RefreshCwIcon, ShoppingBagIcon } from 'lucide-react'
 
 import { api } from '../../../../../convex/_generated/api'
-import { Alert } from '@/components/arc/alert/alert'
+import { AeAlert as Alert } from '@/components/ae/shared/arc/alert/AeAlert'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Badge } from '@/components/arc/badge/badge'
 import { EmptyState } from '@/components/arc/empty-state/empty-state'
-import { SortableDataTable, type DataColumn } from '@/components/arc/sortable-data-table/sortable-data-table'
+import { AeSortableDataTable } from '@/components/ae/shared/sortable-data-table/AeSortableDataTable'
+import type { AeDataColumn } from '@/components/ae/shared/sortable-data-table/sortable-data-table.contracts'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { adminActivityHref, adminActivityWindow, type AdminActivitySearch, type AdminPurchaseRow } from '@/lib/operator/admin-console/activity'
@@ -109,7 +110,7 @@ function PurchaseActivityQuery({ search, compact = false }: PurchaseActivityProp
   )
 }
 
-const PURCHASE_COLUMNS: DataColumn<PurchaseTableRow>[] = [
+const PURCHASE_COLUMNS: AeDataColumn<PurchaseTableRow>[] = [
   {
     key: 'purchase', label: 'Purchase',
     render: (_value, row) => (
@@ -172,7 +173,7 @@ export function PurchaseActivityTable({ rows, showAccount = true }: Readonly<{ r
   const records = rows.map(row => ({ ...row, purchase: row.toolName ?? row.toolRef, account: row.accountName ?? row.accountRef }))
   return (
     <div className="ae-arc w-full min-w-0">
-      <SortableDataTable density="compact"
+      <AeSortableDataTable
         rows={records}
         columns={showAccount ? PURCHASE_COLUMNS : PURCHASE_COLUMNS.filter(column => column.key !== 'account')}
         rowKey="callRef"

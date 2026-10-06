@@ -1,12 +1,13 @@
 import { ChevronDownIcon, SlidersHorizontalIcon } from 'lucide-react'
 import { useId, useRef, useState } from 'react'
+import styles from './DirectoryExplorerFilters.module.css'
 import { Button } from '@/components/arc/button/button'
 import { ChipGroup, type ChipOption } from '@/components/arc/chip-group/chip-group'
 import { Combobox, type ComboboxOption } from '@/components/arc/combobox/combobox'
 import { FilterToolbar, type FilterChip } from '@/components/arc/filter-toolbar/filter-toolbar'
 import { Input } from '@/components/arc/input/input'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { Drawer, DrawerClose, DrawerContent, DrawerTrigger } from '@/components/arc/drawer/Drawer'
+import { Drawer, DrawerClose, DrawerContent, DrawerTrigger } from '@/components/ae/shared/arc/drawer/AeDrawerContent'
 import { cn } from '@/lib/utils'
 import { SEARCH_QUERY_MAX_LENGTH } from '@/modules/common/search-query'
 import { x402DirectoryFilterSchema } from '@/modules/market/x402-directory'
@@ -202,6 +203,7 @@ function PayerBreadthFilter({ search, onChange }: Pick<DirectoryExplorerFiltersP
   const removalFilters: FilterChip[] = [
     ...(selectedBand === undefined ? [] : [{ id: 'adoptionBand', label: 'payer band', value: adoptionBandLabels[selectedBand] }]),
     ...(selectedMax === undefined ? [] : [{ id: 'maxPayers30d', label: 'maximum payer count', value: `At most ${selectedMax.toLocaleString('en-AU')} paying addresses` }]),
+    ...(search.minPayers30d === undefined ? [] : [{ id: 'minPayers30d', label: 'minimum payer count', value: `At least ${search.minPayers30d.toLocaleString('en-AU')} paying addresses` }]),
   ]
   const payerOptions = [
     { value: 'any', label: 'Any payer count' },
@@ -226,16 +228,20 @@ function PayerBreadthFilter({ search, onChange }: Pick<DirectoryExplorerFiltersP
   return <fieldset className="flex flex-col gap-2 border-t pt-5">
     <legend className="sr-only">Payer breadth</legend>
     <p className="text-sm font-medium">Payer breadth · 30 days</p>
-    {removalFilters.length > 0 ? <FilterToolbar
+    <FilterToolbar
       filters={removalFilters}
       label="Existing payer filters"
       onRemove={id => {
         if (id === 'adoptionBand') onChange({ adoptionBand: undefined })
         if (id === 'maxPayers30d') onChange({ maxPayers30d: undefined })
+        if (id === 'minPayers30d') onChange({ minPayers30d: undefined })
       }}
-      onClearAll={() => onChange({ adoptionBand: undefined, maxPayers30d: undefined })}
-    /> : null}
-    <ChipGroup options={payerOptions} value={selectedPayerValue} onValueChange={change} label="Payer breadth · 30 days" multiple={false} />
+      onClearAll={() => onChange({ adoptionBand: undefined, maxPayers30d: undefined, minPayers30d: undefined })}
+    >
+      <div className={styles.payerChoiceTarget} role="group" aria-label="Payer breadth choices" tabIndex={-1} data-filter-trigger="">
+        <ChipGroup className="w-full min-w-0" options={payerOptions} value={selectedPayerValue} onValueChange={change} label="Payer breadth · 30 days" multiple={false} />
+      </div>
+    </FilterToolbar>
     <p className="text-xs leading-relaxed text-muted-foreground">Distinct paying addresses per Tool, not people or Customers.</p>
   </fieldset>
 }
@@ -303,10 +309,10 @@ function AdvancedFilters({ search, overview, onChange }: Pick<DirectoryExplorerF
   const [open, setOpen] = useState(activeCount > 0)
 
   return <Collapsible open={open} onOpenChange={setOpen} className="border-t pt-3">
-    <CollapsibleTrigger render={<Button labelLayout="between" type="button" variant="ghost" className="h-auto min-h-10 w-full justify-between px-2 active:scale-100" aria-label={activeCount > 0 ? `Advanced filters ${activeCount} active` : 'Advanced filters'}>
+    <CollapsibleTrigger render={<button type="button" className={styles.advancedFilterTrigger} aria-label={activeCount > 0 ? `Advanced filters ${activeCount} active` : 'Advanced filters'}>
       <span>Advanced filters{activeCount > 0 ? <span className="ml-2 rounded bg-muted px-1.5 text-xs tabular-nums">{activeCount}</span> : null}</span>
       <ChevronDownIcon className={cn('transition-transform', open && 'rotate-180')} aria-hidden="true" />
-    </Button>} />
+    </button>} />
     <CollapsibleContent className="flex flex-col gap-6 pt-4">
       {facets !== undefined || search.network !== undefined ? <Facets label="Network" allLabel="All networks" values={facets?.networks ?? []} selected={search.network} onChange={network => onChange({ network })} formatLabel={formatPaymentNetwork} /> : null}
       <ListedPriceFilter search={search} onChange={onChange} />
@@ -356,15 +362,17 @@ export function DirectoryExplorerFilters({ entity = 'tools', ...props }: Directo
     : 'Filter Tool listings by category, Provider, price and published details.'
 
   return <Drawer>
-    <DrawerTrigger render={<Button data-filter-trigger="" labelLayout="between" type="button" variant="secondary" className="h-11 w-40 justify-between px-3 active:scale-100" aria-label={count > 0 ? `Filters ${count}` : 'Filters'}>
-      <span className="inline-flex items-center gap-2"><SlidersHorizontalIcon />Filters</span>
-      <span className={cn('min-w-5 rounded px-1 text-center text-xs tabular-nums', count > 0 ? 'bg-muted' : 'invisible')} aria-hidden="true">{count > 0 ? count : 1}</span>
-    </Button>} />
-    <DrawerContent side="left" title={title} description={description} className="arc-market-filters">
+    <DrawerTrigger asChild>
+      <button data-filter-trigger="" type="button" className={cn(styles.filterTrigger, 'w-40')} aria-label={count > 0 ? `Filters ${count}` : 'Filters'}>
+        <span className="inline-flex items-center gap-2"><SlidersHorizontalIcon />Filters</span>
+        <span className={cn('min-w-5 rounded px-1 text-center text-xs tabular-nums', count > 0 ? 'bg-muted' : 'invisible')} aria-hidden="true">{count > 0 ? count : 1}</span>
+      </button>
+    </DrawerTrigger>
+    <DrawerContent side="left" title={title} description={description} closeLabel="Close" className={cn('arc-market-filters', styles.facetTargets)}>
       <div className="min-w-0"><FilterBody key={clearCount} {...props} entity={entity} onReset={() => { setClearCount(value => value + 1); props.onReset() }} /></div>
       <footer className="mt-5 flex flex-row flex-wrap items-stretch gap-3 border-t pt-5">
-        <Button labelLayout="wrap" type="button" variant="secondary" className="min-h-touch flex-1 active:scale-100" onClick={() => { setClearCount(value => value + 1); props.onReset() }}>Clear filters</Button>
-        <DrawerClose render={<Button labelLayout="wrap" type="button" className="min-h-touch flex-1 active:scale-100">Show results</Button>} />
+        <Button type="button" variant="secondary" className="min-h-touch flex-1 active:scale-100" onClick={() => { setClearCount(value => value + 1); props.onReset() }}>Clear filters</Button>
+        <DrawerClose asChild><Button type="button" className="min-h-touch flex-1 active:scale-100">Show results</Button></DrawerClose>
       </footer>
     </DrawerContent>
   </Drawer>
@@ -434,6 +442,7 @@ export function DirectoryDiscoveryFilters(props: DirectoryExplorerFiltersProps) 
       <h2 id={headingId}>Browse by Provider category</h2>
       <p className="text-xs leading-relaxed text-muted-foreground">Category names and counts come from a bounded catalogue sample, not current search matches.</p>
       <ChipGroup
+        className={styles.categoryChips}
         options={categoryOptions(props.overview, selectedCategory)}
         value={selectedCategory === undefined ? [] : [selectedCategory]}
         onValueChange={values => props.onChange({ directoryCategory: values[0] || undefined })}

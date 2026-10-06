@@ -1,4 +1,3 @@
-/* Actual Arc FAQ section source CSS SHA-256: 3346449f678590ac4a0457594f5a99cffad7c15587cd0d1ea16f390f7e67da9f */
 .faq { container: faq / inline-size; background: var(--background); color: var(--foreground); font-family: var(--font-body); letter-spacing: var(--tracking-body); }
 
 .stack { display: grid; gap: var(--space-8); max-width: 720px; margin: 0 auto; padding: var(--space-20) var(--space-6); }
@@ -71,6 +70,3 @@
   .icon, .contact, .contactArrow, .category, .clear { transition: none; }
   .contact:active, .clear:active { transform: none; }
 }
-
-.trigger:focus-visible, .category:focus-visible, .contact:focus-visible, .clear:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
-@media (pointer: coarse), (hover: none) { .category, .clear { min-height: 44px; } }

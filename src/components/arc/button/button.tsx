@@ -1,11 +1,9 @@
-/* Arc UI upstream SHA-256: 2e33ac923371afa716fcf81d06006484fca9b6c7d25a6aa7d51a63c94bd1b105; source retrieved 2026-10-01. */
-// Arc UI button source, retrieved 2026-10-01. Native action semantics adapted for AE.
 "use client";
 
 import { forwardRef, isValidElement, useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import type { ButtonHTMLAttributes, ReactNode, Ref, RefObject } from "react";
 import { AnimatePresence, animate, motion, useIsPresent, useMotionValue, useReducedMotion } from "motion/react";
-import type { HTMLMotionProps, TargetAndTransition, Variants } from "motion/react";
+import type { TargetAndTransition, Variants } from "motion/react";
 import { motionTokens } from "../lib/motion-tokens";
 import styles from "./button.module.css";
 
@@ -16,8 +14,6 @@ export interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement
   variant?: ButtonVariant;
   size?: ButtonSize;
   loading?: boolean;
-  /** Fill the label for real full-width facet and disclosure callers. */
-  labelLayout?: "start" | "between" | "wrap";
 }
 
 /** Icon buttons press a little deeper, wide buttons a little less, so every size reads as the same push. */
@@ -64,7 +60,7 @@ function useMorphWidth(content: RefObject<HTMLElement | null>, key: string, redu
     if (!node || !slot || typeof ResizeObserver === "undefined") return;
     let measured = false;
     const observer = new ResizeObserver(([entry]) => {
-      const next = entry?.contentRect.width ?? 0;
+      const next = entry.contentRect.width;
       if (!next || !measured || reduced || performance.now() > armedUntil.current) { measured = next > 0; width.jump(next || "auto"); delete slot.dataset.morphing; return; }
       slot.dataset.morphing = "";
       animate(width, next, { ...motionTokens.spring.morph, onComplete: () => { delete slot.dataset.morphing; } });
@@ -81,7 +77,7 @@ function LabelPhase({ children, icon, reduced, ref }: { children: ReactNode; ico
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
-  { className, variant = "primary", size = "md", type = "button", loading = false, labelLayout, disabled, children, onClick, ...props },
+  { className, variant = "primary", size = "md", loading = false, disabled, children, onClick, ...props },
   ref,
 ) {
   const reduceMotion = useReducedMotion() ?? false;
@@ -98,24 +94,20 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   const popup = props["aria-haspopup"];
   const anchorsLayer = (popup !== undefined && popup !== false && popup !== "false") || props.role === "combobox" || (props as Record<string, unknown>)["data-state"] !== undefined;
   const inert = disabled || loading || props["aria-disabled"] === true || props["aria-disabled"] === "true";
-  // HTML optional props permit explicit undefined; Motion exact-optionals do not.
-  const nativeProps = Object.fromEntries(Object.entries(props).filter(([, value]) => value !== undefined)) as HTMLMotionProps<"button">;
   const classes = [styles.button, styles[variant], styles[size], className].filter(Boolean).join(" ");
 
   return (
     <motion.button
       ref={setRefs}
-      type={type}
       tabIndex={props.tabIndex ?? 0}
       className={classes}
-      data-label-layout={labelLayout}
       disabled={disabled}
       aria-busy={loading || undefined}
       custom={buttonRef}
       variants={pressVariants}
-      {...(reduceMotion || anchorsLayer || inert ? {} : { whileTap: "pressed" })}
+      whileTap={reduceMotion || anchorsLayer || inert ? undefined : "pressed"}
       transition={motionTokens.spring.snappy}
-      {...nativeProps}
+      {...props}
       // Loading keeps the button focusable (a disabled button would drop keyboard focus mid-action) and swallows presses instead.
       aria-disabled={loading || props["aria-disabled"] || undefined}
       onClick={loading ? event => event.preventDefault() : onClick}

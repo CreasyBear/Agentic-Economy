@@ -1,5 +1,5 @@
 // Invariant: the Run button exposes charge timing and explicit submission state, following truthful chat purchase disclosures.
-import { Button } from '@/components/arc/button/button'
+import { AeActionLink } from '@/components/ae/shared/action-link/AeActionLink'
 import { ToolPriceText } from '@/components/ae/market/AeToolPrice'
 import { chatToolPanel } from '@/lib/public/chat-ia'
 import type { ToolPanelActionsProps } from '../tool-panel.contracts'
@@ -20,18 +20,18 @@ export function ToolPanelActions({ view, statusId, onRun, onRunAgain }: ToolPane
       {view.submission === 'outcome_unknown' ? null : view.submission === 'submitted' ? (
         <>
           <p role="status" className="break-words text-sm text-muted-foreground">{chatToolPanel.submitted}</p>
-          <Button type="button" labelLayout="wrap" onClick={onRunAgain}>{chatToolPanel.runAgain}</Button>
+          <AeActionLink type="button" labelLayout="wrap" onAction={onRunAgain}>{chatToolPanel.runAgain}</AeActionLink>
         </>
       ) : (
-        <Button type="button" labelLayout="wrap"
-          disabled={!view.canRun} aria-busy={view.submission === 'submitting'} onClick={onRun}>
+        <AeActionLink type="button" labelLayout="wrap"
+          disabled={!view.canRun} aria-busy={view.submission === 'submitting'} onAction={onRun}>
           {view.submission === 'submitting' ? chatToolPanel.submitting : (
             <span className="min-w-0 break-words">
               {chatToolPanel.run}{view.price === 'Price to be confirmed' ? null : <> · <ToolPriceText price={view.price}
                 {...(view.priceValidUntil === undefined ? {} : { validUntil: view.priceValidUntil })} /></>}
             </span>
           )}
-        </Button>
+        </AeActionLink>
       )}
       <p className="break-words text-sm text-muted-foreground">{view.consequence}</p>
       <p className="break-words text-sm text-muted-foreground">{view.priceNote}</p>

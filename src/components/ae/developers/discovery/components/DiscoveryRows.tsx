@@ -1,4 +1,4 @@
-import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
+import { AeEmptyState } from '@/components/ae/shared/arc/empty-state/AeEmptyState'
 import { DEVELOPER_DISCOVERY_UI_COPY } from '../discovery.contracts'
 import type { DeveloperDiscoveryRow } from '../discovery.contracts'
 import '../../DeveloperReferenceComposition.css'

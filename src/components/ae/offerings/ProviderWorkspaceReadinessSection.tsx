@@ -1,4 +1,4 @@
-import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
+import { AeEmptyState } from '@/components/ae/shared/arc/empty-state/AeEmptyState'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeCapabilityList } from '@/components/ae/status/AeCapabilityList'
 import { AeStatusCard } from '@/components/ae/status/AeStatusCard'

@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { SearchIcon } from "lucide-react";
 import { useMemo } from "react";
 
-import { AeEmptyState } from "@/components/ae/feedback/AeEmptyState";
+import { AeEmptyState } from "@/components/ae/shared/arc/empty-state/AeEmptyState";
 import { AeCapabilityTile } from "@/components/ae/market/AeCapabilityTile";
 import { X402DirectoryCards } from "@/components/ae/market/AeX402Directory";
 import { AeCollectionRail } from "@/components/ae/shared/AeCollectionRail";

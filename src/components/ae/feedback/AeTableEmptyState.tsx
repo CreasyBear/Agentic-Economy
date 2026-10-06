@@ -1,18 +1,12 @@
 import type { ReactNode } from 'react'
 
-import {
-  AeEmptyState,
-  type AeEmptyStateRecipe,
-} from './AeEmptyState'
-
-export { TACTILE } from './AeEmptyState'
+import { AeEmptyState } from '@/components/ae/shared/arc/empty-state/AeEmptyState'
 
 export type AeTableEmptyStateProps = Readonly<{
   title: string
   description: string
   action?: ReactNode
   icon?: ReactNode
-  recipes?: readonly AeEmptyStateRecipe[]
   financialReassurance?: string
 }>
 
@@ -21,7 +15,6 @@ export function AeTableEmptyState({
   description,
   action,
   icon,
-  recipes,
   financialReassurance,
 }: AeTableEmptyStateProps) {
   return (
@@ -31,7 +24,6 @@ export function AeTableEmptyState({
         description={description}
         {...(action !== undefined ? { action } : {})}
         {...(icon !== undefined ? { icon } : {})}
-        {...(recipes !== undefined ? { recipes } : {})}
         {...(financialReassurance !== undefined ? { financialReassurance } : {})}
       />
   )

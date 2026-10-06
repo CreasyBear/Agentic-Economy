@@ -27,8 +27,6 @@ export interface LineChartDatum {
   axisLabel?: string;
   /** One value per series key. A missing value counts as zero. */
   values: Record<string, number | undefined>;
-  /** Authoritative labels, when geometry is an approximation of exact units. */
-  formattedValues?: Record<string, string | undefined>;
 }
 
 /** Use a line chart for one or more measures over time, when the shape of the trend matters more than any single value. */
@@ -45,8 +43,6 @@ export interface LineChartProps {
   formatValue?: (value: number, series: LineChartSeries) => string;
   /** Formats the value axis. Defaults to a compact number, such as 1.2K. */
   formatTick?: (value: number) => string;
-  /** Keep count axes on whole units, even when all observations are zero. */
-  integerTicks?: boolean;
   /** Controlled hidden series keys. */
   hiddenSeries?: string[];
   defaultHiddenSeries?: string[];
@@ -81,26 +77,19 @@ const fadeFast = { duration: duration.instant, ease: [...ease.standard] } as con
 
 /** Room above the top gridline, and the gap between the crosshair and its tooltip. */
 const TOP = 12, GAP = 14;
-const PALETTE = ["var(--accent)", "color-mix(in oklch, var(--foreground) 46%, var(--surface))", "color-mix(in oklch, var(--foreground) 26%, var(--surface))"];
+const PALETTE = ["var(--accent)", "color-mix(in oklab, var(--foreground) 46%, var(--surface))", "color-mix(in oklab, var(--foreground) 26%, var(--surface))"];
 const grouped = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 });
 const compact = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });
 const clamp = (value: number, low: number, high: number) => Math.min(high, Math.max(low, value));
 const colorOf = (series: LineChartSeries, index: number) => series.color ?? PALETTE[Math.min(index, PALETTE.length - 1)];
 const clean = (value: number) => Number(value.toPrecision(12));
 
-/** Internal geometry indexes must refer to a real sample; never invent a zero. */
-function requiredAt<T>(items: readonly T[], index: number): T {
-  const item = items[index];
-  if (item === undefined) throw new RangeError(`Missing chart sample at ${index}`);
-  return item;
-}
-
 /** Clean gridlines: the smallest step of 1, 2, 2.5, or 5 that covers the data in four rows or fewer, from zero unless the data dips below it. */
-function niceScale(low: number, high: number, integerTicks = false) {
+function niceScale(low: number, high: number) {
   const lo = Math.min(0, low), hi = Math.max(high, lo + 1);
-  const span = hi - lo, magnitude = Math.max(integerTicks ? 1 : 0, 10 ** Math.floor(Math.log10(span / 4)));
+  const span = hi - lo, magnitude = 10 ** Math.floor(Math.log10(span / 4));
   for (const factor of [1, 2, 2.5, 5, 10]) {
-    const step = integerTicks ? Math.ceil(factor * magnitude) : factor * magnitude, bottom = Math.floor(lo / step) * step, top = Math.ceil(hi / step) * step;
+    const step = factor * magnitude, bottom = Math.floor(lo / step) * step, top = Math.ceil(hi / step) * step;
     if ((top - bottom) / step <= 4 + 1e-9) {
       const ticks: number[] = [];
       for (let value = bottom; value <= top + step / 2; value += step) ticks.push(clean(value));
@@ -113,29 +102,24 @@ function niceScale(low: number, high: number, integerTicks = false) {
 /** The line through every value, sampled densely on x from 0 to 1 in data units. Monotone cubic tangents keep a smooth curve from swinging past the data. */
 function curveFor(values: number[], smooth: boolean): Point[] {
   if (values.length === 0) return [];
-  if (values.length === 1) return [[0, requiredAt(values, 0)], [1, requiredAt(values, 0)]];
+  if (values.length === 1) return [[0, values[0]], [1, values[0]]];
   const last = values.length - 1, step = 1 / last;
   if (!smooth) return values.map((value, index) => [index * step, value]);
-  const slopes = values.slice(1).map((value, index) => (value - requiredAt(values, index)) / step);
-  const tangents = values.map((_, index) => {
-    if (index === 0 || index === last) return 0;
-    const before = requiredAt(slopes, index - 1), after = requiredAt(slopes, index);
-    return (Math.sign(before) + Math.sign(after)) * Math.min(Math.abs(before), Math.abs(after), Math.abs(before + after) / 4) || 0;
-  });
-  if (last > 1) { tangents[0] = (3 * requiredAt(slopes, 0) - requiredAt(tangents, 1)) / 2; tangents[last] = (3 * requiredAt(slopes, last - 1) - requiredAt(tangents, last - 1)) / 2; }
-  else { tangents[0] = requiredAt(slopes, 0); tangents[1] = requiredAt(slopes, 0); }
+  const slopes = values.slice(1).map((value, index) => (value - values[index]) / step);
+  const tangents = values.map((_, index) => index === 0 || index === last ? 0 : (Math.sign(slopes[index - 1]) + Math.sign(slopes[index])) * Math.min(Math.abs(slopes[index - 1]), Math.abs(slopes[index]), Math.abs(slopes[index - 1] + slopes[index]) / 4) || 0);
+  if (last > 1) { tangents[0] = (3 * slopes[0] - tangents[1]) / 2; tangents[last] = (3 * slopes[last - 1] - tangents[last - 1]) / 2; }
+  else { tangents[0] = slopes[0]; tangents[1] = slopes[0]; }
   const samples = Math.max(1, Math.min(16, Math.round(192 / last)));
   const points: Point[] = [];
   for (let index = 0; index < last; index++) {
-    const before = requiredAt(values, index), after = requiredAt(values, index + 1);
-    const low = Math.min(before, after), high = Math.max(before, after);
+    const low = Math.min(values[index], values[index + 1]), high = Math.max(values[index], values[index + 1]);
     for (let sample = 0; sample < samples; sample++) {
       const t = sample / samples, t2 = t * t, t3 = t2 * t;
-      const value = (2 * t3 - 3 * t2 + 1) * before + (t3 - 2 * t2 + t) * step * requiredAt(tangents, index) + (3 * t2 - 2 * t3) * after + (t3 - t2) * step * requiredAt(tangents, index + 1);
+      const value = (2 * t3 - 3 * t2 + 1) * values[index] + (t3 - 2 * t2 + t) * step * tangents[index] + (3 * t2 - 2 * t3) * values[index + 1] + (t3 - t2) * step * tangents[index + 1];
       points.push([(index + t) * step, clamp(value, low, high)]);
     }
   }
-  points.push([1, requiredAt(values, last)]);
+  points.push([1, values[last]]);
   return points;
 }
 
@@ -143,10 +127,10 @@ function curveFor(values: number[], smooth: boolean): Point[] {
 function valueAt(shape: Point[], x: number) {
   if (!shape.length) return 0;
   let low = 0, high = shape.length - 1;
-  if (x <= requiredAt(shape, low)[0]) return requiredAt(shape, low)[1];
-  if (x >= requiredAt(shape, high)[0]) return requiredAt(shape, high)[1];
-  while (high - low > 1) { const middle = (low + high) >> 1; if (requiredAt(shape, middle)[0] < x) low = middle; else high = middle; }
-  const [x0, y0] = requiredAt(shape, low), [x1, y1] = requiredAt(shape, high);
+  if (x <= shape[low][0]) return shape[low][1];
+  if (x >= shape[high][0]) return shape[high][1];
+  while (high - low > 1) { const middle = (low + high) >> 1; if (shape[middle][0] < x) low = middle; else high = middle; }
+  const [x0, y0] = shape[low], [x1, y1] = shape[high];
   return x1 === x0 ? y1 : y0 + ((y1 - y0) * (x - x0)) / (x1 - x0);
 }
 
@@ -189,7 +173,7 @@ function axisPicks(data: LineChartDatum[], width: number) {
   return labeled.reverse().filter((_, rank) => rank % stride === 0).reverse();
 }
 
-export function LineChart({ data, series, label, unit = "", height = 220, formatValue, formatTick = value => compact.format(value), integerTicks = false, hiddenSeries, defaultHiddenSeries, onHiddenSeriesChange, onActiveChange, loading = false, emptyLabel = "No data for this range", legend, categoryLabel = "Date", curve = "smooth", ref, className }: LineChartProps) {
+export function LineChart({ data, series, label, unit = "", height = 220, formatValue, formatTick = value => compact.format(value), hiddenSeries, defaultHiddenSeries, onHiddenSeriesChange, onActiveChange, loading = false, emptyLabel = "No data for this range", legend, categoryLabel = "Date", curve = "smooth", ref, className }: LineChartProps) {
   const reduced = useReducedMotionSafe();
   const figure = useRef<HTMLElement>(null);
   const plot = useRef<HTMLDivElement>(null);
@@ -222,7 +206,7 @@ export function LineChart({ data, series, label, unit = "", height = 220, format
   const targets = useMemo(() => new Map(series.map(line => [line.key, curveFor(data.map(item => item.values[line.key] ?? 0), curve === "smooth")])), [signature]); // eslint-disable-line react-hooks/exhaustive-deps
   let low = Infinity, high = -Infinity;
   for (const line of visible) for (const item of data) { const value = item.values[line.key] ?? 0; low = Math.min(low, value); high = Math.max(high, value); }
-  const range = Number.isFinite(low) ? niceScale(low, high, integerTicks) : null;
+  const range = Number.isFinite(low) ? niceScale(low, high) : null;
   const [steady, setSteady] = useState(() => range ?? niceScale(0, 100));
   if (range && (range.min !== steady.min || range.max !== steady.max)) setSteady(range);
   const scale = { min: useMotionValue(steady.min), max: useMotionValue(steady.max) };
@@ -315,7 +299,7 @@ export function LineChart({ data, series, label, unit = "", height = 220, format
     }
     morph.current?.stop();
     if (!moves.length) { paint(); return; }
-    morph.current = animate(0, 1, { ...settle, restDelta: .0005, onUpdate: progress => { for (const move of moves) update(move.track, { shape: move.xs.map((x, at): Point => [x, requiredAt(move.from, at) + (requiredAt(move.to, at) - requiredAt(move.from, at)) * progress]) }); paint(); }, onComplete: () => { for (const move of moves) update(move.track, { shape: move.target }); paint(); } });
+    morph.current = animate(0, 1, { ...settle, restDelta: .0005, onUpdate: progress => { for (const move of moves) update(move.track, { shape: move.xs.map((x, at): Point => [x, move.from[at] + (move.to[at] - move.from[at]) * progress]) }); paint(); }, onComplete: () => { for (const move of moves) update(move.track, { shape: move.target }); paint(); } });
     return () => morph.current?.stop();
   }, [paint, reduced, targets]);
 
@@ -383,18 +367,10 @@ export function LineChart({ data, series, label, unit = "", height = 220, format
   };
   const onPointerMove = (event: PointerEvent<HTMLDivElement>) => { if (!empty && (event.pointerType === "mouse" || event.buttons)) setActive(pointAt(event.clientX)); };
 
-  // Requires each exact label to describe the same datum and series as its geometry.
-  // Ensures every inspection surface uses that label verbatim; numeric fallback
-  // remains for count callers. Invariant: formatting never changes plotted data.
-  const format = (datum: LineChartDatum | undefined, line: LineChartSeries) => {
-    const exact = datum?.formattedValues?.[line.key];
-    if (exact !== undefined) return exact;
-    const value = datum?.values[line.key] ?? 0;
-    return `${formatValue ? formatValue(value, line) : grouped.format(value)}${unit ? ` ${unit}` : ""}`;
-  };
+  const format = (value: number, line: LineChartSeries) => `${formatValue ? formatValue(value, line) : grouped.format(value)}${unit ? ` ${unit}` : ""}`;
   const reading = index === null ? null : data[index];
-  const valueText = reading ? `${reading.label}: ${visible.map(line => `${line.label} ${format(reading, line)}`).join(", ")}` : empty ? emptyLabel : `${visible.length} of ${series.length} series shown`;
-  const summary = empty ? `${label}. ${emptyLabel}.` : `${label}, ${requiredAt(data, 0).label} to ${requiredAt(data, last).label}. ${visible.map(line => `${line.label}, latest ${format(requiredAt(data, last), line)}`).join(". ")}.`;
+  const valueText = reading ? `${reading.label}: ${visible.map(line => `${line.label} ${format(reading.values[line.key] ?? 0, line)}`).join(", ")}` : empty ? emptyLabel : `${visible.length} of ${series.length} series shown`;
+  const summary = empty ? `${label}. ${emptyLabel}.` : `${label}, ${data[0].label} to ${data[last].label}. ${visible.map(line => `${line.label}, latest ${format(data[last].values[line.key] ?? 0, line)}`).join(". ")}.`;
   const picks = axisPicks(data, plotWidth);
   const allHidden = !empty && visible.length === 0;
   const tipX = reduced ? tipTargetX : tipSpringX, tipY = reduced ? tipTargetY : tipSpringY;
@@ -428,7 +404,7 @@ export function LineChart({ data, series, label, unit = "", height = 220, format
           {visible.map(line => <p key={line.key} className={styles.tipRow} style={{ "--series": colorOf(line, series.indexOf(line)) } as CSSProperties}>
             <span className={styles.tipSwatch} data-dashed={line.dashed || undefined} />
             <span className={styles.tipName}>{line.label}</span>
-            <span className={styles.tipValue}>{format(reading ?? data[last], line)}</span>
+            <span className={styles.tipValue}>{format((reading ?? data[last])?.values[line.key] ?? 0, line)}</span>
           </p>)}
         </motion.div>
         <AnimatePresence initial={false}>
@@ -441,7 +417,7 @@ export function LineChart({ data, series, label, unit = "", height = 220, format
       </div>
       <div className={styles.axis} aria-hidden="true">
         <AnimatePresence initial={false}>
-          {picks.map(at => { const share = last > 0 ? at / last : .5; return <motion.span key={`${requiredAt(data, at).key}:${requiredAt(data, at).axisLabel}`} className={styles.axisLabel} style={{ left: `${share * 100}%`, translateX: `${-share * 100}%` }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: fadeFast }} transition={{ duration: duration.standard, ease: [...ease.standard] }}>{requiredAt(data, at).axisLabel}</motion.span>; })}
+          {picks.map(at => { const share = last > 0 ? at / last : .5; return <motion.span key={`${data[at].key}:${data[at].axisLabel}`} className={styles.axisLabel} style={{ left: `${share * 100}%`, translateX: `${-share * 100}%` }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: fadeFast }} transition={{ duration: duration.standard, ease: [...ease.standard] }}>{data[at].axisLabel}</motion.span>; })}
         </AnimatePresence>
       </div>
     </div>
@@ -449,7 +425,7 @@ export function LineChart({ data, series, label, unit = "", height = 220, format
     {!empty && <table className={styles.srOnly}>
       <caption>{label}</caption>
       <thead><tr><th scope="col">{categoryLabel}</th>{series.map(line => <th key={line.key} scope="col">{line.label}</th>)}</tr></thead>
-      <tbody>{data.map(item => <tr key={item.key}><th scope="row">{item.label}</th>{series.map(line => <td key={line.key}>{format(item, line)}</td>)}</tr>)}</tbody>
+      <tbody>{data.map(item => <tr key={item.key}><th scope="row">{item.label}</th>{series.map(line => <td key={line.key}>{format(item.values[line.key] ?? 0, line)}</td>)}</tr>)}</tbody>
     </table>}
     <p className={styles.srOnly} aria-live="polite" aria-atomic="true">{loading ? "Loading" : ""}</p>
   </figure>;

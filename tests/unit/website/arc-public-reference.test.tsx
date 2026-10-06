@@ -14,6 +14,7 @@ import { ABOUT } from '@/content/brand-copy'
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({ children, to, className }: { children: ReactNode; to: string; className?: string }) => <a href={to} className={className}>{children}</a>,
+  useRouter: () => ({ navigate: vi.fn(), preloadRoute: vi.fn().mockResolvedValue(undefined) }),
 }))
 
 afterEach(() => { cleanup(); vi.restoreAllMocks() })

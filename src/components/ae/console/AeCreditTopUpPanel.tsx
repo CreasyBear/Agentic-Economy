@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 
 import { Button } from '@/components/arc/button/button'
+import { RadioCards } from '@/components/arc/radio-cards/radio-cards'
 import { Skeleton } from '@/components/arc/skeleton/skeleton'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Spinner } from '@/components/ui/spinner'
@@ -84,6 +85,10 @@ export function AeAccountFundingPanel({
   }, [accountBalance, paymentStatus])
 
   const taxOnServiceFeeBps = constraints?.kind === 'available' ? constraints.taxOnServiceFeeBps : 1000
+  const selectedSuggestedUnits = suggestedPrincipalUnits.find((units) => units === selectedPrincipalUnits)
+  const selectedSuggestedValue = selectedSuggestedUnits === undefined
+    ? null
+    : audInputTextFromUnits(selectedSuggestedUnits)
 
   return (
     <div className="arc-market arc-funding-review">
@@ -156,33 +161,22 @@ export function AeAccountFundingPanel({
       {session === undefined && recovery === undefined && port !== undefined && constraints?.kind === 'available' ? (
         <div className="arc-funding-form">
           {suggestedPrincipalUnits.length > 0 ? (
-            <fieldset className="arc-funding-amount-options">
-              <legend>Choose a credit amount</legend>
-              <div className="arc-funding-denominations">
-                {suggestedPrincipalUnits.map((units) => {
-                  const selected = selectedPrincipalUnits === units
-                  return (
-                    <Button
-                      key={units.toString()}
-                      type="button"
-                      variant="secondary"
-                      aria-pressed={selected}
-                      disabled={pending || checking}
-                      onClick={() => {
-                        dispatch({
-                          type: 'amount_changed',
-                          amountText: audInputTextFromUnits(units),
-                          valid: true,
-                        })
-                      }}
-                      className="arc-funding-denomination font-mono tabular-nums"
-                    >
-                      +{formatAudUnits(units)}
-                    </Button>
-                  )
-                })}
-              </div>
-            </fieldset>
+            <RadioCards
+              aria-label="Choose a credit amount"
+              className="arc-market arc-funding-denominations"
+              disabled={pending || checking}
+              layout="grid"
+              value={selectedSuggestedValue}
+              onValueChange={(amountText) => dispatch({ type: 'amount_changed', amountText, valid: true })}
+              options={suggestedPrincipalUnits.map((units) => {
+                const amount = formatAudUnits(units)
+                return {
+                  value: audInputTextFromUnits(units),
+                  label: <span className="font-mono tabular-nums">+{amount}</span>,
+                  description: 'Available credit updates after payment is confirmed.',
+                }
+              })}
+            />
           ) : null}
           <div className="arc-funding-custom-amount">
             <label htmlFor="account-funding-amount">Other amount (AUD)</label>

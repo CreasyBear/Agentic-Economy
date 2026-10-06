@@ -1,7 +1,7 @@
 import { ArrowUpRight } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
 
-import { AeEmptyState } from '../feedback/AeEmptyState'
+import { AeEmptyState } from '@/components/ae/shared/arc/empty-state/AeEmptyState'
 import buttonStyles from '@/components/arc/button/button.module.css'
 import { ProductListingShelf } from '@/components/arc/market/ProductListing'
 import { cn } from '@/lib/utils'

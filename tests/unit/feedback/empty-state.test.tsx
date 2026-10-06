@@ -6,9 +6,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { SearchIcon } from 'lucide-react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import {
-  AeEmptyState,
-} from '@/components/ae/feedback/AeEmptyState'
+import { AeEmptyState } from '@/components/ae/shared/arc/empty-state/AeEmptyState'
 import { AeTableEmptyState } from '@/components/ae/feedback/AeTableEmptyState'
 
 afterEach(cleanup)
@@ -35,6 +33,20 @@ describe('AeEmptyState (W-42)', () => {
     expect(screen.queryByRole('button')).toBeNull()
     expect(screen.getByRole('heading', { level: 2, name: 'No tools match these filters' })).toBeTruthy()
     expect(screen.getByRole('status')).toBeInTheDocument()
+  })
+
+  it('preserves caller-selected alert and paragraph title semantics', () => {
+    render(
+      <AeEmptyState
+        role="alert"
+        titleAs="p"
+        title="No providers"
+        description="Try a broader search."
+      />,
+    )
+
+    expect(screen.getByRole('alert')).toBeInTheDocument()
+    expect(screen.getByText('No providers').closest('p')).not.toBeNull()
   })
 
   it('shows a decorative Arc inbox drawing and no invented actions', () => {

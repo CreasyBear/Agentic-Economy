@@ -1,7 +1,7 @@
 import { useEffect, useId, useState } from 'react'
 
 import { Button } from '@/components/arc/button/button'
-import { Drawer, DrawerContent } from '@/components/arc/drawer/Drawer'
+import { Drawer, DrawerContent } from '@/components/ae/shared/arc/drawer/AeDrawerContent'
 import SegmentedControl from '@/components/arc/segmented-control/segmented-control'
 import { SortableDataTable, type DataColumn } from '@/components/arc/sortable-data-table/sortable-data-table'
 import { ADMIN_METRICS_COPY, type AdminMetricDayRow } from '../metrics.contracts'
@@ -150,7 +150,6 @@ export function MetricsDayTable({ rows }: MetricsDayTableProps) {
         columns={[columns.day, ...current.keys.map((key) => columns[key]), detailsColumn]}
         rows={[...rows]}
         rowKey="day"
-        animateRows={false}
         caption={`${ADMIN_METRICS_COPY.dailyTitle}: ${current.label}`}
         emptyMessage={ADMIN_METRICS_COPY.noDays}
         defaultSort={{ key: 'day', direction: 'desc' }}

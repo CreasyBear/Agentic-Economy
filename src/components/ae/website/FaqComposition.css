@@ -1,10 +1,14 @@
-/* Page status continuation only. FAQ hierarchy and responsive geometry belong to the actual Arc block. */
+/* AE continuation layout keeps the native status route outside Arc's FAQ block. */
+.arc-site-faq { container: ae-site-faq / inline-size; }
 .arc-market .arc-site-faq-status {
-  margin: var(--space-6) 0 0;
+  margin: calc(var(--space-8) - var(--space-20)) 0 0;
   color: var(--text-secondary);
   font-size: var(--text-sm);
   line-height: 1.55;
   overflow-wrap: anywhere;
+}
+@container ae-site-faq (max-width: 480px) {
+  .arc-site-faq-status { margin-top: calc(var(--space-8) - var(--space-12)); }
 }
 .arc-market .arc-site-faq-status a {
   display: inline-flex;
@@ -13,4 +17,7 @@
   color: var(--foreground);
   text-underline-offset: 4px;
 }
-.arc-market .arc-site-faq-status a:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
+.arc-market .arc-site-faq-status a:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
+}
