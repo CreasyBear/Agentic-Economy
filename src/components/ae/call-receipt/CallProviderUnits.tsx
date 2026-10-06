@@ -1,5 +1,5 @@
-import { BillingHistory } from '@/components/arc/blocks/billing-overview/billing-overview'
-import { MetricsSummary } from '@/components/arc/blocks/metrics-dashboard/metrics-dashboard'
+import { BillingHistory } from '@/components/ae/shared/arc-pro/billing-overview/billing-overview'
+import { MetricsSummary } from '@/components/ae/shared/arc-pro/metrics-dashboard/metrics-dashboard'
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { formatUtcTimestamp } from '@/lib/ui/format-time'
 import { providerUnitLabel, providerUnitQuantity, type ProviderUnitEvidence } from '@/modules/capability-execution/provider-service-units'

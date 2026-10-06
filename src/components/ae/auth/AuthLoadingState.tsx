@@ -26,7 +26,7 @@ export function AuthLoadingState({ mode, reload = () => window.location.reload()
     <div aria-hidden="true">
       {[0, 1, 2, 3].map(index => <div key={index} className="arc-auth-loading-field"><Skeleton lines={2} /></div>)}
     </div>
-    {delayed ? <div className="space-y-3">
+    {delayed ? <div className="grid gap-3">
       <p className="text-sm">Reload this page to try again. Your return destination stays in the address.</p>
       <Button type="button" variant="secondary" className="min-h-touch" onClick={() => {
         recordProductJourney({ action: 'auth_retry', phase: 'attempted', surface: mode })

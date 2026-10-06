@@ -4,7 +4,7 @@
  * single invitations. Header, invite, toolbar and roster composition retained.
  * No demo seats, bulk send, pending records, role mutation or removal engine. */
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
-import { Button } from '../../button/button'
+import { Button } from '../../../../arc/button/button'
 import styles from './team-members.module.css'
 
 export type TeamMember = Readonly<{ key: string; name: string; email: string | null; role: string }>

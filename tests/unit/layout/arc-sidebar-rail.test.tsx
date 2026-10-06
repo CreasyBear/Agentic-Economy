@@ -3,7 +3,7 @@ import { useEffect } from 'react'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
-import { SidebarRail, SidebarRailNavigation, type SidebarRailGroup } from '@/components/arc/blocks/sidebar-rail/sidebar-rail'
+import { SidebarRail, SidebarRailNavigation, type SidebarRailGroup } from '@/components/ae/shared/arc-pro/sidebar-rail/sidebar-rail'
 
 afterEach(() => { cleanup(); vi.restoreAllMocks() })
 

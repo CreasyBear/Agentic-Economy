@@ -2,7 +2,7 @@ import { useQuery } from 'convex/react'
 import { useState } from 'react'
 
 import { api } from '../../../../../convex/_generated/api'
-import { MetricsDashboard } from '@/components/arc/blocks/marketplace-dashboard/metrics-dashboard'
+import { MetricsDashboard } from '@/components/ae/shared/arc-pro/marketplace-dashboard/metrics-dashboard'
 import { ExpandableCard } from '@/components/arc/expandable-card/expandable-card'
 import { AeAlert as Alert } from '@/components/ae/shared/arc/alert/AeAlert'
 import { AePageState } from '@/components/ae/layout/AePageState'

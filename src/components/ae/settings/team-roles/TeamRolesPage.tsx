@@ -1,4 +1,4 @@
-import { TeamMembers } from '@/components/arc/blocks/team-members/team-members'
+import { TeamMembers } from '@/components/ae/shared/arc-pro/team-members/team-members'
 import { SettingsPage } from '../settings-shell/components/SettingsSections'
 import type { TeamRolesPageProps } from './team-roles.contracts'
 import { useInviteTeamMember } from './useInviteTeamMember'

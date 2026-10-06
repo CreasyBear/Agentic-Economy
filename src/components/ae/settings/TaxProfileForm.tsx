@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactElement } from 'react'
 import { AeNavigationSafetyBoundary } from '@/components/ae/layout/AeNavigationSafetyBoundary'
 import { SettingsGroup, SettingsPage, SettingsRow } from '@/components/ae/settings/settings-shell/components/SettingsSections'
-import { SettingsSaveBar } from '@/components/arc/blocks/settings-page/settings-page'
+import { SettingsSaveBar } from '@/components/ae/shared/arc-pro/settings-page/settings-page'
 import './TaxProfileComposition.css'
 
 import { AeAlert as Alert } from '@/components/ae/shared/arc/alert/AeAlert'

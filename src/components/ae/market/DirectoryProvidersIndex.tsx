@@ -5,8 +5,8 @@ import { toDirectoryProviderRow } from '@/modules/market/directory-card.view-mod
 import type { X402DirectoryFacet, X402DirectoryProvidersPage } from '@/modules/market/x402-directory-catalogue'
 import { AeSortableDataTable } from '@/components/ae/shared/sortable-data-table/AeSortableDataTable'
 import type { AeDataColumn } from '@/components/ae/shared/sortable-data-table/sortable-data-table.contracts'
-import '@/components/arc/market/ProductListing.css'
-import '@/components/arc/market/ProviderListing.css'
+import '@/components/ae/shared/arc-pro/market/ProductListing.css'
+import '@/components/ae/shared/arc-pro/market/ProviderListing.css'
 import { MARKET_LINK_STATE } from './market-return-context'
 import { useMarketPath } from './market-navigation-context'
 

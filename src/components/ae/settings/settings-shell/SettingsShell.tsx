@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { ChevronDownIcon } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
-import { SettingsPage as ArcSettingsPage } from '@/components/arc/blocks/settings-page/settings-page'
+import { SettingsPage as ArcSettingsPage } from '@/components/ae/shared/arc-pro/settings-page/settings-page'
 import { Button } from '@/components/arc/button/button'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem,

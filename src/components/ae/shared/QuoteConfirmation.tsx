@@ -1,7 +1,7 @@
 import { useId } from 'react'
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeActionLink } from '@/components/ae/shared/action-link/AeActionLink'
-import { DecisionPanel } from '@/components/arc/chat/DecisionPanel'
+import { DecisionPanel } from '@/components/ae/shared/arc-pro/chat/DecisionPanel'
 import { formatUtcTimestamp } from '@/lib/ui/format-time'
 import { formatCurrencyAmount, formatDisplayAmount } from '@/modules/money/public'
 import type { QuoteConfirmationView } from './object-family.contracts'

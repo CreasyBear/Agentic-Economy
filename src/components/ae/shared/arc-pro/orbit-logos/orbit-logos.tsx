@@ -4,7 +4,7 @@ import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useSta
 import type { CSSProperties, KeyboardEvent, ReactNode, RefObject } from "react";
 import { AnimatePresence, LayoutGroup, animate, motion, useIsPresent, useReducedMotion } from "motion/react";
 import { ArrowUpRight, ChevronLeft, ChevronRight, X } from "lucide-react";
-import { motionTokens } from "../lib/motion-tokens";
+import { motionTokens } from "../../../../arc/lib/motion-tokens";
 import styles from "./orbit-logos.module.css";
 
 export interface OrbitLogo {

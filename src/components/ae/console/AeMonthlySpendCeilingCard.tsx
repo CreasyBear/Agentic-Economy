@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
 import { SettingsGroup } from '@/components/ae/settings/settings-shell/components/SettingsSections'
-import { UsageBillingMeter } from '@/components/arc/blocks/usage-billing/usage-billing'
+import { UsageBillingMeter } from '@/components/ae/shared/arc-pro/usage-billing/usage-billing'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/arc/button/button'
 import { Drawer, DrawerContent } from '@/components/ae/shared/base-ui/drawer/drawer'

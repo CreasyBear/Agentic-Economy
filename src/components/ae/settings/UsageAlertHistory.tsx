@@ -1,5 +1,5 @@
 import { useRef,useState } from 'react'
-import { BillingHistory } from '@/components/arc/blocks/billing-overview/billing-overview'
+import { BillingHistory } from '@/components/ae/shared/arc-pro/billing-overview/billing-overview'
 import { Button } from '@/components/arc/button/button'
 import { readUsageAlertHistoryServer } from '@/lib/server/usage-alert-history.functions'
 import { formatUtcTimestamp } from '@/lib/ui/format-time'

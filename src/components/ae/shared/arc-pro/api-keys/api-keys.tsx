@@ -5,7 +5,7 @@
  * Demo secret generation, usage, scopes and optimistic revocation are omitted. */
 import { useId, type ReactNode } from 'react'
 import { ChevronDown } from 'lucide-react'
-import { Button } from '../../button/button'
+import { Button } from '../../../../arc/button/button'
 import styles from './api-keys.module.css'
 
 export type ApiKeyRecord = Readonly<{

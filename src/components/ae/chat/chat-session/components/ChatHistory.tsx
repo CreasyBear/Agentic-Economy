@@ -2,7 +2,7 @@
 // Live history binding. The installed Arc AI Chat block owns list presentation.
 import { MoreHorizontalIcon } from 'lucide-react'
 import { useState } from 'react'
-import { ArcAiChatHistory } from '@/components/arc/blocks/ai-chat/ai-chat'
+import { ArcAiChatHistory } from '@/components/ae/shared/arc-pro/ai-chat/ai-chat'
 
 import { Button } from '@/components/arc/button/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'

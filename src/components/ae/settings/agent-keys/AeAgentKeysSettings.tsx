@@ -17,7 +17,7 @@ import type { IssuedAgentAccessReveal } from '@/modules/agent-access/issue-key.c
 import type { AgentKeyDraft } from '@/components/ae/console/connect-agent-wizard/agent-key-draft'
 import type { ConnectAgentEnvironment, ConnectAgentIssuePhase } from '@/components/ae/console/connect-agent-wizard/connect-agent-wizard.contracts'
 import { useAgentKeysSettings } from './useAgentKeysSettings'
-import { ApiKeys } from '@/components/arc/blocks/api-keys/api-keys'
+import { ApiKeys } from '@/components/ae/shared/arc-pro/api-keys/api-keys'
 
 export type AeAgentKeysSettingsProps = Readonly<{
   deploymentEnvironment: ConnectAgentEnvironment

@@ -5,7 +5,7 @@ import { Download, ExternalLink } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
 
 import { SettingsEmptyState, SettingsPage } from '@/components/ae/settings/settings-shell/components/SettingsSections'
-import { UsageBillingInvoices, type UsageBillingInvoice } from '@/components/arc/blocks/usage-billing/usage-billing'
+import { UsageBillingInvoices, type UsageBillingInvoice } from '@/components/ae/shared/arc-pro/usage-billing/usage-billing'
 import { Button } from '@/components/arc/button/button'
 import { Skeleton } from '@/components/arc/skeleton/skeleton'
 import buttonStyles from '@/components/arc/button/button.module.css'

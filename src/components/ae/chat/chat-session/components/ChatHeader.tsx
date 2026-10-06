@@ -2,7 +2,7 @@
 import { CheckIcon, CopyIcon, MenuIcon, PlusIcon, Share2Icon, UnlinkIcon } from 'lucide-react'
 import { createPortal } from 'react-dom'
 
-import { ArcAiChatHeader } from '@/components/arc/blocks/ai-chat/ai-chat'
+import { ArcAiChatHeader } from '@/components/ae/shared/arc-pro/ai-chat/ai-chat'
 import { AeActionLink } from '@/components/ae/shared/action-link/AeActionLink'
 import { Button } from '@/components/arc/button/button'
 import { Drawer, DrawerContent } from '@/components/ae/shared/base-ui/drawer/drawer'

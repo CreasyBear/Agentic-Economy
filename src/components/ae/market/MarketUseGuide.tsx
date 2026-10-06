@@ -11,7 +11,7 @@ export function MarketUseGuide() {
     <CollapsibleTrigger render={<Button type="button" variant="ghost" className="min-h-touch">
       How Aecon works<ChevronDownIcon aria-hidden="true" className="size-4" />
     </Button>} />
-    <CollapsibleContent className="space-y-3 px-4 py-3 text-sm">
+    <CollapsibleContent className="grid gap-3 px-4 py-3 text-sm">
       <p>Find an outside service for the task you already have. Browse freely, or search and compare Tools by their inputs, price and expected result.</p>
       <p>For a Tool callable through Aecon, connect your Agent when you are ready. Review who receives the input and the permissions and spending limits you grant. A fresh Quote confirms the price and expires if unused; permission and account balance are separate.</p>
       <p>After an authorized Call, keep its result and receipt. If the outcome is pending or uncertain, check that original Call before retrying. A directory listing with external payment is not an Aecon Call.</p>

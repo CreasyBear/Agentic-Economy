@@ -14,7 +14,7 @@ import {
   providerConnectionStatus,
 } from './owner-provider-connections-model'
 import { OWNER_MCP_OAUTH_CALLBACK_COPY } from './owner-mcp-oauth-callback.contracts'
-import { Integrations, type IntegrationRecord } from '@/components/arc/blocks/integrations/integrations'
+import { Integrations, type IntegrationRecord } from '@/components/ae/shared/arc-pro/integrations/integrations'
 
 export function AeProviderConnectionList({
   connections,

@@ -1,7 +1,7 @@
 import { useRef, useState, type FormEvent } from 'react'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { SettingsSaveBar } from '@/components/arc/blocks/settings-page/settings-page'
+import { SettingsSaveBar } from '@/components/ae/shared/arc-pro/settings-page/settings-page'
 import { Button } from '@/components/arc/button/button'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import type { RenameProviderDisplayNameResult } from '@/lib/server/owner-workspace.functions'

@@ -1,4 +1,4 @@
-import { MetricsOverview } from '@/components/arc/blocks/metrics-dashboard/metrics-dashboard'
+import { MetricsOverview } from '@/components/ae/shared/arc-pro/metrics-dashboard/metrics-dashboard'
 import type { UsageReportManifest } from '@/lib/export/durable-usage-report'
 import { forecastUsageReport } from '@/lib/export/usage-forecast'
 import { formatCurrencyAmount } from '@/modules/money/public'

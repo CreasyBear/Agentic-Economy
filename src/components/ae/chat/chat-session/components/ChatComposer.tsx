@@ -1,7 +1,7 @@
 // The installed Arc block owns the composer; AE owns draft admission and recovery.
 
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
-import { ArcAiComposer } from '@/components/arc/blocks/ai-composer/ai-composer'
+import { ArcAiComposer } from '@/components/ae/shared/arc-pro/ai-composer/ai-composer'
 import { AlphaLearningNotice } from '@/components/ae/shared/AlphaLearningNotice'
 import './ChatComposerFeedback.css'
 import { RecoveryNotice } from '../../recovery/RecoveryNotice'

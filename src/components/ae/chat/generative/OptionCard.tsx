@@ -8,8 +8,8 @@ import { ToolPriceText } from '@/components/ae/market/AeToolPrice'
 import { chatToolPanel } from '@/lib/public/chat-ia'
 import { toolChoiceReadinessLabel } from '@/modules/chat/tool-card'
 import type { OptionView } from './generative.contracts'
-import '@/components/arc/market/ProductListing.css'
-import '@/components/arc/chat/Options.css'
+import '@/components/ae/shared/arc-pro/market/ProductListing.css'
+import '@/components/ae/shared/arc-pro/chat/Options.css'
 
 export type OptionCardProps = Readonly<{
   option: OptionView

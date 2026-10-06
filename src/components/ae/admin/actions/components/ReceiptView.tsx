@@ -1,6 +1,6 @@
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import ArcButton from '@/components/arc/button/button'
-import { DecisionPanel } from '@/components/arc/chat/DecisionPanel'
+import { DecisionPanel } from '@/components/ae/shared/arc-pro/chat/DecisionPanel'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { ADMIN_REFUSAL_PRESENTATION } from '@/lib/operator/admin-console/refusal-presentation'
 import { formatPerthTimestamp } from '@/lib/ui/format-time'

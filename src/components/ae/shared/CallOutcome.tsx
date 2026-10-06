@@ -1,5 +1,5 @@
 import { AeFactList } from '@/components/ae/data/AeFactList'
-import { DecisionPanel } from '@/components/arc/chat/DecisionPanel'
+import { DecisionPanel } from '@/components/ae/shared/arc-pro/chat/DecisionPanel'
 import { formatCurrencyAmount, formatDisplayAmount } from '@/modules/money/public'
 import type { CallOutcomeView } from './object-family.contracts'
 

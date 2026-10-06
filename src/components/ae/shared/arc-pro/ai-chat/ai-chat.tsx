@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 import { ArrowUpRight, LoaderCircle, SquarePen } from "lucide-react";
 import { LazyMotion, LayoutGroup, domAnimation, m, useReducedMotion } from "motion/react";
 
-import { motionTokens } from "../../lib/motion-tokens";
+import { motionTokens } from "../../../../arc/lib/motion-tokens";
 import styles from "./ai-chat.module.css";
 
 type ArcAiChatHistoryItem = Readonly<{

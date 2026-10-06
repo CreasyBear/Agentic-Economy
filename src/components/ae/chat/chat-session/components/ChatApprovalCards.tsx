@@ -3,7 +3,7 @@ import { useEffect, useRef } from 'react'
 import { CallOutcome } from '@/components/ae/shared/CallOutcome'
 import { QuoteConfirmation } from '@/components/ae/shared/QuoteConfirmation'
 import { AeActionLink } from '@/components/ae/shared/action-link/AeActionLink'
-import { DecisionPanel } from '@/components/arc/chat/DecisionPanel'
+import { DecisionPanel } from '@/components/ae/shared/arc-pro/chat/DecisionPanel'
 import type { OwnerChatCard } from '../chat-session.contracts'
 
 export type ChatApprovalCardsProps = Readonly<{

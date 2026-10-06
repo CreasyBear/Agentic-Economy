@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { TeamRolesPage } from '@/components/ae/settings/team-roles/TeamRolesPage'
-import { TeamMembersSkeleton } from '@/components/arc/blocks/team-members/team-members'
+import { TeamMembersSkeleton } from '@/components/ae/shared/arc-pro/team-members/team-members'
 import { readTeamRolesServer } from '@/components/ae/settings/team-roles/team-roles.functions'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 

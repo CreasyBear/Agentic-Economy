@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 import { LazyMotion, domMax, m, useReducedMotion } from "motion/react";
 
 import { Drawer, DrawerContent } from "@/components/ae/shared/base-ui/drawer/drawer";
-import { motionTokens } from "../../lib/motion-tokens";
+import { motionTokens } from "../../../../arc/lib/motion-tokens";
 import styles from "./sidebar-rail.module.css";
 
 const FULL = 240;

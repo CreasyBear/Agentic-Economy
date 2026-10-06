@@ -4,7 +4,7 @@ import { animate, motion, useDragControls, useMotionValue, useReducedMotion } fr
 import type { PanInfo } from 'motion/react'
 import { ArrowUpRight, Braces, ChevronDown, ChevronLeft, ChevronRight, GripHorizontal } from 'lucide-react'
 
-import { motionTokens } from '../lib/motion-tokens'
+import { motionTokens } from '../../../../arc/lib/motion-tokens'
 import './ProductDetail.css'
 
 /**

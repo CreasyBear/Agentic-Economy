@@ -1,6 +1,6 @@
 // Invariant: a recoverable chat failure always stays beside its safe next action, following the existing chat card notices.
 import { Button } from '@/components/arc/button/button'
-import { DecisionPanel } from '@/components/arc/chat/DecisionPanel'
+import { DecisionPanel } from '@/components/ae/shared/arc-pro/chat/DecisionPanel'
 import { projectChatRecovery } from './recovery.view-model'
 import type { RecoveryNoticeProps } from './recovery.contracts'
 

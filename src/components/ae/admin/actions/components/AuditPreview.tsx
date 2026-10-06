@@ -1,5 +1,5 @@
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
-import { DecisionPanel } from '@/components/arc/chat/DecisionPanel'
+import { DecisionPanel } from '@/components/ae/shared/arc-pro/chat/DecisionPanel'
 import { ADMIN_ACTION_COPY, ADMIN_ACTION_SHEET_COPY, ADMIN_REASON_LABELS, ADMIN_REASON_OPTIONS, type AuditPreviewProps } from '../actions.contracts'
 import './CommandReviewComposition.css'
 

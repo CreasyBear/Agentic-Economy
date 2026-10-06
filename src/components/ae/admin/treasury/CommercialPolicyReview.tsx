@@ -1,5 +1,5 @@
 import type { AdminCommandRequest } from '../actions/actions.contracts'
-import { SettingsPageGroup } from '@/components/arc/blocks/settings-page/settings-page'
+import { SettingsPageGroup } from '@/components/ae/shared/arc-pro/settings-page/settings-page'
 import { SortableDataTable } from '@/components/arc/sortable-data-table/sortable-data-table'
 import { formatPerthTimestamp } from '@/lib/ui/format-time'
 import { POLICY_LABELS, policyDecimal } from './commercial-policy-form'

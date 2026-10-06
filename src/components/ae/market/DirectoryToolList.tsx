@@ -2,7 +2,7 @@ import { Link } from '@tanstack/react-router'
 import { Check, Heart } from 'lucide-react'
 import { memo } from 'react'
 
-import { ProductListing, ProductListingCard } from '@/components/arc/market/ProductListing'
+import { ProductListing, ProductListingCard } from '@/components/ae/shared/arc-pro/market/ProductListing'
 import { AeSortableDataTable } from '@/components/ae/shared/sortable-data-table/AeSortableDataTable'
 import type { AeDataColumn } from '@/components/ae/shared/sortable-data-table/sortable-data-table.contracts'
 import { toDirectoryToolCardModel } from '@/modules/market/directory-card.view-model'

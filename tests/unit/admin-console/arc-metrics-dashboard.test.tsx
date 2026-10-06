@@ -3,7 +3,7 @@ import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { MetricsDashboard } from '@/components/arc/blocks/metrics-dashboard/metrics-dashboard'
+import { MetricsDashboard } from '@/components/ae/shared/arc-pro/metrics-dashboard/metrics-dashboard'
 import type { AdminMetricCallPoint } from '@/components/ae/admin/metrics/metrics.contracts'
 
 const cards = [{ label: 'Settled Call value', value: 'A$9,007,199,254,740,993.01', delta: 'No prior comparison' }]

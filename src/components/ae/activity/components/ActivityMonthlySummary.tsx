@@ -1,7 +1,7 @@
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Button } from '@/components/arc/button/button'
-import { MetricsSummary } from '@/components/arc/blocks/metrics-dashboard/metrics-dashboard'
+import { MetricsSummary } from '@/components/ae/shared/arc-pro/metrics-dashboard/metrics-dashboard'
 
 import './ActivitySummaryComposition.css'
 

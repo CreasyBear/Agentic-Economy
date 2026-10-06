@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { DecisionPanel } from '@/components/arc/chat/DecisionPanel'
+import { DecisionPanel } from '@/components/ae/shared/arc-pro/chat/DecisionPanel'
 import { Button } from '@/components/arc/button/button'
 import type { OwnerSupplySourceAssessmentInput } from '@/modules/capability-supply/source-first-owner'
 import type { SupplySourceAssessment } from '@/modules/capability-supply/source-first-owner'

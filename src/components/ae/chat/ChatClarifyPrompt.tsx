@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { Button } from '@/components/arc/button/button'
 import { AeActionLink } from '@/components/ae/shared/action-link/AeActionLink'
 import { Input } from '@/components/arc/input/input'
-import { DecisionPanel } from '@/components/arc/chat/DecisionPanel'
+import { DecisionPanel } from '@/components/ae/shared/arc-pro/chat/DecisionPanel'
 import { chatClarify } from '@/lib/public/chat-ia'
 
 export type ChatClarifyPromptProps = Readonly<{

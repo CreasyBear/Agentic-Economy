@@ -5,7 +5,7 @@ import { useRef } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
-import { SettingsSaveBar } from '@/components/arc/blocks/settings-page/settings-page'
+import { SettingsSaveBar } from '@/components/ae/shared/arc-pro/settings-page/settings-page'
 import { Button } from '@/components/arc/button/button'
 
 afterEach(cleanup)

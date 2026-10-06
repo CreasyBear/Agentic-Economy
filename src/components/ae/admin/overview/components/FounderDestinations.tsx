@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { ActivityIcon, BookOpenCheckIcon, ChartNoAxesCombinedIcon, CirclePauseIcon, CirclePlayIcon, PanelsTopLeftIcon, ReceiptTextIcon, StoreIcon, UsersRoundIcon, WalletCardsIcon } from 'lucide-react'
 import { AeSection } from '@/components/ae/layout/AeSection'
-import { OrbitLogos, type OrbitLogo } from '@/components/arc/orbit-logos/orbit-logos'
+import { OrbitLogos, type OrbitLogo } from '@/components/ae/shared/arc-pro/orbit-logos/orbit-logos'
 import { readObservabilityClientConfig } from '@/lib/observability/config'
 import styles from './FounderDestinations.module.css'
 

@@ -1,7 +1,7 @@
 import { ArrowRightIcon, WrenchIcon } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
 
-import { DecisionPanel } from '@/components/arc/chat/DecisionPanel'
+import { DecisionPanel } from '@/components/ae/shared/arc-pro/chat/DecisionPanel'
 import buttonStyles from '@/components/arc/button/button.module.css'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 

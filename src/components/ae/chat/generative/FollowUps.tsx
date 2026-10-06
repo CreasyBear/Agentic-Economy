@@ -1,4 +1,4 @@
-import { ArcAiChatSuggestions } from '@/components/arc/blocks/ai-chat/ai-chat'
+import { ArcAiChatSuggestions } from '@/components/ae/shared/arc-pro/ai-chat/ai-chat'
 import type { FollowUpsProps } from './generative.contracts'
 import './FollowUpsComposition.css'
 

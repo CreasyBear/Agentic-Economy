@@ -1,4 +1,4 @@
-import { ArcAgentRunTimeline } from '@/components/arc/blocks/agent-run/agent-run'
+import { ArcAgentRunTimeline } from '@/components/ae/shared/arc-pro/agent-run/agent-run'
 import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import type { WorkDisclosureView } from '@/components/ae/chat/generative/generative.contracts'
 

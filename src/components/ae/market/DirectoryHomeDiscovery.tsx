@@ -3,7 +3,7 @@ import { Link } from '@tanstack/react-router'
 
 import { AeEmptyState } from '@/components/ae/shared/arc/empty-state/AeEmptyState'
 import buttonStyles from '@/components/arc/button/button.module.css'
-import { ProductListingShelf } from '@/components/arc/market/ProductListing'
+import { ProductListingShelf } from '@/components/ae/shared/arc-pro/market/ProductListing'
 import { cn } from '@/lib/utils'
 import { carryMarketCompare } from '@/modules/market/market-route-data'
 import type { X402MarketplaceHome } from '@/modules/market/x402-marketplace-home'

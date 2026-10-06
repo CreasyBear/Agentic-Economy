@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 
 import { AeInlineState } from '@/components/ae/feedback/AeInlineState'
-import { MultiStepForm, type CompletedFormStep } from '@/components/arc/blocks/multi-step-form/multi-step-form'
+import { MultiStepForm, type CompletedFormStep } from '@/components/ae/shared/arc-pro/multi-step-form/multi-step-form'
 import buttonStyles from '@/components/arc/button/button.module.css'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { SupplyCandidateSection } from './SupplyCandidateSection'

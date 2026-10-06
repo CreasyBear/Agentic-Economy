@@ -3,9 +3,9 @@
 import { useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { Download } from "lucide-react";
-import { motionTokens } from "../../lib/motion-tokens";
-import SegmentedControl from "../../segmented-control/segmented-control";
-import { Alert } from "../../alert/alert";
+import { motionTokens } from "../../../../arc/lib/motion-tokens";
+import SegmentedControl from "../../../../arc/segmented-control/segmented-control";
+import { Alert } from "../../../../arc/alert/alert";
 import styles from "./metrics-dashboard.module.css";
 
 /** ARC Pro metrics-dashboard, adapted to authorized AE snapshots. No demonstration data. */

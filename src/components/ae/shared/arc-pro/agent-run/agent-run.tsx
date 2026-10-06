@@ -5,7 +5,7 @@ import { useId, useState, type ReactNode } from "react";
 import { AnimatePresence, LazyMotion, domAnimation, m, useReducedMotion } from "motion/react";
 import { Check, ChevronDown, CircleCheck, LoaderCircle, TriangleAlert } from "lucide-react";
 
-import { motionTokens } from "../../lib/motion-tokens";
+import { motionTokens } from "../../../../arc/lib/motion-tokens";
 import styles from "./agent-run.module.css";
 
 type AgentRunPhase = "working" | "complete" | "attention";

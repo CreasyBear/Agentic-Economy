@@ -2,7 +2,7 @@ import { Link } from '@tanstack/react-router'
 import { AeToolPrice } from '@/components/ae/market/AeToolPrice'
 import { Badge } from '@/components/ui/badge'
 import { AeCopyValue } from '@/components/ae/shared/copy-value/AeCopyValue'
-import { DecisionPanel } from '@/components/arc/chat/DecisionPanel'
+import { DecisionPanel } from '@/components/ae/shared/arc-pro/chat/DecisionPanel'
 import buttonStyles from '@/components/arc/button/button.module.css'
 import type { PublicToolDescriptor } from '@/modules/capability-supply/public'
 

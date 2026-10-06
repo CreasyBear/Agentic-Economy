@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router'
 import { AeAccountFundingPanel } from '@/components/ae/console/AeCreditTopUpPanel'
-import { BillingOverview } from '@/components/arc/blocks/billing-overview/billing-overview'
+import { BillingOverview } from '@/components/ae/shared/arc-pro/billing-overview/billing-overview'
 import { Button } from '@/components/arc/button/button'
 import { Skeleton } from '@/components/arc/skeleton/skeleton'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'

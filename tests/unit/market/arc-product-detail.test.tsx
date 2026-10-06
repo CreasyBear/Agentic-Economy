@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import '../../setup/jsdom-platform'
-import { ProductDetail, type ProductDetailProps } from '@/components/arc/market/ProductDetail'
+import { ProductDetail, type ProductDetailProps } from '@/components/ae/shared/arc-pro/market/ProductDetail'
 
 afterEach(cleanup)
 

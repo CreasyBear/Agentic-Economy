@@ -1,5 +1,5 @@
 import { DonutChart } from '@/components/arc/donut-chart/donut-chart'
-import { FunnelChart } from '@/components/arc/funnel-chart/funnel-chart'
+import { FunnelChart } from '@/components/ae/shared/arc-pro/funnel-chart/funnel-chart'
 import type { MarketplaceMetricsReport } from '@/lib/operator/admin-console/metrics.contracts'
 import { marketplaceFundingChartViewModel } from '../marketplace-signal.view-model'
 import styles from './MarketplaceSignalCharts.module.css'

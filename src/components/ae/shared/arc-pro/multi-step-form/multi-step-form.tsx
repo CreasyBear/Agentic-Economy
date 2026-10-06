@@ -12,8 +12,8 @@ import { useCallback, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { AnimatePresence, LazyMotion, domAnimation, m, useReducedMotion } from 'motion/react'
 import type { Variants } from 'motion/react'
-import { Button } from '../../button/button'
-import { motionTokens } from '../../lib/motion-tokens'
+import { Button } from '../../../../arc/button/button'
+import { motionTokens } from '../../../../arc/lib/motion-tokens'
 import styles from './multi-step-form.module.css'
 
 export type FormStep = Readonly<{ id: string; title: string; description?: string }>

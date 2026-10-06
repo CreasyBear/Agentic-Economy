@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import type { X402MarketplaceHome } from '@/modules/market/x402-marketplace-home'
-import { ProductListingHeader } from '@/components/arc/market/ProductListing'
+import { ProductListingHeader } from '@/components/ae/shared/arc-pro/market/ProductListing'
 
 export type DirectoryHeroProps = Readonly<{
   home?: X402MarketplaceHome

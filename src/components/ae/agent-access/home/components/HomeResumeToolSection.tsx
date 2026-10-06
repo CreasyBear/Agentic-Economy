@@ -1,7 +1,7 @@
 import { Link } from '@tanstack/react-router'
 import type { ComponentProps } from 'react'
 
-import { AgentRun } from '@/components/arc/blocks/agent-run/agent-run'
+import { AgentRun } from '@/components/ae/shared/arc-pro/agent-run/agent-run'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
 import { Button } from '@/components/arc/button/button'

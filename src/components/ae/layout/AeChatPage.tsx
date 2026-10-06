@@ -1,5 +1,5 @@
 import { type ReactNode } from 'react'
-import { ArcAiChatPage } from '@/components/arc/blocks/ai-chat/ai-chat'
+import { ArcAiChatPage } from '@/components/ae/shared/arc-pro/ai-chat/ai-chat'
 import './ChatPageComposition.css'
 
 type AeChatAskPageProps = {

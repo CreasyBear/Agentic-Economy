@@ -1,7 +1,7 @@
 import { ArrowUpRight } from 'lucide-react'
 import { directoryInitials } from '@/modules/market/directory-card.view-model'
 import { x402DirectoryFilterSchema, type X402DirectoryEntry } from '@/modules/market/x402-directory'
-import '@/components/arc/market/ProviderListing.css'
+import '@/components/ae/shared/arc-pro/market/ProviderListing.css'
 
 type Props = Readonly<{ provider: string; entries: readonly X402DirectoryEntry[]; totalTools?: number }>
 

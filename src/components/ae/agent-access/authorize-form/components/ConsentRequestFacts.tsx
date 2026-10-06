@@ -1,4 +1,4 @@
-import { SettingsPageGroup, SettingsPageRow } from '@/components/arc/blocks/settings-page/settings-page'
+import { SettingsPageGroup, SettingsPageRow } from '@/components/ae/shared/arc-pro/settings-page/settings-page'
 import { Button } from '@/components/arc/button/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 

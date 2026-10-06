@@ -3,7 +3,7 @@
 import { useEffect, useId, useLayoutEffect, useRef } from 'react'
 import type { ReactNode, Ref, RefObject } from 'react'
 import { LayoutGroup, animate, motion, useMotionValue, useReducedMotion } from 'motion/react'
-import { motionTokens } from '../../motion-tokens'
+import { motionTokens } from '../../../../arc/motion-tokens'
 import styles from './settings-page.module.css'
 
 /** Arc UI Pro settings-page, installed from the authenticated Arc registry.

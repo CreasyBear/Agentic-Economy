@@ -1,10 +1,10 @@
 import { groupDirectoryProviders, toDirectoryToolCardModel } from '@/modules/market/directory-card.view-model'
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
-import { ProductListing } from '@/components/arc/market/ProductListing'
-import { ProviderListingCard } from '@/components/arc/market/ProviderListing'
+import { ProductListing } from '@/components/ae/shared/arc-pro/market/ProductListing'
+import { ProviderListingCard } from '@/components/ae/shared/arc-pro/market/ProviderListing'
 import { AeSortableDataTable } from '@/components/ae/shared/sortable-data-table/AeSortableDataTable'
 import type { AeDataColumn } from '@/components/ae/shared/sortable-data-table/sortable-data-table.contracts'
-import '@/components/arc/market/ProviderListing.css'
+import '@/components/ae/shared/arc-pro/market/ProviderListing.css'
 
 export type DirectoryProviderListProps = Readonly<{
   layout?: 'table' | 'grid'

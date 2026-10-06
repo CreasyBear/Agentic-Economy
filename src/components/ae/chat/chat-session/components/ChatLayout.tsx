@@ -1,9 +1,9 @@
 // Adapted from vercel/ai-chatbot, c2f8235e1f3ea903ad8b7f61447c4f74164b5c58, components/chat/shell.tsx and components/chat/app-sidebar.tsx, Apache-2.0.
 import { ErrorBoundary } from '@sentry/react'
 import { useEffect, useState } from 'react'
-import { ArcAiChatDock, ArcAiChatFrame } from '@/components/arc/blocks/ai-chat/ai-chat'
+import { ArcAiChatDock, ArcAiChatFrame } from '@/components/ae/shared/arc-pro/ai-chat/ai-chat'
 import buttonStyles from '@/components/arc/button/button.module.css'
-import '@/components/arc/chat/ChatComposition.css'
+import '@/components/ae/shared/arc-pro/chat/ChatComposition.css'
 import { AeChatPage } from '@/components/ae/layout/AeChatPage'
 
 import { ChatTranscript } from '../../ChatTranscript'

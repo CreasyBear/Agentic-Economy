@@ -8,7 +8,7 @@ import { AeToolInputDisclosure, AeToolTechnicalContract } from '@/components/ae/
 import { AeToolLatencyChart } from '@/components/ae/market/tool-detail/AeToolLatencyChart'
 import { ToolFacts } from '@/components/ae/shared/ToolFacts'
 import { alternativeToolSearchHref, projectToolObject } from '@/components/ae/shared/listing-family.view-model'
-import { ProductDetail, type DetailSlide } from '@/components/arc/market/ProductDetail'
+import { ProductDetail, type DetailSlide } from '@/components/ae/shared/arc-pro/market/ProductDetail'
 import buttonStyles from '@/components/arc/button/button.module.css'
 import { REASON_COPY, REASON_COPY_FALLBACK } from '@/content/reason-copy'
 import { projectAdmittedListing } from '@/modules/registry/public'

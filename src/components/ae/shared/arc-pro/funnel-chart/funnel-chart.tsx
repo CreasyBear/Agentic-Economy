@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type PointerEvent, type Ref } from "react";
 import { animate, motion, useInView, useMotionValue, useReducedMotion, useSpring, useTransform } from "motion/react";
-import { motionTokens } from "../lib/motion-tokens";
+import { motionTokens } from "../../../../arc/lib/motion-tokens";
 import styles from "./funnel-chart.module.css";
 
 export interface FunnelSegment {

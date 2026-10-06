@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
-import { BillingHistory } from '@/components/arc/blocks/billing-overview/billing-overview'
+import { BillingHistory } from '@/components/ae/shared/arc-pro/billing-overview/billing-overview'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeRecordTable } from '@/components/ae/operator/AeOperatorDataTable'
 import { formatUtcTimestamp } from '@/lib/ui/format-time'
