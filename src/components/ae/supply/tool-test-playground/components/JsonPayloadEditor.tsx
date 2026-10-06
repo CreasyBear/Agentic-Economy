@@ -1,11 +1,9 @@
 import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/arc/button/button'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { cn } from '@/lib/utils'
 
 import type { JsonPayloadEditorProps } from '../tool-test-playground.contracts'
-import { TACTILE } from '../tool-test-playground.contracts'
 
 export function JsonPayloadEditor({
   inputJson,
@@ -25,9 +23,9 @@ export function JsonPayloadEditor({
         <div className="flex flex-wrap items-center gap-2">
           <Button
             type="button"
-            variant="outline"
+            variant="secondary"
             size="sm"
-            className={cn('h-7 text-xs', TACTILE)}
+            className="h-7 text-xs"
             onClick={onLoadExamples}
             disabled={isRunning}
           >
@@ -37,7 +35,7 @@ export function JsonPayloadEditor({
             type="button"
             variant="ghost"
             size="sm"
-            className={cn('h-7 text-xs', TACTILE)}
+            className="h-7 text-xs"
             onClick={onResetDefaults}
             disabled={isRunning}
           >

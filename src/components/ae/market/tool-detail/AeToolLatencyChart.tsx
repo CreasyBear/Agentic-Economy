@@ -1,11 +1,6 @@
 import { lazy, Suspense } from 'react'
 
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyTitle,
-} from '@/components/ui/empty'
+import { AeEmptyState } from '@/components/ae/shared/arc/empty-state/AeEmptyState'
 import type { MarketLatencyProjection } from '@/modules/market/listing-evidence'
 
 import { AeToolLatencyChartSkeleton } from './AeToolLatencyChartSkeleton'
@@ -37,14 +32,7 @@ export function AeToolLatencyChart({
       </div>
 
       {chartData.length === 0 ? (
-        <Empty className="min-h-36 items-start justify-end rounded-none border-0 px-0 py-6 text-left md:px-0 md:py-6">
-          <EmptyHeader className="items-start text-left">
-            <EmptyTitle className="text-sm">Waiting for timed calls</EmptyTitle>
-            <EmptyDescription>
-              The chart appears after AE observes the first completed call.
-            </EmptyDescription>
-          </EmptyHeader>
-        </Empty>
+        <AeEmptyState compact titleAs="p" title="Waiting for timed calls" description="The chart appears after AE observes the first completed call." />
       ) : (
         <Suspense fallback={<AeToolLatencyChartSkeleton />}>
           <AeToolLatencyChartPlot

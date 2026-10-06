@@ -21,12 +21,22 @@
 - **E3 market and tool detail, hand-roll pass.** `/market` already composes Arc `search-field`, `filter-toolbar`, `chip-group`, `combobox`, `segmented-control`, `skeleton`, empty state and the Base UI drawer/select.
   - The only hand-rolled duplicate was a second query form inside the filter drawer (`DirectoryQueryFilter`). Nothing could reach it: its sole caller passed `showQuery={false}`. It has been deleted, and its over-limit assertions now run against the real market search.
   - Tool detail keeps `AeCopyCommand` and `AeCopyReference`. Arc `CopyButton` needs an eager `value: string`, but AE resolves `$ORIGIN` and secret getters only when the user activates the button, and reports copy failure. That eager value does not fit, so they are a recorded KEEP.
-
 - **shadcn `ui/alert` → Arc alert (E3).** All 105 `ui/alert` sites in 60 AE files now render `AeAlert`, the edge wrapper over pristine Arc `Alert`. No AE file imports `@/components/ui/alert`.
   - Variant mapping: `destructive` became `tone="danger"`; `default` or no variant became `tone="info"`.
   - Arc announces non-danger tones as `status`, but shadcn always announced `alert`. To keep each screen's announcement unchanged, converted non-danger alerts carry an explicit `role="alert"`.
   - Hand-placed lucide icons were dropped, because Arc supplies the tone icon.
   - Arc requires a string `title`. Description-only alerts now use their message as the title. Six rich alerts were split by hand: admin MFA, Treasury resume, commercial policy, paused agent, playground input errors, and route error.
+- **shadcn `ui/badge`, `ui/button` and `ui/empty` → Arc (E3).**
+  - All 45 badge sites render Arc `Badge`. Mapping: `destructive` → `danger`, `outline` → `neutral`, `default` → `info`, plus semantic picks per helper (secondary completion → `success`, MCP protocol → `info`).
+  - `aeStatusToneVariants` is deleted, because `AeTone` already equals Arc `BadgeTone`.
+  - The six `ui/button` files use Arc `Button` (`outline` → `secondary`). The hand-rolled `TACTILE` press class that duplicated Arc's press motion is deleted, together with the test that pinned it.
+  - Both `ui/empty` sites render `AeEmptyState`.
+- **Recorded KEEPs (no free Arc equivalent).**
+  - `ui/skeleton` box placeholders for charts and tables: Arc `Skeleton` is a text-line placeholder.
+  - `ui/spinner`: Arc has no standalone spinner.
+  - `TaxProfileForm`'s `ui/input` fields: these are the stabilised Base UI fields.
+  - `ui/collapsible`, `ui/dialog`, `ui/dropdown-menu`, `ui/command`, `ui/radio-group`, `ui/select`, `ui/switch`, `ui/checkbox`, `ui/tooltip` and `ui/accordion`: all are Base UI primitives (Base UI stays) or have no free Arc counterpart.
+
 ## 2. Baseline and interpretation
 
 - Catalog snapshot: **236 = 128 Free + 108 Pro**. Vendored entries: **49 = 28 primitives + 21 blocks; 31 Free entries + 18 Pro entries representing 17 distinct Pro origins**, because the local `marketplace-dashboard` is a second derivative of `metrics-dashboard`. Source: `docs/operations/arc-audit-2026-10-06.md` §§Inventory. `ProviderListing` is another **AE derivative of Pro `product-listing`**, not an Arc catalog ID (`src/components/ae/shared/arc-pro/market/ProviderListing.tsx:1-9`).

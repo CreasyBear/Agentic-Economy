@@ -1,10 +1,8 @@
 import { CheckIcon, CopyIcon } from 'lucide-react'
 
-import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
+import { Button } from '@/components/arc/button/button'
 
 import type { PlaygroundResponsePaneProps } from '../tool-test-playground.contracts'
-import { TACTILE } from '../tool-test-playground.contracts'
 
 export function PlaygroundResponsePane({ response, hasCopied, onCopy }: PlaygroundResponsePaneProps) {
   return (
@@ -15,7 +13,7 @@ export function PlaygroundResponsePane({ response, hasCopied, onCopy }: Playgrou
           type="button"
           variant="ghost"
           size="sm"
-          className={cn('h-6 px-2 text-xs gap-1', TACTILE)}
+          className="h-6 px-2 text-xs gap-1"
           onClick={() => {
             void onCopy()
           }}

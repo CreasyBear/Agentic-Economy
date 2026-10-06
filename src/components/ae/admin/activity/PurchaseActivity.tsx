@@ -10,7 +10,7 @@ import { Badge } from '@/components/arc/badge/badge'
 import { EmptyState } from '@/components/arc/empty-state/empty-state'
 import { AeSortableDataTable } from '@/components/ae/shared/sortable-data-table/AeSortableDataTable'
 import type { AeDataColumn } from '@/components/ae/shared/sortable-data-table/sortable-data-table.contracts'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/arc/button/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { adminActivityHref, adminActivityWindow, type AdminActivitySearch, type AdminPurchaseRow } from '@/lib/operator/admin-console/activity'
 import { formatPerthTimestamp } from '@/lib/ui/format-time'
@@ -62,7 +62,7 @@ function PurchaseActivityQuery({ search, compact = false }: PurchaseActivityProp
 
   const exhausted = activity.status === 'Exhausted'
   const loadMore = !compact && !exhausted ? (
-    <Button variant="outline" disabled={activity.status !== 'CanLoadMore'} onClick={() => activity.loadMore(25)}>
+    <Button variant="secondary" disabled={activity.status !== 'CanLoadMore'} onClick={() => activity.loadMore(25)}>
       {activity.status === 'LoadingMore' ? 'Loading…' : 'Load more purchases'}
     </Button>
   ) : undefined

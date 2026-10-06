@@ -6,7 +6,7 @@ import { CodeBlock, CodeBlockActions, CodeBlockCopyButton, CodeBlockHeader, Code
 import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
 import { Badge } from '@/components/arc/badge/badge'
 import { Button } from '@/components/arc/button/button'
-import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty'
+import { AeEmptyState } from '@/components/ae/shared/arc/empty-state/AeEmptyState'
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ae/shared/base-ui/tabs/tabs'
 import { Textarea } from '@/components/ui/textarea'
@@ -83,7 +83,7 @@ function PlaygroundEditor({ entry, toolRef, inputSchemaJson, inputExampleJson }:
         <div className="flex flex-wrap items-center justify-between gap-3"><h3 id={`${id}-output`} className="text-lg font-medium">Output</h3><Badge tone="neutral">Provider example</Badge></div>
         <p className="text-sm text-muted-foreground">Published sample output. Editing the input does not generate a new result.</p>
         {outputExample !== undefined ? <JsonExample title="Example response" code={JSON.stringify(outputExample, null, 2)} />
-          : <Empty className="min-h-72 border"><EmptyHeader><EmptyMedia variant="icon"><FileJsonIcon /></EmptyMedia><EmptyTitle>No output example</EmptyTitle><EmptyDescription>{entry.output?.exampleOmitted ? 'The published example is too large to display here.' : 'The Provider has not included a sample response.'}</EmptyDescription></EmptyHeader></Empty>}
+          : <AeEmptyState icon={<FileJsonIcon />} title="No output example" titleAs="p" description={entry.output?.exampleOmitted ? 'The published example is too large to display here.' : 'The Provider has not included a sample response.'} />}
         {entry.output?.schemaJson ? <details><summary className="cursor-pointer text-sm font-medium">View output schema</summary><div className="pt-3"><JsonExample title="Provider output schema" code={entry.output.schemaJson} /></div></details> : null}
       </section>
     </div>
