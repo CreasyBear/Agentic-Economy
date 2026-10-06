@@ -2,29 +2,45 @@
 
 ## Continuation status (2026-10-06)
 
-W2–W6 source is now implemented in this worktree: HTTP/MCP/CLI quote/run/get/cancel,
-one purchased/promotional Hold, durable Workflow and ordinary Call allocation,
-owner approval/status/receipts/Activity, and bounded chat suggestion/import/run.
-The existing implementation plan below is retained as the original handoff;
-its remaining-work list and funding prohibition are historical.
+W2–W6 shipped in [PR #362](https://github.com/CreasyBear/Agentic-Economy/pull/362):
+HTTP/MCP/CLI quote/run/get/cancel, one purchased/promotional Hold, durable Workflow
+and ordinary Call allocation, owner approval/status/receipts/Activity, and bounded
+chat suggestion/import/run. The original handoff below is historical.
 
-Joel subsequently authorized the current live funding for the final paid proof.
-No Clerk configuration change is required. Release still requires the full source
-gate, a PR, verified production v1.7 chart installation/readback, separate backend
-and web deployment, and the actual paid CLI/MCP/HTTP journey. Those release steps
-are pending at this update; local and native evidence is not a hosted claim.
+Joel authorized the existing live funding. Production v1.7 schema installation
+and digest readback passed before Convex source `5d4e32c04` was deployed; the web
+release `df0d360cb` has the same gated tree. Payment audience, custody limits and
+Clerk configuration remain unchanged. See [deployment provenance](deployments.md)
+and [paid acceptance](../production-readiness-plan.md#two-node-plan-acceptance-6-october).
 
-Native Ledger :3080: twelve Plan money tests pass, including the actual Workflow
-with purchased/promotional credit, partial delivery, uncertain settlement and paid
-owner approval. Lifecycle, chat, parser, selector, HTTP/CLI and presenter tests
-cover their boundaries; `npm run check` passes before the latest inspection and
-approval additions, whose final check is running. See build decisions B8–B12.
+The live Plan `9aa9390a-8fee-4ef2-ba56-93d118eb5745` completed two sequential CoinCap
+Calls. CLI/MCP/HTTP quotes agreed on digest, stages and AUD 0.005766 maximum;
+changed totals refused without a Hold or Call. Final reads agreed on success,
+AUD 0.005736 promotional use, AUD 0.000030 released and zero held. Same-key replay
+on all three surfaces retained two Calls. Two spare quotes cancelled without
+Calls. Direct Formance readback verified 18 transactions and two zero Hold accounts.
+
+The source release passed `npm run check` and `npm run gate`: 9,141 unit tests,
+3,062 integration tests, 31 SEO checks, 18 browser journeys, 18 accessibility
+cases, CLI packaging and public build. Separately, 57 native money acceptance
+cases passed, including twelve Plan cases covering purchased/promotional credit,
+partial delivery, uncertain settlement and owner approval. Existing skips and
+todos are not included in these pass claims.
+
+The live run exposed a CLI watch timeout that lost its recovery instruction.
+CLI 0.3.1 preserves the same Plan reference, origin and JSON mode when a read
+stalls or the watch deadline expires; the 14-case CLI Plan suite verifies this
+without any purchase retry. The release PR records final distribution readback;
+npm publication requires the publisher's security-key authentication.
 
 Current limits: paid execution requires managed x402; paid fixed-AUD execution
 refuses before Hold. Deferred managed prices need a proven finite bound. An
 approval-required quote needs current published readiness and performs no unpaid
-Provider request until approval. Conventional Provider async completion, selected
-binary artifacts and alternate payment rails remain separate ADR 0006 work.
+Provider request until approval. Paid approval, output-linked dataflow, partial
+failure and uncertainty have native/contract evidence; the production Plan used
+literal inputs with an explicit dependency under the existing Spending policy.
+Conventional Provider async completion, selected binary artifacts and alternate
+payment rails remain separate ADR 0006 work.
 
 ## Original handoff snapshot
 - **Worktree:** `/Users/joelchan/Documents/Coding/App-Dev/live/01. Pre-Implementation/aecon-plan-quotes`.

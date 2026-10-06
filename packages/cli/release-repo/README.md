@@ -5,18 +5,18 @@ Install the pinned `ae` command from npm or a signed [aecon-cli release](https:/
 For a published npm version:
 
 ```sh
-npm install --global @agentic-economy/cli@0.3.0
+npm install --global @agentic-economy/cli@0.3.1
 ae --help
 ```
 
-A 404 from `npm view @agentic-economy/cli@0.3.0 version` means that version has not been published yet.
+A 404 from `npm view @agentic-economy/cli@0.3.1 version` means that version has not been published yet.
 
-## Download and verify v0.3.0
+## Download and verify v0.3.1
 
-Choose the exact release version you intend to install; do not use a moving `latest` URL. This example pins `v0.3.0`:
+Choose the exact release version you intend to install; do not use a moving `latest` URL. This example pins `v0.3.1`:
 
 ```sh
-VERSION=0.3.0
+VERSION=0.3.1
 BASE="https://github.com/CreasyBear/aecon-cli/releases/download/v${VERSION}"
 curl -fLO "${BASE}/agentic-economy-cli-${VERSION}.tgz"
 curl -fLO "${BASE}/SHA256SUMS"
@@ -44,17 +44,17 @@ Search may return no matching Tool. If it returns one, use its actual Tool refer
 
 The source workflow is `CreasyBear/Agentic-Economy/.github/workflows/cli-release.yml`. Set its GitHub Actions repository secret `AECON_CLI_RELEASE_TOKEN` to a **fine-grained personal access token** limited to `CreasyBear/aecon-cli` with **Contents: Read and write**; it must be able to create a release and tag there. Do not place the token in this public repository or release assets. The source workflow uses its own `id-token: write` permission for keyless Cosign signing and needs the existing source-gate Clerk test secrets.
 
-Update `packages/cli/package.json` in the private source first, then create and push a source tag named exactly `v<package version>` (for example, `v0.3.0`). The release workflow also supports manual dispatch **only when the selected ref is that matching tag**, not a branch. It runs `npm run gate`, packs the workspace once through its existing `prepack`, checks and signs the archive, then creates the matching public release against `main` with its archive, `SHA256SUMS`, and Sigstore bundle. Publication refuses any pre-existing public tag rather than attaching assets to an unrelated version; investigate a failed publication rather than replacing assets. Update this README's pinned example for each new public version.
+Update `packages/cli/package.json` in the private source first, then create and push a source tag named exactly `v<package version>` (for example, `v0.3.1`). The release workflow also supports manual dispatch **only when the selected ref is that matching tag**, not a branch. It runs `npm run gate`, packs the workspace once through its existing `prepack`, checks and signs the archive, then creates the matching public release against `main` with its archive, `SHA256SUMS`, and Sigstore bundle. Publication refuses any pre-existing public tag rather than attaching assets to an unrelated version; investigate a failed publication rather than replacing assets. Update this README's pinned example for each new public version.
 
 ### npm publication
 
 The npm account must have publish access to the `agentic-economy` scope. Sign in with `npm login --registry=https://registry.npmjs.org/` and verify `npm whoami` and `npm org ls agentic-economy`. Keep credentials outside the repository.
 
-Before the first publication, run `npm run gate` for the source revision, pack the CLI once with `npm pack --workspace @agentic-economy/cli --json --pack-destination /path/to/release`, and validate that exact archive with `AE_CLI_PACKAGE_TARBALL=/path/to/release/agentic-economy-cli-0.3.0.tgz AE_CLI_PACKAGE_EXPECTED_SHA256=<sha256> npm run test:cli-package`. Publish only the validated archive:
+Before the first publication, run `npm run gate` for the source revision, pack the CLI once with `npm pack --workspace @agentic-economy/cli --json --pack-destination /path/to/release`, and validate that exact archive with `AE_CLI_PACKAGE_TARBALL=/path/to/release/agentic-economy-cli-0.3.1.tgz AE_CLI_PACKAGE_EXPECTED_SHA256=<sha256> npm run test:cli-package`. Publish only the validated archive:
 
 ```sh
-npm publish /path/to/release/agentic-economy-cli-0.3.0.tgz --access public --registry=https://registry.npmjs.org/
-npm view @agentic-economy/cli@0.3.0 name version dist.integrity
+npm publish /path/to/release/agentic-economy-cli-0.3.1.tgz --access public --registry=https://registry.npmjs.org/
+npm view @agentic-economy/cli@0.3.1 name version dist.integrity
 ```
 
 The release contract requires the archive name and version to match the package manifest, its files to match the allowlist, and its digest to match the tested archive. Publication preserves `ae` as the command and never replaces an existing npm version. On a mismatch or an existing version, stop and investigate; do not unpublish or bump the version merely to retry. After an uncertain network result, inspect the existing version and compare its `dist.integrity` with the pack report before attempting another publication. The registry's unique package/version key prevents concurrent attempts from overwriting a release.

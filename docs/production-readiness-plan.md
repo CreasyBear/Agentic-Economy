@@ -1,6 +1,6 @@
 # Production readiness
 
-**Evidence reconciled:** 5 October 2026 · **Scope:** the supported Admin-only alpha
+**Evidence reconciled:** 6 October 2026 · **Scope:** the supported Admin-only alpha
 
 The [deployment map](operations/deployments.md) owns hosts and release provenance.
 [TODOS.md](../TODOS.md) owns remaining actions. This record states what the
@@ -22,6 +22,45 @@ The full [execution journal](archive/2026-10-05/production-readiness-plan.md)
 preserves contracts, exact revisions, failure drills and the progression from
 initial diagnosis through acceptance. Later evidence supersedes an earlier open
 item only where it proves that item; archiving the journal does not close it.
+
+## Two-node Plan acceptance (6 October)
+
+[PR #362](https://github.com/CreasyBear/Agentic-Economy/pull/362) passed the full
+source gate before additive Formance v1.7 installation, separate Convex deployment
+and web merge. The gated/backend tree is `5425af4304077d960bc61c14ee92c709d3d94f82`;
+the hosted release is `df0d360cbc1951ed84a5bf68f4f434a23235baa0`.
+
+Production Plan `9aa9390a-8fee-4ef2-ba56-93d118eb5745` bought two CoinCap results,
+bitcoin then ethereum, under the existing Spending policy and promotional funding.
+All three interfaces agreed on digest, stages and AUD 0.005766 maximum. Each
+refused a changed total before Hold/Call; MCP uses its standard structured problem
+error envelope. Final CLI/MCP/HTTP reads agreed on two succeeded Calls, AUD
+0.005736 settled, AUD 0.000030 released and zero held. Same-key replay on all three
+surfaces retained the original Calls, and two spare quotes cancelled without Calls.
+The signed-in owner view exposed both Call receipts and separate credit movement.
+
+Direct Formance reads verified one aggregate Hold, two Plan allocations, two Plan
+settlements, remainder release and associated promotional/Provider postings:
+18 transaction references, two zero Hold accounts, and an Account debit equal to
+the two settled amounts. Funding remained promotional; this does not establish
+purchased consideration or external Customer traction. Operator evidence is
+retained in the `plan-quotes-362` recovery bundle, including the three final reads,
+replay parity, native financial proof and before/after balance observations.
+
+The full gate passed 9,141 unit and 3,062 integration tests, 31 SEO checks, 18
+browser journeys, 18 accessibility cases, CLI packaging and public build.
+Separately, 57 native money cases passed, including twelve Plan cases. Native
+fixtures establish paid approval, output-linked dataflow, partial failure and
+uncertainty behavior; those paths were not separately purchased in production.
+The live Plan used literal inputs with an explicit dependency. It is a functional
+acceptance, not a latency benchmark or sustained availability claim.
+
+The bounded CLI watch hit its deadline during this run and initially lost the
+recovery command in a generic transport timeout. CLI 0.3.1 keeps the original Plan,
+origin and output mode on timeout, with three regression cases for normal deadline,
+early stalled body and final stalled body. Observing or replaying this Plan never
+requires a replacement purchase. The release PR owns final package publication
+readback because npm requires the publisher's security-key authentication.
 
 ## Twenty real mainnet payments
 
@@ -95,8 +134,8 @@ RPC availability remains a limit.
 Historic completed Calls took approximately 71–132 seconds and used recovery.
 The receipt-ordering race was repaired in PR #358, but no subsequent paid run
 establishes a speedup. Tool duration estimates use the exact Tool identity, a
-30-day window and at least five samples; the current CoinCap Tool has only one
-recorded observation, so median and p95 remain unavailable.
+30-day window and at least five samples; the Plan acceptance adds two CoinCap observations to the earlier sample;
+this still does not establish a reliable median/p95 or a performance improvement.
 
 Nine scheduled treasury checks on 5 October, 07:44:37–08:24:28 UTC, span the
 20-minute evidence-expiry window and match 44 cash records, 20 settlements and
