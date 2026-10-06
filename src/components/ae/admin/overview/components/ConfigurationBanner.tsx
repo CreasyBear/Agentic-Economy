@@ -83,7 +83,8 @@ export function ConfigurationBanner({ readiness, compact = false }: Configuratio
   return (
     <AeSection title={ADMIN_OVERVIEW_COPY.configurationTitle} description={ADMIN_OVERVIEW_COPY.configurationDescription} className="arc-market arc-overview-configuration">
       <div className="mb-related grid gap-intra">
-        <p role="status" aria-label="Payment readiness status"><Badge tone={ready ? 'neutral' : 'warning'}>{ready ? 'Ready' : 'Not ready'}</Badge></p>
+        {/* A readiness flip is a new status, not a label morph: remount so the live region never holds both words. */}
+        <p role="status" aria-label="Payment readiness status"><Badge key={ready ? 'ready' : 'not-ready'} tone={ready ? 'neutral' : 'warning'}>{ready ? 'Ready' : 'Not ready'}</Badge></p>
         {ready && readiness?.checks.sanctions.kind === 'deferred'
           ? <p className="text-sm">Payee screening deferred under the alpha policy; payees are not screened.</p> : null}
         <p className="text-sm">{readiness === null ? 'Environment: Not declared'
