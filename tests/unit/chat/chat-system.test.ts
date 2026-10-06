@@ -14,6 +14,8 @@ import {
 } from '@/components/ae/chat/presentation'
 import { providerSafeActionToolName } from '@/modules/actions/tool-contract'
 import { toTransportMessages } from '@/components/ae/chat/chat-session/anonymous-session'
+import { formatDetailRequest, parseDetailRequest } from '@/modules/chat/run-request'
+import { projectChatChoiceActions } from '@/modules/chat/tool-card-actions'
 
 const toolRef = `operation:v1:${'a'.repeat(64)}`
 const quoteRef = `operation-commitment:v1:${'f'.repeat(64)}`
@@ -22,6 +24,32 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+describe('exact selected detail requests', () => {
+  it.each([toolRef, `registry:${'b'.repeat(64)}`])('round-trips the bounded reference %s without title inference', (reference) => {
+    const title = 'Same title "quoted" \\ line\n二'
+    expect(parseDetailRequest(formatDetailRequest(reference, title))).toEqual({ toolRef: reference, title })
+  })
+
+  it.each([
+    `Tell me more about Lookup`,
+    `Inspect Tool registry:legacy-id with this exact title: "Lookup".`,
+    `Inspect Tool operation:v1:${'A'.repeat(64)} with this exact title: "Lookup".`,
+    `Inspect Tool ${toolRef} with this exact title: "Lookup". Then run it.`,
+    `Inspect Tool ${toolRef} with this exact title: " Lookup ".`,
+    `Inspect Tool ${toolRef} with this exact title: "${'x'.repeat(201)}".`,
+  ])('rejects malformed or expanded selection text %s', text => {
+    expect(parseDetailRequest(text)).toBeNull()
+  })
+
+  it('rejects invalid reference/title formatting and accepts the exact title limit', () => {
+    expect(() => formatDetailRequest('registry:legacy-id', 'Lookup')).toThrow('detail_request_tool_ref_invalid')
+    expect(() => formatDetailRequest(`${toolRef}\n`, 'Lookup')).toThrow('detail_request_tool_ref_invalid')
+    expect(() => formatDetailRequest(toolRef, ' ')).toThrow('detail_request_title_invalid')
+    expect(() => formatDetailRequest(toolRef, 'x'.repeat(201))).toThrow('detail_request_title_invalid')
+    const title = '\u0000'.repeat(200)
+    expect(parseDetailRequest(formatDetailRequest(toolRef, title))).toEqual({ toolRef, title })
+  })
+})
 
 describe('anonymous chat recovery', () => {
   it('retains the HTTPS failure reference and offers a safe catalogue continuation', async () => {
@@ -92,6 +120,24 @@ describe('transcript projector', () => {
     expect(projectGenerativeTurn(turn).options.options).toHaveLength(4)
   })
 
+  it('replaces the earlier shortlist with the corrected second search while retaining explicit detail', () => {
+    const selectedRef = `operation:v1:${'c'.repeat(64)}`
+    const results = (prefix: string) => Array.from({ length: 4 }, (_, index) => ({
+      toolRef: `operation:v1:${prefix}${String(index).repeat(63)}`, title: `Lookup ${prefix}${index}`,
+    }))
+    const [turn] = projectTranscriptTurns([{ id: 'corrected-search', role: 'assistant', parts: [
+      { type: 'tool-registry_tools_search', state: 'output-available', output: { kind: 'match', results: results('a') } },
+      { type: 'tool-registry_tools_describe', state: 'output-available', output: {
+        kind: 'found', tool: { toolRef: selectedRef, title: 'Selected detail', readiness: 'unavailable' },
+      } },
+      { type: 'tool-registry_tools_search', state: 'output-available', output: { kind: 'match', results: results('b') } },
+    ] }])
+    if (turn === undefined) throw new Error('Missing corrected-search turn')
+    expect(projectGenerativeTurn(turn).options.options.map(option => option.id))
+      .toEqual([selectedRef, ...results('b').slice(0, 3).map(choice => choice.toolRef)])
+    expect(turn.tools).toHaveLength(3)
+  })
+
   it('keeps the latest explicit detail authoritative when a broad search finishes later', () => {
     const choice = { toolRef, title: 'Lookup', source: 'current' }
     const [turn] = projectTranscriptTurns([{ id: 'detail-search-order', role: 'assistant', parts: [
@@ -109,6 +155,17 @@ describe('transcript projector', () => {
     const options = projectGenerativeTurn(turn).options.options
     expect(options).toMatchObject([{ id: toolRef, readiness: 'unavailable', outcome: 'Latest detail' }])
     expect(options[0]?.quoteable === true).toBe(false)
+    expect(projectChatChoiceActions(turn.tools)).toMatchObject([{ toolId: 'registry.tools.describe',
+      reviewInputs: false, compare: true, choice: { toolRef, readiness: 'unavailable' } }])
+  })
+
+  it.each(['id with spaces', 'id\nwith-control', 'x'.repeat(201)])('excludes unbounded external identity %s from transport', id => {
+    const messages = [{ id: 'bad-external', role: 'assistant' as const, parts: [{
+      type: 'tool-registry_tools_search', state: 'output-available', output: {
+        kind: 'scoped', results: [{ id, source: 'coinbase', access: 'external_listing', title: 'Outside' }],
+      },
+    }] }]
+    expect(projectAnonymousTranscript(messages, true)).toEqual([])
   })
 
   it('retains external listing identities as guest lookup hints without granting Call access', () => {
