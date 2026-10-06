@@ -9,7 +9,6 @@ import { Input } from '@/components/arc/input/input'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Drawer, DrawerClose, DrawerContent, DrawerTrigger } from '@/components/ae/shared/base-ui/drawer/drawer'
 import { cn } from '@/lib/utils'
-import { SEARCH_QUERY_MAX_LENGTH } from '@/modules/common/search-query'
 import { x402DirectoryFilterSchema } from '@/modules/market/x402-directory'
 import type { X402DirectoryCatalogueOverview, X402DirectoryFacet } from '@/modules/market/x402-directory-catalogue'
 import type { DirectoryExplorerFilterPatch, DirectoryExplorerFilterValues } from '@/modules/market/directory-filters.contracts'
@@ -21,8 +20,6 @@ export type DirectoryExplorerFiltersProps = Readonly<{
   overview?: X402DirectoryCatalogueOverview
   onChange: (patch: DirectoryExplorerFilterPatch) => void
   onReset: () => void
-  jevRecipient?: string
-  showQuery?: boolean
   entity?: 'tools' | 'providers'
 }>
 
@@ -62,34 +59,6 @@ function facetOptions(values: readonly X402DirectoryFacet[], selected: string | 
   }))
   if (selected !== undefined && !options.some(option => option.value === selected)) options.push({ value: selected, label: selected, keywords: [selected] })
   return options
-}
-
-function DirectoryQueryFilter({ search, onChange, jevRecipient, entity }: Pick<DirectoryExplorerFiltersProps, 'search' | 'onChange' | 'jevRecipient' | 'entity'>) {
-  const id = useId()
-  const [query, setQuery] = useState(search.query ?? '')
-  const [queryError, setQueryError] = useState<string>()
-  const inputRef = useRef<HTMLInputElement>(null)
-  const label = entity === 'providers' ? 'Search Providers' : 'Search Tools'
-
-  return <form className="flex flex-col gap-2" onSubmit={event => {
-    event.preventDefault()
-    const trimmed = query.trim()
-    if (trimmed.length > SEARCH_QUERY_MAX_LENGTH) {
-      setQueryError(`Use ${SEARCH_QUERY_MAX_LENGTH} characters or fewer. Shorten your search and try again.`)
-      inputRef.current?.focus()
-      return
-    }
-    setQueryError(undefined)
-    onChange({ query: trimmed || undefined, sort: trimmed ? 'relevance' : undefined })
-  }}>
-    <Input ref={inputRef} id={`${id}-query`} label={label} type="search" value={query} onChange={event => { setQuery(event.target.value); setQueryError(undefined) }} placeholder="Weather forecasts, document analysis…" {...(queryError === undefined ? {} : { error: queryError })} />
-    {entity === 'providers'
-      ? <p className="text-xs text-muted-foreground">Search indexed Provider names, descriptions, categories and hostnames.</p>
-      : jevRecipient === undefined
-        ? <p className="text-xs text-muted-foreground">Search assesses Market Tool listings and published candidate descriptions.</p>
-        : <p className="text-xs text-muted-foreground">Search query and candidate Tool text go to {jevRecipient}.</p>}
-    <Button type="submit" variant="secondary" size="sm" className="w-full">{label}</Button>
-  </form>
 }
 
 function Facets({ label, values, selected, onChange, allLabel, description, formatLabel }: Readonly<{
@@ -325,11 +294,10 @@ function AdvancedFilters({ search, overview, onChange }: Pick<DirectoryExplorerF
   </Collapsible>
 }
 
-function FilterBody({ search, overview, onChange, jevRecipient, showQuery = true, entity = 'tools' }: DirectoryExplorerFiltersProps) {
+function FilterBody({ search, overview, onChange }: DirectoryExplorerFiltersProps) {
   const facets = overview?.kind === 'ok' ? overview : undefined
 
   return <div className="flex flex-col gap-6">
-    {showQuery ? <DirectoryQueryFilter search={search} onChange={onChange} entity={entity} {...(jevRecipient === undefined ? {} : { jevRecipient })} /> : null}
     {facets !== undefined || search.directoryCategory !== undefined ? <Facets label="Provider category" allLabel="All categories" values={facets?.categories ?? []} selected={search.directoryCategory} onChange={directoryCategory => onChange({ directoryCategory })} /> : null}
     {facets === undefined ? <p className="text-xs text-muted-foreground">Provider and network catalogue samples are unavailable.</p> : <>
       <p className="text-xs leading-relaxed text-muted-foreground">Provider names and counts come from a bounded catalogue sample.</p>

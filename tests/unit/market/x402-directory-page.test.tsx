@@ -450,6 +450,7 @@ it('refuses an oversized catalogue query and returns focus without navigating', 
   fireEvent.submit(screen.getByRole('form', { name: 'Search the Tool market' }))
   expect(screen.getByRole('alert').textContent).toContain(`Use ${SEARCH_QUERY_MAX_LENGTH} characters or fewer`)
   expect(document.activeElement).toBe(input)
+  expect((input as HTMLInputElement).value).toBe('x'.repeat(SEARCH_QUERY_MAX_LENGTH + 1))
   expect(router.state.location.search).not.toHaveProperty('query')
 })
 it('opens a fresh chat through the native Agent link and clears the previous guest session', async () => {

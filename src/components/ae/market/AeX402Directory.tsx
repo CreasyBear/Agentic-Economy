@@ -570,7 +570,7 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
               void navigate({ to: marketPath, resetScroll: false, search: current => ({ ...current, layout: value }) })
             }} /> : null}
           </div>
-          {indexed || search.query !== undefined ? <DirectoryDiscoveryFilters entity={tab} search={search} showQuery={false} {...(overview === undefined ? {} : { overview })} onChange={applyExplorerFilters} onReset={() => explore({})} /> : null}
+          {indexed || search.query !== undefined ? <DirectoryDiscoveryFilters entity={tab} search={search} {...(overview === undefined ? {} : { overview })} onChange={applyExplorerFilters} onReset={() => explore({})} /> : null}
           {search.query === undefined && search.provider !== undefined && page.kind === 'ok' ? <div className="mb-8"><DirectoryProviderHeader provider={search.provider} entries={page.items} /></div> : null}
           <AeCollectionRail
             title={

@@ -63,22 +63,6 @@ it('keeps the committed category label through Clear filters and Drawer close/re
   expect((filters.getByRole('combobox', { name: 'Provider category' }) as HTMLInputElement).value).toBe('Search 500')
 })
 
-it('keeps an over-limit Market query editable and submits only a corrected search', () => {
-  const { filters, change } = show()
-  const input = filters.getByRole('searchbox', { name: 'Search Tools' }) as HTMLInputElement
-  const tooLong = 'x'.repeat(201)
-  fireEvent.change(input, { target: { value: tooLong } })
-  fireEvent.click(filters.getByRole('button', { name: 'Search Tools' }))
-  expect(input.value).toBe(tooLong)
-  expect(input.getAttribute('aria-invalid')).toBe('true')
-  expect(filters.getByRole('alert').textContent).toContain('200')
-  expect(document.activeElement).toBe(input)
-  expect(change).not.toHaveBeenCalled()
-  fireEvent.change(input, { target: { value: ' weather ' } })
-  fireEvent.click(filters.getByRole('button', { name: 'Search Tools' }))
-  expect(change).toHaveBeenCalledWith({ query: 'weather', sort: 'relevance' })
-})
-
 it('chooses a category by keyboard, then Escape closes the Combo before the Drawer', () => {
   const change = vi.fn(), reset = vi.fn()
   const renderFilters = (search: DirectoryExplorerFilterValues) => <DirectoryDiscoveryFilters search={search} overview={overview} onChange={change} onReset={reset} />
@@ -380,10 +364,8 @@ it('removes only the selected key and clears all eighteen facet keys without tou
 it('uses Provider terminology for the provider Drawer without claiming imported host verification', () => {
   const { filters } = show({}, overview, 'providers')
   expect(filters.getByRole('heading', { name: 'Refine Providers' })).toBeTruthy()
-  expect(filters.getByRole('searchbox', { name: 'Search Providers' })).toBeTruthy()
   expect(filters.getByRole('combobox', { name: 'Providers' })).toBeTruthy()
   expect(filters.getByText('Provider names and counts come from a bounded catalogue sample.')).toBeTruthy()
-  expect(filters.getByText('Search indexed Provider names, descriptions, categories and hostnames.')).toBeTruthy()
 })
 
 it('summarizes labels from the catalogue and preserves exact filter-bound meanings', () => {

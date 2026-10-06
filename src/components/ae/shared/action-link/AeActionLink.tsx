@@ -6,6 +6,7 @@ import { Button } from '@/components/arc/button/button'
 import { cn } from '@/lib/utils'
 
 import type { AeActionLinkComposedChildProps, AeActionLinkProps } from './action-link.contracts'
+import { actionLinkClassName } from './actionLinkClassName'
 import styles from './action-link.module.css'
 
 export function AeActionLink(props: AeActionLinkProps) {
@@ -77,7 +78,7 @@ export function AeActionLink(props: AeActionLinkProps) {
     }
     const variant = props.variant ?? 'primary'
     const size = props.size ?? 'md'
-    const linkClassName = cn(styles.link, styles[variant], styles[size], props.className)
+    const linkClassName = cn(actionLinkClassName(variant, size), props.className)
     const childClassName = child.props.className
     const className = typeof childClassName === 'function'
       ? (state: unknown) => cn(linkClassName, (childClassName as (state: unknown) => string)(state))
@@ -97,7 +98,7 @@ export function AeActionLink(props: AeActionLinkProps) {
   } = props
   void _asChild
   void _onAction
-  const linkClassName = cn(styles.link, styles[variant], styles[size], className)
+  const linkClassName = cn(actionLinkClassName(variant, size), className)
   return (
     <a {...anchorProps} href={href} className={linkClassName}>
       {children}
