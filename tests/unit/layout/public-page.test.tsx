@@ -1,11 +1,16 @@
 /**
  * @vitest-environment jsdom
  */
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
+
+const router = vi.hoisted(() => ({
+  navigate: vi.fn(),
+  preloadRoute: vi.fn().mockResolvedValue(undefined),
+}))
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({
@@ -17,13 +22,15 @@ vi.mock('@tanstack/react-router', () => ({
     to: string
     reloadDocument?: boolean
   }) => <a href={to} data-reload-document={reloadDocument ? 'true' : undefined}>{children}</a>,
-  useRouter: () => ({
-    navigate: vi.fn(),
-    preloadRoute: vi.fn().mockResolvedValue(undefined),
-  }),
+  useRouter: () => router,
 }))
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  router.navigate.mockClear()
+  router.preloadRoute.mockClear()
+})
+
 
 describe('AePublicPage', () => {
   it('lets editorial pages own their intro', () => {
@@ -66,7 +73,7 @@ describe('AePublicPage', () => {
     expect(screen.getAllByRole('contentinfo')).toHaveLength(1)
     const navigation = within(footer).getByRole('navigation', { name: 'Footer' })
     expect(['Resources', 'Help', 'Legal', 'Machines'].map(name =>
-      within(navigation).getByRole('region', { name }).querySelector('h2')?.textContent,
+      within(navigation).getByRole('heading', { level: 2, name }).textContent,
     )).toEqual(['Resources', 'Help', 'Legal', 'Machines'])
     for (const [label, href] of [
       ['API reference', '/developers/api'],
@@ -80,22 +87,39 @@ describe('AePublicPage', () => {
       ['.well-known/ucp', '/.well-known/ucp'],
       ['glossary.md', '/glossary.md'],
     ] as const) {
-      const link = within(navigation).getByRole('link', { name: label })
-      expect(link.getAttribute('href')).toBe(href)
-      expect(link.getAttribute('data-reload-document')).toBe(
-        ['llms.txt', 'SKILL.md', '.well-known/ucp', 'glossary.md'].includes(label) ? 'true' : null,
-      )
+      expect(within(navigation).getByRole('link', { name: label }).getAttribute('href')).toBe(href)
     }
-  })
 
+    fireEvent.click(within(navigation).getByRole('link', { name: 'Support' }))
+    expect(router.navigate).toHaveBeenCalledWith({ href: '/support' })
+    router.navigate.mockClear()
+
+    for (const label of ['llms.txt', 'SKILL.md', '.well-known/ucp', 'glossary.md']) {
+      const link = within(navigation).getByRole('link', { name: label })
+      let interceptedByRouter = false
+      const observeDocumentNavigation = (event: MouseEvent) => {
+        if (event.target !== link) return
+        interceptedByRouter = event.defaultPrevented
+        event.preventDefault()
+      }
+      document.addEventListener('click', observeDocumentNavigation)
+      try {
+        fireEvent.click(link)
+      } finally {
+        document.removeEventListener('click', observeDocumentNavigation)
+      }
+      expect(interceptedByRouter).toBe(false)
+    }
+    expect(router.navigate).not.toHaveBeenCalled()
+  })
   it('keeps public business identity and social destinations without invented status or signup controls', () => {
     render(<AePublicPage><h1>About</h1></AePublicPage>)
     const footer = within(screen.getByRole('contentinfo'))
     expect(footer.getByRole('link', { name: 'ABN 98 700 838 115' }).getAttribute('href')).toBe('https://abr.business.gov.au/ABN/View?abn=98700838115')
-    const socials = within(footer.getByRole('navigation', { name: 'Follow Agentic Economy' }))
-    expect(socials.getByRole('link', { name: 'LinkedIn' }).getAttribute('href')).toBe('https://www.linkedin.com/company/aecon-ai/')
-    expect(socials.getByRole('link', { name: 'X' }).getAttribute('href')).toBe('https://x.com/Aeconai')
-    expect(socials.getByRole('link', { name: 'Facebook' }).getAttribute('href')).toBe('https://www.facebook.com/profile.php?id=61594070258261')
+    const socials = footer.getByRole('list', { name: 'Social' })
+    expect(within(socials).getByRole('link', { name: 'LinkedIn' }).getAttribute('href')).toBe('https://www.linkedin.com/company/aecon-ai/')
+    expect(within(socials).getByRole('link', { name: 'X' }).getAttribute('href')).toBe('https://x.com/Aeconai')
+    expect(within(socials).getByRole('link', { name: 'Facebook' }).getAttribute('href')).toBe('https://www.facebook.com/profile.php?id=61594070258261')
     expect(footer.queryByRole('textbox')).toBeNull()
     expect(footer.queryByText('All systems normal')).toBeNull()
   })

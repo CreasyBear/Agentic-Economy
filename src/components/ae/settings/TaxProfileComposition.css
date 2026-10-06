@@ -8,8 +8,27 @@
 .arc-market .arc-tax-profile-placeholder { display: grid; min-width: 0; gap: var(--space-3); padding-block: var(--space-4); border-block-end: 1px solid var(--border-subtle); }
 
 .arc-tax-profile .arc-tax-input {
+  box-sizing: border-box;
   width: min(100%, 384px);
   min-width: 0;
+  min-height: var(--control-height-md);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+  padding: 0 var(--space-3);
+  background: var(--surface);
+  color: var(--foreground);
+  font: inherit;
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+  letter-spacing: var(--tracking-body);
+  outline: none;
+  box-shadow: none;
+  transition: border-color var(--duration-fast) var(--ease-standard), background-color var(--duration-fast) var(--ease-standard);
+}
+
+.arc-tax-profile .arc-tax-input:focus-visible {
+  border-color: var(--foreground);
+  box-shadow: none;
 }
 
 .arc-tax-profile .arc-tax-input[readonly] {

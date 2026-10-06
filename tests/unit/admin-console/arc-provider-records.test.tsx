@@ -72,9 +72,9 @@ describe('Arc Provider record tables', () => {
       <ProviderAdmissionCasesTable rows={[]} />
       <ProviderRemovalDisputesTable rows={[]} />
     </>)
-    expect(screen.getAllByRole('table').map(table => table.getAttribute('aria-label'))).toEqual([
-      'Tool versions', 'Connections', 'Admission cases', 'Removal disputes',
-    ])
+    expect(screen.getAllByRole('table')).toEqual(
+      ['Tool versions', 'Connections', 'Admission cases', 'Removal disputes'].map(name => screen.getByRole('table', { name })),
+    )
     for (const message of ['No Tool versions for this Provider.', 'No Provider connections.', 'No admission cases.', 'No removal disputes.']) {
       expect(screen.getByText(message)).toBeTruthy()
     }

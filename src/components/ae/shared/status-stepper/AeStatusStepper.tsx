@@ -83,7 +83,7 @@ export function AeStatusStepper({
               <span className={styles.marker} aria-hidden="true">{glyph}</span>
               <span className={styles.text}>
                 <span className={styles.label}>{step.label}</span>
-                {statusAnnouncement ? <span className={styles.srOnly}>, {statusAnnouncement}</span> : null}
+                {statusAnnouncement ? <span className={styles.srOnly}>, <span>{statusAnnouncement}</span></span> : null}
                 {detail ? <span className={step.error ? styles.error : styles.description}>{detail}</span> : null}
               </span>
             </button>
@@ -91,7 +91,7 @@ export function AeStatusStepper({
               <span className={styles.marker} aria-hidden="true">{glyph}</span>
               <span className={styles.text}>
                 <span className={styles.label}>{step.label}</span>
-                {statusAnnouncement ? <span className={styles.srOnly}>, {statusAnnouncement}</span> : null}
+                {statusAnnouncement ? <span className={styles.srOnly}>, <span>{statusAnnouncement}</span></span> : null}
                 {detail ? <span className={step.error ? styles.error : styles.description}>{detail}</span> : null}
               </span>
             </span>}
