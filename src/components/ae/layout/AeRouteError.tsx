@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { AeOperatorPage, useOperatorShellChrome } from '@/components/ae/layout/AeOperatorPage'
 import { AePageState } from '@/components/ae/layout/AePageState'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
 import { Button } from '@/components/arc/button/button'
 import { operatorForbiddenCopy } from '@/components/ae/layout/route-error.contracts'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
@@ -95,10 +95,8 @@ function RouteErrorState({ error, operator }: { error: unknown; operator: boolea
 
   const operatorRole = operatorRoleForPath(pathname) ?? 'owner'
   const body = (
-    <Alert variant="destructive" className="arc-market arc-recovery-alert">
-      {parentShell === null ? null : <AlertTitle>Couldn’t load this page</AlertTitle>}
-      <AlertDescription>
-        <p>{recoveryCopy}</p>
+    <AeAlert tone="danger" title={parentShell === null ? recoveryCopy : 'Couldn’t load this page'} className="arc-market arc-recovery-alert">
+        {parentShell === null ? null : <p>{recoveryCopy}</p>}
         {correlationRef === undefined
           ? null
           : <AeCopyReference label="support reference" value={correlationRef} />}
@@ -133,8 +131,7 @@ function RouteErrorState({ error, operator }: { error: unknown; operator: boolea
             Check system status
           </Link>
         </div>
-      </AlertDescription>
-    </Alert>
+    </AeAlert>
   )
 
   if (parentShell !== null) return body

@@ -1,4 +1,4 @@
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ae/shared/base-ui/tabs/tabs'
 
 import './CreditComposition.css'
@@ -26,12 +26,9 @@ export function AeOwnerCredit(props: AeOwnerCreditProps) {
   return (
     <div className="arc-market arc-credit-root">
       {openReconciliation > 0 ? (
-        <Alert>
-          <AlertTitle>Reconciliation needs attention</AlertTitle>
-          <AlertDescription>
+        <AeAlert role="alert" tone="info" title="Reconciliation needs attention">
             {openReconciliation} open difference(s) may limit paid Calls. Details are available below.
-          </AlertDescription>
-        </Alert>
+          </AeAlert>
       ) : null}
       <Tabs defaultValue={defaultSection} className="arc-credit-tabs">
         <TabsList

@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router'
 
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
 import { presentConnectionProblem } from '@/modules/agent-access/public'
 
 import type { ConsentOutcomeViewProps } from '../authorize-form.contracts'
@@ -10,16 +10,13 @@ import './ConsentEvidenceComposition.css'
 function ConnectionProblemAlert({ code, technicalReference }: Readonly<{ code: string; technicalReference?: string }>) {
   const presentation = presentConnectionProblem({ code, ...(technicalReference === undefined ? {} : { instance: technicalReference }) })
   return (
-    <Alert variant="destructive" className="arc-market arc-consent-outcome">
-      <AlertTitle id="consent-outcome-heading" tabIndex={-1}>{presentation.heading}</AlertTitle>
-      <AlertDescription className="arc-consent-outcome-body">
+    <AeAlert tone="danger" title={presentation.heading} className="arc-market arc-consent-outcome"><div className="arc-consent-outcome-body">
         <p>{presentation.outcome}</p>
         <p>{presentation.nextAction}</p>
         {presentation.technicalReference === undefined ? null : (
           <p className="font-mono">Reference: {presentation.technicalReference}</p>
         )}
-      </AlertDescription>
-    </Alert>
+      </div></AeAlert>
   )
 }
 
@@ -33,10 +30,7 @@ export function ConsentOutcomeView({
 }: ConsentOutcomeViewProps) {
   if (phase === 'approved') {
     return (
-      <Alert className="arc-market arc-consent-outcome">
-        <AlertTitle id="consent-outcome-heading" tabIndex={-1}>Access approved for {clientName}</AlertTitle>
-        <AlertDescription className="arc-consent-outcome-body">Return there to continue. Check the Agents page for authenticated access and Tool results.</AlertDescription>
-      </Alert>
+      <AeAlert role="alert" tone="info" title={`Access approved for ${clientName}`} className="arc-market arc-consent-outcome"><div className="arc-consent-outcome-body">Return there to continue. Check the Agents page for authenticated access and Tool results.</div></AeAlert>
     )
   }
   if (phase === 'denied') {

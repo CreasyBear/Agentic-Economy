@@ -2,7 +2,7 @@ import { Link } from '@tanstack/react-router'
 
 import { AeEmptyState } from '@/components/ae/shared/arc/empty-state/AeEmptyState'
 import { Button } from '@/components/arc/button/button'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
 
 import { OWNER_OFFERINGS_COPY, type OwnerOfferingsProjectionGateProps } from '../owner-offerings.contracts'
 import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
@@ -15,17 +15,14 @@ export function OwnerOfferingsProjectionGate({
   if (projectionState === 'current') return null
 
   return (
-    <Alert className="arc-market arc-owner-inventory-gate">
-      <AlertTitle>Your public page is still updating</AlertTitle>
-      <AlertDescription>
+    <AeAlert role="alert" tone="info" title="Your public page is still updating" className="arc-market arc-owner-inventory-gate">
         <p>Your changes are saved. People still see the last safe page until this update finishes.</p>
         {onRetryProjection === undefined ? null : (
           <Button type="button" variant="secondary" size="md" onClick={onRetryProjection}>
             Refresh public status
           </Button>
         )}
-      </AlertDescription>
-    </Alert>
+      </AeAlert>
   )
 }
 

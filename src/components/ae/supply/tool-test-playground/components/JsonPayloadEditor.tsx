@@ -1,4 +1,4 @@
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -56,13 +56,10 @@ export function JsonPayloadEditor({
       />
       <div className="min-h-[2.5rem]" aria-live="polite" role="status">
         {diagnostic ? (
-          <Alert variant="destructive" className="py-2">
-            <AlertTitle className="text-xs font-semibold">{diagnostic.whatHappened}</AlertTitle>
-            <AlertDescription className="grid gap-0.5 text-xs">
+          <AeAlert tone="danger" title={diagnostic.whatHappened} className="py-2"><div className="grid gap-0.5 text-xs">
               <span className="font-mono tabular-nums">{diagnostic.financialImpact}</span>
               <span>{diagnostic.nextStep}</span>
-            </AlertDescription>
-          </Alert>
+            </div></AeAlert>
         ) : null}
       </div>
     </div>

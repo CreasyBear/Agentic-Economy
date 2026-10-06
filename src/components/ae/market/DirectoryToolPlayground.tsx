@@ -3,7 +3,7 @@ import { BracesIcon, FileJsonIcon } from 'lucide-react'
 
 import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
 import { CodeBlock, CodeBlockActions, CodeBlockCopyButton, CodeBlockHeader, CodeBlockTitle } from '@/components/ai-elements/code-block'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/arc/button/button'
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty'
@@ -69,14 +69,14 @@ function PlaygroundEditor({ entry, toolRef, inputSchemaJson, inputExampleJson }:
             {schema ? <TabsTrigger value="schema">Schema</TabsTrigger> : null}
           </TabsList>
           <TabsContent value="form" className="pt-4">
-            {formAvailable && schema && value !== undefined ? <ToolInputFormBoundary fallback={<div className="grid gap-4"><Alert><AlertDescription>This schema needs the JSON editor.</AlertDescription></Alert>{jsonEditor}</div>}>
+            {formAvailable && schema && value !== undefined ? <ToolInputFormBoundary fallback={<div className="grid gap-4"><AeAlert tone="info" title="This schema needs the JSON editor." role="alert" />{jsonEditor}</div>}>
               <AeToolInputForm idPrefix={`${id}-form`} schema={schema} value={value} onChange={next => setInputText(JSON.stringify(next, null, 2) ?? '')} />
             </ToolInputFormBoundary> : jsonEditor}
           </TabsContent>
           <TabsContent value="json" className="pt-4">{jsonEditor}</TabsContent>
           {schema ? <TabsContent value="schema" className="pt-4"><JsonExample title={canonical ? 'Tool input schema' : 'Provider request schema'} code={JSON.stringify(schema, null, 2)} /></TabsContent> : null}
         </Tabs>
-        {errors.length > 0 ? <Alert id={errorId}><AlertDescription><ul className="list-inside list-disc">{errors.slice(0, 4).map((error, index) => <li key={`${index}:${error}`}>{error}</li>)}</ul></AlertDescription></Alert> : null}
+        {errors.length > 0 ? <AeAlert tone="danger" role="alert" id={errorId} title={errors.length === 1 ? 'Fix this input before running' : 'Fix these inputs before running'}><ul className="list-inside list-disc">{errors.slice(0, 4).map((error, index) => <li key={`${index}:${error}`}>{error}</li>)}</ul></AeAlert> : null}
         {!formAvailable ? <p className="text-sm text-muted-foreground">{schema ? 'Use JSON for this schema’s input structure.' : entry.input?.schemaOmitted ? 'The full input schema is too large to display here.' : 'This Provider has not published an input schema.'}</p> : null}
       </section>
       <section className="grid min-w-0 content-start gap-4" aria-labelledby={`${id}-output`}>

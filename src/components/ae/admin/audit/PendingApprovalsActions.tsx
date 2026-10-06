@@ -8,7 +8,7 @@ import {
 } from '@/components/ae/admin/actions/actions.contracts'
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { AeSection } from '@/components/ae/layout/AeSection'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
 import { Button } from '@/components/arc/button/button'
 import { formatExactAmount } from '@/modules/money/public'
 import './AccessDecisionsComposition.css'
@@ -41,7 +41,7 @@ export function PendingApprovalsActions({ proposals, now, role, actorRef, pagina
                   </time>
                 </div>
                 {canApprove && material === null ? (
-                  <Alert role="alert" variant="destructive"><AlertDescription>{ADMIN_ACTION_SHEET_COPY.proposalUnavailable}</AlertDescription></Alert>
+                  <AeAlert tone="danger" title={ADMIN_ACTION_SHEET_COPY.proposalUnavailable} role="alert" />
                 ) : canApprove && material !== null ? (
                   <Button type="button" variant="secondary" size="md" disabled={selected !== null} onClick={() => setSelected(proposal)}>
                     {ADMIN_AUDIT_ACTION_COPY.approve}
@@ -111,9 +111,9 @@ function TreasuryPaymentApproval({ command, proposalRef, onOpenChange }: {
   if (view === undefined) return <p role="status">Loading the payment audience for review…</p>
   if (view.kind !== 'ready' || view.environment !== command.input.environment
     || view.controls.launchStateDigest !== command.expectedStateDigest) {
-    return <Alert role="alert" variant="destructive"><AlertDescription>
-      The payment state has changed or is unavailable. <a className="underline underline-offset-4" href="/admin/treasury">Review Treasury before proposing resume again.</a>
-    </AlertDescription></Alert>
+    return <AeAlert tone="danger" role="alert" title="The payment state has changed or is unavailable.">
+      <a className="underline underline-offset-4" href="/admin/treasury">Review Treasury before proposing resume again.</a>
+    </AeAlert>
   }
   const audience = view.controls.paymentsOpenTo === 'none'
     ? view.controls.resumePaymentsOpenTo : view.controls.paymentsOpenTo

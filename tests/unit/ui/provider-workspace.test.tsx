@@ -47,6 +47,7 @@ vi.mock('@/components/ae/status/AeCapabilityList', () => ({ AeCapabilityList: (p
 vi.mock('@/components/ae/settings/AeWorkspaceGeneral', () => ({ AeWorkspaceGeneral: (props: unknown) => { rendered.identity(props); return <div data-testid="provider-identity-controls" /> } }))
 
 import { AeProviderWorkspace } from '@/components/ae/offerings/provider-workspace/AeProviderWorkspace'
+import arcAlertStyles from '@/components/arc/alert/alert.module.css'
 
 const inventory = { kind: 'available', provider: { name: 'Provider' }, tools: [], projection: 'current', isDone: true, continueCursor: '' } as const
 const unavailable = Promise.resolve({ kind: 'not_applicable' as const })
@@ -171,7 +172,7 @@ describe('Tools management disclosure', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Manage provider identity' }))
     const unavailableTitle = await screen.findByText('Provider identity controls unavailable')
-    expect(unavailableTitle.closest('[data-slot="alert"]')?.className).not.toContain('text-destructive')
+    expect(unavailableTitle.closest('[role="alert"]')?.className).not.toContain(arcAlertStyles.danger)
     fireEvent.click(screen.getByRole('button', { name: 'Try provider identity again' }))
 
     expect(await screen.findByTestId('provider-identity-controls')).toBeTruthy()

@@ -4,7 +4,7 @@ import type { ReactNode } from 'react'
 
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Button } from '@/components/arc/button/button'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
 import type { AgentDirectoryProjection } from '@/modules/agent-access/agent-operator-view-model'
 import type { PendingCallApproval } from '@/modules/capability-execution/call-approval.functions'
 import type { AgentSpendingLimitsReadResult, AgentSpendingLimitsResult } from '@/modules/agent-access/spending-policy-update'
@@ -110,13 +110,10 @@ export function AeAgentOperatorConsole({
       <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{approvalStatus ?? ''}</p>
       {approvalsSection}
       {selectedPrincipalId === undefined || selected !== undefined ? null : (
-        <Alert className="arc-agent-console-recovery">
-          <AlertTitle>Agent not found</AlertTitle>
-          <AlertDescription>
+        <AeAlert role="alert" tone="info" title="Agent not found" className="arc-agent-console-recovery">
             <p>This agent is no longer in the directory or the link is stale.</p>
             <Button type="button" variant="secondary" onClick={onClearSelectedPrincipal}>Return to Agents</Button>
-          </AlertDescription>
-        </Alert>
+          </AeAlert>
       )}
       <AeSection
         className="arc-agent-directory-section"

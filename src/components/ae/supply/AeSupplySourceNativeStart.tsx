@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 
 import { AeInlineState } from '@/components/ae/feedback/AeInlineState'
 import { MultiStepForm, type CompletedFormStep } from '@/components/ae/shared/arc-pro/multi-step-form/multi-step-form'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
 import { SupplyCandidateSection } from './SupplyCandidateSection'
 import { SupplySourceSuggestion } from './SupplySourceSuggestion'
 import { SupplyPublicationFlow } from './SupplyPublicationFlow'
@@ -179,11 +179,9 @@ function SupplyFlowFeedback({ error, requiredAction, success, continuation, publ
 }>) {
   return (
     <>
-      {error === undefined ? null : <Alert id={SUPPLY_PUBLICATION_ERROR_ID} variant="destructive" role="alert" className="arc-supply-feedback"><AlertTitle>Action required</AlertTitle><AlertDescription className="arc-supply-feedback-description"><p>{error}</p>{publicationLocked ? <a href="/owner/operations" className={`${actionLinkClassName('secondary', 'md')} arc-supply-feedback-action`}>Open Tools</a> : null}</AlertDescription></Alert>}
+      {error === undefined ? null : <AeAlert tone="danger" title="Action required" id={SUPPLY_PUBLICATION_ERROR_ID} role="alert" className="arc-supply-feedback"><div className="arc-supply-feedback-description"><p>{error}</p>{publicationLocked ? <a href="/owner/operations" className={`${actionLinkClassName('secondary', 'md')} arc-supply-feedback-action`}>Open Tools</a> : null}</div></AeAlert>}
       {requiredAction === undefined ? null : (
-        <Alert role="status" className="arc-supply-feedback">
-          <AlertTitle>{requiredAction.title}</AlertTitle>
-          <AlertDescription className="arc-supply-feedback-description">
+        <AeAlert tone="info" title={requiredAction.title} role="status" className="arc-supply-feedback"><div className="arc-supply-feedback-description">
             <p>{requiredAction.description}</p>
             {requiredAction.cta === null ? null : (
               <a
@@ -193,13 +191,10 @@ function SupplyFlowFeedback({ error, requiredAction, success, continuation, publ
                 {requiredAction.ctaLabel}
               </a>
             )}
-          </AlertDescription>
-        </Alert>
+          </div></AeAlert>
       )}
       {success === undefined ? null : (
-        <Alert className="arc-supply-feedback">
-          <AlertTitle>Submitted</AlertTitle>
-          <AlertDescription className="arc-supply-feedback-description">
+        <AeAlert role="alert" tone="info" title="Submitted" className="arc-supply-feedback"><div className="arc-supply-feedback-description">
             <p>{success}</p>
             {continuation === undefined ? null : (
               <a
@@ -209,8 +204,7 @@ function SupplyFlowFeedback({ error, requiredAction, success, continuation, publ
                 {continuation.label}
               </a>
             )}
-          </AlertDescription>
-        </Alert>
+          </div></AeAlert>
       )}
     </>
   )

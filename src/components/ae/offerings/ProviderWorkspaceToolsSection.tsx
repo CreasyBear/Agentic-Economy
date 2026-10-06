@@ -2,7 +2,7 @@ import { Await } from '@tanstack/react-router'
 import { Suspense, type ReactNode } from 'react'
 
 import { AeSection } from '@/components/ae/layout/AeSection'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
 import './ProviderWorkspaceComposition.css'
 import { projectProviderWorkspace, type ProviderWorkspaceProjectionRow } from './provider-workspace-projection'
 import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
@@ -35,10 +35,7 @@ export function ProviderWorkspaceToolsSection({ inventory, lifecycle, compatibil
   return (
     <AeSection title="Tools" description={`Tools supplied by ${inventory.provider.name}.`}>
       {inventory.diagnostics?.map((diagnostic) => (
-        <Alert key={diagnostic.offeringRef}>
-          <AlertTitle>Tool status needs repair</AlertTitle>
-          <AlertDescription>{diagnostic.offeringRef}: lifecycle status could not be read. Other Tools remain available.</AlertDescription>
-        </Alert>
+        <AeAlert role="alert" tone="info" title="Tool status needs repair" key={diagnostic.offeringRef}>{diagnostic.offeringRef}: lifecycle status could not be read. Other Tools remain available.</AeAlert>
       ))}
       {lifecycle === undefined ? renderList(pendingRows) : (
         <Suspense fallback={renderList(pendingRows)}>
@@ -50,30 +47,22 @@ export function ProviderWorkspaceToolsSection({ inventory, lifecycle, compatibil
                 projection.reason === 'multiple_providers'
 
               return (
-                <Alert variant="destructive">
-                  <AlertTitle>
-                    {isOwnershipConflict
+                <AeAlert tone="danger" title={isOwnershipConflict
                       ? 'Provider ownership conflict'
-                      : 'Tools need repair'}
-                  </AlertTitle>
-                  <AlertDescription>
+                      : 'Tools need repair'}>
                     {isOwnershipConflict
                       ? 'Lifecycle records do not belong to the current provider. No Tool action is available.'
                       : 'Duplicate lifecycle records were found. No publication action is available.'}
-                  </AlertDescription>
-                </Alert>
+                  </AeAlert>
               )
             }
             return (
               <div className="arc-provider-workspace-tool-results">
                 {projection.attentionCount === 0 ? null : (
-                  <Alert>
-                    <AlertTitle>{projection.attentionCount === 1 ? '1 Tool needs attention' : `${projection.attentionCount} Tools need attention`}</AlertTitle>
-                    <AlertDescription>{projection.firstBlocker}</AlertDescription>
-                  </Alert>
+                  <AeAlert role="alert" tone="info" title={projection.attentionCount === 1 ? '1 Tool needs attention' : `${projection.attentionCount} Tools need attention`}>{projection.firstBlocker}</AeAlert>
                 )}
                 {projection.inconsistencyCount === 0 ? null : (
-                  <Alert><AlertTitle>Lifecycle update in progress</AlertTitle><AlertDescription>Some lifecycle facts do not yet match the current inventory.</AlertDescription></Alert>
+                  <AeAlert role="alert" tone="info" title="Lifecycle update in progress">Some lifecycle facts do not yet match the current inventory.</AeAlert>
                 )}
                 {renderList(projection.rows)}
               </div>

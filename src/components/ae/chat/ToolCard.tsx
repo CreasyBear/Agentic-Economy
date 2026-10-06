@@ -2,7 +2,7 @@ import { createContext, useContext } from 'react'
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
 import { AeToolPrice } from '@/components/ae/market/AeToolPrice'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
 import { Button } from '@/components/arc/button/button'
 import { DecisionPanel } from '@/components/ae/shared/arc-pro/chat/DecisionPanel'
 import { ProductListing } from '@/components/ae/shared/arc-pro/market/ProductListing'
@@ -200,7 +200,7 @@ function cardBody(projection: ToolCardProjection, onAddCredit?: ToolCardProps['o
       return null
     case 'status': {
       if (projection.state === 'attention') {
-        return <Alert><AlertDescription>{projection.summary}</AlertDescription></Alert>
+        return <AeAlert tone="info" title={projection.summary} role="alert" />
       }
       const funding = projection.funding
       const reason = safeRecoveryReason(projection.recoveryReason, 'tool_unavailable')
@@ -234,10 +234,7 @@ function cardBody(projection: ToolCardProjection, onAddCredit?: ToolCardProps['o
                 ? {} : { onAddCredit: () => onAddCredit() })}
             />
           ) : (
-            <Alert variant="default">
-              <AlertTitle>{executeStateTitle(projection.state)}</AlertTitle>
-              <AlertDescription>{projection.summary}</AlertDescription>
-            </Alert>
+            <AeAlert role="alert" tone="info" title={executeStateTitle(projection.state)}>{projection.summary}</AeAlert>
           )}
           {projection.state === 'completed' && projection.paid !== undefined && projection.callRef !== undefined && reportOwner != null
             ? <PaidCallReportControl key={projection.callRef} callRef={projection.callRef} paidLabel={projection.paid} onPosted={reportOwner.onPosted} />

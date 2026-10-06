@@ -14,7 +14,7 @@ import type {
 import { AeProviderToolDetail } from '@/components/ae/supply/AeProviderToolDetail'
 import { OWNER_TOOL_DETAIL_COPY } from '@/components/ae/supply/owner-tool-detail.contracts'
 import type { ProviderToolActionOutcome } from '@/modules/capability-supply/provider-tool-actions.contracts'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
 import { formatTimestamp } from '@/lib/ui/format-time'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
@@ -167,14 +167,11 @@ function UnavailableTool({ toolRef, unavailable }: Readonly<{ toolRef: string; u
       currentPath={`/owner/operations/${encodeURIComponent(toolRef)}`}
     >
       <div className="arc-market arc-owner-tool-unavailable">
-        <Alert variant={unavailable ? 'destructive' : 'default'}>
-          <AlertTitle>{unavailable ? 'Tool status unavailable' : 'Tool not found'}</AlertTitle>
-          <AlertDescription>
+        <AeAlert role="alert" tone={unavailable ? 'danger' : 'info'} title={unavailable ? 'Tool status unavailable' : 'Tool not found'}>
             {unavailable
               ? 'Agentic Economy could not read the canonical lifecycle. No Tool was changed.'
               : 'This Tool is not part of the current Provider workspace.'}
-          </AlertDescription>
-        </Alert>
+          </AeAlert>
         <Link
           to="/owner/operations"
           className={[actionLinkClassName('secondary', 'md'), 'arc-owner-tool-action'].join(' ')}

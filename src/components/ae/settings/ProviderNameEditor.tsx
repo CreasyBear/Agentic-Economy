@@ -1,6 +1,6 @@
 import { useRef, useState, type FormEvent } from 'react'
 
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
 import { SettingsSaveBar } from '@/components/ae/shared/arc-pro/settings-page/settings-page'
 import { Button } from '@/components/arc/button/button'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
@@ -83,12 +83,12 @@ export function ProviderNameEditor({ businessId, currentName, onRename, descript
       </Button>
     </SettingsSaveBar>
     {feedback?.kind === 'refused' ? (
-      <Alert variant="destructive" role="alert"><AlertTitle>Public name was not saved</AlertTitle><AlertDescription>{
+      <AeAlert tone="danger" title="Public name was not saved" role="alert">{
         feedback.code === 'invalid_name' ? 'Enter a public Provider name from 1 to 160 characters.'
           : feedback.code === 'unauthenticated' ? 'Sign in again before changing the public Provider name.'
             : feedback.code === 'wrong_owner' ? 'This Business does not own that Provider identity.'
             : 'Try again. The existing public name is unchanged.'
-      }</AlertDescription></Alert>
+      }</AeAlert>
     ) : null}
   </form>
 }

@@ -1,4 +1,4 @@
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
 import { Button } from '@/components/arc/button/button'
 
 import type { McpOAuthStartPanelProps } from '../connection-handoff.contracts'
@@ -18,10 +18,7 @@ export function McpOAuthStartPanel({
         Sign in to {sourceOriginLabel}. The Provider controls its consent screen; Agentic Economy stores the resulting connection securely and returns you to Add Tool.
       </p>
       {error === undefined ? null : (
-        <Alert variant="destructive" role="alert">
-          <AlertTitle>Sign in not started</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
+        <AeAlert tone="danger" title="Sign in not started" role="alert">{error}</AeAlert>
       )}
       <div className="arc-connection-handoff-actions">
         <Button type="button" variant="primary" size="md" disabled={beginBusy} onClick={() => void onBegin()}>

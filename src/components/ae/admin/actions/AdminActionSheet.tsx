@@ -1,5 +1,5 @@
 import { AeRecordSheet } from '@/components/ae/layout/AeRecordSheet'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
 import { Button } from '@/components/arc/button/button'
 import { ADMIN_ACTION_COPY, ADMIN_ACTION_SHEET_COPY, type AdminActionSheetProps } from './actions.contracts'
 import { AuditPreview } from './components/AuditPreview'
@@ -53,11 +53,11 @@ export function AdminActionSheet(props: AdminActionSheetProps) {
       )}
     >
       <div className="arc-market flex min-w-0 flex-col gap-6 py-4">
-        {command.allowed ? null : <Alert role="status"><AlertDescription>{ADMIN_ACTION_SHEET_COPY.permission}</AlertDescription></Alert>}
+        {command.allowed ? null : <AeAlert tone="info" title={ADMIN_ACTION_SHEET_COPY.permission} role="status" />}
         {command.phase === 'receipt' && command.receipt?.kind === 'refused' && command.receipt.code === 'mfa_reverification_required'
-          ? <Alert role="status"><AlertDescription>{ADMIN_ACTION_SHEET_COPY.mfaRequired} <a href="/owner/settings/account/security" className="underline underline-offset-4 focus-visible:outline-2">Account security</a></AlertDescription></Alert>
+          ? <AeAlert tone="info" role="status" title={ADMIN_ACTION_SHEET_COPY.mfaRequired}><a href="/owner/settings/account/security" className="underline underline-offset-4 focus-visible:outline-2">Account security</a></AeAlert>
           : null}
-        {command.error === null ? null : <Alert role="alert" variant="destructive"><AlertDescription>{command.error}</AlertDescription></Alert>}
+        {command.error === null ? null : <AeAlert tone="danger" title={command.error} role="alert" />}
         {props.action === 'change_commercial_policy' ? <CommercialPolicyReview input={command.submittedRequest?.action === 'change_commercial_policy' ? command.submittedRequest.input : props.input} /> : null}
         {command.phase === 'reason' ? (
           <ReasonSelect action={props.action} value={command.reasonCode} onChange={command.setReason} />
@@ -67,7 +67,7 @@ export function AdminActionSheet(props: AdminActionSheetProps) {
           <p className="text-sm text-muted-foreground">{ADMIN_ACTION_SHEET_COPY.proofNotice}</p>
         ) : command.phase === 'preview' || command.phase === 'confirm' || command.phase === 'submitting' ? (
           <>
-            {command.phase === 'confirm' ? <Alert role="alert" variant="destructive"><AlertDescription>{ADMIN_ACTION_SHEET_COPY.confirmEffect}</AlertDescription></Alert> : null}
+            {command.phase === 'confirm' ? <AeAlert tone="danger" title={ADMIN_ACTION_SHEET_COPY.confirmEffect} role="alert" /> : null}
             <AuditPreview action={props.action} targetRefs={props.targetRefs} reasonCode={command.reasonCode} evidenceRefs={command.evidenceRefs} approval={command.approval} />
           </>
         ) : command.receipt === null ? null : (

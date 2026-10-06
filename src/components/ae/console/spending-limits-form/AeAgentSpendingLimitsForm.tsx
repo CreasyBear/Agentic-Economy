@@ -1,10 +1,10 @@
 'use client'
 
-import { AlertCircleIcon, CheckIcon, ShieldAlertIcon } from 'lucide-react'
+import { CheckIcon, ShieldAlertIcon } from 'lucide-react'
 
 import { SpendingLimitInputs } from '@/components/ae/shared/SpendingLimitInputs'
 import { Button } from '@/components/arc/button/button'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
 import { Badge } from '@/components/ui/badge'
 import type { AgentDetail } from '@/modules/agent-access/agent-operator-view-model'
 import type {
@@ -109,14 +109,9 @@ export function AeAgentSpendingLimitsForm({
         <>
           <div className="arc-spending-policy-pause-notice">
             {view.isPaused ? (
-              <Alert className="border-warning-ring bg-warning-subtle py-2 text-warning-foreground">
-                <AlertCircleIcon className="size-4" />
-                <AlertDescription className="arc-spending-policy-hint">
-                  This agent is paused. New paid Calls will be refused. In-flight Calls are not cancelled.
-                  {' '}
-                  A$0.00 new spend authorized until you resume.
-                </AlertDescription>
-              </Alert>
+              <AeAlert tone="warning" role="alert" title="This agent is paused.">
+                <span className="arc-spending-policy-hint">New paid Calls will be refused. In-flight Calls are not cancelled. A$0.00 new spend authorized until you resume.</span>
+              </AeAlert>
             ) : null}
           </div>
 

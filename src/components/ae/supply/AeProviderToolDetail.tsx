@@ -7,7 +7,7 @@ import { AeSection } from '@/components/ae/layout/AeSection'
 import { AePriceUpdateModal } from './price-update-modal/AePriceUpdateModal'
 import { Button as ArcButton } from '@/components/arc/button/button'
 import { DecisionPanel } from '@/components/ae/shared/arc-pro/chat/DecisionPanel'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
 import { Badge } from '@/components/ui/badge'
 import { formatTimestamp } from '@/lib/ui/format-time'
 import { getStatusPresentation } from '@/lib/ui/status-presentation'
@@ -85,16 +85,10 @@ export function AeProviderToolDetail({
           ? 'This saved Tool has no resumable source. Start another Tool or contact Help with its Tool reference.'
           : stateDescription(status)}</p>
         {firstReason === undefined ? null : (
-          <Alert variant="destructive">
-            <AlertTitle>{firstReason.title}</AlertTitle>
-            <AlertDescription>{firstReason.description}</AlertDescription>
-          </Alert>
+          <AeAlert tone="danger" title={firstReason.title}>{firstReason.description}</AeAlert>
         )}
         {feedback === undefined ? null : (
-          <Alert variant={feedback.kind === 'refused' ? 'destructive' : 'default'} aria-live="polite">
-            <AlertTitle>{feedback.kind === 'applied' ? 'Tool updated' : 'Tool unchanged'}</AlertTitle>
-            <AlertDescription>{feedback.message}</AlertDescription>
-          </Alert>
+          <AeAlert role="alert" tone={feedback.kind === 'refused' ? 'danger' : 'info'} title={feedback.kind === 'applied' ? 'Tool updated' : 'Tool unchanged'} aria-live="polite">{feedback.message}</AeAlert>
         )}
         <PrimaryAction
           status={status}

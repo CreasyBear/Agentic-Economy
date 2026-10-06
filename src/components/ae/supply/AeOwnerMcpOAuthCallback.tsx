@@ -2,7 +2,7 @@ import { Link } from '@tanstack/react-router'
 
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSettingsStack } from '@/components/ae/layout/AeSection'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
 import { Badge } from '@/components/ui/badge'
 import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import './connection-handoff/ConnectionHandoffComposition.css'
@@ -33,9 +33,7 @@ export function AeOwnerMcpOAuthCallback({ result }: AeOwnerMcpOAuthCallbackProps
             {OWNER_MCP_OAUTH_CALLBACK_COPY.environment[result.environment]}
           </Badge>
         )}
-        <Alert variant="destructive" className="arc-market arc-connection-handoff-status">
-          <AlertTitle>{outcome.title}</AlertTitle>
-          <AlertDescription>
+        <AeAlert tone="danger" title={outcome.title} className="arc-market arc-connection-handoff-status">
             <p>{outcome.description}</p>
             <Link
               to="/owner/operations/new"
@@ -46,8 +44,7 @@ export function AeOwnerMcpOAuthCallback({ result }: AeOwnerMcpOAuthCallbackProps
             >
               {OWNER_MCP_OAUTH_CALLBACK_COPY.action}
             </Link>
-          </AlertDescription>
-        </Alert>
+          </AeAlert>
       </AeSettingsStack>
     </AeOperatorPage>
   )

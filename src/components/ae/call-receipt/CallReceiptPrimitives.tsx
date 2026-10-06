@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/arc/button/button'
 import './ReceiptComposition.css'
@@ -98,9 +98,6 @@ export function CallReceiptStatusFeedback({
     )
   }
   return (
-    <Alert role="status" className="arc-market arc-call-status-feedback">
-      <AlertTitle>Status refreshed</AlertTitle>
-      <AlertDescription>{feedback.message}</AlertDescription>
-    </Alert>
+    <AeAlert tone="info" title="Status refreshed" role="status" className="arc-market arc-call-status-feedback">{feedback.message}</AeAlert>
   )
 }

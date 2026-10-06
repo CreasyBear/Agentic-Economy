@@ -6,7 +6,7 @@ import { SpendingLimitInputs } from '@/components/ae/shared/SpendingLimitInputs'
 import { Button } from '@/components/arc/button/button'
 import { Drawer, DrawerContent } from '@/components/ae/shared/base-ui/drawer/drawer'
 import { MultiStepForm } from '@/components/ae/shared/arc-pro/multi-step-form/multi-step-form'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
 import type { AgentAccessKeyIssueResult, IssuedAgentAccessReveal } from '@/modules/agent-access/issue-key.contracts'
 import type { AgentKeyDraft } from './agent-key-draft'
 
@@ -120,13 +120,10 @@ export function AeConnectAgentWizardDialog({
             ]}>
             {view.diagnostic !== null ? (
               <div aria-live="polite">
-                <Alert variant="destructive">
-                  <AlertTitle>{view.diagnostic.whatHappened}</AlertTitle>
-                  <AlertDescription className="grid gap-1">
+                <AeAlert tone="danger" title={view.diagnostic.whatHappened}><div className="grid gap-1">
                     <span>{view.diagnostic.financialImpact}</span>
                     <span>{view.diagnostic.nextStep}</span>
-                  </AlertDescription>
-                </Alert>
+                  </div></AeAlert>
               </div>
             ) : null}
 

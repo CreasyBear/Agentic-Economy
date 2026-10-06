@@ -1,4 +1,4 @@
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
 import { Button } from '@/components/arc/button/button'
 
 import './ActivitySummaryComposition.css'
@@ -10,12 +10,9 @@ export function ActivityPaginationControl({ pagination, onLoadMore }: ActivityPa
   return (
     <div className="arc-market arc-activity-pagination">
       {pagination.status === 'failed' ? (
-        <Alert>
-          <AlertTitle>Could not load older Calls.</AlertTitle>
-          <AlertDescription>
+        <AeAlert role="alert" tone="info" title="Could not load older Calls.">
             The loaded Calls remain available. Retry to read the remaining history for this period.
-          </AlertDescription>
-        </Alert>
+          </AeAlert>
       ) : null}
       <Button
         type="button"

@@ -2,7 +2,7 @@ import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeInlineState } from '@/components/ae/feedback/AeInlineState'
 import { AeSection } from '@/components/ae/layout/AeSection'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
 import { Button } from '@/components/arc/button/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/arc/input/input'
@@ -41,12 +41,12 @@ export function TreasuryActions({ view }: { view: AdminTreasuryView }) {
       <Button type="button" variant="secondary" disabled={!view.controls.canManage || locked} onClick={() => state.open('thresholds')}>Edit thresholds</Button>
     </div>
     {!view.controls.canManage ? <p className="text-sm text-muted-foreground">An Admin owner can change payment controls and thresholds.</p> : null}
-    {state.receipt?.kind === 'completed' ? <Alert role="status"><AlertTitle>{state.receipt.action === 'change_treasury_thresholds' ? 'Treasury thresholds saved' : state.receipt.code === 'payments_paused' ? 'Payments paused' : 'Payments resumed'}</AlertTitle><AlertDescription><a href="/admin/audit-events" className="underline underline-offset-4">View the audit record</a></AlertDescription></Alert> : null}
-    {state.receipt?.kind === 'proposed' ? <Alert role="status"><AlertTitle>Awaiting another Admin owner</AlertTitle><AlertDescription>
+    {state.receipt?.kind === 'completed' ? <AeAlert tone="info" title={state.receipt.action === 'change_treasury_thresholds' ? 'Treasury thresholds saved' : state.receipt.code === 'payments_paused' ? 'Payments paused' : 'Payments resumed'} role="status"><a href="/admin/audit-events" className="underline underline-offset-4">View the audit record</a></AeAlert> : null}
+    {state.receipt?.kind === 'proposed' ? <AeAlert tone="info" title="Awaiting another Admin owner" role="status">
       <p>Payments remain paused until the proposal is approved. Expires {formatTimestamp(state.receipt.expiresAt)}.</p>
       <AeCopyReference label="proposal reference" value={state.receipt.proposalRef} />
       <a href="/admin/audit-events" className="underline underline-offset-4">Open the proposal in Audit</a>
-    </AlertDescription></Alert> : null}
+    </AeAlert> : null}
     <Dialog open={state.action !== null} onOpenChange={open => { if (!open) state.close() }}>
       <DialogContent className="arc-market" showCloseButton={!locked}>
         <DialogHeader>

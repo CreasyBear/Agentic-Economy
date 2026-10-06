@@ -9,7 +9,7 @@ import { MultiStepForm } from '@/components/ae/shared/arc-pro/multi-step-form/mu
 import type { CompletedFormStep, FormStep } from '@/components/ae/shared/arc-pro/multi-step-form/multi-step-form'
 import { SettingsPageGroup, SettingsPageRow } from '@/components/ae/shared/arc-pro/settings-page/settings-page'
 import { Button } from '@/components/arc/button/button'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
 import type { AgentAccessAuthorizeFormDetails, ConsentLocator } from '@/modules/agent-access/consent.contracts'
 
 import { AuthorityModeRadioGroup } from './components/AuthorityModeRadioGroup'
@@ -97,10 +97,7 @@ function ConsentReviewChoices({ vm, connectionSummary, replacementReasonSummary,
       </SettingsPageGroup>
       {vm.accessProfile === 'market' ? <AlphaLearningNotice /> : null}
       {vm.accessProfile === 'provider' ? (
-        <Alert>
-          <AlertTitle>Provider management</AlertTitle>
-          <AlertDescription>May inspect lifecycle and earnings, publish, recheck, withdraw, and republish your Tools. It cannot spend buyer credit or manage unrelated account settings.</AlertDescription>
-        </Alert>
+        <AeAlert role="alert" tone="info" title="Provider management">May inspect lifecycle and earnings, publish, recheck, withdraw, and republish your Tools. It cannot spend buyer credit or manage unrelated account settings.</AeAlert>
       ) : null}
     </>
   )

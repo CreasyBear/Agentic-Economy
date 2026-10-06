@@ -1,7 +1,7 @@
 import { Button as ArcButton } from '@/components/arc/button/button'
 import { RouterLinkBoundary } from '@/components/ae/shared/router-link-boundary/RouterLinkBoundary'
 import { HeroSection } from '@/components/arc/blocks/hero-section/hero-section'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
 import { AeSiteFaq } from '@/components/ae/website'
 import { PROVIDER_FAQ } from '@/content/provider-copy'
 
@@ -70,17 +70,14 @@ export function AeSupplyLanding({
       {sourceError === undefined ? null : (
         <section className="arc-provider-error" aria-label="Provider recovery">
           <div className="arc-provider-error-inner">
-            <Alert variant="destructive" className="arc-provider-error-alert">
-              <AlertTitle>Provider information is unavailable</AlertTitle>
-              <AlertDescription>
+            <AeAlert tone="danger" title="Provider information is unavailable" className="arc-provider-error-alert">
                 <p>{sourceError}</p>
                 {onRetry === undefined ? null : (
                   <ArcButton type="button" variant="secondary" size="md" className="arc-provider-action" onClick={onRetry}>
                     Try again
                   </ArcButton>
                 )}
-              </AlertDescription>
-            </Alert>
+              </AeAlert>
           </div>
         </section>
       )}

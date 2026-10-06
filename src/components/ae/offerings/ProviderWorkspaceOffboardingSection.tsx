@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 
 import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
 import { AeSection } from '@/components/ae/layout/AeSection'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
 import { Button } from '@/components/arc/button/button'
 import { DecisionPanel } from '@/components/ae/shared/arc-pro/chat/DecisionPanel'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
@@ -116,13 +116,13 @@ function ProviderOffboardingCard({ initial, refreshWorkspace }: Readonly<{
 
   if (result.kind === 'unavailable') return <UnavailableSummary title="Provider offboarding unavailable" />
   if (result.kind === 'refused') {
-    return <Alert variant="destructive"><AlertTitle>Provider cannot be retired</AlertTitle><AlertDescription>{offboardingError(result.reason)}</AlertDescription></Alert>
+    return <AeAlert tone="danger" title="Provider cannot be retired">{offboardingError(result.reason)}</AeAlert>
   }
   if (result.kind === 'not_found') {
     return (
       <DecisionPanel className="arc-provider-offboarding" aria-label="Provider offboarding">
         <div className="arc-provider-offboarding-heading"><h3>Retire this Provider</h3><p>AE freezes new work first, then waits for Calls, obligations and payouts before revoking connections.</p></div>
-        {error === undefined ? null : <Alert variant="destructive" role="alert"><AlertTitle>Provider was not retired</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}
+        {error === undefined ? null : <AeAlert tone="danger" title="Provider was not retired" role="alert">{error}</AeAlert>}
         <Button ref={triggerRef} type="button" variant="danger" size="md" className="arc-provider-offboarding-action" onClick={() => setConfirmOpen(true)}>Start Provider offboarding</Button>
         <AeConfirmDialog
           open={confirmOpen}
@@ -147,7 +147,7 @@ function ProviderOffboardingCard({ initial, refreshWorkspace }: Readonly<{
     <DecisionPanel className="arc-provider-offboarding" aria-label="Provider offboarding" aria-live="polite">
       <div className="arc-provider-offboarding-heading"><h3>{status.state}</h3><p>{status.routeabilityFrozen ? 'New work is frozen.' : 'AE is preparing to freeze new work.'} Case {status.caseRef}</p></div>
       {status.blockerCodes.length === 0 ? null : (
-        <Alert><AlertTitle>Action required</AlertTitle><AlertDescription>{status.blockerCodes.map(offboardingBlocker).join(' ')}</AlertDescription></Alert>
+        <AeAlert role="alert" tone="info" title="Action required">{status.blockerCodes.map(offboardingBlocker).join(' ')}</AeAlert>
       )}
       {status.state === 'Retired' ? <p className="text-sm text-muted-foreground">Tools are retired, Calls and obligations are clear, and Provider connections are revoked.</p> : null}
       {status.state === 'Cancelled' ? <p className="text-sm text-muted-foreground">Offboarding was cancelled before new work was frozen. The Provider remains active.</p> : null}
@@ -157,7 +157,7 @@ function ProviderOffboardingCard({ initial, refreshWorkspace }: Readonly<{
           {canCancel ? <Button type="button" variant="secondary" size="md" disabled={pending} onClick={() => void cancel()}>Cancel offboarding</Button> : null}
         </div>
       )}
-      {error === undefined ? null : <Alert variant="destructive" role="alert"><AlertTitle>Status was not updated</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}
+      {error === undefined ? null : <AeAlert tone="danger" title="Status was not updated" role="alert">{error}</AeAlert>}
     </DecisionPanel>
   )
 }

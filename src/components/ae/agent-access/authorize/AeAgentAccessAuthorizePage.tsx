@@ -3,7 +3,7 @@ import { Link } from '@tanstack/react-router'
 import { AeAgentAccessAuthorizeForm } from '@/components/ae/agent-access/authorize-form/AeAgentAccessAuthorizeForm'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSettingsStack } from '@/components/ae/layout/AeSection'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
 import '../authorize-form/ConsentComposition.css'
 import { presentConnectionProblem } from '@/modules/agent-access/public'
 
@@ -37,14 +37,11 @@ export function AeAgentAccessAuthorizePage({ loaded }: AeAgentAccessAuthorizePag
     return (
       <AeOperatorPage operatorRole="owner" title="Review Agent access" description="Confirm the current result before taking another action." currentPath="/agent-access">
         <AeSettingsStack className="arc-market arc-consent-page-outcome">
-          <Alert variant="destructive">
-            <AlertTitle>Check the current access status</AlertTitle>
-            <AlertDescription>
+          <AeAlert tone="danger" title="Check the current access status">
               <p>The approval may have completed. Do not submit it again.</p>
               <p className="mt-2 break-all">Request reference: {loaded.grantRef}</p>
               <OpenAgentsLink grantRef={loaded.grantRef} {...(loaded.oauthState === undefined ? {} : { state: loaded.oauthState })} />
-            </AlertDescription>
-          </Alert>
+            </AeAlert>
         </AeSettingsStack>
       </AeOperatorPage>
     )
@@ -53,14 +50,11 @@ export function AeAgentAccessAuthorizePage({ loaded }: AeAgentAccessAuthorizePag
     return (
       <AeOperatorPage operatorRole="owner" title="Review Agent access" description="This request has already completed." currentPath="/agent-access">
         <AeSettingsStack className="arc-market arc-consent-page-outcome">
-          <Alert>
-            <AlertTitle>Access approved</AlertTitle>
-            <AlertDescription>
+          <AeAlert role="alert" tone="info" title="Access approved">
               <p>This approval has completed. Open Agents for the current credential status.</p>
               <p className="mt-2 break-all">Request reference: {loaded.grantRef}</p>
               <OpenAgentsLink grantRef={loaded.grantRef} {...(loaded.oauthState === undefined ? {} : { state: loaded.oauthState })} />
-            </AlertDescription>
-          </Alert>
+            </AeAlert>
         </AeSettingsStack>
       </AeOperatorPage>
     )
@@ -70,14 +64,11 @@ export function AeAgentAccessAuthorizePage({ loaded }: AeAgentAccessAuthorizePag
     return (
       <AeOperatorPage operatorRole="owner" title="Review Agent access" description="This request cannot be used." currentPath="/agent-access">
         <AeSettingsStack className="arc-market arc-consent-page-outcome">
-          <Alert variant="destructive">
-            <AlertTitle>{presentation.heading}</AlertTitle>
-            <AlertDescription>
+          <AeAlert tone="danger" title={presentation.heading}>
               <p>{presentation.outcome}</p>
               <p className="mt-2">{presentation.nextAction}</p>
               <OpenAgentsLink />
-            </AlertDescription>
-          </Alert>
+            </AeAlert>
         </AeSettingsStack>
       </AeOperatorPage>
     )
@@ -85,13 +76,10 @@ export function AeAgentAccessAuthorizePage({ loaded }: AeAgentAccessAuthorizePag
   return (
     <AeOperatorPage operatorRole="owner" title="Review Agent access" description="Choose what this Agent may do, then approve or decline." currentPath="/agent-access">
       <AeSettingsStack className="arc-market arc-consent-page-outcome">
-        <Alert variant="destructive">
-          <AlertTitle>This access request is missing a code</AlertTitle>
-          <AlertDescription>
+        <AeAlert tone="danger" title="This access request is missing a code">
             <p>Start a new request from your Agent.</p>
             <OpenAgentsLink />
-          </AlertDescription>
-        </Alert>
+          </AeAlert>
       </AeSettingsStack>
     </AeOperatorPage>
   )

@@ -1,4 +1,4 @@
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
 import { AeEmptyState } from '@/components/ae/shared/arc/empty-state/AeEmptyState'
 import { formatCurrencyAmount, formatDisplayAmount } from '@/modules/money/public'
 import type { AeSupplyEarningsCardProps } from './earnings-card.contracts'
@@ -6,10 +6,7 @@ import type { AeSupplyEarningsCardProps } from './earnings-card.contracts'
 export function AeSupplyEarningsCard({ readback }: AeSupplyEarningsCardProps) {
   if (readback.kind === 'error' || readback.kind === 'conflict') {
     return (
-      <Alert variant="destructive" className="arc-market">
-        <AlertTitle>Earnings unavailable</AlertTitle>
-        <AlertDescription>{readback.kind === 'conflict' ? 'Provider ownership requires resolution before earnings can be shown.' : 'The earnings source could not be read. Try again.'}</AlertDescription>
-      </Alert>
+      <AeAlert tone="danger" title="Earnings unavailable" className="arc-market">{readback.kind === 'conflict' ? 'Provider ownership requires resolution before earnings can be shown.' : 'The earnings source could not be read. Try again.'}</AeAlert>
     )
   }
   if (readback.kind === 'not_found') {

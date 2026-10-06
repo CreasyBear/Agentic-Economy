@@ -5,7 +5,7 @@ import { cleanup, render, screen, within } from '@testing-library/react'
 import type { ComponentType, ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
-import arcButtonStyles from '@/components/arc/button/button.module.css'
+import actionLinkStyles from '@/components/ae/shared/action-link/action-link.module.css'
 
 const routeState = vi.hoisted(() => ({
   components: new Map<string, ComponentType>(),
@@ -104,8 +104,8 @@ describe('public semantic comfort', () => {
     expect(screen.getByRole('heading', { level: 2, name: ABOUT.ctaHeading })).toBeTruthy()
     const cta = about.getByRole('region', { name: ABOUT.ctaHeading })
     const primaryCta = within(cta).getByRole('link', { name: ABOUT.ctaPrimary })
-    expect(Array.from(primaryCta.classList)).toContain(arcButtonStyles.primary)
-    expect(Array.from(primaryCta.classList)).toContain(arcButtonStyles.md)
+    expect(Array.from(primaryCta.classList)).toContain(actionLinkStyles.primary)
+    expect(Array.from(primaryCta.classList)).toContain(actionLinkStyles.md)
     expect(primaryCta.getAttribute('href')).toBe('/market')
     expect(within(cta).queryByRole('link', { name: 'Add Tool' })).toBeNull()
     expect(about.queryByRole('link', { name: 'Add Tool' })).toBeNull()

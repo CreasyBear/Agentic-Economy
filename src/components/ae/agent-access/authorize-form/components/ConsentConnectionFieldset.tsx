@@ -1,4 +1,4 @@
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
 import { Button } from '@/components/arc/button/button'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
@@ -78,15 +78,12 @@ export function ConsentConnectionFieldset({
         </div>
       ) : null}
       {agentTargetsError !== undefined || agentTargetsNextCursor !== undefined ? (
-        <Alert>
-          <AlertTitle>{agentTargetsError === undefined ? 'More agents are available' : 'Agent list needs refreshing'}</AlertTitle>
-          <AlertDescription className="arc-consent-field-group">
+        <AeAlert role="alert" tone="info" title={agentTargetsError === undefined ? 'More agents are available' : 'Agent list needs refreshing'}><div className="arc-consent-field-group">
             {agentTargetsError === undefined ? 'Load the next page if the agent you want is not shown.' : agentTargetsError}
             <Button type="button" variant="secondary" className="arc-consent-inline-action" disabled={agentTargetsLoading} onClick={() => void onLoadAgentTargets()}>
               {agentTargetsLoading ? 'Loading agents…' : agentTargetsError === undefined ? 'Load more agents' : 'Retry agent list'}
             </Button>
-          </AlertDescription>
-        </Alert>
+          </div></AeAlert>
       ) : null}
     </fieldset>
   )

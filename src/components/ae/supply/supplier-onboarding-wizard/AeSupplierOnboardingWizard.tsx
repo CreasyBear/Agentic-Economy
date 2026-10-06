@@ -1,8 +1,7 @@
 'use client'
 
-import { AlertCircleIcon } from 'lucide-react'
 
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
 
 import { FirstToolStep } from './components/FirstToolStep'
 import { OnboardingStepper } from './components/OnboardingStepper'
@@ -28,14 +27,10 @@ export function AeSupplierOnboardingWizard({
   const diagnosticSlot = (
     <div className="arc-provider-setup-diagnostic" aria-live="polite">
       {view.diagnostic !== undefined ? (
-        <Alert id={SUPPLIER_IDENTITY_ERROR_ID} variant="destructive" className="py-2">
-          <AlertCircleIcon className="size-4" />
-          <AlertTitle>{view.diagnostic.whatHappened}</AlertTitle>
-          <AlertDescription>
+        <AeAlert tone="danger" title={view.diagnostic.whatHappened} id={SUPPLIER_IDENTITY_ERROR_ID} className="py-2">
             <span>{view.diagnostic.financialImpact}</span>
             <span>{view.diagnostic.nextStep}</span>
-          </AlertDescription>
-        </Alert>
+          </AeAlert>
       ) : null}
     </div>
   )

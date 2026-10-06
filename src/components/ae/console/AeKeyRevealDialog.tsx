@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ComponentProps } from 'react'
 import {
-  AlertTriangleIcon,
   CheckIcon,
   CopyIcon,
   DownloadIcon,
@@ -13,7 +12,7 @@ import {
 
 import { Button } from '@/components/arc/button/button'
 import { Drawer, DrawerContent } from '@/components/ae/shared/base-ui/drawer/drawer'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ae/shared/base-ui/tabs/tabs'
@@ -208,13 +207,9 @@ export function AeKeyRevealDialog({
         </div>
 
         <div data-ae-key-reveal-scroll className="arc-key-reveal-scroll overflow-y-auto">
-          <Alert className="arc-key-warning">
-            <AlertTriangleIcon aria-hidden="true" />
-            <AlertTitle>This secret will never be shown again.</AlertTitle>
-            <AlertDescription>
+          <AeAlert role="alert" tone="info" title="This secret will never be shown again." className="arc-key-warning">
               This secret will never be shown again. Store it securely.
-            </AlertDescription>
-          </Alert>
+            </AeAlert>
 
           <div className="arc-key-secret-group">
             <Label className="arc-key-secret-label">Secret key</Label>

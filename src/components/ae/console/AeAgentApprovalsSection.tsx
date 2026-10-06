@@ -3,7 +3,7 @@ import { Link } from '@tanstack/react-router'
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Button } from '@/components/arc/button/button'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
 import { Skeleton } from '@/components/arc/skeleton/skeleton'
 import type { PendingCallApproval } from '@/modules/capability-execution/call-approval.functions'
 import './AgentApprovalComposition.css'
@@ -35,15 +35,12 @@ export function AeAgentApprovalsSection({
           </div>
         ) : null}
         {error === undefined ? null : (
-          <Alert>
-            <AlertTitle>Waiting approvals unavailable</AlertTitle>
-            <AlertDescription>
+          <AeAlert role="alert" tone="info" title="Waiting approvals unavailable">
               <p>{error}</p>
               <Button type="button" variant="secondary" className="arc-agent-approvals__alert-action" disabled={loading} onClick={onRetry}>
                 {loading ? 'Refreshing approvals…' : 'Refresh approvals'}
               </Button>
-            </AlertDescription>
-          </Alert>
+            </AeAlert>
         )}
         {approvals.length === 0 ? null : (
           <ol className="arc-agent-approvals__list">
@@ -74,15 +71,12 @@ export function AeAgentApprovalsSection({
                     />
                   </div>
                   {canApprove ? null : (
-                    <Alert>
-                      <AlertTitle>Decision facts are incomplete</AlertTitle>
-                      <AlertDescription>
+                    <AeAlert role="alert" tone="info" title="Decision facts are incomplete">
                         <p>Approval remains unavailable until the accepted Quote can show the exact Tool, Provider, AUD ceiling, effects and data release. You can refresh these details or decline the request now.</p>
                         <Button type="button" variant="secondary" className="arc-agent-approvals__alert-action" disabled={loading} onClick={onRetry}>
                           {loading ? 'Refreshing details…' : 'Refresh decision details'}
                         </Button>
-                      </AlertDescription>
-                    </Alert>
+                      </AeAlert>
                   )}
                   <div className="arc-agent-approvals__actions">
                     <Button

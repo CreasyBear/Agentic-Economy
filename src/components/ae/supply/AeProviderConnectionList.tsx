@@ -1,6 +1,6 @@
 import type { RefObject } from 'react'
 
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
 import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { Button as ArcButton } from '@/components/arc/button/button'
@@ -115,23 +115,17 @@ export function AeProviderConnectionList({
         )}
         context={rebindOfferingRef === undefined || rebindConnection === undefined ? null : (
           refreshedForRebind === rebindConnection.connectionRef ? (
-            <Alert>
-              <AlertTitle>Authority refreshed</AlertTitle>
-              <AlertDescription className="grid gap-3">
+            <AeAlert role="alert" tone="info" title="Authority refreshed"><div className="grid gap-3">
                 Re-admit {rebindOfferingRef} now so this Tool binds to the refreshed authority snapshot.
                 <a ref={rebindLinkRef} href={`/owner/operations/${encodeURIComponent(rebindOfferingRef)}#provider`}
                   className={actionLinkClassName('primary', 'md')}>
                   Re-admit Tool
                 </a>
-              </AlertDescription>
-            </Alert>
+              </div></AeAlert>
           ) : (
-            <Alert>
-              <AlertTitle>Two-step authority recovery</AlertTitle>
-              <AlertDescription>
+            <AeAlert role="alert" tone="info" title="Two-step authority recovery">
                 Refresh this connection first. AE will then continue to {rebindOfferingRef} so its binding can be re-admitted against the new authority generation and digest.
-              </AlertDescription>
-            </Alert>
+              </AeAlert>
           )
         )}
       />

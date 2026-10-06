@@ -1,6 +1,6 @@
 import { CheckCircle2Icon } from 'lucide-react'
 
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field'
 import '../../SupplyPublicationComposition.css'
 import { inspectHttpsUrl } from '../../supply-source-native-start-presentation'
@@ -66,12 +66,9 @@ function HttpsUrlPreflightBadge({ status, example }: HttpsUrlPreflightBadgeProps
 
 function PreflightRule4Alert({ diagnostic }: PreflightRule4AlertProps) {
   return (
-    <Alert variant="destructive" className="w-full">
-      <AlertTitle>{diagnostic.whatHappened}</AlertTitle>
-      <AlertDescription className="grid gap-0.5">
+    <AeAlert tone="danger" title={diagnostic.whatHappened} className="w-full"><div className="grid gap-0.5">
         <span className="tabular-nums">{diagnostic.financialImpact}</span>
         <span>{diagnostic.nextStep}</span>
-      </AlertDescription>
-    </Alert>
+      </div></AeAlert>
   )
 }

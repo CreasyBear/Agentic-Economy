@@ -1,5 +1,5 @@
 import { SettingsGroup, SettingsRow } from '@/components/ae/settings/settings-shell/components/SettingsSections'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
 import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import './SecurityHistoryComposition.css'
 
@@ -38,16 +38,13 @@ export function AeCompromiseRecoveryChecklist() {
         title="If you suspect compromise"
         description="Review independent sources. Opening this checklist does not revoke access."
       >
-        <Alert className="arc-security-warning">
-          <AlertTitle>This page does not mark the account contained</AlertTitle>
-          <AlertDescription>
+        <AeAlert role="alert" tone="info" title="This page does not mark the account contained" className="arc-security-warning">
             Resetting MFA alone does not revoke existing sessions, Agent credentials,
             Provider connection authority.
             <p className="arc-security-financial-impact">
               A$0.00 affected. Opening this list does not revoke sessions or Agents.
             </p>
-          </AlertDescription>
-        </Alert>
+          </AeAlert>
         {recoveryChecks.map((check) => (
           <SettingsRow key={check.title} label={check.title} description={check.description}>
             <a href={check.href} className={`${actionLinkClassName('secondary', 'md')} arc-security-review-link`}>

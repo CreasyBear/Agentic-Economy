@@ -3,7 +3,7 @@ import { useServerFn } from '@tanstack/react-start'
 import { useState } from 'react'
 
 import { Button } from '@/components/arc/button/button'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { captureRouteException } from '@/lib/observability/capture-route-exception'
@@ -60,7 +60,7 @@ export function ProviderIdentityForm() {
 
   return (
     <div className="arc-market arc-provider-identity-form">
-      <Alert className="arc-provider-identity-notice"><AlertTitle>Create your provider identity</AlertTitle><AlertDescription className="arc-provider-identity-notice-description">This starts an unpublished provider workspace. Once an exact Tool passes verification, agents can find it through search and it is listed under your Provider.</AlertDescription></Alert>
+      <AeAlert role="alert" tone="info" title="Create your provider identity" className="arc-provider-identity-notice"><div className="arc-provider-identity-notice-description">This starts an unpublished provider workspace. Once an exact Tool passes verification, agents can find it through search and it is listed under your Provider.</div></AeAlert>
       <FieldGroup className="arc-provider-identity-fields">
         <Field className="arc-provider-identity-field" data-invalid={error !== undefined || undefined}>
           <FieldLabel className="arc-provider-identity-label" htmlFor="provider-name">Provider name</FieldLabel>

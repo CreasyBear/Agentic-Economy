@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
 import { SettingsGroup } from '@/components/ae/settings/settings-shell/components/SettingsSections'
 import { UsageBillingMeter } from '@/components/ae/shared/arc-pro/usage-billing/usage-billing'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeAlert } from '@/components/ae/shared/arc/alert/AeAlert'
 import { Button } from '@/components/arc/button/button'
 import { Drawer, DrawerContent } from '@/components/ae/shared/base-ui/drawer/drawer'
 import './MonthlySpendComposition.css'
@@ -145,26 +145,19 @@ export function AeMonthlySpendCeilingCard({
   function renderCardAlertSlot() {
     if (!spendKnown) {
       return (
-        <Alert>
-          <AlertDescription>Monthly spend data is unavailable.</AlertDescription>
-        </Alert>
+        <AeAlert tone="info" title="Monthly spend data is unavailable." role="alert" />
       )
     }
     if (resolvedSettings.enabled && percent >= 90 && percent < 100) {
       return (
-        <Alert className="border-warning-ring bg-warning-subtle text-warning-foreground">
-          <AlertTitle>Approaching monthly limit ({percent}%)</AlertTitle>
-        </Alert>
+        <AeAlert role="alert" tone="info" title={`Approaching monthly limit (${percent}%)`} className="border-warning-ring bg-warning-subtle text-warning-foreground" />
       )
     }
     if (resolvedSettings.enabled && percent >= 100) {
       return (
-        <Alert variant="destructive">
-          <AlertTitle>Monthly spending limit reached</AlertTitle>
-          <AlertDescription>
+        <AeAlert tone="danger" title="Monthly spending limit reached">
             Paid Calls are paused until next month or the cap is raised.
-          </AlertDescription>
-        </Alert>
+          </AeAlert>
       )
     }
     return null
@@ -173,13 +166,10 @@ export function AeMonthlySpendCeilingCard({
   function renderDialogDiagnosticSlot() {
     if (diagnostic === null) return null
     return (
-      <Alert variant="destructive">
-        <AlertTitle className="text-sm">{diagnostic.whatHappened}</AlertTitle>
-        <AlertDescription className="grid gap-1 text-xs">
+      <AeAlert tone="danger" title={diagnostic.whatHappened}><div className="grid gap-1 text-xs">
           <span>{diagnostic.financialImpact}</span>
           <span>{diagnostic.nextStep}</span>
-        </AlertDescription>
-      </Alert>
+        </div></AeAlert>
     )
   }
 
