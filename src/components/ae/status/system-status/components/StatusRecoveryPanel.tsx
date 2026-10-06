@@ -1,8 +1,8 @@
 import { Link } from '@tanstack/react-router'
 
-import buttonStyles from '@/components/arc/button/button.module.css'
 
 import type { StatusRecoveryPanelProps } from '../system-status.contracts'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import '../../StatusComposition.css'
 
 export function StatusRecoveryPanel({ recovery }: StatusRecoveryPanelProps) {
@@ -17,7 +17,7 @@ export function StatusRecoveryPanel({ recovery }: StatusRecoveryPanelProps) {
       </div>
       <Link
         to={recovery.href}
-        className={[buttonStyles.button, buttonStyles.secondary, buttonStyles.md].join(' ')}
+        className={actionLinkClassName('secondary', 'md')}
       >
         {recovery.label}
       </Link>

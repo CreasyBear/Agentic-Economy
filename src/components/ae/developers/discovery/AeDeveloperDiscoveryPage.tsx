@@ -3,12 +3,12 @@ import { useId, useState } from 'react'
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeEmptyState } from '@/components/ae/shared/arc/empty-state/AeEmptyState'
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
-import arcButtonStyles from '@/components/arc/button/button.module.css'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { DiscoveryRows } from './components/DiscoveryRows'
 import { DEVELOPER_DISCOVERY_UI_COPY } from './discovery.contracts'
 import type { DeveloperDiscoveryViewModel } from './discovery.contracts'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import '../DeveloperReferenceComposition.css'
 
 export type AeDeveloperDiscoveryPageProps = Readonly<{
@@ -61,7 +61,7 @@ export function AeDeveloperDiscoveryPage({ model }: AeDeveloperDiscoveryPageProp
                     <div className="arc-reference-artifact-status">
                       <Badge variant={artifact.statusVariant}>{artifact.statusLabel}</Badge>
                       <span>{artifact.checkedLabel}</span>
-                      <a href={artifact.href} aria-label={`${artifact.actionLabel}, ${artifact.label}`} className={cn(arcButtonStyles.button, arcButtonStyles.secondary, arcButtonStyles.md)}>
+                      <a href={artifact.href} aria-label={`${artifact.actionLabel}, ${artifact.label}`} className={cn(actionLinkClassName('secondary', 'md'))}>
                         {artifact.actionLabel}
                       </a>
                     </div>

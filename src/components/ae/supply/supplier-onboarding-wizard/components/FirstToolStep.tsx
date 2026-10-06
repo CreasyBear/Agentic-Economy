@@ -2,8 +2,8 @@ import { ArrowRightIcon, WrenchIcon } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
 
 import { DecisionPanel } from '@/components/ae/shared/arc-pro/chat/DecisionPanel'
-import buttonStyles from '@/components/arc/button/button.module.css'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 
 import '../OnboardingComposition.css'
 
@@ -29,7 +29,7 @@ export function FirstToolStep() {
         <div className="arc-provider-setup-actions">
           <Link
             to="/owner/operations/new"
-            className={['arc-market', buttonStyles.button, buttonStyles.primary, buttonStyles.md, 'arc-provider-setup-action'].join(' ')}
+            className={['arc-market', actionLinkClassName('primary', 'md'), 'arc-provider-setup-action'].join(' ')}
           >
             <span>Add Tool</span>
             <ArrowRightIcon className="arc-provider-setup-action-icon" aria-hidden />
@@ -37,7 +37,7 @@ export function FirstToolStep() {
           <Link
             to="/owner/operations"
             hash="provider-identity"
-            className={['arc-market', buttonStyles.button, buttonStyles.secondary, buttonStyles.md, 'arc-provider-setup-action'].join(' ')}
+            className={['arc-market', actionLinkClassName('secondary', 'md'), 'arc-provider-setup-action'].join(' ')}
           >
             Manage Provider identity
           </Link>

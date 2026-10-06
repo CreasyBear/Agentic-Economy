@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/arc/button/button'
 import { Skeleton } from '@/components/arc/skeleton/skeleton'
-import buttonStyles from '@/components/arc/button/button.module.css'
 import { recordProductJourney } from '@/lib/observability/product-journey'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import '@/components/ae/website/AuthComposition.css'
 
 const AUTH_DELAY_MS = 15_000
@@ -34,8 +34,8 @@ export function AuthLoadingState({ mode, reload = () => window.location.reload()
       }}>Reload account form</Button>
     </div> : null}
     <div className="mt-3 flex flex-wrap gap-3">
-      <a href="/support" className={`${buttonStyles.button} ${buttonStyles.ghost} ${buttonStyles.md} min-h-touch`} onClick={() => recordProductJourney({ action: 'help_opened', phase: 'attempted', surface: mode })}>Get help</a>
-      <a href="/status" className={`${buttonStyles.button} ${buttonStyles.ghost} ${buttonStyles.md} min-h-touch`}>System status</a>
+      <a href="/support" className={`${actionLinkClassName('ghost', 'md')} min-h-touch`} onClick={() => recordProductJourney({ action: 'help_opened', phase: 'attempted', surface: mode })}>Get help</a>
+      <a href="/status" className={`${actionLinkClassName('ghost', 'md')} min-h-touch`}>System status</a>
     </div>
   </div>
 }

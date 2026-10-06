@@ -6,12 +6,12 @@ import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { AePriceUpdateModal } from './price-update-modal/AePriceUpdateModal'
 import { Button as ArcButton } from '@/components/arc/button/button'
-import buttonStyles from '@/components/arc/button/button.module.css'
 import { DecisionPanel } from '@/components/ae/shared/arc-pro/chat/DecisionPanel'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { formatTimestamp } from '@/lib/ui/format-time'
 import { getStatusPresentation } from '@/lib/ui/status-presentation'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import {
   providerToolReasonPresentation,
   type ProviderToolStatus,
@@ -208,7 +208,7 @@ function PrimaryAction({
     return (
       <a
         href={status.ownerHandoff.cta}
-        className={[buttonStyles.button, buttonStyles.primary, buttonStyles.md, 'arc-provider-tool-action'].join(' ')}
+        className={[actionLinkClassName('primary', 'md'), 'arc-provider-tool-action'].join(' ')}
       >
         {status.ownerHandoff.ctaLabel}
       </a>
@@ -219,7 +219,7 @@ function PrimaryAction({
       return (
         <a
           href={resumeHref ?? '/owner/operations/new'}
-          className={[buttonStyles.button, buttonStyles.primary, buttonStyles.md, 'arc-provider-tool-action'].join(' ')}
+          className={[actionLinkClassName('primary', 'md'), 'arc-provider-tool-action'].join(' ')}
         >
           {resumeHref === undefined ? 'Add another Tool' : 'Continue setup'}
         </a>

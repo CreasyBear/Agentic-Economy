@@ -7,9 +7,9 @@ import {
   type FundingReturnPageState,
 } from '@/components/ae/funding/funding-return.contracts'
 import { AeActionLink } from '@/components/ae/shared/action-link/AeActionLink'
-import buttonStyles from '@/components/arc/button/button.module.css'
 import { formatDisplayAmount } from '@/modules/money/public'
 import type { FundingReturnViewState } from '@/modules/money/funding-return.view-model'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 
 export type AeFundingReturnStateProps = Readonly<{
   pageState: FundingReturnViewState
@@ -18,13 +18,13 @@ export type AeFundingReturnStateProps = Readonly<{
 }>
 
 const OPEN_CREDIT_ACTION = (
-  <Link to="/owner/credit" className={`${buttonStyles.button} ${buttonStyles.primary} ${buttonStyles.md}`}>
+  <Link to="/owner/credit" className={actionLinkClassName('primary', 'md')}>
     {fundingReturnCopy.openCreditAction}
   </Link>
 )
 
 const OPEN_AGENTS_ACTION = (
-  <Link to="/agent-access" className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}>
+  <Link to="/agent-access" className={actionLinkClassName('secondary', 'md')}>
     {fundingReturnCopy.openAgentsAction}
   </Link>
 )

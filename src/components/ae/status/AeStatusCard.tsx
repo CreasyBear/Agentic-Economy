@@ -3,10 +3,10 @@ import { ExternalLinkIcon } from 'lucide-react'
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeCopyPublicUrlButton } from '@/components/ae/forms/AeCopyPublicUrlButton'
 import { AeStatusBadge } from '@/components/ae/status/AeStatusBadge'
-import buttonStyles from '@/components/arc/button/button.module.css'
 import { readPublicCatalogActivationRef } from '@/modules/catalog/public'
 import type { PublicOwnerStatusRouteReadback } from '@/modules/catalog/public'
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import {
   dispositionToAeStatus,
   offeringAccessToAeStatus,
@@ -56,7 +56,7 @@ export function AeStatusCard({ readback }: AeStatusCardProps) {
               size="sm"
             />
           )}
-          <a href={readback.publicUrl} className={[buttonStyles.button, buttonStyles.secondary, buttonStyles.md].join(' ')}>
+          <a href={readback.publicUrl} className={actionLinkClassName('secondary', 'md')}>
             <ExternalLinkIcon aria-hidden="true" />
             {isPreview ? 'Open preview' : 'Open page'}
           </a>

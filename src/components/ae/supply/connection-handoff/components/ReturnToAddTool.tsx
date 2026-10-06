@@ -1,8 +1,8 @@
 import { Link } from '@tanstack/react-router'
 
-import buttonStyles from '@/components/arc/button/button.module.css'
 
 import type { ReturnToAddToolProps } from '../connection-handoff.contracts'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import '../ConnectionHandoffComposition.css'
 
 export function ReturnToAddTool({ returnSearch }: ReturnToAddToolProps) {
@@ -10,7 +10,7 @@ export function ReturnToAddTool({ returnSearch }: ReturnToAddToolProps) {
     <Link
       to="/owner/operations/new"
       search={returnSearch}
-      className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md} arc-connection-return`}
+      className={`${actionLinkClassName('secondary', 'md')} arc-connection-return`}
     >
       Return to Add Tool
     </Link>

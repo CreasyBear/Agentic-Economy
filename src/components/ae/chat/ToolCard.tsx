@@ -4,7 +4,6 @@ import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
 import { AeToolPrice } from '@/components/ae/market/AeToolPrice'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/arc/button/button'
-import buttonStyles from '@/components/arc/button/button.module.css'
 import { DecisionPanel } from '@/components/ae/shared/arc-pro/chat/DecisionPanel'
 import { ProductListing } from '@/components/ae/shared/arc-pro/market/ProductListing'
 import { AeComparisonTable } from '@/components/ae/shared/comparison-table/AeComparisonTable'
@@ -33,9 +32,10 @@ import type { SearchNextProps, ToolCardProps as ToolCardBaseProps } from './pres
 import type { RunIntent } from '@/modules/chat/run-request'
 import { readChatRecoveryReason } from './recovery/recovery.view-model'
 import type { ChatRecoveryReason } from './recovery/recovery.contracts'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import './ToolResultComposition.css'
 
-const secondaryLink = `${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.sm}`
+const secondaryLink = `${actionLinkClassName('secondary', 'sm')}`
 
 type ToolCardProps = ToolCardBaseProps & Readonly<{
   onAddCredit?: ((shortfall?: { units: string; exponent: number }, run?: RunIntent) => void) | undefined

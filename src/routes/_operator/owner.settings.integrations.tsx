@@ -1,7 +1,6 @@
 import { createFileRoute, Link, useLocation, useRouter } from '@tanstack/react-router'
 
 import { AeActionLink } from '@/components/ae/shared/action-link/AeActionLink'
-import arcButtonStyles from '@/components/arc/button/button.module.css'
 import { AeOwnerProviderConnections } from '@/components/ae/supply/AeOwnerProviderConnections'
 import { providerConnectionTargetId } from '@/components/ae/supply/provider-connection-target'
 import { readProviderWorkspaceConnectionsDetailServer } from '@/components/ae/offerings/provider-workspace.functions'
@@ -10,6 +9,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { parseOwnerToolsCompatibilitySearch, parseOwnerToolsX402ConnectionSearch } from '@/lib/operator/supply-compatibility'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 import { cn } from '@/lib/utils'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 
 export const Route = createFileRoute('/_operator/owner/settings/integrations')({
   ...operatorRouteOptions,
@@ -39,7 +39,7 @@ function OwnerIntegrationsRoute() {
   return <SettingsPage title="Provider connections" description="Manage hosted x402 endpoints and their access authority.">
     {detail.kind === 'not_applicable' ? (
       <SettingsEmptyState title="No provider workspace yet" description="Create your provider workspace from Tools, then return here to connect an endpoint."
-        action={<Link to="/owner/operations" className={cn(arcButtonStyles.button, arcButtonStyles.primary, arcButtonStyles.md)}>Open Tools</Link>} />
+        action={<Link to="/owner/operations" className={cn(actionLinkClassName('primary', 'md'))}>Open Tools</Link>} />
     ) : detail.kind === 'conflict' ? (
       <Alert variant="destructive"><AlertTitle>Connection ownership conflict</AlertTitle><AlertDescription>
         {detail.reason === 'multiple_providers' ? 'More than one provider is linked to this account.' : 'Connection records do not belong to the current provider.'} No connection can be changed until ownership is resolved. <Link to="/support" className="underline">Contact support</Link>.

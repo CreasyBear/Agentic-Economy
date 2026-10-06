@@ -3,7 +3,7 @@ import { Link } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
 
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
-import buttonStyles from '@/components/arc/button/button.module.css'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import './ReceiptComposition.css'
 
 export function CallReceiptWorkspace({
@@ -33,20 +33,20 @@ export function CallReceiptWorkspace({
           <Link
             to="/support"
             search={{ callRef }}
-            className={`${buttonStyles.button} ${buttonStyles.ghost} ${buttonStyles.md}`}
+            className={actionLinkClassName('ghost', 'md')}
           >
             Get help
           </Link>
           <Link
             to="/trust"
-            className={`${buttonStyles.button} ${buttonStyles.ghost} ${buttonStyles.md}`}
+            className={actionLinkClassName('ghost', 'md')}
           >
             Trust centre
           </Link>
           <Link
             to="/activity"
             search={activityReturnSearch(returnScope)}
-            className={`${buttonStyles.button} ${buttonStyles.ghost} ${buttonStyles.md}`}
+            className={actionLinkClassName('ghost', 'md')}
           >
             Back to Calls
           </Link>

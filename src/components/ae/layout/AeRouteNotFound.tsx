@@ -3,9 +3,9 @@ import { Link, useLocation } from '@tanstack/react-router'
 
 import { AeNotFound } from '@/components/ae/layout/AeNotFound'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
-import buttonStyles from '@/components/arc/button/button.module.css'
 import { appDestination } from '@/lib/navigation/app-navigation'
 import { operatorRoleForPath } from '@/lib/operator/roles'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import './RouteRecoveryComposition.css'
 
 export type OperatorRouteNotFoundProps = Readonly<{
@@ -43,7 +43,7 @@ export function OperatorRouteNotFoundRecovery({
       currentPath={pathname}
     >
       <div className="arc-market arc-recovery-panel">
-        <Link to={recoveryHref} className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}>
+        <Link to={recoveryHref} className={actionLinkClassName('secondary', 'md')}>
           <ArrowLeftIcon data-icon="inline-start" aria-hidden="true" />
           {recoveryLabel}
         </Link>

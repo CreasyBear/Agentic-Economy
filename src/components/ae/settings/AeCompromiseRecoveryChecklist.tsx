@@ -1,6 +1,6 @@
 import { SettingsGroup, SettingsRow } from '@/components/ae/settings/settings-shell/components/SettingsSections'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import buttonStyles from '@/components/arc/button/button.module.css'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import './SecurityHistoryComposition.css'
 
 const recoveryChecks: ReadonlyArray<{
@@ -50,7 +50,7 @@ export function AeCompromiseRecoveryChecklist() {
         </Alert>
         {recoveryChecks.map((check) => (
           <SettingsRow key={check.title} label={check.title} description={check.description}>
-            <a href={check.href} className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md} arc-security-review-link`}>
+            <a href={check.href} className={`${actionLinkClassName('secondary', 'md')} arc-security-review-link`}>
               {check.href === '/support' ? 'Contact support' : 'Review'}
             </a>
           </SettingsRow>

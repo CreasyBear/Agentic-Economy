@@ -4,9 +4,9 @@ import { AeStatusStepper } from '@/components/ae/shared/status-stepper/AeStatusS
 import { Button } from '@/components/arc/button/button'
 import { Stepper } from '@/components/arc/stepper/stepper'
 import type { StepperStep } from '@/components/arc/stepper/stepper'
-import buttonStyles from '@/components/arc/button/button.module.css'
 import type { AgentOnboardingRequest } from '@/modules/agent-access/public'
 import type { AgentAccessSearch } from '@/modules/agent-access/agent-lifecycle.view-model'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 
 type OnboardingRequestPhase = Extract<AgentOnboardingRequest, { kind: 'request' }>['phase']
 type OnboardingRequestState = Readonly<{
@@ -130,7 +130,7 @@ export function HomeOnboardingRequestSection({ request, search, onCheck, checkin
     <div className="arc-agent-connect-actions">
       {view.reviewSearch ? <Link to="/agent-access/authorize"
         search={view.reviewSearch}
-        className={`${buttonStyles.button} ${buttonStyles.primary} ${buttonStyles.md}`}>Review access request</Link> : null}
+        className={actionLinkClassName('primary', 'md')}>Review access request</Link> : null}
       <Button type="button" variant="secondary" disabled={checking} onClick={onCheck}>{checking ? 'Checking…' : 'Check request status'}</Button>
     </div>
   </AeSection>

@@ -6,7 +6,6 @@ import { AePageState } from '@/components/ae/layout/AePageState'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { AlphaLearning } from './AlphaLearning'
 import { Button } from '@/components/arc/button/button'
-import arcButtonStyles from '@/components/arc/button/button.module.css'
 import { Accordion } from '@/components/arc/accordion/accordion'
 import { AdminObjectSearchForm } from '../object-search/components/AdminObjectSearchForm'
 import { useAdminObjectSearch } from '../object-search/useAdminObjectSearch'
@@ -19,6 +18,7 @@ import { FounderDestinations } from './components/FounderDestinations'
 import { RecentlyViewed } from './components/RecentlyViewed'
 import { ADMIN_OVERVIEW_COPY, type AdminOverviewDataState } from './overview.contracts'
 import { useAdminOverview, useOverviewExceptions } from './useAdminOverview'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 
 export function AdminOverviewPage() {
   const data = useAdminOverview()
@@ -44,7 +44,7 @@ export function AdminOverviewPage() {
             <ErrorBoundary fallback={
               <AeSection title="Marketplace activity">
                 <p role="status">{ADMIN_OVERVIEW_COPY.metricsUnavailable}</p>
-                <Link to="/admin/metrics" className={`arc-market ${arcButtonStyles.button} ${arcButtonStyles.secondary} ${arcButtonStyles.md}`}>Open Metrics</Link>
+                <Link to="/admin/metrics" className={`arc-market ${actionLinkClassName('secondary', 'md')}`}>Open Metrics</Link>
               </AeSection>
             }>
               <OverviewMarketplaceActivity />
@@ -55,7 +55,7 @@ export function AdminOverviewPage() {
           <ErrorBoundary fallback={
             <AeSection title={ADMIN_OVERVIEW_COPY.exceptionsTitle}>
               <p role="status">{ADMIN_OVERVIEW_COPY.exceptionsUnavailable}</p>
-              <Link to="/admin/exceptions" className={`arc-market ${arcButtonStyles.button} ${arcButtonStyles.secondary} ${arcButtonStyles.md}`}>Open queues</Link>
+              <Link to="/admin/exceptions" className={`arc-market ${actionLinkClassName('secondary', 'md')}`}>Open queues</Link>
             </AeSection>
           }>
             <OverviewExceptionsContainer />

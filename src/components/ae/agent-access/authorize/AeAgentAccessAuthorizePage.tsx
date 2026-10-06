@@ -4,11 +4,11 @@ import { AeAgentAccessAuthorizeForm } from '@/components/ae/agent-access/authori
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSettingsStack } from '@/components/ae/layout/AeSection'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import buttonStyles from '@/components/arc/button/button.module.css'
 import '../authorize-form/ConsentComposition.css'
 import { presentConnectionProblem } from '@/modules/agent-access/public'
 
 import type { AgentAccessAuthorizeLoaded } from './authorize.contracts'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 
 export type AeAgentAccessAuthorizePageProps = Readonly<{ loaded: AgentAccessAuthorizeLoaded }>
 
@@ -17,7 +17,7 @@ function OpenAgentsLink({ grantRef, state }: Readonly<{ grantRef?: string; state
     <Link
       to="/agent-access"
       search={grantRef === undefined ? {} : { grantRef, ...(state === undefined ? {} : { state }) }}
-      className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md} arc-consent-page-outcome-link`}
+      className={`${actionLinkClassName('secondary', 'md')} arc-consent-page-outcome-link`}
     >
       Open Agents
     </Link>

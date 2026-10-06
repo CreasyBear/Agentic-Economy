@@ -14,10 +14,10 @@ import type {
 import { AeProviderToolDetail } from '@/components/ae/supply/AeProviderToolDetail'
 import { OWNER_TOOL_DETAIL_COPY } from '@/components/ae/supply/owner-tool-detail.contracts'
 import type { ProviderToolActionOutcome } from '@/modules/capability-supply/provider-tool-actions.contracts'
-import buttonStyles from '@/components/arc/button/button.module.css'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { formatTimestamp } from '@/lib/ui/format-time'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import {
   recheckOwnerCapabilityServer,
   republishOwnerCapabilityServer,
@@ -135,7 +135,7 @@ export function AeOwnerToolDetailPage({ toolRef, identity, status }: AeOwnerTool
           <Link
             to="/tools/$providerHost/$slug"
             params={{ providerHost: identity.slug, slug: status.tool.slug }}
-            className={[buttonStyles.button, buttonStyles.secondary, buttonStyles.md, 'arc-owner-tool-action'].join(' ')}
+            className={[actionLinkClassName('secondary', 'md'), 'arc-owner-tool-action'].join(' ')}
           >
             {OWNER_TOOL_DETAIL_COPY.publicPreviewLabel}
           </Link>
@@ -177,7 +177,7 @@ function UnavailableTool({ toolRef, unavailable }: Readonly<{ toolRef: string; u
         </Alert>
         <Link
           to="/owner/operations"
-          className={[buttonStyles.button, buttonStyles.secondary, buttonStyles.md, 'arc-owner-tool-action'].join(' ')}
+          className={[actionLinkClassName('secondary', 'md'), 'arc-owner-tool-action'].join(' ')}
         >
           Return to Tools
         </Link>

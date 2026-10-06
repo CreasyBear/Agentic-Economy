@@ -1,7 +1,6 @@
 import { useAuth } from '@clerk/tanstack-react-start'
 import { Link, useLocation } from '@tanstack/react-router'
 
-import buttonStyles from '@/components/arc/button/button.module.css'
 import { ArrowUpRightIcon } from 'lucide-react'
 import {
   PUBLIC_NAVIGATION,
@@ -9,6 +8,7 @@ import {
   type PublicDestination,
 } from '@/lib/navigation/app-navigation'
 import { cn } from '@/lib/utils'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import './SiteNavigationComposition.css'
 
 export function AeSitePrimaryNav() {
@@ -59,7 +59,7 @@ function PublicNavLink({
       {...(onNavigate === undefined ? {} : { onClick: onNavigate })}
       aria-current={active ? 'page' : undefined}
       className={cn(
-        buttonStyles.button, buttonStyles.ghost, buttonStyles.md,
+        actionLinkClassName('ghost', 'md'),
         'arc-public-nav-link', drawer ? 'arc-public-drawer-link' : null,
       )}
     >

@@ -4,7 +4,6 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { Button as ArcButton } from '@/components/arc/button/button'
-import arcButtonStyles from '@/components/arc/button/button.module.css'
 import type { OwnerProviderConnection } from '@/modules/capability-supply/supply-funnel.functions'
 import { formatRelativeTime, formatTimestamp, timestampIso } from '@/lib/ui/format-time'
 import { providerConnectionTargetId } from './provider-connection-target'
@@ -15,6 +14,7 @@ import {
 } from './owner-provider-connections-model'
 import { OWNER_MCP_OAUTH_CALLBACK_COPY } from './owner-mcp-oauth-callback.contracts'
 import { Integrations, type IntegrationRecord } from '@/components/ae/shared/arc-pro/integrations/integrations'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 
 export function AeProviderConnectionList({
   connections,
@@ -120,7 +120,7 @@ export function AeProviderConnectionList({
               <AlertDescription className="grid gap-3">
                 Re-admit {rebindOfferingRef} now so this Tool binds to the refreshed authority snapshot.
                 <a ref={rebindLinkRef} href={`/owner/operations/${encodeURIComponent(rebindOfferingRef)}#provider`}
-                  className={[arcButtonStyles.button, arcButtonStyles.primary, arcButtonStyles.md].join(' ')}>
+                  className={actionLinkClassName('primary', 'md')}>
                   Re-admit Tool
                 </a>
               </AlertDescription>

@@ -5,7 +5,6 @@ import type { ColumnDef } from '@tanstack/react-table'
 import { ArrowUpRightIcon } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
-import buttonStyles from '@/components/arc/button/button.module.css'
 import {
   AeOperatorSortableHeader,
   AeRecordTable,
@@ -14,6 +13,7 @@ import { AeEmptyState } from '@/components/ae/shared/arc/empty-state/AeEmptyStat
 import { formatDisplayAmount } from '@/modules/money/public'
 import { projectCallSummaryPurchaseStatus } from '@/modules/capability-execution/call-receipt-view'
 import { formatUtcTimestamp } from '@/lib/ui/format-time'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import type {
   AgentActivityView,
   AgentUsageSummary,
@@ -139,7 +139,7 @@ export function AeAgentCallHistoryTable({
         cell: ({ row }) => (
           <a
             href={`/calls/${encodeURIComponent(row.original.callRef)}`}
-            className={`${buttonStyles.button} ${buttonStyles.ghost} ${buttonStyles.sm}`}
+            className={actionLinkClassName('ghost', 'sm')}
             aria-label={`View call receipt ${row.original.callRef}`}
           >
             <span>Receipt</span>

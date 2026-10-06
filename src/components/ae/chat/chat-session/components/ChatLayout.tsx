@@ -2,7 +2,6 @@
 import { ErrorBoundary } from '@sentry/react'
 import { useEffect, useState } from 'react'
 import { ArcAiChatDock, ArcAiChatFrame } from '@/components/ae/shared/arc-pro/ai-chat/ai-chat'
-import buttonStyles from '@/components/arc/button/button.module.css'
 import '@/components/ae/shared/arc-pro/chat/ChatComposition.css'
 import { AeChatPage } from '@/components/ae/layout/AeChatPage'
 
@@ -13,6 +12,7 @@ import { ChatComposer } from './ChatComposer'
 import { ChatHeader } from './ChatHeader'
 import { ChatHeaderAuthorityContainer } from '../ChatHeaderAuthorityContainer'
 import { RecoveryNotice } from '../../recovery/RecoveryNotice'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 
 
 export function ChatLayout({ model, ownerChatEnabled = false, enableSpendingBusy = model.header.busy, onEnableSpending, onAddCredit, balanceLabel, balanceDescription }: ChatLayoutProps) {
@@ -51,7 +51,7 @@ export function ChatLayout({ model, ownerChatEnabled = false, enableSpendingBusy
         <div className="arc-chat-private">
           <h1>Sign in to open this chat</h1>
           <p>This conversation is private. Sign in to return to this page.</p>
-          <a href={model.signInToThread.href} className={`${buttonStyles.button} ${buttonStyles.primary} ${buttonStyles.md}`}>Sign in</a>
+          <a href={model.signInToThread.href} className={actionLinkClassName('primary', 'md')}>Sign in</a>
         </div>
       </AeChatPage>
     )

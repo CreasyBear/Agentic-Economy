@@ -2,10 +2,10 @@ import { Link } from '@tanstack/react-router'
 
 import { AeEmptyState } from '@/components/ae/shared/arc/empty-state/AeEmptyState'
 import { Button } from '@/components/arc/button/button'
-import buttonStyles from '@/components/arc/button/button.module.css'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 
 import { OWNER_OFFERINGS_COPY, type OwnerOfferingsProjectionGateProps } from '../owner-offerings.contracts'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import './OwnerInventoryComposition.css'
 
 export function OwnerOfferingsProjectionGate({
@@ -37,7 +37,7 @@ export function OwnerOfferingsEmptyState() {
       action={
         <Link
           to="/owner/operations/new"
-          className={`arc-market ${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md} arc-owner-inventory-empty-action`}
+          className={`arc-market ${actionLinkClassName('secondary', 'md')} arc-owner-inventory-empty-action`}
         >
           {OWNER_OFFERINGS_COPY.emptyAction}
         </Link>

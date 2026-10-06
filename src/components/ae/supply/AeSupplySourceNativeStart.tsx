@@ -2,7 +2,6 @@ import { useEffect, useRef } from 'react'
 
 import { AeInlineState } from '@/components/ae/feedback/AeInlineState'
 import { MultiStepForm, type CompletedFormStep } from '@/components/ae/shared/arc-pro/multi-step-form/multi-step-form'
-import buttonStyles from '@/components/arc/button/button.module.css'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { SupplyCandidateSection } from './SupplyCandidateSection'
 import { SupplySourceSuggestion } from './SupplySourceSuggestion'
@@ -17,6 +16,7 @@ import {
 import type { SupplyJourneyContinuation } from './supply-source-native-start-presentation'
 import { supplyPublishAuthorityRequired, useReportSupplyNavigationSafety } from './supply-navigation-safety'
 import { useSupplyNativeStartState, type SupplyNativeStartProps } from './useSupplyNativeStartState'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import './SupplyJourneyComposition.css'
 
 type SupplyStage = 'source' | 'tool' | 'terms' | 'review'
@@ -179,7 +179,7 @@ function SupplyFlowFeedback({ error, requiredAction, success, continuation, publ
 }>) {
   return (
     <>
-      {error === undefined ? null : <Alert id={SUPPLY_PUBLICATION_ERROR_ID} variant="destructive" role="alert" className="arc-supply-feedback"><AlertTitle>Action required</AlertTitle><AlertDescription className="arc-supply-feedback-description"><p>{error}</p>{publicationLocked ? <a href="/owner/operations" className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md} arc-supply-feedback-action`}>Open Tools</a> : null}</AlertDescription></Alert>}
+      {error === undefined ? null : <Alert id={SUPPLY_PUBLICATION_ERROR_ID} variant="destructive" role="alert" className="arc-supply-feedback"><AlertTitle>Action required</AlertTitle><AlertDescription className="arc-supply-feedback-description"><p>{error}</p>{publicationLocked ? <a href="/owner/operations" className={`${actionLinkClassName('secondary', 'md')} arc-supply-feedback-action`}>Open Tools</a> : null}</AlertDescription></Alert>}
       {requiredAction === undefined ? null : (
         <Alert role="status" className="arc-supply-feedback">
           <AlertTitle>{requiredAction.title}</AlertTitle>
@@ -188,7 +188,7 @@ function SupplyFlowFeedback({ error, requiredAction, success, continuation, publ
             {requiredAction.cta === null ? null : (
               <a
                 href={requiredAction.cta}
-                className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md} arc-supply-feedback-action`}
+                className={`${actionLinkClassName('secondary', 'md')} arc-supply-feedback-action`}
               >
                 {requiredAction.ctaLabel}
               </a>
@@ -204,7 +204,7 @@ function SupplyFlowFeedback({ error, requiredAction, success, continuation, publ
             {continuation === undefined ? null : (
               <a
                 href={continuation.to}
-                className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md} arc-supply-feedback-action`}
+                className={`${actionLinkClassName('secondary', 'md')} arc-supply-feedback-action`}
               >
                 {continuation.label}
               </a>

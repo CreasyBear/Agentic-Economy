@@ -2,7 +2,7 @@ import { Link } from '@tanstack/react-router'
 
 import type { AeFact } from '@/components/ae/data/AeFactList'
 import { AeRecordSheet } from '@/components/ae/layout/AeRecordSheet'
-import buttonStyles from '@/components/arc/button/button.module.css'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import '../../RecordWorkspaceComposition.css'
 import {
   ADMIN_EXCEPTIONS_COPY,
@@ -42,7 +42,7 @@ export function ExceptionEvidenceSheet({ row, onOpenChange }: ExceptionEvidenceS
             <p className="arc-admin-record-context">{ADMIN_EXCEPTIONS_COPY.verifySourceAuthority}</p>
           ) : null}
           {objectHref === null || objectHref === undefined ? null : (
-            <Link to={objectHref} className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}>
+            <Link to={objectHref} className={actionLinkClassName('secondary', 'md')}>
               {ADMIN_EXCEPTIONS_COPY.openObject}
             </Link>
           )}

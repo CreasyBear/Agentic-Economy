@@ -5,7 +5,6 @@ import { AeAgentJsonAffordance } from '@/components/ae/landing/AeAgentJsonAfford
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { ProviderIdentity } from '@/components/ae/shared/ProviderIdentity'
 import { ProviderPortfolio } from '@/components/ae/shared/ProviderPortfolio'
-import arcButtonStyles from '@/components/arc/button/button.module.css'
 import '@/components/ae/shared/ProviderCatalogueComposition.css'
 import { cn } from '@/lib/utils'
 import { telUri } from '@/lib/ui/tel-uri'
@@ -14,6 +13,7 @@ import { isPublicHttpsUrl } from '@/modules/catalog/public'
 import { projectCatalogueEndpointListing, type PublicBusinessCatalogApiV2Dto, type ServiceDto } from '@/modules/registry/public'
 import { projectToolObject } from '@/components/ae/shared/listing-family.view-model'
 import type { PublicOfferingSupplyView } from '@/components/ae/offerings/offering-presentation'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 
 export type AeProviderListingPageProps = Readonly<{
   catalog: PublicBusinessCatalogApiV2Dto
@@ -48,8 +48,8 @@ export function AeProviderListingPage({ catalog, agentJsonUrl, service, supply, 
       <aside aria-label="Provider information" className="arc-provider-aside">
         <section><h2>About this Provider</h2><p>Published Business portfolio. A listed endpoint is not callable through AE unless it is exactly joined to an admitted Tool.</p>
           <AeFactList facts={[{ label: 'Category', value: catalog.category }, { label: 'Last indexed', value: <time dateTime={timestampIso(catalog.observedAt)}>{formatTimestamp(catalog.observedAt)}</time> }, ...(catalog.responseTimeMinutes === undefined ? [] : [{ label: 'Published response time', value: `${catalog.responseTimeMinutes} min` }])]} />
-          {websiteHref === undefined ? null : <a href={websiteHref} target="_blank" rel="noreferrer" aria-label="Provider website (opens in a new tab)" className={cn(arcButtonStyles.button, arcButtonStyles.secondary, arcButtonStyles.md, 'justify-between text-left')}>Provider website<ArrowUpRightIcon className="shrink-0" aria-hidden="true" /></a>}
-          {catalog.businessContext.kind !== 'local_human' || catalog.businessContext.publishedPhone === undefined ? null : <a href={telUri(catalog.businessContext.publishedPhone)} className={cn(arcButtonStyles.button, arcButtonStyles.secondary, arcButtonStyles.md)}>Phone provider</a>}
+          {websiteHref === undefined ? null : <a href={websiteHref} target="_blank" rel="noreferrer" aria-label="Provider website (opens in a new tab)" className={cn(actionLinkClassName('secondary', 'md'), 'justify-between text-left')}>Provider website<ArrowUpRightIcon className="shrink-0" aria-hidden="true" /></a>}
+          {catalog.businessContext.kind !== 'local_human' || catalog.businessContext.publishedPhone === undefined ? null : <a href={telUri(catalog.businessContext.publishedPhone)} className={cn(actionLinkClassName('secondary', 'md'))}>Phone provider</a>}
         </section>
         <details className="arc-provider-json"><summary><BracesIcon className="size-4" aria-hidden="true" />Agent-readable catalogue</summary><div><p>Inspect the public JSON projection without parsing this page.</p><AeAgentJsonAffordance agentJsonUrl={agentJsonUrl} query={catalog.name} /></div></details>
         <Link to="/privacy/remove-business" className="arc-provider-text-link">Correct or remove this Provider</Link>
@@ -63,6 +63,6 @@ export function ListingFirstScreen({ catalog }: Readonly<{ catalog: PublicBusine
 }
 
 function ListingBackLink({ from, threadId }: Readonly<{ from?: 'thread'; threadId?: string }>) {
-  if (from === 'thread' && threadId !== undefined) return <Link to="/t/$threadId" params={{ threadId }} className={cn(arcButtonStyles.button, arcButtonStyles.ghost, arcButtonStyles.md)}><ArrowLeftIcon aria-hidden="true" />Back to result</Link>
-  return <Link to="/market" className={cn(arcButtonStyles.button, arcButtonStyles.ghost, arcButtonStyles.md)}><ArrowLeftIcon aria-hidden="true" />Browse Market</Link>
+  if (from === 'thread' && threadId !== undefined) return <Link to="/t/$threadId" params={{ threadId }} className={cn(actionLinkClassName('ghost', 'md'))}><ArrowLeftIcon aria-hidden="true" />Back to result</Link>
+  return <Link to="/market" className={cn(actionLinkClassName('ghost', 'md'))}><ArrowLeftIcon aria-hidden="true" />Browse Market</Link>
 }

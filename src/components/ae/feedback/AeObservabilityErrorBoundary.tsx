@@ -2,9 +2,9 @@ import { Component, type ReactNode } from 'react'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/arc/button/button'
-import buttonStyles from '@/components/arc/button/button.module.css'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { attemptViteStaleChunkReload } from '@/lib/observability/stale-chunk-reload'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import '../layout/RouteRecoveryComposition.css'
 
 type AeRenderErrorBoundaryProps = Readonly<{
@@ -53,7 +53,7 @@ function AeObservabilityErrorFallback() {
             <Button type="button" size="md" onClick={() => window.location.reload()}>
               Try again
             </Button>
-            <a href="/market" className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}>Browse Tools</a>
+            <a href="/market" className={actionLinkClassName('secondary', 'md')}>Browse Tools</a>
           </div>
         </AlertDescription>
       </Alert>

@@ -5,7 +5,6 @@ import { useAuth } from '@clerk/tanstack-react-start'
 
 import { Command, CommandEmpty, CommandList } from '@/components/ui/command'
 import { Button } from '@/components/arc/button/button'
-import arcButton from '@/components/arc/button/button.module.css'
 import {
   searchMarketTools,
   type MarketToolSearchInput,
@@ -27,6 +26,7 @@ import {
 import { useCommandPaletteSelection } from './useCommandPaletteSelection'
 import { useMarketToolSearch } from './useMarketToolSearch'
 import { useSavedMarketNeed } from './useSavedMarketNeed'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import '../CommandPanelComposition.css'
 
 type ToolsSearchPageProps = Readonly<{
@@ -193,7 +193,7 @@ export function ToolsSearchPage({
                 </div>
               )
             ) : isSignedIn === false ? (
-              <a href="/sign-in" className={`${arcButton.button} ${arcButton.secondary} ${arcButton.md}`}>
+              <a href="/sign-in" className={actionLinkClassName('secondary', 'md')}>
                 Sign in to save this need
               </a>
             ) : null}

@@ -4,7 +4,7 @@ import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSettingsStack } from '@/components/ae/layout/AeSection'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
-import buttonStyles from '@/components/arc/button/button.module.css'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import './connection-handoff/ConnectionHandoffComposition.css'
 
 import {
@@ -42,7 +42,7 @@ export function AeOwnerMcpOAuthCallback({ result }: AeOwnerMcpOAuthCallbackProps
               search={result.continuationDraftRef === undefined
                 ? {}
                 : { draft: result.continuationDraftRef }}
-              className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md} arc-connection-return`}
+              className={`${actionLinkClassName('secondary', 'md')} arc-connection-return`}
             >
               {OWNER_MCP_OAUTH_CALLBACK_COPY.action}
             </Link>

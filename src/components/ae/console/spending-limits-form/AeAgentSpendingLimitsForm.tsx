@@ -4,7 +4,6 @@ import { AlertCircleIcon, CheckIcon, ShieldAlertIcon } from 'lucide-react'
 
 import { SpendingLimitInputs } from '@/components/ae/shared/SpendingLimitInputs'
 import { Button } from '@/components/arc/button/button'
-import buttonStyles from '@/components/arc/button/button.module.css'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import type { AgentDetail } from '@/modules/agent-access/agent-operator-view-model'
@@ -21,6 +20,7 @@ import { SpendingPauseToggle } from './components/SpendingPauseToggle'
 import { SpendingPolicyDiagnosticSlot } from './components/SpendingPolicyDiagnosticSlot'
 import { SpendingPresetSelector } from './components/SpendingPresetSelector'
 import { useAgentSpendingLimits } from './useAgentSpendingLimits'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import './SpendingPolicyComposition.css'
 
 export type AeAgentSpendingLimitsFormProps = Readonly<{
@@ -95,7 +95,7 @@ export function AeAgentSpendingLimitsForm({
       ) : policy.kind === 'expired' ? (
         <div className="arc-spending-policy-renewal" role="status">
           <span className="arc-spending-policy-hint">Agent authority expired. Renew the connection to set new spending limits.</span>
-          <a href="/agent-access" className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md} arc-spending-policy-renew`}>Renew connection</a>
+          <a href="/agent-access" className={`${actionLinkClassName('secondary', 'md')} arc-spending-policy-renew`}>Renew connection</a>
         </div>
       ) : policy.kind === 'unset' ? (
         <p className="arc-spending-policy-hint">No spending policy set.</p>

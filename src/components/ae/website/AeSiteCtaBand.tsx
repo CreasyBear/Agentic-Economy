@@ -2,8 +2,8 @@ import type { ReactNode } from 'react'
 
 import { Link } from '@tanstack/react-router'
 
-import arcButtonStyles from '@/components/arc/button/button.module.css'
 import { cn } from '@/lib/utils'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 
 import './AboutFeaturesComposition.css'
 
@@ -27,14 +27,14 @@ export function AeSiteCtaBand({ title, description, primary, secondary }: AeSite
           <div className="arc-about-cta-actions">
             <Link
               to={primary.to}
-              className={cn(arcButtonStyles.button, arcButtonStyles.primary, arcButtonStyles.md)}
+              className={cn(actionLinkClassName('primary', 'md'))}
             >
               {primary.label}
             </Link>
             {secondary === undefined ? null : (
               <Link
                 to={secondary.to}
-                className={cn(arcButtonStyles.button, arcButtonStyles.secondary, arcButtonStyles.md)}
+                className={cn(actionLinkClassName('secondary', 'md'))}
               >
                 {secondary.label}
               </Link>

@@ -5,9 +5,9 @@ import { ProviderNameEditor } from '@/components/ae/settings/ProviderNameEditor'
 import { SettingsGroup, SettingsRow } from '@/components/ae/settings/settings-shell/components/SettingsSections'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import type { RenameProviderDisplayNameResult } from '@/lib/server/owner-workspace.functions'
-import buttonStyles from '@/components/arc/button/button.module.css'
 import type { PublicOwnerStatusRouteReadbackResult } from '@/modules/catalog/public'
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 
 export function AeWorkspaceGeneral({
   result,
@@ -45,7 +45,7 @@ export function AeWorkspaceGeneral({
         action={
           <Link
             to="/for-providers"
-            className={`arc-market ${buttonStyles.button} ${buttonStyles.primary} ${buttonStyles.md}`}
+            className={`arc-market ${actionLinkClassName('primary', 'md')}`}
           >
             Review Provider setup
           </Link>
@@ -63,7 +63,7 @@ export function AeWorkspaceGeneral({
           <Link
             to="/owner/operations"
             hash="provider-identity"
-            className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}
+            className={actionLinkClassName('secondary', 'md')}
           >
             Try again
           </Link>

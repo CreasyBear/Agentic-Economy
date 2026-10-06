@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import { Link } from '@tanstack/react-router'
-import buttonStyles from '@/components/arc/button/button.module.css'
 
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AlphaLearningNotice } from '@/components/ae/shared/AlphaLearningNotice'
@@ -21,6 +20,7 @@ import { ConsentOutcomeView } from './components/ConsentOutcomeView'
 import { ConsentRequestFacts } from './components/ConsentRequestFacts'
 import { ConsentToolAccessFieldset } from './components/ConsentToolAccessFieldset'
 import { useAgentConsentDecision } from './useAgentConsentDecision'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import './ConsentComposition.css'
 
 export type AeAgentAccessAuthorizeFormProps = Readonly<{
@@ -398,7 +398,7 @@ function AeAgentAccessAuthorizeFormLifetime({ locator, oauthState, details }: Ae
           />
         )}
         <Link to="/agent-access" search={{ grantRef: vm.grantRef, ...(oauthState === undefined ? {} : { state: oauthState }) }}
-          target="_blank" rel="noopener" className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}>
+          target="_blank" rel="noopener" className={actionLinkClassName('secondary', 'md')}>
           Follow live onboarding
         </Link>
       </AeSettingsStack>

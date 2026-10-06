@@ -3,9 +3,9 @@ import { Suspense, type ReactNode } from 'react'
 
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import buttonStyles from '@/components/arc/button/button.module.css'
 import './ProviderWorkspaceComposition.css'
 import { projectProviderWorkspace, type ProviderWorkspaceProjectionRow } from './provider-workspace-projection'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import type {
   ProviderWorkspaceInventoryResult,
   ProviderWorkspaceLifecycleResult,
@@ -86,7 +86,7 @@ export function ProviderWorkspaceToolsSection({ inventory, lifecycle, compatibil
           {compatibilityCursor === undefined ? null : (
             <a
               href="/owner/operations"
-              className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}
+              className={actionLinkClassName('secondary', 'md')}
             >
               First 50 Tools
             </a>
@@ -94,7 +94,7 @@ export function ProviderWorkspaceToolsSection({ inventory, lifecycle, compatibil
           {inventory.isDone ? null : (
             <a
               href={`/owner/operations?cursor=${encodeURIComponent(inventory.continueCursor)}`}
-              className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}
+              className={actionLinkClassName('secondary', 'md')}
             >
               Next 50 Tools
             </a>

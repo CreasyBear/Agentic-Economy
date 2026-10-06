@@ -1,6 +1,5 @@
 import { Link } from '@tanstack/react-router'
 
-import buttonStyles from '@/components/arc/button/button.module.css'
 import { SiteFooter } from '@/components/arc/blocks/site-footer/site-footer'
 import { RouterLinkBoundary } from '@/components/ae/shared/router-link-boundary/RouterLinkBoundary'
 import {
@@ -12,6 +11,7 @@ import {
 import { FOOTER } from '@/content/brand-copy'
 
 import { AE_SITE_FOOTER, FOOTER_NAVIGATION } from './AeSiteFooter.contracts'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import './FooterComposition.css'
 
 export type AeSiteFooterProps = Readonly<{
@@ -33,13 +33,13 @@ export function AeSiteFooter({ hideCloser = false }: AeSiteFooterProps = {}) {
             <div className="arc-site-footer-closer-actions">
               <Link
                 to="/market"
-                className={`${buttonStyles.button} ${buttonStyles.primary} ${buttonStyles.md}`}
+                className={actionLinkClassName('primary', 'md')}
               >
                 {AE_SITE_FOOTER.closer.primaryAction}
               </Link>
               <Link
                 to="/status"
-                className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}
+                className={actionLinkClassName('secondary', 'md')}
               >
                 {AE_SITE_FOOTER.closer.secondaryAction}
               </Link>

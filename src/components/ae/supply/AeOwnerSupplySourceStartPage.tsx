@@ -2,13 +2,13 @@ import { Link } from '@tanstack/react-router'
 import { useRef, useState } from 'react'
 import { useServerFn } from '@tanstack/react-start'
 import { useReverification } from '@clerk/tanstack-react-start'
-import buttonStyles from '@/components/arc/button/button.module.css'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { AeNavigationSafetyBoundary } from '@/components/ae/layout/AeNavigationSafetyBoundary'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSupplySourceNativeStart } from '@/components/ae/supply/AeSupplySourceNativeStart'
 import './SupplyJourneyComposition.css'
 import type { ProviderWorkspaceIdentityDetailResult } from '@/components/ae/offerings/provider-workspace.functions'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import {
   assessOwnerSupplySourceServer,
   filterOwnerSupplyAuthorityOptions,
@@ -67,7 +67,7 @@ export function AeOwnerSupplySourceStartPage({ data, search, navigate }: AeOwner
             <p>Agentic Economy could not confirm the current Business. Return to Tools and try again.</p>
             <Link
               to="/owner/operations"
-              className={`arc-market ${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md} arc-supply-feedback-action`}
+              className={`arc-market ${actionLinkClassName('secondary', 'md')} arc-supply-feedback-action`}
             >
               Return to Tools
             </Link>

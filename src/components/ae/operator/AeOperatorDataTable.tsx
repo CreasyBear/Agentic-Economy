@@ -24,12 +24,12 @@ import { type ReactElement, type ReactNode, useCallback, useEffect, useMemo, use
 
 import { AeViewBar } from '@/components/ae/data/AeViewBar'
 import { Button } from '@/components/arc/button/button'
-import buttonStyles from '@/components/arc/button/button.module.css'
 import { AeSortableDataTable, AeSortableDataTableHeader } from '@/components/ae/shared/sortable-data-table/AeSortableDataTable'
 import type { AeDataColumn } from '@/components/ae/shared/sortable-data-table/sortable-data-table.contracts'
 import './RecordTable.css'
 import { Checkbox } from '@/components/ae/shared/base-ui/checkbox/checkbox'
 import { useFirstLoadPending } from '@/components/ui/data-state'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 
 
 export type AeRecordTableSelection<TData> = Readonly<{
@@ -352,7 +352,7 @@ function RecordTableAction<TData>({
         to={action.getHref(row.original)}
         aria-label={accessibleLabel}
         data-ae-row-action-id={row.id}
-        className={`${buttonStyles.button} ${buttonStyles.ghost} ${buttonStyles.sm} arc-record-action`}
+        className={`${actionLinkClassName('ghost', 'sm')} arc-record-action`}
       >
         {label}
       </Link>

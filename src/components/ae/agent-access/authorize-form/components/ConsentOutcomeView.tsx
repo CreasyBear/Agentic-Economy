@@ -1,10 +1,10 @@
 import { Link } from '@tanstack/react-router'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import buttonStyles from '@/components/arc/button/button.module.css'
 import { presentConnectionProblem } from '@/modules/agent-access/public'
 
 import type { ConsentOutcomeViewProps } from '../authorize-form.contracts'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import './ConsentEvidenceComposition.css'
 
 function ConnectionProblemAlert({ code, technicalReference }: Readonly<{ code: string; technicalReference?: string }>) {
@@ -51,7 +51,7 @@ export function ConsentOutcomeView({
           to="/agent-access/authorize"
           search={authorizeRecoverySearch}
           reloadDocument
-          className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md} arc-consent-outcome-recovery`}
+          className={`${actionLinkClassName('secondary', 'md')} arc-consent-outcome-recovery`}
         >
           Check approval status
         </Link>

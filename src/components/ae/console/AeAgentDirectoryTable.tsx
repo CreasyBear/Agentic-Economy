@@ -8,13 +8,13 @@ import {
   AeRecordTable,
 } from '@/components/ae/operator/AeOperatorDataTable'
 import { Badge } from '@/components/ui/badge'
-import arcButton from '@/components/arc/button/button.module.css'
 import SegmentedControl from '@/components/arc/segmented-control/segmented-control'
 import { stagedListPhase, useFirstLoadPending } from '@/components/ui/data-state'
 import { InlineEditField } from '@/components/ui/inline-edit-field'
 import { formatRelativeTime, formatTimestamp, timestampIso } from '@/lib/ui/format-time'
 import { suggestNextAction } from '@/modules/market/suggested-next-action'
 import type { AgentDirectoryItem } from '@/modules/agent-access/agent-operator-view-model'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import {
   agentStatusBadgeVariant,
   agentStatusLabel,
@@ -224,7 +224,7 @@ export function AeAgentDirectoryTable({
           action={
             <a
               href={missingAgentNextAction.href}
-              className={`${arcButton.button} ${arcButton.primary} ${arcButton.md}`}
+              className={actionLinkClassName('primary', 'md')}
             >
               {missingAgentNextAction.label}
             </a>

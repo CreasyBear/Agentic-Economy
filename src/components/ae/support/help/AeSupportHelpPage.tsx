@@ -3,7 +3,6 @@ import { ActivityIcon, ArrowUpRightIcon, CableIcon, CodeIcon, MailIcon } from 'l
 
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
 import { AeSiteFaq } from '@/components/ae/website/AeSiteFaq'
-import buttonStyles from '@/components/arc/button/button.module.css'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ae/shared/base-ui/tabs/tabs'
 
 import { AgentConnectionSection } from './components/AgentConnectionSection'
@@ -18,6 +17,7 @@ import {
   type SupportHelpTopic,
 } from './help.contracts'
 import { useSupportHelpPage } from './useSupportHelpPage'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import './SupportComposition.css'
 export function AeSupportHelpPage({ canonicalBaseUrl, callRef }: AeSupportHelpPageProps) {
   const { supportEmailHref, diagnosticCommand } = useSupportHelpPage({ canonicalBaseUrl, callRef })
@@ -34,7 +34,7 @@ export function AeSupportHelpPage({ canonicalBaseUrl, callRef }: AeSupportHelpPa
           <h2>Public developer reports</h2>
           <p>GitHub issues are public. Use them only for non-sensitive developer reports.</p>
           <div className="arc-support-actions">
-            <a href={ISSUE_URL} target="_blank" rel="noreferrer" className={`${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}>
+            <a href={ISSUE_URL} target="_blank" rel="noreferrer" className={actionLinkClassName('secondary', 'md')}>
               Open a public developer issue (opens in a new tab) <ArrowUpRightIcon aria-hidden="true" />
             </a>
           </div>
@@ -66,7 +66,7 @@ export function AeSupportHelpPage({ canonicalBaseUrl, callRef }: AeSupportHelpPa
       title="Help"
       description="Keep the Call reference shown with the problem. It helps us find the right record without asking you to share private inputs."
       actions={
-        <a href={supportEmailHref} className={`${buttonStyles.button} ${buttonStyles.primary} ${buttonStyles.md}`}>
+        <a href={supportEmailHref} className={actionLinkClassName('primary', 'md')}>
           Email support (opens email app)
         </a>
       }

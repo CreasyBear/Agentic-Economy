@@ -1,8 +1,8 @@
 import SegmentedControl from '@/components/arc/segmented-control/segmented-control'
-import buttonStyles from '@/components/arc/button/button.module.css'
 import './MetricsControls.css'
 import type { MarketplaceMetricsRange } from '@/lib/operator/admin-console/metrics.contracts'
 import { ADMIN_METRICS_COPY, ADMIN_METRICS_RANGES } from '../metrics.contracts'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 
 export type MetricsControlsProps = Readonly<{
   range: MarketplaceMetricsRange
@@ -24,7 +24,7 @@ export function MetricsControls({ range, onRangeChange }: MetricsControlsProps) 
       <a
         href={`/api/admin/metrics-export?range=${range}`}
         download
-        className={`arc-metrics-export ${buttonStyles.button} ${buttonStyles.secondary} ${buttonStyles.md}`}
+        className={`arc-metrics-export ${actionLinkClassName('secondary', 'md')}`}
       >
         {ADMIN_METRICS_COPY.exportCsv}
       </a>

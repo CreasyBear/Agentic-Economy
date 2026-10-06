@@ -5,7 +5,6 @@ import { Download } from 'lucide-react'
 import { AeEmptyState } from '@/components/ae/shared/arc/empty-state/AeEmptyState'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { Button } from '@/components/arc/button/button'
-import buttonStyles from '@/components/arc/button/button.module.css'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 
@@ -24,6 +23,7 @@ import { ActivityUsageReports } from './components/ActivityUsageReports'
 import { ActivityPaginationControl } from './components/ActivityPaginationControl'
 import { ActivityUnavailableState } from './components/ActivityUnavailableState'
 import { useAeActivity } from './useAeActivity'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 
 function activityStatus(vm: ReturnType<typeof useAeActivity>): string {
   if (vm.pagination.status === 'loading') return 'Loading older Calls.'
@@ -167,7 +167,7 @@ function AeActivityAvailable({
           <AeEmptyState
             title="No Calls in this period"
             description="No Calls were recorded for the selected Account or Agent and date range. Change the filters or find a Tool."
-            action={<Link to="/market" className={`${buttonStyles.button} ${buttonStyles.primary} ${buttonStyles.md}`}>Find Tools</Link>}
+            action={<Link to="/market" className={actionLinkClassName('primary', 'md')}>Find Tools</Link>}
           />
         ) : vm.showEmptyNoMatch ? (
           <AeEmptyState

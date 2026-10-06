@@ -6,7 +6,6 @@ import { Link, useRouter } from '@tanstack/react-router'
 import { useEffect, useRef } from 'react'
 
 import { Button as ArcButton } from '@/components/arc/button/button'
-import buttonStyles from '@/components/arc/button/button.module.css'
 import { Drawer, DrawerContent, DrawerTrigger } from '@/components/ae/shared/base-ui/drawer/drawer'
 import { AeCommandPanel } from '@/components/ae/command-panel'
 import { AeNetworkHealthBanner, AeNetworkHealthIndicator } from '@/components/ae/layout/AeNetworkHealthIndicator'
@@ -20,6 +19,7 @@ import type { OperatorRole } from '@/lib/operator/roles'
 import { cn } from '@/lib/utils'
 
 import { OperatorWorkspaceMenu } from './OperatorWorkspaceMenu'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import './AppHeaderComposition.css'
 
 export type AeAppHeaderProps = Readonly<{
@@ -98,7 +98,7 @@ export function AeAppHeader({
           <div className="arc-app-header__actions">
             <div className="hidden sm:block"><AeNetworkHealthIndicator /></div>
             <ThemeToggle />
-            <Link to="/market" className={cn(buttonStyles.button, buttonStyles.ghost, buttonStyles.md, 'arc-app-header__browse')}>
+            <Link to="/market" className={cn(actionLinkClassName('ghost', 'md'), 'arc-app-header__browse')}>
               <ArrowLeftIcon aria-hidden="true" className="size-3.5" />
               Browse Tools
             </Link>
@@ -139,7 +139,7 @@ export function AeAppHeader({
               <div className="hidden sm:block"><AeNetworkHealthIndicator /></div>
               <div className={chatFrame ? 'hidden sm:block' : ''}><AeCommandPanel /></div>
               <div className={chatFrame ? 'hidden sm:block' : ''}><ThemeToggle /></div>
-              <Link to="/sign-in/$" params={{ _splat: '' }} className={cn(buttonStyles.button, buttonStyles.ghost, buttonStyles.md, 'arc-app-header__desktop-sign-in hidden md:inline-flex')}>Sign in</Link>
+              <Link to="/sign-in/$" params={{ _splat: '' }} className={cn(actionLinkClassName('ghost', 'md'), 'arc-app-header__desktop-sign-in hidden md:inline-flex')}>Sign in</Link>
               {!chatFrame ? <DrawerTrigger
                 render={
                   <ArcButton
@@ -164,7 +164,7 @@ export function AeAppHeader({
           >
             <AeSiteDrawerNav onNavigate={() => setMobileNavOpen(false)} />
             <div className="arc-app-header__drawer-footer">
-              <Link to="/sign-in/$" params={{ _splat: '' }} onClick={() => setMobileNavOpen(false)} className={cn(buttonStyles.button, buttonStyles.secondary, buttonStyles.md)}>Sign in</Link>
+              <Link to="/sign-in/$" params={{ _splat: '' }} onClick={() => setMobileNavOpen(false)} className={cn(actionLinkClassName('secondary', 'md'))}>Sign in</Link>
               <ThemeToggle />
             </div>
           </DrawerContent>

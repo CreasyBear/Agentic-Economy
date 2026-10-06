@@ -3,10 +3,10 @@ import { AeToolPrice } from '@/components/ae/market/AeToolPrice'
 import { Badge } from '@/components/ui/badge'
 import { AeCopyValue } from '@/components/ae/shared/copy-value/AeCopyValue'
 import { DecisionPanel } from '@/components/ae/shared/arc-pro/chat/DecisionPanel'
-import buttonStyles from '@/components/arc/button/button.module.css'
 import type { PublicToolDescriptor } from '@/modules/capability-supply/public'
 
 import { AeToolFacts } from './AeToolFacts'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import {
   nextActionCode,
   type ToolInspectorModel,
@@ -52,7 +52,7 @@ export function AeToolCompactDecision({
           <Link
             to={model.nextAction.href}
             onClick={onNavigate}
-            className={`${buttonStyles.button} ${buttonStyles.primary} ${buttonStyles.sm} min-h-touch w-fit`}
+            className={`${actionLinkClassName('primary', 'sm')} min-h-touch w-fit`}
           >
             {model.nextAction.label}
           </Link>

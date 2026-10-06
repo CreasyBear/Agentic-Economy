@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react'
 import { Link } from '@tanstack/react-router'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 
-import buttonStyles from '@/components/arc/button/button.module.css'
 import './AppFrameComposition.css'
 
 function subscribeToNetworkStatus(onStoreChange: () => void): () => void {
@@ -50,7 +50,7 @@ export function AeNetworkHealthIndicator() {
   return (
     <Link
       to="/status"
-      className={`arc-market ${buttonStyles.button} ${buttonStyles.ghost} ${buttonStyles.md}`}
+      className={`arc-market ${actionLinkClassName('ghost', 'md')}`}
       aria-label="System status"
     >
       Status

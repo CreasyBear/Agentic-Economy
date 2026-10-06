@@ -8,8 +8,8 @@ import {
   AeOperatorSortableHeader,
   AeRecordTable,
 } from '@/components/ae/operator/AeOperatorDataTable'
-import buttonStyles from '@/components/arc/button/button.module.css'
 import type { PublicBusinessCatalogApiV2Dto, PublicListingDto } from '@/modules/registry/public'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 
 type AeCapabilityListProps = {
   catalog: PublicBusinessCatalogApiV2Dto
@@ -64,7 +64,7 @@ export function AeCapabilityList({ catalog }: AeCapabilityListProps) {
         action={
           <a
             href="/owner/operations/new"
-            className={['arc-market', buttonStyles.button, buttonStyles.primary, buttonStyles.md].join(' ')}
+            className={['arc-market', actionLinkClassName('primary', 'md')].join(' ')}
           >
             Add Tool
           </a>
