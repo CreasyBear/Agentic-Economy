@@ -32,10 +32,6 @@
   margin: 0;
 }
 
-.arc-funding-review [data-slot="alert"] {
-  border-radius: var(--radius-panel);
-}
-
 .arc-funding-form {
   display: grid;
   min-width: 0;

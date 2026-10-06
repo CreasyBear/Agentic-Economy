@@ -116,15 +116,6 @@
   background: var(--ae-warning-subtle);
   color: var(--ae-warning-foreground);
 }
-.arc-market.arc-call-status-feedback [data-slot="alert-title"] {
-  display: block;
-  overflow: visible;
-  font-size: var(--text-sm);
-  line-height: 1.55;
-  overflow-wrap: anywhere;
-  -webkit-line-clamp: unset;
-}
-.arc-market.arc-call-status-feedback [data-slot="alert-description"] { font-size: var(--text-sm); line-height: 1.55; }
 .arc-market.arc-call-fact { display: grid; min-width: 0; gap: var(--space-2); padding-block: var(--space-3); }
 .arc-market.arc-call-fact > dt { color: var(--text-secondary); font-size: var(--text-sm); }
 .arc-market.arc-call-fact > dd { min-width: 0; margin: 0; font-size: var(--text-sm); overflow-wrap: anywhere; }

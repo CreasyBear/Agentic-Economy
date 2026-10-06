@@ -13,9 +13,6 @@
 .arc-market .arc-system-check-time { color: var(--text-secondary); font-weight: 400; }
 .arc-market .arc-system-check-ref { display: grid; min-width: 0; gap: var(--space-2); margin-top: var(--space-2); }
 .arc-market .arc-system-check-ref > p { margin: 0; color: var(--text-secondary); font-size: var(--text-sm); line-height: 1.5; }
-.arc-market.arc-system-checks [data-slot='badge'],
-.arc-market.arc-status-badge [data-slot='badge'] { align-self: start; max-width: 100%; white-space: normal; font-size: var(--text-sm); font-weight: 500; line-height: 1.5; overflow-wrap: anywhere; }
-.arc-market.arc-system-checks [data-slot='badge'] { min-height: 32px; padding: var(--space-1) 10px; }
 .arc-market .arc-system-status-updated { margin: 0; color: var(--text-secondary); font-size: var(--text-sm); line-height: 1.5; overflow-wrap: anywhere; }
 .arc-market.arc-system-status-footer { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-4); border-top: 1px solid var(--border); padding-top: var(--space-6); color: var(--text-secondary); font-size: var(--text-sm); line-height: 1.5; }
 .arc-market.arc-system-status-footer > p { flex: 1 1 320px; min-width: 0; margin: 0; overflow-wrap: anywhere; }

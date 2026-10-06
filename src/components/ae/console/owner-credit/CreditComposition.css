@@ -9,21 +9,6 @@
   font-weight: 400;
 }
 
-.arc-credit-root [data-slot="alert"] {
-  border-color: var(--border);
-  border-radius: var(--radius-panel);
-  background: var(--surface);
-  color: var(--foreground);
-}
-
-.arc-credit-root [data-slot="alert-title"] {
-  font-weight: 500;
-}
-
-.arc-credit-root [data-slot="alert-description"] {
-  color: var(--text-secondary);
-}
-
 .arc-credit-tabs {
   min-width: 0;
   gap: var(--space-6);

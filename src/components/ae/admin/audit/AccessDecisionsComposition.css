@@ -92,12 +92,6 @@
   min-width: 0;
   max-width: 100%;
 }
-.arc-market .arc-admin-approval-diagnostic [data-slot="alert-description"] {
-  color: inherit;
-  font-size: var(--text-sm);
-  line-height: 1.55;
-  overflow-wrap: anywhere;
-}
 .arc-market .arc-admin-approvals-empty {
   margin: 0;
   border: 1px dashed var(--border-strong);

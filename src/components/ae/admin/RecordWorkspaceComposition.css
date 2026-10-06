@@ -169,7 +169,7 @@
   font-weight: 500;
   line-height: 1.4;
 }
-.arc-market.arc-admin-record-table-region :where(code, time, [data-slot="badge"]) {
+.arc-market.arc-admin-record-table-region :where(code, time) {
   min-width: 0;
   font-size: var(--text-sm);
   overflow-wrap: anywhere;
