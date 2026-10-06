@@ -51,6 +51,10 @@ type CatalogPage = {
   continueCursor: string
 }
 
+const PLAN_TOOL_SLUGS = ['sandbox-open-meteo-geocoding', 'sandbox-open-meteo-weather']
+const PLAN_TOOL_IDS = ['sandbox.open-meteo-geocoding', 'sandbox.open-meteo-weather']
+const planToolEntries = (created: boolean) => PLAN_TOOL_IDS.map(capabilityId => ({ capabilityId, toolRef: expect.stringMatching(/^operation:v1:/u), created }))
+
 const SANDBOX_TOOL_BUSINESS_SLUG = 'sandbox-aecon-reference'
 const SANDBOX_TOOL_CAPABILITY_ID = 'sandbox.frankfurter-fx'
 const SANDBOX_TOOL_BINDING_ID = `capability-binding:${SANDBOX_TOOL_BUSINESS_SLUG}:x402:v1`
@@ -75,7 +79,7 @@ const SKIPPED_WITHOUT_FIXTURE_URL = {
 // origin (AE_SITE_URL), never a hard-coded host. Without it the reference
 const SITE_URL_ENV = 'AE_SITE_URL'
 const SITE_URL = 'https://sandbox.example.test'
-const SANDBOX_REFERENCE_ENDPOINT_URL = 'https://api.frankfurter.app/latest'
+const SANDBOX_REFERENCE_ENDPOINT_URL = 'https://api.frankfurter.dev/v1/latest'
 
 type SandboxSupplyFacts = {
   sandboxBusinessSlugs: readonly string[]
@@ -165,10 +169,10 @@ describe('dev-seeded public catalog decision facts', () => {
   })
   /**
    * Without the reference provider's env there is nowhere to send a paid Call,
-   * so the second Tool is skipped rather than published against a guessed URL,
-   * and the first Tool is seeded exactly as it always was.
+   * so the testnet Tool is skipped rather than published against a guessed URL.
+   * The three public sandbox Tools are still seeded.
    */
-  it('publishes only the fixture sandbox Tool when the reference provider env is absent', async () => {
+  it('publishes the three public sandbox Tools when the testnet provider env is absent', async () => {
     const backend = convexTestWithMarketComponents()
     await seedDevCatalogAuthority(backend)
     setSiteUrlEnvironment()
@@ -179,13 +183,14 @@ describe('dev-seeded public catalog decision facts', () => {
     expect(first.toolRef).toMatch(/^operation:v1:/u)
     expect(first.tools).toEqual([
       { capabilityId: SANDBOX_TOOL_CAPABILITY_ID, toolRef: first.toolRef, created: true },
+      ...planToolEntries(true),
       SKIPPED_WITHOUT_FIXTURE_URL,
     ])
 
     const seeded = await readSandboxSupply(backend)
-    expect(seeded.sandboxBusinessSlugs).toEqual([SANDBOX_TOOL_BUSINESS_SLUG])
-    expect(seeded.publications).toHaveLength(1)
-    const [publication] = seeded.publications
+    expect(seeded.sandboxBusinessSlugs).toEqual([SANDBOX_TOOL_BUSINESS_SLUG, ...PLAN_TOOL_SLUGS].sort())
+    expect(seeded.publications).toHaveLength(3)
+    const publication = seeded.publications.find(row => row.publicationRef === first.publicationId)
     expect(publication?.publicationRef).toBe(first.publicationId)
     expect(publication?.runtimeEnvironment).toBe('sandbox')
     expect(publication?.searchText ?? '').not.toBe('')
@@ -202,6 +207,7 @@ describe('dev-seeded public catalog decision facts', () => {
       businessSlug: SANDBOX_TOOL_BUSINESS_SLUG,
       tools: [
         { capabilityId: SANDBOX_TOOL_CAPABILITY_ID, toolRef: first.toolRef, created: false },
+        ...planToolEntries(false),
         SKIPPED_WITHOUT_FIXTURE_URL,
       ],
     })
@@ -299,7 +305,7 @@ describe('dev-seeded public catalog decision facts', () => {
     expect(await readCapabilityBindingEndpointUrl(backend, SANDBOX_TOOL_BINDING_ID))
       .toBe(SANDBOX_REFERENCE_ENDPOINT_URL)
 
-    expect(await searchSandboxSlugs(backend, 'sandbox')).toEqual([SANDBOX_TOOL_BUSINESS_SLUG])
+    expect([...await searchSandboxSlugs(backend, 'sandbox')].sort()).toEqual([SANDBOX_TOOL_BUSINESS_SLUG, ...PLAN_TOOL_SLUGS].sort())
     expect(await searchSandboxSlugs(backend, 'AEcon sandbox reference provider'))
       .toEqual([SANDBOX_TOOL_BUSINESS_SLUG])
 
@@ -313,7 +319,7 @@ describe('dev-seeded public catalog decision facts', () => {
     expect(await readSandboxPriceFacts(backend)).toEqual(seeded)
     expect(await readSandboxCatalogDetail(backend)).toEqual(detail)
     expect(await readSandboxSearchDocumentIds(backend)).toEqual(documents)
-    expect(await searchSandboxSlugs(backend, 'sandbox')).toEqual([SANDBOX_TOOL_BUSINESS_SLUG])
+    expect([...await searchSandboxSlugs(backend, 'sandbox')].sort()).toEqual([SANDBOX_TOOL_BUSINESS_SLUG, ...PLAN_TOOL_SLUGS].sort())
     expect(await searchSandboxSlugs(backend, 'AEcon sandbox reference provider'))
       .toEqual([SANDBOX_TOOL_BUSINESS_SLUG])
   }, 300_000)
@@ -331,9 +337,10 @@ describe('dev-seeded public catalog decision facts', () => {
         toolRef: expect.any(String),
         created: true,
       },
+      ...planToolEntries(true),
       SKIPPED_WITHOUT_FIXTURE_URL,
     ])
-    expect((await readSandboxSupply(backend)).sandboxBusinessSlugs).toEqual([SANDBOX_TOOL_BUSINESS_SLUG])
+    expect((await readSandboxSupply(backend)).sandboxBusinessSlugs).toEqual([SANDBOX_TOOL_BUSINESS_SLUG, ...PLAN_TOOL_SLUGS].sort())
   }, 300_000)
 })
 
@@ -411,7 +418,7 @@ describe('dev-seeded Base Sepolia reference Tool', () => {
     vi.unstubAllEnvs()
   })
 
-  it('publishes exactly the two named sandbox Tools and replays the second run', async () => {
+  it('publishes exactly the four named sandbox Tools and replays the second run', async () => {
     const backend = convexTestWithMarketComponents()
     await seedDevCatalogAuthority(backend)
     setSiteUrlEnvironment()
@@ -421,6 +428,7 @@ describe('dev-seeded Base Sepolia reference Tool', () => {
     expect(first).toMatchObject({ created: true, businessSlug: SANDBOX_TOOL_BUSINESS_SLUG })
     expect(first.tools).toEqual([
       { capabilityId: SANDBOX_TOOL_CAPABILITY_ID, toolRef: first.toolRef, created: true },
+      ...planToolEntries(true),
       {
         capabilityId: SANDBOX_TESTNET_CAPABILITY_ID,
         toolRef: expect.stringMatching(/^operation:v1:/u) as unknown as string,
@@ -430,8 +438,8 @@ describe('dev-seeded Base Sepolia reference Tool', () => {
 
     const seeded = await readSandboxSupply(backend)
     expect(seeded.sandboxBusinessSlugs)
-      .toEqual([SANDBOX_TOOL_BUSINESS_SLUG, SANDBOX_TESTNET_BUSINESS_SLUG].sort())
-    expect(seeded.publications).toHaveLength(2)
+      .toEqual([SANDBOX_TOOL_BUSINESS_SLUG, SANDBOX_TESTNET_BUSINESS_SLUG, ...PLAN_TOOL_SLUGS].sort())
+    expect(seeded.publications).toHaveLength(4)
     for (const publication of seeded.publications) {
       expect(publication.runtimeEnvironment).toBe('sandbox')
       expect((publication.searchText ?? '').toLowerCase()).toContain('sandbox')
@@ -498,7 +506,7 @@ describe('dev-seeded Base Sepolia reference Tool', () => {
 
     // Both Tools are findable through the same public read a buyer uses.
     expect([...await searchSandboxSlugs(backend, 'sandbox')].sort())
-      .toEqual([SANDBOX_TOOL_BUSINESS_SLUG, SANDBOX_TESTNET_BUSINESS_SLUG].sort())
+      .toEqual([SANDBOX_TOOL_BUSINESS_SLUG, SANDBOX_TESTNET_BUSINESS_SLUG, ...PLAN_TOOL_SLUGS].sort())
     expect(await searchSandboxSlugs(backend, 'AEcon sandbox testnet reference provider'))
       .toContain(SANDBOX_TESTNET_BUSINESS_SLUG)
     expect(await readSandboxSearchDocumentIds(backend, SANDBOX_TESTNET_BUSINESS_SLUG))
@@ -529,7 +537,7 @@ describe('dev-seeded Base Sepolia reference Tool', () => {
     }
 
     const replay = await backend.mutation(internal.devSeed.publishSandboxTool, {})
-    const testnetEntry = first.tools[1]
+    const testnetEntry = first.tools.find(tool => tool.capabilityId === SANDBOX_TESTNET_CAPABILITY_ID)
     if (!testnetEntry || !('toolRef' in testnetEntry)) throw new Error('expected a created testnet tool entry')
     expect(replay).toEqual({
       created: false,
@@ -539,6 +547,7 @@ describe('dev-seeded Base Sepolia reference Tool', () => {
       businessSlug: SANDBOX_TOOL_BUSINESS_SLUG,
       tools: [
         { capabilityId: SANDBOX_TOOL_CAPABILITY_ID, toolRef: first.toolRef, created: false },
+        ...planToolEntries(false),
         {
           capabilityId: SANDBOX_TESTNET_CAPABILITY_ID,
           toolRef: testnetEntry.toolRef,
@@ -560,7 +569,7 @@ describe('dev-seeded Base Sepolia reference Tool', () => {
     const before = await readTestnetPublicationChain(backend)
 
     const migrated = await backend.mutation(internal.devSeed.publishSandboxTool, {})
-    expect(migrated.tools[1]).toMatchObject({
+    expect(migrated.tools.find(tool => tool.capabilityId === SANDBOX_TESTNET_CAPABILITY_ID)).toMatchObject({
       capabilityId: SANDBOX_TESTNET_CAPABILITY_ID,
       created: false,
     })
@@ -573,9 +582,9 @@ describe('dev-seeded Base Sepolia reference Tool', () => {
     expect(after[0]?.contractDigest).toBe(before[0]?.contractDigest)
     expect(after[0]?.toolRef).toBe(before[0]?.toolRef)
     const replay = await backend.mutation(internal.devSeed.publishSandboxTool, {})
-    expect(replay.tools[1]).toEqual(migrated.tools[1])
+    expect(replay.tools.find(tool => tool.capabilityId === SANDBOX_TESTNET_CAPABILITY_ID)).toEqual(migrated.tools.find(tool => tool.capabilityId === SANDBOX_TESTNET_CAPABILITY_ID))
     expect(await readTestnetPublicationChain(backend)).toEqual(after)
-    expect(first.tools[1]).not.toEqual(migrated.tools[1])
+    expect(first.tools.find(tool => tool.capabilityId === SANDBOX_TESTNET_CAPABILITY_ID)).not.toEqual(migrated.tools.find(tool => tool.capabilityId === SANDBOX_TESTNET_CAPABILITY_ID))
     expect(await backend.run(async (ctx) => {
       const publication = await ctx.db.query('capabilityPublications')
         .withIndex('by_publicationRef_and_revision', (query) => query
@@ -685,13 +694,14 @@ describe('dev-seeded Base Sepolia reference Tool', () => {
     const published = await backend.mutation(internal.devSeed.publishSandboxTool, {})
     expect(published.tools).toEqual([
       { capabilityId: SANDBOX_TOOL_CAPABILITY_ID, toolRef: published.toolRef, created: true },
+      ...planToolEntries(true),
       {
         capabilityId: SANDBOX_TESTNET_CAPABILITY_ID,
         skipped: 'AE_PACKAGE5_FIXTURE_X402_PAY_TO_missing',
       },
     ])
     expect((await readSandboxSupply(backend)).sandboxBusinessSlugs)
-      .toEqual([SANDBOX_TOOL_BUSINESS_SLUG])
+      .toEqual([SANDBOX_TOOL_BUSINESS_SLUG, ...PLAN_TOOL_SLUGS].sort())
   }, 300_000)
 })
 
