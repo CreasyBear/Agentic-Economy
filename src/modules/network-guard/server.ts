@@ -33,6 +33,8 @@ export async function sendGuardedHttpRequest(
           },
     });
   } finally {
-    await dispatcher.close().catch(() => undefined);
+    // This dispatcher owns only the completed or aborted request. Graceful close
+    // can wait for a stalled DNS connection after the request deadline expires.
+    await dispatcher.destroy().catch(() => undefined);
   }
 }

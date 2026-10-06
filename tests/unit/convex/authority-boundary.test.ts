@@ -10,6 +10,7 @@ import {
 } from '../../../convex/lib/authority/boundary/binding'
 import schema from '../../../convex/schema'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { agentAccessPolicyDigest, type AgentAccessPolicy } from '@/modules/agent-access/policy'
 import { DelegationService } from '@/modules/authority/delegation/public'
 import {
   createSourceWriteAdmission,
@@ -61,6 +62,25 @@ const ACCESS_POLICY = {
   },
 }
 const ACCESS_POLICY_DIGEST = canonicalDigest(ACCESS_POLICY as never)
+const SELECTED_TOOL_REF = `operation:v1:${'c'.repeat(64)}`
+const SELECTED_TOOL_POLICY = {
+  format: 'ae.agent-access-policy:v2',
+  toolAccess: 'selected_tools',
+  toolRefs: [SELECTED_TOOL_REF],
+  environment: 'production',
+  budget: {
+    budgetPolicyRef: ACCESS_POLICY.budget.budgetPolicyRef,
+    generation: 4,
+    currency: 'USD',
+    exponent: 2,
+    maximumSpendPerCall: ACCESS_POLICY.budget.maximumSpendPerInvocation,
+    maximumDailySpend: ACCESS_POLICY.budget.maximumDailySpend,
+    maximumMonthlySpend: ACCESS_POLICY.budget.maximumMonthlySpend,
+    maximumConcurrentCalls: 2,
+  },
+  rate: ACCESS_POLICY.rate,
+} satisfies AgentAccessPolicy
+const SELECTED_TOOL_POLICY_DIGEST = agentAccessPolicyDigest(SELECTED_TOOL_POLICY)
 
 type MutationArgs = Readonly<{
   credentialId: string
@@ -330,6 +350,53 @@ describe('canonical agent authority boundary', () => {
       grantRef: GRANT_REF,
     })
   })
+
+  it.each([
+    ['feedback', 'surface:http:feedback-submit', {}, true],
+    ['account read', 'surface:http:account-self', {}, true],
+    ['selected Tool', SELECTED_TOOL_REF, {}, true],
+    ['unknown surface', 'surface:http:feedback-submit-other', {}, false],
+    ['unselected Tool', `operation:v1:${'d'.repeat(64)}`, {}, false],
+    ['revoked credential', 'surface:http:feedback-submit', { credential: { lifecycle: 'revoked' } }, false],
+    ['expired credential', 'surface:http:feedback-submit', { credential: { expiresAt: NOW } }, false],
+    ['revoked grant', 'surface:http:feedback-submit', { grant: { lifecycle: 'revoked' } }, false],
+    ['expired grant', 'surface:http:feedback-submit', { grant: { expiresAt: NOW } }, false],
+  ] satisfies readonly (readonly [string, string, SeedOverrides, boolean])[])(
+    'enforces current selected-Tool authority for %s through the registered mutation',
+    async (caseName: string, operationKey: string, overrides: SeedOverrides, allowed: boolean) => {
+      vi.stubEnv('AE_SOURCE_WRITE_SECRET', SECRET)
+      const backend = testBackend()
+      await seedCanonicalChain(backend, {
+        ...(overrides.credential === undefined ? {} : { credential: overrides.credential }),
+        grant: {
+          scopes: ['market_tools:call'], resourceRefs: [SELECTED_TOOL_REF],
+          ...overrides.grant,
+        },
+        parentGrant: { scopes: ['market_tools:call'], resourceRefs: [SELECTED_TOOL_REF] },
+        admission: { scopes: ['market_tools:call'], spendingPolicyDigest: SELECTED_TOOL_POLICY_DIGEST },
+        accessGrant: {
+          operationAccess: undefined, operationRefs: undefined, policy: undefined, policyDigest: undefined,
+          authorityMode: 'spending_policy', toolAccess: 'selected_tools', toolRefs: [SELECTED_TOOL_REF],
+          spendingPolicy: SELECTED_TOOL_POLICY, spendingPolicyDigest: SELECTED_TOOL_POLICY_DIGEST,
+        },
+      })
+      const args = await signedMutationArgs({
+        scopes: ['market_tools:call'], requiredScopes: ['market_tools:call'], operationKey,
+      }, `feedback-authority-${caseName.replaceAll(' ', '-')}`)
+
+      const result = await backend.mutation(resolveAgentBinding, args)
+      if (allowed) expect(result).toMatchObject({ principalId: PRINCIPAL_REF, ownerId: ACCOUNT_REF, grantRef: GRANT_REF })
+      else expect(result).toBeNull()
+      const durable = await backend.run(async ctx => ({
+        snapshots: await ctx.db.query('authorityDelegationSnapshots').collect(),
+        grant: await ctx.db.query('authorityDelegationGrants')
+          .withIndex('by_grantRef', query => query.eq('grantRef', GRANT_REF)).unique(),
+      }))
+      expect(durable.snapshots).toHaveLength(allowed ? 1 : 0)
+      if (allowed) expect(durable.snapshots[0]).toMatchObject({ resourceRefs: [SELECTED_TOOL_REF], budgetAmount: 0 })
+      expect(durable.grant).toMatchObject({ resourceRefs: [SELECTED_TOOL_REF], budgetUsed: 0 })
+    },
+  )
 
   it.each([
     ['credential locator', { credentialId: '' }],
