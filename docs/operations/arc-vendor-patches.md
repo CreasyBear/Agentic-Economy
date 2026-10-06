@@ -1,22 +1,46 @@
 # Arc vendor patches
 
-Vendored Arc files are upstream-pristine unless listed here as **PATCHED**. Focus-visible treatment belongs in AE edge CSS, never in a vendor patch.
+This ledger lists every `// arc-patch:` marker under `src/components/arc/`, generated from the source on 2026-10-07. Each patch is a minimal accessibility or semantic change on top of the registry file. Re-apply it after any resync. The per-wave notes are in [arc-patches/](arc-patches/).
 
+## `src/components/arc/accordion/accordion.tsx`
 
-## Accordion — PATCHED (E1-14)
+- line 38: Closed panels leave focus navigation and the accessibility tree immediately.
 
-- **Diff:** add `inert={!open}` and `aria-hidden={!open}` to the mounted motion panel in `src/components/arc/accordion/accordion.tsx`; mark it with `// arc-patch:`.
-- **Reason:** `forceMount` retains closed panel content during the exit animation. Removing it from keyboard navigation and the accessibility tree immediately prevents focus from remaining in or moving into a panel as it closes. Existing `.ae-arc :focus-visible` provides AE-owned focus styling.
-- **Upstream report:** “Closed panels stay mounted but switch to visibility hidden once collapsed, so they leave the accessibility tree.” Source: [Accordion documentation](https://uiarc.dev/components/accordion/markdown). The upstream `forceMount` exit-animation path does not provide immediate `inert` or `aria-hidden` state.
-- **Install evidence:** isolated shadcn install matched the `accordion.tsx` and `accordion.module.css` registry bytes before this a11y patch; CSS remains registry-pristine.
+## `src/components/arc/alert/alert.tsx`
 
-## Chip group — PATCHED (E1-15)
+- line 74: honor caller role overrides and keep rich child markup out of paragraphs.
 
-- **Diff:** before a collapse removes the focused `Show less` button, move focus to the first remaining visible chip; mark an exiting overflow button `aria-hidden`, remove it from the tab order, and disable it until exit completes. Inline markers: `// arc-patch:` in `src/components/arc/chip-group/chip-group.tsx`.
-- **Reason:** preserve keyboard focus and prevent interaction with an outgoing control absent from the visible/accessibility model. Focus appearance remains AE-owned via `.arc-market :focus-visible`.
-- **Upstream report:** “When the expanded `Show less` overflow button is focused and activation collapses the group, it is removed without handing focus to a surviving control. During its exit animation it also remains enabled. Please move focus to a surviving chip before collapse when the overflow control will disappear, and make exiting overflow controls inert to keyboard and pointer interaction.”
-- **Install evidence:** isolated shadcn install matched `chip-group.tsx` registry bytes. The CLI omitted the CSS registry's first descriptive comment; it was restored verbatim. The CSS has no AE focus override.
+## `src/components/arc/blocks/faq-section/faq-section.tsx`
 
-## Kept AE components
+- line 29: preserve authored heading ids and omit headings without dangling section labels.
 
-None in this slice.
+## `src/components/arc/chip-group/chip-group.tsx`
+
+- line 193: keep an exiting overflow control out of the keyboard and interaction model.
+- line 229: return focus before collapse removes the focused overflow control.
+
+## `src/components/arc/combobox/combobox.tsx`
+
+- line 52: Keep exiting popover content inert and hidden from assistive technology.
+- line 58: Keep an exiting clear action out of keyboard and assistive-technology navigation.
+- line 93: Retain listbox refs for all valid string values, including object-prototype keys.
+- line 191: ArrowUp from no active option starts at the final enabled option.
+- line 209: Keep Escape on the combobox before an enclosing overlay handles it.
+
+## `src/components/arc/donut-chart/donut-chart.module.css`
+
+- line 32: Preserve the repository's 44px minimum target for legend controls.
+
+## `src/components/arc/empty-state/empty-state.module.css`
+
+- line 6: carry the existing title treatment across supported title elements.
+
+## `src/components/arc/empty-state/empty-state.tsx`
+
+- line 17: preserve caller-owned live-region and title semantics.
+
+## `src/components/arc/filter-toolbar/filter-toolbar.tsx`
+
+- line 183: Keep outgoing menu-step controls out of the accessibility tree and keyboard order.
+- line 397: Keep exiting chip and Clear all controls out of the accessibility tree and keyboard order.
+- line 403: Prevent the outgoing Back control from remaining exposed or tabbable during its exit.
