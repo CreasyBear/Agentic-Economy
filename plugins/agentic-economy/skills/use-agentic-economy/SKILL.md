@@ -7,41 +7,45 @@ description: Find and acquire a bounded outside service through Agentic Economy 
 
 ## First use and returning to the task
 
-Keep the user's need, selected Tool and input in the current harness. Website
-and Agent discovery use the same Quote → authorized Call → result and receipt
-path. Refresh tools/list after connection and follow pagination. Setup, browser
-return, key issuance and authenticated reads do not complete Tool use. Browse
-only access permits discovery; explain the approval needed to purchase. Recover
-an existing Call before buying again. Report unavailable supply, refused
-authority and uncertainty honestly.
+Keep the need, selected Tool and input in the harness. Website and Agent paths
+share Quote → authorized Call → result and receipt. Refresh tools/list after
+connection and follow pagination. Setup and authenticated reads do not complete
+Tool use. Browse-only access permits discovery; explain purchase approval.
+Recover existing Calls before buying again. Report refusals and uncertainty.
 
-Share the exact verification link; **Follow live onboarding** observes that
-request before credential issuance. Once authenticated, follow this Agent at
-`/agent-access?caller=<principalRef>` on the connected server, using
-`ae_agentAccess_whoami`. Add `callRef=<original Call reference>` after acceptance
-to follow that attempt, or `resumeTool=<toolRef>` for a selected Tool. This page
-shows recorded access and Calls; planning stays in the harness. Never put
-credentials or private input in the URL.
+Share the exact verification link; **Follow live onboarding** observes access before issuance.
+After authentication, use `ae_agentAccess_whoami` to follow
+`/agent-access?caller=<principalRef>` on the connected server. Add
+`callRef=<original Call reference>` after acceptance or `resumeTool=<toolRef>`
+for a selected Tool. This shows recorded access and Calls, not planning.
+Never put credentials or private input in the URL.
+
+## Send product feedback
+
+Optionally report friction or missing functionality with listed `ae_feedback_submit`
+or `ae feedback "<message>"`: expected/actual behaviour and relevant errors.
+The text goes to AE through PostHog with pseudonymous attribution. Exclude
+credentials, personal/business data and Tool payloads. Summarize for the user
+only after acceptance. Skip disabled/unavailable feedback; never auto-retry.
+Continue working; feedback is not required at task end, a Call rating or a refund.
 
 ## Find a suitable Tool
 
-Use the installed server's tools/list before calling a tool. Public discovery has
-three tools: `ae_registry_tools_search`, `ae_registry_tools_describe` and
+Read tools/list first. Public discovery: `ae_registry_tools_search`, `ae_registry_tools_describe` and
 `ae_registry_tools_compare`.
 
-Search with a short capability phrase. Describe a returned Tool to understand
-its required input and public terms; compare only actual returned references.
+Search with a capability phrase. Describe returned Tools for input and terms;
+compare only returned references.
 Public discovery does not require an account connection. A result is a candidate,
 not a promise that the current caller can buy or use it.
 
-Set `includeLatency: true` on describe/compare for recorded admission-to-completion
-`latency`, including recovery, across the last 30 days. `window.from` is the
-cutoff; `window.to` is the observation time. Median/p95 require five valid
-samples and use up to the latest 48 completed Calls. `insufficient_sample`
-reports the count; an absent opted-in field means unavailable history. Omitting
-the option preserves older response shapes. The current CLI requests it; Tool
-pages show the chart. This excludes unfinished Calls and measures neither first
-byte nor Provider execution alone. It is not a deadline or SLA; slow is not failed.
+Set `includeLatency: true` on describe/compare for 30-day admission-to-completion
+`latency`, including recovery. `window.from`/`to` mark cutoff/observation time.
+Median/p95 need five samples from up to 48 latest completed Calls.
+`insufficient_sample` reports count; an absent opted-in field means unavailable
+history. Omission preserves older shapes. CLI requests it; Tool pages chart it.
+Unfinished Calls are excluded. This is not first-byte latency, Provider duration,
+a deadline or SLA; slow is not failed.
 
 If no Tool fits, explain the missing capability without inventing a listing.
 `tool_read_unavailable` means no catalogue read completed. It is retryable,

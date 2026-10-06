@@ -83,6 +83,9 @@ explicit opt-in operations; implementation does not activate them.
 - `/api/v1/market-tools/*` exposes canonical Tool discovery and comparison.
 - `/api/v1/tools/quote` and `/api/v1/tools/call` define paid or consequential Calls.
 - `/api/v1/calls` and `/api/v1/calls/{callRef}/*` define Call history and recovery.
+- `/api/v1/feedback`, MCP `ae_feedback_submit` and CLI `ae feedback` accept
+  optional product feedback through the existing PostHog project. See
+  [feedback and opt-out](./packages/cli/README.md#send-product-feedback).
 - `/mcp`, `/llms.txt` and `/SKILL.md` are the accepted source discovery/plugin
   surfaces. The deployment map identifies their current hosted release.
 - The CLI source supports search, `describe`, `call`, `history`, status, wait,

@@ -26,12 +26,18 @@ export function isObservabilityDisabled(env: EnvRecord): boolean {
   return env.VITE_AE_DISABLE_OBSERVABILITY === 'true' || env.AE_DISABLE_OBSERVABILITY === 'true'
 }
 
+/** Executor/DO_NOT_TRACK convention opts out unless the value is explicitly false. */
+export function isProductAnalyticsDisabled(env: EnvRecord): boolean {
+  return ['DO_NOT_TRACK', 'AE_DISABLE_ANALYTICS', 'VITE_AE_DISABLE_ANALYTICS'].some(name =>
+    !['', '0', 'false', 'no', 'off'].includes((env[name] ?? '').trim().toLowerCase()))
+}
+
 export function readObservabilityClientConfig(
   env: EnvRecord = import.meta.env as EnvRecord,
 ): ObservabilityClientConfig {
   const disabled = isObservabilityDisabled(env)
   const sentryDsn = readTrimmed(env.VITE_SENTRY_DSN)
-  const posthogKey = readTrimmed(env.VITE_POSTHOG_KEY)
+  const posthogKey = isProductAnalyticsDisabled(env) ? undefined : readTrimmed(env.VITE_POSTHOG_KEY)
   const posthogHost = readTrimmed(env.VITE_POSTHOG_HOST) ?? defaultPosthogHost
   const posthogAppUrl = readTrimmed(env.VITE_POSTHOG_APP_URL)
   const release = readRelease(env)
@@ -57,7 +63,7 @@ export function readObservabilityServerConfig(
 ): ObservabilityServerConfig {
   const disabled = isObservabilityDisabled(env)
   const sentryDsn = readTrimmed(env.SENTRY_DSN) ?? readTrimmed(env.VITE_SENTRY_DSN)
-  const posthogKey = readTrimmed(env.POSTHOG_KEY) ?? readTrimmed(env.VITE_POSTHOG_KEY)
+  const posthogKey = isProductAnalyticsDisabled(env) ? undefined : readTrimmed(env.POSTHOG_KEY) ?? readTrimmed(env.VITE_POSTHOG_KEY)
   const posthogHost = readTrimmed(env.POSTHOG_HOST) ?? readTrimmed(env.VITE_POSTHOG_HOST) ?? defaultPosthogHost
   const posthogAppUrl = readTrimmed(env.POSTHOG_APP_URL) ?? readTrimmed(env.VITE_POSTHOG_APP_URL)
   const release = readRelease(env)

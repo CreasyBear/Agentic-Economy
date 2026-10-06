@@ -37,6 +37,7 @@ import {
 } from '@/modules/registry/tool-entry'
 import { MARKET_REQUEST_ROUTE_CONTRACTS } from '@/modules/market-demand/market-demand.actions'
 import { SAVED_TOOLS_ROUTE_CONTRACTS } from '@/modules/market/saved-tools.contracts'
+import { FEEDBACK_ROUTE_CONTRACT } from '@/modules/actions/feedback.actions'
 
 import { TOOL_QUOTE_ACTION_ID } from '@/modules/capability-execution/quote'
 import { TOOL_PLAN_QUOTE_ACTION_ID } from '@/modules/capability-execution/plan/quote.actions'
@@ -91,7 +92,7 @@ export type CommandManifestEntry = Readonly<{
   summary: string
   args: string
   json: boolean
-  authentication?: 'buyer'
+  authentication?: 'buyer' | 'buyer_or_provider'
   guidance?: readonly string[]
   commands?: Readonly<Record<string, CommandManifestEntry>>
 }>
@@ -176,6 +177,15 @@ type RootCommandManifestEntry = CommandManifestEntry & Readonly<{
 }>
 
 export const COMMANDS: Readonly<Record<string, RootCommandManifestEntry>> = {
+  feedback: {
+    ...deriveCliCommand(FEEDBACK_ROUTE_CONTRACT.actionId), args: '"<message>"', group: 'reference', rootOrder: 3,
+    authentication: 'buyer_or_provider',
+    guidance: [
+      'Optional product feedback, not a required end-of-task step. Say what you expected, what happened, and what would help.',
+      'The explicit message goes to the AE team through PostHog. Never include credentials, personal information or Customer business data.',
+      'Set DO_NOT_TRACK=1 or AE_DISABLE_ANALYTICS=1 to skip feedback. Do not automatically retry an unconfirmed submission.',
+    ],
+  },
   manifest: { summary: 'Read this machine-readable Tool terminal contract.', args: '', json: true, group: 'reference', rootOrder: 1 },
   config: {
     summary: 'Inspect effective local CLI origin, paths, overrides, and redacted connection state without changing anything.',

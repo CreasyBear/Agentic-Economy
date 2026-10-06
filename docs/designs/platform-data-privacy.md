@@ -76,6 +76,52 @@ The first product change improves **buyer matching and purchase**: an Agent can 
 
 **Open owner decisions:** approve exact content and backup periods; decide which sensitive or secret-bearing routes AE will support initially; set the minimum evidence for Provider claims; inspect live recipients and logging; and get an entity-specific Australian legal review. Until those are resolved, describe unknown handling honestly and do not advertise a blanket “private,” “no retention” or Australian-only route.
 
+## Explicit product feedback — 6 October 2026
+
+Joel approved following Executor's v2 feedback pattern: an optional
+`feedback.submit` action, instructions to use it when friction occurs, and
+confirmed ingestion into the existing PostHog project. The reference is
+[Executor's agent instructions](https://github.com/UsefulSoftwareCo/executor/blob/1e25fd4eee3fafe21e6fe6efe155c0ab01134ec2/packages/app-templates/executor/skills/executor/feedback.md)
+and [submission implementation](https://github.com/UsefulSoftwareCo/executor/blob/1e25fd4eee3fafe21e6fe6efe155c0ab01134ec2/apps/hosted/cloud/src/implementation/product-analytics.ts).
+This is distinct from the categorical Call usefulness feedback below.
+
+**Requires:** an authenticated Agent credential and one explicitly submitted,
+nonblank `message` of at most 10,000 characters. No caller-supplied identity,
+Call payload, conversation, attachment or arbitrary analytics properties.
+**Ensures:** `accepted` only after PostHog acknowledges ingestion. Only the
+submitted text and server-derived pseudonymous attribution/version/environment
+metadata are sent. Agents describe product friction without credentials,
+personal information or Customer business data, then continue working.
+**Invariant:** no Call, payment, refund, spending authority or usefulness vote
+changes. No application feedback table or durable content queue is added.
+**On violation:** authentication, input and rate-limit failures stop before
+ingestion; disabled analytics returns `feedback_disabled`; a network failure,
+non-success response or five-second deadline returns `feedback_unavailable`.
+
+**Error and retry decision:** ingestion is the sole new mutation. It is not
+idempotent; duplicate or concurrent submissions may produce separate events.
+Make one attempt, with no automatic retry and no generated retry continuation.
+A timeout cannot prove rejection, so the failure guarantees preserved product
+state, not rollback at PostHog. The agent should skip unavailable feedback and
+continue the original task. Expected transport failures become typed outcomes;
+neither submitted text nor upstream error bodies enter diagnostic logs.
+
+**Complexity decision:** keep one action schema/descriptor shared by HTTP, MCP
+and CLI, their existing adapters, and one confirmed-send function beside the
+current PostHog implementation. This adds transport registration but keeps
+payload changes in one schema. The existing fire-and-forget capture helper and
+installed SDK's error-swallowing `captureImmediate` cannot prove acceptance;
+use Executor's direct batch-ingestion pattern. Reject a separate feedback
+database, service layer, retry store and dashboard. Retention is the configured
+PostHog project's policy, not the Call feedback table's 90-day policy.
+
+**Verification:** exercise authorization, strict/oversized input, opt-out,
+confirmed acceptance, rejected/delayed ingestion, independent concurrent
+submissions, single-attempt failures, and equivalent CLI/MCP/HTTP outcomes.
+Inspect the outbound event to establish that only explicit feedback text and
+the allowed attribution are sent. Tests replace the external ingestion boundary;
+they do not establish production PostHog delivery or retention.
+
 ## Approved alpha learning change — 4 October 2026
 
 Joel approved 30-day Call content retention, disclosed founder review,

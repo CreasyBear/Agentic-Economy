@@ -64,6 +64,7 @@ const PUBLIC_READ_COMMANDS = new Set(['list', 'search', 'describe', 'compare'])
 const COMMAND_OPTIONS: Readonly<Record<string, readonly string[]>> = {
   manifest: ['technical'],
   config: [],
+  feedback: [],
   list: ['source', 'limit', 'cursor', 'filters'],
   search: ['source', 'limit', 'cursor', 'filters'],
   describe: ['technical'],
@@ -303,13 +304,13 @@ function printCommandHelp(command: string | undefined, positionals: readonly str
       '  Provider profile: ae connect --provider requests market_supply:manage separately and does not replace the buyer credential.',
     )
   }
-  if (metadata.authentication === 'buyer') {
+  if (metadata.authentication !== undefined) {
     lines.push(
       '',
       'Authentication:',
       `  Credential: ${AUTH_HELP.credential}`,
       `  Credential origin: ${AUTH_HELP.credentialOrigin}`,
-      `  Scope: ${AUTH_HELP.scope}`,
+      `  Scope: ${metadata.authentication === 'buyer_or_provider' ? `${AUTH_HELP.scope} or ${SUPPLY_AUTH_HELP.scope}` : AUTH_HELP.scope}`,
       `  Origin policy: ${AUTH_HELP.origin}`,
       `  Next: ${AUTH_HELP.next}`,
     )
@@ -431,6 +432,7 @@ async function main(argv: readonly string[] = process.argv.slice(2)): Promise<nu
     supplyCommands,
     waitCommands,
     planCommands,
+    feedbackCommands,
   ] = await Promise.all([
     import('./commands/account'),
     import('./commands/cancel'),
@@ -451,6 +453,7 @@ async function main(argv: readonly string[] = process.argv.slice(2)): Promise<nu
     import('./commands/supply'),
     import('./commands/wait'),
     import('./commands/plan'),
+    import('./commands/feedback'),
   ])
   const marketToolRunners: Record<string, CommandRunner> = Object.fromEntries(
     marketToolCommands.MARKET_TOOL_COMMAND_DESCRIPTORS.map(({ command, run }) => [command, run] as const),
@@ -458,6 +461,7 @@ async function main(argv: readonly string[] = process.argv.slice(2)): Promise<nu
   const commands: Record<string, CommandRunner> = {
     manifest: manifestCommands.runManifestCommand,
     plan: planCommands.runPlanCommand,
+    feedback: feedbackCommands.runFeedbackCommand,
     config: configCommands.runConfigCommand,
     ...marketToolRunners,
     connect: connectCommands.runConnectCommand,

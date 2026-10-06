@@ -18,6 +18,7 @@ import {
   fundingHandoffStatusInputSchema,
 } from '@/modules/money/funding-handoff.actions'
 import { exactAmountSchema } from '@/modules/money/public'
+import { FEEDBACK_ROUTE_CONTRACT } from '@/modules/actions/feedback.actions'
 
 import { jsonSchemaOf, problemResponses } from './openapi-document-schema'
 import type { NormalizedOperation } from './openapi-document-types'
@@ -25,6 +26,7 @@ import type { NormalizedOperation } from './openapi-document-types'
 const AUTH_ERRORS = problemResponses(['UNAUTHENTICATED', 'PERMISSION_DENIED', 'INVALID_ARGUMENT', 'PAYLOAD_TOO_LARGE', 'NOT_FOUND', 'ALREADY_EXISTS', 'RESOURCE_EXHAUSTED', 'UNAVAILABLE'])
 
 const actionRoutes = [
+  FEEDBACK_ROUTE_CONTRACT,
   AGENT_ACCOUNT_SELF_ROUTE_CONTRACT,
   ...Object.values(AGENT_ACCOUNT_MONEY_ROUTE_CONTRACTS),
   ...Object.values(MARKET_REQUEST_ROUTE_CONTRACTS),
@@ -46,13 +48,15 @@ function actionOperations(): readonly NormalizedOperation[] {
       tags: [route.path.startsWith('/api/v1/supply/') ? 'Provider' : route.path.startsWith('/api/v1/market-requests') ? 'Market demand' : 'Account'],
       method: route.method,
       path: route.path,
-      security: { scope: route.scope },
+      security: { scope: 'anyScopes' in route ? route.anyScopes.join(' or ') : route.scope },
+      ...(route.actionId === FEEDBACK_ROUTE_CONTRACT.actionId ? { description: descriptor.boundaries.join(' ') } : {}),
       ...(hasBodyIdempotency ? { description: 'Retry the same logical operation with the same JSON body idempotencyKey; a changed payload conflicts.' } : {}),
       pathParams: [], queryParams: [],
       ...(route.method === 'POST' && bodySchema !== undefined ? { requestBodySchema: bodySchema } : {}),
       responses: [
         { status: 200, schema: descriptor.outputJsonSchema ?? jsonSchemaOf(action.outputSchema), mediaType: 'application/json', description: 'Success.' },
         ...AUTH_ERRORS,
+        ...(route.actionId === FEEDBACK_ROUTE_CONTRACT.actionId ? problemResponses(['FAILED_PRECONDITION']) : []),
       ],
     }
   })

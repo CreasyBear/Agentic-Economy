@@ -61,6 +61,32 @@ Describe the **exact** returned ref and read its input schema before supplying v
 
 A `scoped` response assesses only part of the selected supply: follow its typed `next` action, including `next-page`, rather than claiming there is no Tool. With `--cursor`, pass `pagination.nextCursor` unchanged along with the **same query, source, limit, and filters**; the JSON `nextPageCommand` supplies that continuation for inspection. `noMatch` after `assessed.coverage == "complete"` means no suitable Tool in the assessed sources; it does **not** assert the market has none anywhere. An `unavailable` response is a failed assessment: follow `next: retry` rather than treating it as no match. A private `ae request create "<job>"` can remember a genuinely missing job for the connected caller; it is not a Tool or a provider order, and creation refuses a current matching Tool.
 
+## Send product feedback
+
+The current CLI source supports `ae feedback "<message>" --json` for optional
+feedback when AE gets in the way or lacks needed functionality. Use an existing
+buyer or provider connection. Describe expected and actual behaviour and relevant
+errors; exclude credentials, personal information, Customer business data and Tool
+payloads. The explicit text goes to the AE team through PostHog with pseudonymous
+Account/Agent attribution. It is separate from Call ratings and refunds.
+
+`{"kind":"accepted"}` confirms ingestion, not review or a promised fix. Tell the
+user after acceptance, then continue the original task. Skip `feedback_disabled`
+or `feedback_unavailable` and do not automatically retry: a timeout may follow
+successful ingestion. Feedback is not a required end-of-task step.
+
+Set `DO_NOT_TRACK=1` or `AE_DISABLE_ANALYTICS=1` in the CLI process to prevent
+feedback submission before authentication or network access. The same server
+flags disable PostHog analytics and feedback for that deployment while preserving
+Sentry error diagnostics. `VITE_AE_DISABLE_ANALYTICS=1` disables browser analytics
+at build time. CLI opt-out does not change the remote server's analytics policy
+for other requests. The existing `AE_DISABLE_OBSERVABILITY=true` switch also
+disables feedback.
+
+HTTP clients use authenticated `POST /api/v1/feedback` with only
+`{"message":"..."}` (nonblank, at most 10,000 characters). MCP exposes the
+`ae_feedback_submit` tool to authenticated connections with writes enabled.
+
 ## Connect, inspect a Quote, then Call
 
 ```sh

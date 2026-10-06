@@ -22,6 +22,7 @@ const expectedCommands = [
   "connect",
   "describe",
   "doctor",
+  "feedback",
   "fund",
   "history",
   "list",

@@ -95,6 +95,7 @@ import {
 import { PLAN_RUNTIME_ROUTES, toolPlanRunAction, toolPlanGetAction, toolPlanCancelAction } from '@/modules/capability-execution/plan/runtime.actions'
 import { callListAction } from '@/modules/capability-execution/call-history.actions'
 import { journeyStatusAction } from './status.actions'
+import { feedbackSubmitAction } from './feedback.actions'
 import {
   marketRequestCreateAction,
   marketRequestListAction,
@@ -126,6 +127,7 @@ const registeredActions: readonly AnyAction[] = [
   agentAccountSelfAction,
   agentAccountBalanceAction,
   agentAccountActivityAction,
+  feedbackSubmitAction,
   fundingHandoffConfigAction,
   fundingHandoffCreateAction,
   fundingHandoffStatusAction,
