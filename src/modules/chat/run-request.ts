@@ -10,6 +10,34 @@ const MAX_RUN_REQUEST_LENGTH = 2_000
 const RUN_PREFIX = 'Run Tool '
 const INPUT_INTRO = ' with this exact JSON input: '
 
+export function isDetailToolRef(value: unknown): value is string {
+  return typeof value === 'string' && value.trim() === value
+    && (isPublicToolRef(value) || /^registry:[0-9a-f]{64}$/u.test(value))
+}
+
+/** Exact selection carries an untrusted lookup hint; it never grants purchase authority. */
+export function formatDetailRequest(toolRef: string, title: string): string {
+  if (!isDetailToolRef(toolRef)) throw new RangeError('detail_request_tool_ref_invalid')
+  const boundedTitle = title.trim()
+  if (boundedTitle.length === 0 || boundedTitle.length > 200) throw new RangeError('detail_request_title_invalid')
+  return `Inspect Tool ${toolRef} with this exact title: ${JSON.stringify(boundedTitle)}.`
+}
+
+/** Invalid/oversized selection text returns null; free-form questions remain model input. */
+export function parseDetailRequest(text: string): { toolRef: string; title: string } | null {
+  if (typeof text !== 'string' || text.length > 1_400) return null
+  const match = /^Inspect Tool ((?:operation:v1:|registry:)[0-9a-f]{64}) with this exact title: ("(?:[^"\\]|\\.)*")\.$/u.exec(text)
+  if (match?.[1] === undefined || match[2] === undefined || !isDetailToolRef(match[1])) return null
+  try {
+    const title: unknown = JSON.parse(match[2])
+    if (typeof title !== 'string' || title.length === 0 || title.length > 200 || title.trim() !== title
+      || formatDetailRequest(match[1], title) !== text) return null
+    return { toolRef: match[1], title }
+  } catch {
+    return null
+  }
+}
+
 type SerializationState = { parts: string[]; length: number; nodes: number; active: WeakSet<object> }
 
 function append(state: SerializationState, part: string): boolean {

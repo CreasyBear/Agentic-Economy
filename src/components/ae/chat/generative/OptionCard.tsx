@@ -40,7 +40,7 @@ export function OptionCard({ option, recommended, compared, selected, multipleOp
           {option.networkLabel ? <p className="arc-listing-preview-label">{option.networkLabel}</p> : null}
         </div>
         {readOnly ? null : <div className="arc-listing-quick arc-chat-option-actions">
-          {option.quoteable ? (
+          {option.reviewInputs ? (
             <Button type="button" size="sm" disabled={onReview === undefined}
               onClick={() => onReview?.(option.id)} aria-expanded={openToolRef === option.id}
               {...(panelId === undefined || openToolRef !== option.id ? {} : { 'aria-controls': panelId })}>
@@ -48,7 +48,7 @@ export function OptionCard({ option, recommended, compared, selected, multipleOp
             </Button>
           ) : null}
           {selectionActions ? <>
-            {!option.quoteable && onSelect !== undefined ? <Button type="button" size="sm" variant="secondary" onClick={() => onSelect(option.id)} disabled={!option.selectable}>Ask about this Tool</Button> : null}
+            {!option.reviewInputs && onSelect !== undefined ? <Button type="button" size="sm" variant="secondary" onClick={() => onSelect(option.id)} disabled={!option.selectable || option.detailRequestable === false}>Ask about this Tool</Button> : null}
             {multipleOptions && option.selectable ? <Button type="button" size="sm" variant="ghost" onClick={() => onCompare?.(option.id)} disabled={onCompare === undefined} aria-pressed={compared} aria-label={compared ? 'Remove from compare' : 'Compare'}>{compared ? 'Compared' : 'Compare'}</Button> : null}
           </> : null}
         </div>}

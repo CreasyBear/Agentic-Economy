@@ -1,4 +1,4 @@
-import { listUIMessages, mockModel, saveMessage, saveMessages } from '@convex-dev/agent'
+import { listMessages, listUIMessages, mockModel, saveMessage, saveMessages } from '@convex-dev/agent'
 import { getFunctionName } from 'convex/server'
 import type { ActionCtx } from '../../convex/_generated/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -103,7 +103,45 @@ describe.sequential('durable Tool chat messaging and shares', () => {
     expect(messages.page.some(message => message.role === 'assistant' && message.text.trim().length > 0)).toBe(true)
   })
 
-  it.each(['immediate_explanation', 'initial', 'final_answer'] as const)(
+  it('uses a key-backed first-turn native discovery loop without dispatching purchase work', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
+    const backend = convexTestWithMarketComponents()
+    const { principal } = await createTestAgentPrincipal(backend, 'native-first-discovery')
+    const { toolRef } = await admitDiscoveredToolFixture(backend)
+    const binding = await startManuallyGeneratedTurn(backend, async () => backend.mutation(api.chatTurns.startTurn,
+      await withSourceWrite('protected_action', {
+        principal: { kind: 'agent_key' as const, ...principal }, clientTurnId: 'native-first-discovery',
+        prompt: 'Find a Tool that can convert a local appointment between cities.',
+        operationKey: 'chat-turn.start', correlationId: 'native-first-discovery',
+      })))
+    await backend.mutation(internal.chatTurns.finishTurn, { turnRef: binding.turnRef, promptMessageId: binding.promptMessageId, state: 'working' })
+    const searchTurn = { turnRef: binding.turnRef, threadId: binding.threadId, promptMessageId: binding.promptMessageId }
+    const current = await backend.query(internal.chatTurns.authorizeKeyGeneration, searchTurn)
+    if (current === null) throw new Error('native_first_authority_missing')
+    const model = mockModel({ contentSteps: [
+      [{ type: 'tool-call', toolCallId: 'native-first-search', toolName: 'registry_tools_search', input: JSON.stringify({ query: 'timezone conversion', source: 'current' }) }],
+      [{ type: 'text', text: '**Timezone Converter** changes a local time between timezones. Next: Ask about this Tool on its card.' }],
+    ] })
+    const outbound = vi.spyOn(model, 'doStream')
+    const actions: string[] = []
+    await backend.action(ctx => streamDurableChatResponse(new Proxy(ctx, { get(target, property, receiver) {
+      if (property === 'runAction') return (...args: Parameters<ActionCtx['runAction']>) => {
+        actions.push(getFunctionName(args[0]))
+        return Reflect.apply(target.runAction, target, args)
+      }
+      return Reflect.get(target, property, receiver) as unknown
+    } }) as ActionCtx, { ...searchTurn, searchTurn, ownerId: current.ownerId, trustedChatAuthority: current.authority }, model))
+    expect(outbound.mock.calls[0]?.[0].tools).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'registry_tools_search' })]))
+    expect(actions).not.toContain('chatCall:call')
+    expect(actions).not.toContain('chatQuote:quote')
+    const messages = await backend.run(ctx => listUIMessages(ctx, components.agent, { threadId: binding.threadId, paginationOpts: { cursor: null, numItems: 20 } }))
+    const cards = messages.page.flatMap(message => message.parts).filter(part => part.type === 'tool-registry_tools_search')
+    expect(cards).toHaveLength(1)
+    expect(JSON.stringify(cards)).toContain(toolRef)
+    expect(messages.page.filter(message => message.role === 'assistant' && message.text.trim()).map(message => message.text).join('')).toContain('changes a local time')
+  })
+
+  it.each(['initial', 'final_answer'] as const)(
     'persists each actual %s request before SDK provider I/O while retaining answer behavior', async surface => {
       const backend = convexTestWithMarketComponents()
       const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, `chat-cost-${surface}`)
@@ -127,7 +165,7 @@ describe.sequential('durable Tool chat messaging and shares', () => {
         return await original(options)
       })
       await backend.action(ctx => {
-        const context = surface === 'immediate_explanation' ? ctx : new Proxy(ctx, {
+        const context = new Proxy(ctx, {
           get(target, property, receiver) {
             if (property === 'runAction') return (...args: Parameters<ActionCtx['runAction']>) => {
               if (getFunctionName(args[0]) === 'capabilityToolCatalog:searchInternal') {
@@ -263,7 +301,6 @@ describe.sequential('durable Tool chat messaging and shares', () => {
   })
 
   it.each([false, true])('persists a final response and settles stream deltas (extended lookup=%s)', async extended => {
-    // Keep this case on the model-led recovery path; immediate retrieval has separate coverage.
     vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', undefined)
     const backend = convexTestWithMarketComponents()
     const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'chat-model-owner')
@@ -348,9 +385,10 @@ describe.sequential('durable Tool chat messaging and shares', () => {
       return saved.messageId
     })
 
-    const model = mockModel({
-      content: [{ type: 'text', text: blank ? ' ' : 'No current exchange-rate Tool was verified from that reference.' }],
-    })
+    const model = mockModel({ contentSteps: [
+      [{ type: 'tool-call', toolCallId: 'native-search', toolName: 'registry_tools_search', input: JSON.stringify({ query: 'exchange rate', source: 'current' }) }],
+      [{ type: 'text', text: blank ? ' ' : 'No current exchange-rate Tool was verified from that reference.' }],
+    ] })
     const modelCalls = vi.spyOn(model, 'doStream')
     await backend.action(async (ctx) => {
       await streamDurableChatResponse(ctx, {
@@ -359,8 +397,8 @@ describe.sequential('durable Tool chat messaging and shares', () => {
         promptMessageId,
       }, model)
     })
-    expect(modelCalls).toHaveBeenCalledOnce()
-    expect(modelCalls.mock.calls[0]?.[0].tools).toBeUndefined()
+    expect(modelCalls).toHaveBeenCalledTimes(2)
+    expect(modelCalls.mock.calls[0]?.[0].tools).toBeDefined()
     await backend.mutation(internal.chatMessages.clearActiveGeneration, {
       threadId: created.threadId,
       promptMessageId,
@@ -376,13 +414,13 @@ describe.sequential('durable Tool chat messaging and shares', () => {
         statuses: ['streaming'],
       }),
     ]))
-    expect(messages.page.map((message) => message.role)).toEqual(['user', 'assistant'])
-    expect(messages.page[1]?.text.trim().length).toBeGreaterThan(0)
+    expect(messages.page.filter(message => message.role === 'user')).toHaveLength(1)
+    expect(messages.page.filter(message => message.role === 'assistant' && message.text.trim().length > 0)).toHaveLength(1)
     expect(messages.page.flatMap(message => message.parts)
       .filter(part => part.type === 'tool-registry_tools_search')).toHaveLength(1)
     expect(activeStreams).toEqual([])
   })
-  it('keeps one fallback assistant reply when immediate explanation is unusable', async () => {
+  it('keeps one fallback assistant reply when native search narration is unusable', async () => {
     const backend = convexTestWithMarketComponents()
     const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'chat-immediate-single-voice-owner')
     const created = await owner.mutation(internal.chatThreads.createThread, {
@@ -391,7 +429,10 @@ describe.sequential('durable Tool chat messaging and shares', () => {
     const prompt = await backend.run(ctx => saveMessage(ctx, components.agent, {
       threadId: created.threadId, userId: canonicalAccountRef, prompt: 'Find an exchange-rate Tool',
     }))
-    const model = mockModel({ contentSteps: [[{ type: 'text', text: 'No.' }]] })
+    const model = mockModel({ contentSteps: [
+      [{ type: 'tool-call', toolCallId: 'native-search', toolName: 'registry_tools_search', input: JSON.stringify({ query: 'exchange rate', source: 'current' }) }],
+      [{ type: 'text', text: 'No.' }],
+    ] })
 
     await backend.action(ctx => streamDurableChatResponse(ctx, {
       threadId: created.threadId, ownerId: canonicalAccountRef, promptMessageId: prompt.messageId,
@@ -474,9 +515,9 @@ describe.sequential('durable Tool chat messaging and shares', () => {
     const assistant = messages.page.filter(message => message.role === 'assistant')
     expect(assistant).toHaveLength(1)
     const cards = assistant[0]?.parts.map(projectToolCard).filter(card => card?.kind === 'choices') ?? []
-    expect(cards).toEqual([])
+    expect(cards.every(card => card?.kind === 'choices' && card.choices.length === 0)).toBe(true)
   })
-  it.each(['immediate', 'model-recovery'] as const)('forces authenticated and guest page-two searches without giving the model a cursor (%s)', async mode => {
+  it.each(['four-options', 'one-option', 'missing-call'] as const)('forces authenticated and guest page-two searches without giving the model a cursor (%s)', async mode => {
     vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const backend = convexTestWithMarketComponents()
     await backend.mutation(internal.workloadCron.ensurePlatformWorkloadIdentities, {})
@@ -527,41 +568,62 @@ describe.sequential('durable Tool chat messaging and shares', () => {
     await backend.mutation(internal.chatTurns.finishTurn, {
       turnRef: first.turnRef, promptMessageId: first.promptMessageId, state: 'working',
     })
-    const firstLimit = mode === 'immediate' ? 4 : 1
-    const firstModel = mode === 'immediate'
-      ? mockModel({ content: [{ type: 'text', text: 'Search results are in the card. Next: inspect the card.' }] })
-      : mockModel({ contentSteps: [
-        [{ type: 'tool-call', toolCallId: 'first-search', toolName: 'registry_tools_search',
-          input: JSON.stringify({ query: 'weather', source: 'coinbase', limit: firstLimit }) }],
-        [{ type: 'text', text: 'Search results are in the card. Next: inspect the card.' }],
-      ] })
-    await backend.action(ctx => {
-      let immediateAttempted = false
-      const unavailableImmediateCatalogue = new Proxy(ctx, {
-        get(target, property, receiver) {
-          if (property === 'runAction') return (...args: Parameters<ActionCtx['runAction']>) => {
-            if (mode === 'model-recovery' && !immediateAttempted && getFunctionName(args[0]) === 'capabilityToolCatalog:searchInternal') {
-              immediateAttempted = true
-              return Promise.reject(new Error('catalogue_unavailable'))
-            }
-            return Reflect.apply(target.runAction, target, args)
-          }
-          return Reflect.get(target, property, receiver) as unknown
-        },
-      }) as ActionCtx
-      return streamDurableChatResponse(unavailableImmediateCatalogue, {
+    const firstLimit = mode === 'one-option' ? 1 : 4
+    const firstModel = mockModel({ contentSteps: [
+      [{ type: 'tool-call', toolCallId: 'first-search', toolName: 'registry_tools_search',
+        input: JSON.stringify({ query: 'weather', source: 'coinbase', limit: firstLimit }) }],
+      [{ type: 'text', text: 'Search results are in the card. Next: inspect the card.' }],
+    ] })
+    if (mode === 'missing-call') {
+      const original = firstModel.doStream.bind(firstModel)
+      let requests = 0
+      vi.spyOn(firstModel, 'doStream').mockImplementation(async options => {
+        if (++requests === 1) return original(options)
+        const result = options.prompt.flatMap(message => message.role === 'tool'
+          ? message.content.filter(part => part.type === 'tool-result' && part.toolCallId === 'first-search') : [])[0]
+        if (result?.type !== 'tool-result' || result.output.type !== 'json') throw new Error('unsigned_search_fixture_missing')
+        const output = JSON.stringify(result.output.value)
+        expect(output).not.toContain('sc1.')
+        await backend.run(async ctx => {
+          const history = await listMessages(ctx, components.agent, {
+            threadId: first.threadId, paginationOpts: { cursor: null, numItems: 50 },
+          })
+          const prompt = history.page.find(row => row._id === first.promptMessageId)
+          if (prompt === undefined) throw new Error('signed_search_prompt_missing')
+          const rows = history.page.filter(row => row.order === prompt.order && Array.isArray(row.message?.content)
+            && row.message.content.some(part => 'toolCallId' in part && part.toolCallId === 'first-search'))
+          await ctx.runMutation(components.agent.messages.deleteByIds, { messageIds: rows.map(row => row._id) })
+          await saveMessages(ctx, components.agent, {
+            threadId: first.threadId, userId: canonicalAccountRef, promptMessageId: first.promptMessageId,
+            messages: [{ role: 'tool', content: [{ type: 'tool-result', toolCallId: result.toolCallId,
+              toolName: result.toolName, output: { type: 'text', value: output } }] }],
+            metadata: [{ status: 'failed', error: 'injected_post_search_model_failure' }],
+          })
+        })
+        throw new Error('injected_post_search_model_failure')
+      })
+    }
+    await backend.action(ctx => streamDurableChatResponse(ctx, {
       threadId: first.threadId, ownerId: canonicalAccountRef, promptMessageId: first.promptMessageId,
       searchTurn: { turnRef: first.turnRef, threadId: first.threadId, promptMessageId: first.promptMessageId },
-    }, firstModel)
-    })
+    }, firstModel))
     const firstMessages = await backend.run(ctx => listUIMessages(ctx, components.agent, {
       threadId: first.threadId, paginationOpts: { cursor: null, numItems: 20 },
     }))
     const firstCards = firstMessages.page.flatMap(message => message.parts.map(projectToolCard))
       .filter(card => card?.kind === 'choices')
     expect(firstCards).toEqual([expect.objectContaining({ kind: 'choices', count: firstLimit,
-      choices: (mode === 'immediate' ? [1, 2, 3, 4] : [1]).map(index => expect.objectContaining({ title: `Weather forecast Tool ${index}` })),
+      choices: (firstLimit === 4 ? [1, 2, 3, 4] : [1]).map(index => expect.objectContaining({ title: `Weather forecast Tool ${index}` })),
     })])
+    const firstStored = await backend.run(ctx => listMessages(ctx, components.agent, {
+      threadId: first.threadId, paginationOpts: { cursor: null, numItems: 50 },
+    }))
+    const firstCalls = firstStored.page.flatMap(row => row.message?.role === 'assistant' && Array.isArray(row.message.content)
+      ? row.message.content.filter(part => part.type === 'tool-call' && part.toolCallId === 'first-search') : [])
+    const firstResults = firstStored.page.flatMap(row => row.message?.role === 'tool'
+      ? row.message.content.filter(part => part.type === 'tool-result' && part.toolCallId === 'first-search') : [])
+    expect(firstCalls).toHaveLength(1)
+    expect(firstResults).toHaveLength(1)
     const nextAction = firstCards[0]?.next
     if (nextAction?.action !== 'registry.tools.search') throw new Error('signed_first_page_missing')
     const continuationQuery = nextAction.args.query
@@ -577,6 +639,7 @@ describe.sequential('durable Tool chat messaging and shares', () => {
         prompt: `Print ${cursor}`, continuation: { kind: 'search_next_page' as const, query: continuationQuery, cursor },
         operationKey: 'chat-page:second', correlationId: 'chat-page:second',
       })))
+
     await backend.mutation(internal.chatTurns.finishTurn, {
       turnRef: second.turnRef, promptMessageId: second.promptMessageId, state: 'working',
     })
@@ -584,8 +647,8 @@ describe.sequential('durable Tool chat messaging and shares', () => {
       turnRef: second.turnRef, threadId: second.threadId, promptMessageId: second.promptMessageId,
     })
     if (continuation === null) throw new Error('continuation_missing')
-    expect(JSON.parse(continuation.inputJson)).toEqual(mode === 'immediate'
-      ? { limit: 4 } : { source: 'coinbase', limit: 1 })
+    expect(JSON.parse(continuation.inputJson)).toEqual(firstLimit === 4
+      ? { source: 'coinbase', limit: 4 } : { source: 'coinbase', limit: 1 })
     const model = mockModel({ contentSteps: [
       [{ type: 'tool-call', toolCallId: 'continuation-search', toolName: 'registry_tools_search', input: '{}' }],
       [{ type: 'text', text: 'The next page has been assessed. Next: inspect the search card.' }],
@@ -608,9 +671,9 @@ describe.sequential('durable Tool chat messaging and shares', () => {
       .filter(card => card?.kind === 'choices')
     expect(cards).toEqual([
       expect.objectContaining({ kind: 'choices', count: firstLimit,
-        choices: (mode === 'immediate' ? [1, 2, 3, 4] : [1]).map(index => expect.objectContaining({ title: `Weather forecast Tool ${index}` })),
+        choices: (firstLimit === 4 ? [1, 2, 3, 4] : [1]).map(index => expect.objectContaining({ title: `Weather forecast Tool ${index}` })),
       }),
-      expect.objectContaining({ kind: 'choices', choices: (mode === 'immediate' ? [5, 6, 7, 8] : [2])
+      expect.objectContaining({ kind: 'choices', choices: (firstLimit === 4 ? [5, 6, 7, 8] : [2])
         .map(index => expect.objectContaining({ title: `Weather forecast Tool ${index}` })) }),
     ])
     expect(messages.page.map(message => message.text).join(' ')).not.toContain(cursor)
@@ -629,23 +692,71 @@ describe.sequential('durable Tool chat messaging and shares', () => {
     await drainExpectedUnavailableGenerations(backend)
   })
 
-  it('keeps a completed Tool description when the model fails after the tool step', async () => {
+  it.each((['describe', 'search'] as const).flatMap(lookup =>
+    (['saved', 'missing-call', 'missing-result', 'missing-both'] as const).map(storage => ({ lookup, storage }))))(
+    'keeps one completed $lookup when the model fails after the tool step ($storage)', async ({ lookup, storage }) => {
     vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const backend = convexTestWithMarketComponents()
     const { toolRef } = await admitDiscoveredToolFixture(backend)
     const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'chat-failed-final-owner')
     const created = await owner.mutation(internal.chatThreads.createThread, { title: 'Timezone Tool' })
     const { messageId } = await backend.run(ctx => saveMessage(ctx, components.agent, {
-      threadId: created.threadId, userId: canonicalAccountRef, prompt: 'Describe the timezone Tool',
+      threadId: created.threadId, userId: canonicalAccountRef,
+      prompt: lookup === 'describe' ? 'Describe the timezone Tool' : 'Find a timezone conversion Tool',
     }))
+    const callId = `${lookup}-1`
     const model = mockModel({ contentSteps: [[{
-      type: 'tool-call', toolCallId: 'describe-1', toolName: 'registry_tools_describe',
-      input: JSON.stringify({ toolRef }),
+      type: 'tool-call', toolCallId: callId, toolName: `registry_tools_${lookup}`,
+      input: JSON.stringify(lookup === 'describe' ? { toolRef } : { query: 'timezone conversion', source: 'current' }),
     }]] })
     const original = model.doStream.bind(model)
     let attempts = 0
     vi.spyOn(model, 'doStream').mockImplementation(async options => {
-      if (++attempts > 1) throw new Error('injected_post_tool_model_failure')
+      if (++attempts > 1) {
+        const call = options.prompt.flatMap(message => message.role === 'assistant'
+          ? message.content.filter(part => part.type === 'tool-call' && part.toolCallId === callId) : [])[0]
+        const result = options.prompt.flatMap(message => message.role === 'tool'
+          ? message.content.filter(part => part.type === 'tool-result' && part.toolCallId === callId) : [])[0]
+        if (call?.type !== 'tool-call' || result?.type !== 'tool-result'
+          || (result.output.type !== 'text' && result.output.type !== 'json')) {
+          throw new Error('completed_lookup_fixture_missing')
+        }
+        const output = result.output.type === 'text' ? result.output.value : JSON.stringify(result.output.value)
+        // Shape the SDK storage boundary after the real Tool executes, so each
+        // failure case is independent of the SDK's pending-message save shape.
+        await backend.run(async ctx => {
+          const history = await listMessages(ctx, components.agent, {
+            threadId: created.threadId, paginationOpts: { cursor: null, numItems: 50 },
+          })
+          const prompt = history.page.find(row => row._id === messageId)
+          if (prompt === undefined) throw new Error('completed_lookup_prompt_missing')
+          for (const part of [call, result]) {
+            const keep = storage === 'saved' || (part.type === 'tool-call'
+              ? storage === 'missing-result' : storage === 'missing-call')
+            const rows = history.page.filter(row => row.order === prompt.order
+              && Array.isArray(row.message?.content) && row.message.content.some(content =>
+                content.type === part.type && 'toolCallId' in content && content.toolCallId === callId))
+            if (!keep) {
+              await ctx.runMutation(components.agent.messages.deleteByIds, { messageIds: rows.map(row => row._id) })
+            } else if (rows.length > 0) {
+              for (const row of rows) await ctx.runMutation(components.agent.messages.updateMessage, {
+                messageId: row._id, patch: { status: 'failed', error: 'injected_post_tool_model_failure' },
+              })
+            } else {
+              await saveMessages(ctx, components.agent, {
+                threadId: created.threadId, userId: canonicalAccountRef, promptMessageId: messageId,
+                messages: part.type === 'tool-call'
+                  ? [{ role: 'assistant', content: [{ type: 'tool-call', toolCallId: part.toolCallId,
+                    toolName: part.toolName, input: part.input }] }]
+                  : [{ role: 'tool', content: [{ type: 'tool-result', toolCallId: part.toolCallId,
+                    toolName: part.toolName, output: { type: 'text', value: output } }] }],
+                metadata: [{ status: 'failed', error: 'injected_post_tool_model_failure' }],
+              })
+            }
+          }
+        })
+        throw new Error('injected_post_tool_model_failure')
+      }
       return original(options)
     })
     await backend.action(ctx => streamDurableChatResponse(ctx, {
@@ -655,11 +766,28 @@ describe.sequential('durable Tool chat messaging and shares', () => {
       threadId: created.threadId, paginationOpts: { cursor: null, numItems: 20 },
     }))
     const answer = messages.page.filter(message => message.role === 'assistant').at(-1)?.text ?? ''
-    expect(answer).toContain('One Tool matches this request')
+    expect(answer).toContain('Timezone Converter')
     expect(JSON.stringify(messages.page)).toContain('Timezone')
     expect(answer).not.toContain('try again')
     expect(messages.page.flatMap(message => message.parts.map(projectToolCard))
       .filter(card => card?.kind === 'choices')).toHaveLength(1)
+    const stored = await backend.run(ctx => listMessages(ctx, components.agent, {
+      threadId: created.threadId, paginationOpts: { cursor: null, numItems: 50 },
+    }))
+    const prompt = stored.page.find(row => row._id === messageId)
+    const turn = stored.page.filter(row => row.order === prompt?.order && row._id !== messageId)
+    const storedCalls = turn.flatMap(row => row.message?.role === 'assistant' && Array.isArray(row.message.content)
+      ? row.message.content.flatMap(part => part.type === 'tool-call' && part.toolCallId === callId ? [part] : []) : [])
+    const storedResults = turn.flatMap(row => row.message?.role === 'tool'
+      ? row.message.content.filter(part => part.type === 'tool-result' && part.toolCallId === callId) : [])
+    expect(storedCalls).toHaveLength(1)
+    expect(storedResults).toHaveLength(1)
+    const storedAnswers = turn.flatMap(row => row.message?.role !== 'assistant' ? []
+      : typeof row.message.content === 'string' ? [row.message.content]
+        : row.message.content.flatMap(part => part.type === 'text' ? [part.text] : []))
+      .filter(text => text.trim().length > 0)
+    expect(storedAnswers).toHaveLength(1)
+    expect(storedAnswers[0]).toContain('Timezone Converter')
     expect(attempts).toBe(2)
   })
 

@@ -1,49 +1,15 @@
 import type { LanguageModelV4 } from '@ai-sdk/provider'
 import { createUIMessageStream, createUIMessageStreamResponse, stepCountIs, type ModelMessage, type UIMessageChunk } from 'ai'
-import type { z } from 'zod'
 import { CHAT_TOOL_NAME_MAP } from '@/modules/chat/tool-card'
-import { toolChoiceDescribeOutputSchema, toolChoiceSearchOutputSchema, type ToolChoiceSearchOutput } from '@/modules/registry/tool-choice-contracts'
-import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { recordAnonymousChat } from '@/lib/observability/journey'
 import type { ActionCtx } from '../../../_generated/server'
 import { createChatAgent } from '../tools/agent'
 import { readChatSearchPage } from '../tools/search'
-import { catalogueFact, explanationUsable, immediateSearchToolName, retrieveImmediateTools } from '../tools/immediate'
-import { CHAT_NO_RESULT_ANSWER, chatSearchResolution, prepareChatToolStep } from '../tools/step'
+import { catalogueFact, immediateSearchToolName } from '../tools/immediate'
+import { CHAT_NO_RESULT_ANSWER, chatSearchResolution, prepareChatToolStep, chatActionMessages, hasChatContext } from '../tools/step'
 import { completedChatFacts } from '../generate/completedFacts'
 import type { AnonymousChatMessage, AnonymousSearchContinuation } from './contracts'
 
-
-async function explainCatalogue(
-  agent: ReturnType<typeof createChatAgent>,
-  ctx: ActionCtx,
-  scope: { userId: string },
-  prompt: ModelMessage[],
-  output: ToolChoiceSearchOutput,
-  abortSignal?: AbortSignal,
-): Promise<string> {
-  const titles = output.kind === 'match' || output.kind === 'scoped'
-    ? output.results.slice(0, 4).map(result => result.title) : []
-  try {
-    const explanation = await agent.streamText(ctx, scope, {
-      messages: prompt,
-      tools: {},
-      stopWhen: stepCountIs(1),
-      timeout: { totalMs: 8_000 },
-      maxRetries: 0,
-      instructions: `${agent.options.instructions} Tool cards are already shown. Explain only these titles: ${titles.join('; ') || 'none'}. Never name another Tool or invent an operation id.`,
-      ...(abortSignal === undefined ? {} : { abortSignal }),
-    })
-    const text = (await explanation.text).trim()
-    return explanationUsable(text, output) ? text : catalogueFact(output)
-  } catch {
-    return catalogueFact(output)
-  }
-}
-
-type ChatCandidate =
-  | Extract<ToolChoiceSearchOutput, { kind: 'match' }>['results'][number]
-  | Extract<z.output<typeof toolChoiceDescribeOutputSchema>, { kind: 'found' }>['tool']
 
 export async function streamAnonymousChatResponse(
   ctx: ActionCtx,
@@ -75,36 +41,6 @@ export async function streamAnonymousChatResponse(
         answerOutcome = 'completed'
         return
       }
-      const latestUser = [...messages].reverse().find(message => message.role === 'user')?.content ?? ''
-      // Requires: the first discovery prompt, with no prior assistant context.
-      // Ensures: follow-ups retain their context and can inspect a named Tool.
-      // Invariant: guest tools remain read-only; history grants no authority.
-      // On violation: use the existing tool loop instead of replacing the request with search.
-      if (continuation === undefined && !messages.some(message => message.role === 'assistant')
-        && latestUser.trim().length > 0) {
-        let catalogue: Awaited<ReturnType<typeof retrieveImmediateTools>> = null
-        try {
-          catalogue = await retrieveImmediateTools(ctx, latestUser)
-        } catch (cause) {
-          degradeBackend(cause, undefined, { site: 'chatImmediateSearch', reason: 'source_unavailable' })
-        }
-        if (catalogue !== null) {
-          // This branch writes its own response instead of merging the model's
-          // UI stream, so it also owns the single message start/finish pair.
-          writer.write({ type: 'start' })
-          const toolName = immediateSearchToolName()
-          writer.write({ type: 'tool-input-start', toolCallId: 'immediate-search', toolName })
-          writer.write({ type: 'tool-input-available', toolCallId: 'immediate-search', toolName, input: { query: latestUser, limit: 4 } })
-          writer.write({ type: 'tool-output-available', toolCallId: 'immediate-search', output: catalogue })
-          const answer = await explainCatalogue(agent, ctx, scope, prompt, catalogue, abortSignal)
-          writer.write({ type: 'text-start', id: 'catalogue-answer' })
-          writer.write({ type: 'text-delta', id: 'catalogue-answer', delta: answer })
-          writer.write({ type: 'text-end', id: 'catalogue-answer' })
-          writer.write({ type: 'finish' })
-          answerOutcome = 'completed'
-          return
-        }
-      }
       const result = await agent.streamText(ctx, scope, {
         messages: prompt,
         prepareStep: prepareChatToolStep,
@@ -120,6 +56,7 @@ export async function streamAnonymousChatResponse(
       })
       const initialText: UIMessageChunk[] = []
       for await (const chunk of result.toUIMessageStream({ sendFinish: false })) {
+        if (chunk.type === 'start-step') initialText.length = 0
         if (chunk.type === 'text-start' || chunk.type === 'text-delta' || chunk.type === 'text-end') {
           initialText.push(chunk)
         } else {
@@ -127,6 +64,7 @@ export async function streamAnonymousChatResponse(
         }
       }
       const steps = await result.steps
+      if (abortSignal?.aborted) throw abortSignal.reason ?? new Error('chat_generation_cancelled')
       if (modelFailure !== undefined) {
         const answer = completedChatFacts(completedSteps)
         if (answer === null) throw modelFailure
@@ -138,7 +76,7 @@ export async function streamAnonymousChatResponse(
         return
       }
       const resolution = chatSearchResolution(steps)
-      if (steps.every(step => step.toolResults.length === 0) || resolution !== null) {
+      if (!hasChatContext(prompt) && steps.every(step => step.toolResults.length === 0) || resolution !== null) {
         writer.write({ type: 'text-start', id: 'no-tool-result' })
         writer.write({ type: 'text-delta', id: 'no-tool-result', delta: resolution ?? CHAT_NO_RESULT_ANSWER })
         writer.write({ type: 'text-end', id: 'no-tool-result' })
@@ -149,7 +87,7 @@ export async function streamAnonymousChatResponse(
       const last = steps.at(-1)
       const clarification = steps.some(step => step.toolCalls.some(call =>
         call.toolName === CHAT_TOOL_NAME_MAP.canonicalToProvider['chat.clarify']))
-      const finish = clarification || (steps.every(step => step.toolCalls.length === 0)
+      const finish = clarification || ((last?.toolCalls.length ?? 0) === 0
         && Boolean(last?.text.trim()) && /[.!?…)"']$/u.test(last?.text.trim() ?? '')
         && !/\b(?:let me|i(?:'ll| will) (?:check|search|look)|next page)\b/iu.test(last?.text ?? ''))
       if (finish) {
@@ -161,14 +99,16 @@ export async function streamAnonymousChatResponse(
       const final = await agent.streamText(ctx, scope, {
         messages: [...prompt, ...await result.responseMessages],
         tools: {},
+        prepareStep: options => ({ messages: chatActionMessages(options.messages, completedSteps) }),
         stopWhen: stepCountIs(1),
         timeout: { totalMs: 12_000 },
         maxRetries: 0,
-        instructions: `${agent.options.instructions} The tools are closed. Answer directly from completed tool results, not earlier narration. Open with a bold supported answer. The cards already show the catalogue and comparison: do not repeat them as a list or table. For a detail question, give up to three requested facts, name a material gap once, and finish with one "Next: ..." action. This guest cannot obtain a Quote or Call, so never suggest those actions. Do not promise another search.`,
+        instructions: `${agent.options.instructions} The tools are closed. Answer directly from completed tool results, not earlier narration. Open with a bold supported answer. The cards already show the catalogue and comparison: do not repeat them as a list or table. For a detail question, give up to three requested facts and name a material gap once. Include a next step only when a current available action advances the request. This guest cannot obtain a Quote or Call, so never suggest those actions. Do not promise another search.`,
         ...(abortSignal === undefined ? {} : { abortSignal }),
       })
       const finalChunks: UIMessageChunk[] = []
       for await (const chunk of final.toUIMessageStream({ sendStart: false })) finalChunks.push(chunk)
+      if (abortSignal?.aborted) throw abortSignal.reason ?? new Error('chat_generation_cancelled')
       const answer = (await final.text).trim()
       if (answer.length >= 35 && !/[｜▁]|<\|(?:begin|end)|\b(?:let me|i(?:'ll| will) (?:check|search|look))\b/iu.test(answer)) {
         for (const chunk of finalChunks) {
@@ -181,29 +121,7 @@ export async function streamAnonymousChatResponse(
         answerOutcome = 'completed'
         return
       }
-      const candidates: ChatCandidate[] = []
-      for (const step of steps) for (const result of step.toolResults) {
-        const search = toolChoiceSearchOutputSchema.safeParse(result.output)
-        if (search.success && search.data.kind === 'match') {
-          candidates.push(...search.data.results)
-          continue
-        }
-        const detail = toolChoiceDescribeOutputSchema.safeParse(result.output)
-        if (detail.success && detail.data.kind === 'found') candidates.push(detail.data.tool)
-      }
-      const first = candidates[0]
-      const second = candidates.find(candidate => candidate.toolRef !== first?.toolRef)
-      const source = (candidate: ChatCandidate) => 'access' in candidate && candidate.access === 'external_listing'
-        ? 'External listing; not callable through AE' : 'Admitted Tool; check current terms before use'
-      // Requires: completed results, including JSON strings retained for schema keys.
-      // Ensures: absent narration preserves facts already shown in a Tool card.
-      // Invariant: no purchase authority or result is inferred from narration.
-      // On violation: report no result only when no completed facts can be read.
-      const fallback = first === undefined
-        ? completedChatFacts(steps) ?? CHAT_NO_RESULT_ANSWER
-        : second === undefined
-          ? `**${first.title} may fit this request.**\n\n${'summary' in first ? first.summary : first.description}\n\n${source(first)}.\n\nNext: Open its details to check the exact inputs and current terms.`
-          : `**${first.title} and ${second.title} are worth inspecting.**\n\nNext: Select Compare on their cards to inspect the reported facts.`
+      const fallback = completedChatFacts(steps) ?? CHAT_NO_RESULT_ANSWER
       writer.write({ type: 'text-start', id: 'final-fallback' })
       writer.write({ type: 'text-delta', id: 'final-fallback', delta: fallback })
       writer.write({ type: 'text-end', id: 'final-fallback' })

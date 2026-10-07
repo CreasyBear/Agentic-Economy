@@ -1,4 +1,4 @@
-import { listMessages, saveMessages } from '@convex-dev/agent'
+import { listMessages, saveMessages, toModelMessage } from '@convex-dev/agent'
 import { components, internal } from '../../../_generated/api'
 import type { ModelMessage } from 'ai'
 import type { JSONValue, LanguageModelV4 } from '@ai-sdk/provider'
@@ -12,10 +12,9 @@ import type { TrustedChatAuthority } from '@/modules/chat/agent-turn.contracts'
 import { createChatAgent } from '../tools/agent'
 import { readChatSearchPage } from '../tools/search'
 import { catalogueFact, immediateSearchToolName } from '../tools/immediate'
-import { streamImmediateCatalogue } from './immediateTurn'
 import { quoteThenCallFromCard } from '../tools/purchase'
 import { parseRunRequest } from '@/modules/chat/run-request'
-import { CHAT_NO_RESULT_ANSWER, chatSearchResolution, prepareChatToolStep } from '../tools/step'
+import { CHAT_NO_RESULT_ANSWER, chatSearchResolution, prepareChatToolStep, chatActionMessages, hasChatContext } from '../tools/step'
 import { completedChatFacts } from './completedFacts'
 import { chatModelCostHooks } from './modelCost'
 
@@ -72,7 +71,6 @@ export async function streamDurableChatResponse(
   const completedMessages: ModelMessage[] = []
   let modelFailure: unknown
   const preserveSearchCard = async (): Promise<void> => {
-    if (args.searchTurn === undefined) return
     const searchName = CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']
     if (!completedMessages.some(message => message.role === 'assistant'
       && Array.isArray(message.content)
@@ -81,6 +79,7 @@ export async function streamDurableChatResponse(
       threadId: args.threadId, paginationOpts: { cursor: null, numItems: 50 },
     })
     const prompt = history.page.find(row => row._id === args.promptMessageId)
+    if (prompt === undefined) throw new Error('chat_generation_prompt_missing')
     for (let index = 0; index < completedMessages.length; index++) {
       const assistantCall = completedMessages[index]
       const toolResult = completedMessages[index + 1]
@@ -92,26 +91,36 @@ export async function streamDurableChatResponse(
           && part.toolCallId === call.toolCallId)
         if (original?.type !== 'tool-result') continue
         const requiresSignedCursor = JSON.stringify(original.output).includes('"sc1.')
-        const callPresent = history.page.some(row => row.order === prompt?.order
+        const callPresent = history.page.some(row => row.order === prompt.order
           && row.message?.role === 'assistant' && Array.isArray(row.message.content)
           && row.message.content.some(part => part.type === 'tool-call'
             && part.toolCallId === call.toolCallId))
-        const searchResult = history.page.find(row => row.order === prompt?.order
+        const searchResult = history.page.find(row => row.order === prompt.order
           && row.message?.role === 'tool' && Array.isArray(row.message.content)
           && row.message.content.some(part => part.type === 'tool-result'
             && part.toolCallId === call.toolCallId))
         if (callPresent && searchResult !== undefined
           && (!requiresSignedCursor || JSON.stringify(searchResult.message?.content).includes('"sc1.'))) continue
-        if (callPresent && searchResult?.message?.role === 'tool') {
+        if (requiresSignedCursor && searchResult?.message?.role === 'tool'
+          && !JSON.stringify(searchResult.message.content).includes('"sc1.')) {
+          if (abortSignal?.aborted) throw abortSignal.reason ?? new Error('chat_generation_deadline_exceeded')
+          const storedMessage = toModelMessage(searchResult.message)
+          if (storedMessage.role !== 'tool') throw new Error('chat_generation_tool_result_invalid')
           await agent.updateMessage(ctx, {
             messageId: searchResult._id,
-            patch: { message: toolResult, status: 'success' },
+            patch: { message: { ...storedMessage, content: storedMessage.content.map(part =>
+              part.type === 'tool-result' && part.toolCallId === call.toolCallId ? original : part) },
+            status: 'success', error: '' },
           })
-          continue
         }
+        const missing: ModelMessage[] = []
+        if (!callPresent) missing.push({ role: 'assistant', content: [call] })
+        if (searchResult === undefined) missing.push({ role: 'tool', content: [original] })
+        if (missing.length === 0) continue
+        if (abortSignal?.aborted) throw abortSignal.reason ?? new Error('chat_generation_deadline_exceeded')
         await saveMessages(ctx, components.agent, {
           threadId: args.threadId, userId: args.ownerId, promptMessageId: args.promptMessageId,
-          messages: [{ role: 'assistant', content: [call] }, { role: 'tool', content: [original] }],
+          messages: missing,
           agentName: 'Agentic Economy Operation Market',
         })
       }
@@ -120,16 +129,69 @@ export async function streamDurableChatResponse(
   const finishFromFacts = async (): Promise<boolean> => {
     if (abortSignal?.aborted) throw abortSignal.reason ?? new Error('chat_generation_deadline_exceeded')
     const answer = completedChatFacts(completedSteps) ?? CHAT_NO_RESULT_ANSWER
+    await preserveSearchCard()
+    // The SDK saves completed steps before our callback, but may mark them
+    // failed after a later model error. Repair only this turn's completed parts.
+    const completedIds = new Set(completedMessages.flatMap(message =>
+      message.role === 'tool' ? message.content.flatMap(part =>
+        part.type === 'tool-result' ? [part.toolCallId] : []) : []))
+    if (completedIds.size > 0) {
+      const history = await listMessages(ctx, components.agent, {
+        threadId: args.threadId, paginationOpts: { cursor: null, numItems: 50 },
+      })
+      const prompt = history.page.find(row => row._id === args.promptMessageId)
+      if (prompt === undefined) throw new Error('chat_generation_prompt_missing')
+      const calls = new Set<string>()
+      const results = new Set<string>()
+      for (const row of history.page) {
+        if (row.order !== prompt.order || row.message === undefined
+          || !Array.isArray(row.message.content)) continue
+        const parts = row.message.content.filter(part => part.type === 'tool-call' || part.type === 'tool-result')
+        for (const part of parts) (part.type === 'tool-call' ? calls : results).add(part.toolCallId)
+        if (row.status === 'success') continue
+        if (parts.length === 0 || !parts.every(part => completedIds.has(part.toolCallId))) continue
+        if (abortSignal?.aborted) throw abortSignal.reason ?? new Error('chat_generation_deadline_exceeded')
+        await ctx.runMutation(components.agent.messages.updateMessage, {
+          messageId: row._id, patch: { status: 'success', error: '' },
+        })
+      }
+      const missing: ModelMessage[] = []
+      for (const message of completedMessages) {
+        if (message.role === 'assistant' && Array.isArray(message.content)) {
+          const content = message.content.filter(part => {
+            if (part.type !== 'tool-call' || calls.has(part.toolCallId)) return false
+            calls.add(part.toolCallId)
+            return true
+          })
+          if (content.length > 0) missing.push({ role: 'assistant', content })
+        } else if (message.role === 'tool') {
+          const content = message.content.filter(part => {
+            if (part.type !== 'tool-result' || results.has(part.toolCallId)) return false
+            results.add(part.toolCallId)
+            return true
+          })
+          if (content.length > 0) missing.push({ role: 'tool', content })
+        }
+      }
+      if (missing.length > 0) {
+        if (abortSignal?.aborted) throw abortSignal.reason ?? new Error('chat_generation_deadline_exceeded')
+        await saveMessages(ctx, components.agent, {
+          threadId: args.threadId, userId: args.ownerId, promptMessageId: args.promptMessageId,
+          messages: missing, agentName: 'Agentic Economy Operation Market',
+        })
+      }
+    }
+    if (abortSignal?.aborted) throw abortSignal.reason ?? new Error('chat_generation_deadline_exceeded')
     await saveMessages(ctx, components.agent, {
       threadId: args.threadId,
       userId: args.ownerId,
       promptMessageId: args.promptMessageId,
-      messages: [...completedMessages, { role: 'assistant', content: answer }],
+      messages: [{ role: 'assistant', content: answer }],
       agentName: 'Agentic Economy Operation Market',
     })
     return clarificationRequested || ownerApprovalPending
   }
-  let hasPriorSearch = false
+  let hasPriorContext = false
   const runInitial = async () => {
     const modelCost = chatModelCostHooks(ctx, args.searchTurn, 'initial')
     const result = await agent.streamText(
@@ -140,9 +202,8 @@ export async function streamDurableChatResponse(
       onStart: modelCost.onStart,
       prepareStep: async options => {
         await modelCost.prepareStep(options)
-        return options.stepNumber === 0 && hasPriorSearch
-          ? { toolChoice: 'auto' as const }
-          : prepareChatToolStep(options)
+        if (options.stepNumber === 0) hasPriorContext = hasChatContext(options.messages)
+        return prepareChatToolStep(options)
       },
       timeout: { stepMs: 15_000 },
       maxRetries: 0,
@@ -209,11 +270,6 @@ export async function streamDurableChatResponse(
     })
     const prompt = history.page.find(row => row._id === args.promptMessageId)
     const promptText = prompt?.text ?? ''
-    hasPriorSearch = prompt !== undefined && history.page.some(row =>
-      row.order < prompt.order && row.status === 'success'
-      && row.message?.role === 'tool' && Array.isArray(row.message.content)
-      && row.message.content.some(part => part.type === 'tool-result'
-        && part.toolName === CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']))
     const runRequest = parseRunRequest(promptText)
     if (runRequest !== null && args.trustedChatAuthority?.kind === 'agent_key') {
       if (abortSignal?.aborted) throw abortSignal.reason ?? new Error('chat_generation_deadline_exceeded')
@@ -270,18 +326,7 @@ export async function streamDurableChatResponse(
       })
       return purchased.call?.kind === 'needs_authority'
     }
-    // A Run from a card needs the purchase tools, so it skips the tool-less immediate search.
-    // Prior search results are already in the agent's context; let its tool loop decide what to do next.
-    if (!hasPriorSearch && promptText.trim().length > 0 && await streamImmediateCatalogue(ctx, {
-      agent,
-      args,
-      promptText,
-      completedSteps,
-      ...(abortSignal === undefined ? {} : { signal: abortSignal }),
-    })) {
-      await preserveSearchCard()
-      return false
-    }
+
   }
   let initial
   try {
@@ -311,11 +356,7 @@ export async function streamDurableChatResponse(
     return clarificationRequested || ownerApprovalPending
   }
   const resolution = chatSearchResolution(steps)
-  // Requires: a successful earlier search for an answer without new tool work.
-  // Ensures: follow-up answers survive; failed or unsupported searches keep their fallback.
-  // Invariant: no new Tool request is needed solely to preserve an already grounded reply.
-  // On missing evidence: retain the existing no-result answer and recovery actions.
-  if ((!hasPriorSearch && steps.every(step => step.toolResults.length === 0)) || resolution !== null) {
+  if (!hasPriorContext && steps.every(step => step.toolResults.length === 0) || resolution !== null) {
     const assistant = result.savedMessages?.findLast(message => message.message?.role === 'assistant')
     if (assistant?.message === undefined) throw new Error('chat_generation_answer_missing')
     const content = assistant.message.content
@@ -332,17 +373,20 @@ export async function streamDurableChatResponse(
   if (!clarificationRequested && (last?.text.trim().length === 0 || last?.toolCalls.length
     || !/[.!?…)"']$/u.test(last?.text.trim() ?? '')
     || /\b(?:let me|i(?:'ll| will) (?:check|search|look)|next page)\b/iu.test(last?.text ?? ''))) {
-    // A blank tool-free completion is not an answer. Continue the same saved
-    // prompt once, with tools closed, so no Tool or Call can execute twice.
     try {
+      const finalCost = chatModelCostHooks(ctx, args.searchTurn, 'final_answer')
       const final = await agent.streamText(ctx, { threadId: args.threadId, userId: args.ownerId }, {
         promptMessageId: args.promptMessageId,
-        ...chatModelCostHooks(ctx, args.searchTurn, 'final_answer'),
+        ...finalCost,
+        prepareStep: async options => {
+          await finalCost.prepareStep(options)
+          return { messages: chatActionMessages(options.messages, completedSteps) }
+        },
         tools: {},
         timeout: { totalMs: 12_000 },
         maxRetries: 0,
         ...(abortSignal === undefined ? {} : { abortSignal }),
-        instructions: `${agent.options.instructions} The tools are closed. Answer directly from completed tool results, not earlier narration. Open with a bold supported answer. The cards already show the catalogue and comparison: do not repeat them as a list or table. For a detail question, give up to three requested facts, name a material gap once, and finish with one "Next: ..." action. Do not promise another search.`,
+        instructions: `${agent.options.instructions} The tools are closed. Answer directly from completed tool results, not earlier narration. Open with a bold supported answer. The cards already show the catalogue and comparison: do not repeat them as a list or table. For a detail question, give up to three requested facts and name a material gap once. Include a next step only when a current available action advances the request. Do not promise another search.`,
       }, {
         storageOptions: { saveMessages: 'promptAndOutput' },
         saveStreamDeltas: { chunking: 'word', throttleMs: 100 },

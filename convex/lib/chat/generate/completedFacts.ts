@@ -1,4 +1,5 @@
-import { CHAT_TOOL_NAME_MAP, projectToolCard } from '@/modules/chat/tool-card'
+import { projectChatChoiceActions } from '@/modules/chat/tool-card-actions'
+import { CHAT_TOOL_NAME_MAP, projectToolCard, type ToolCardProjection } from '@/modules/chat/tool-card'
 import { chatSearchResolution } from '../tools/step'
 
 type CompletedStep = Readonly<{
@@ -12,10 +13,12 @@ export function completedChatFacts(steps: readonly CompletedStep[]): string | nu
     result.toolName === CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search'])
   const searchAnswer = search.length === 0 ? null : chatSearchResolution([{ toolResults: search }])
   const facts: string[] = []
+  const cards: ToolCardProjection[] = []
   for (const result of results) {
     const card = projectToolCard({
       type: 'dynamic-tool', toolName: result.toolName, state: 'output-available', output: result.output,
     })
+    if (card !== null) cards.push(card)
     if (card?.kind === 'execute') {
       const reference = card.callRef === undefined ? '' : ` CallRef: ${card.callRef}.`
       const output = card.outputPreview === undefined ? '' : ` Returned output: ${JSON.stringify(card.outputPreview)}.`
@@ -23,16 +26,26 @@ export function completedChatFacts(steps: readonly CompletedStep[]): string | nu
       facts.push(`**Call ${card.state}.**${reference} ${card.summary}${output}${details ? ` ${details}.` : ''}${card.state === 'reconciliation_required' ? ' Do not send another Call until this one is reconciled.' : ''}`)
     } else if (card?.kind === 'inspect' && card.facts.length > 0) {
       facts.push(`**Current Quote terms:** ${card.facts.map(fact => `${fact.label}: ${fact.value}`).join('; ')}.`)
-    } else if (card?.kind === 'choices' && card.choices.length > 0) {
-      facts.push(`**Tools to inspect:** ${card.choices.map(choice =>
-        `${choice.title}${choice.price === undefined ? '' : ` (${choice.price})`}${choice.readiness === undefined ? '' : ` — ${choice.readiness}`}`)
-        .join('; ')}. Next: Open a Tool card to check its exact inputs and current terms.`)
+    } else if (card?.kind === 'status' && card.toolId === 'tool.quote') {
+      facts.push(`**Quote ${card.state}.** ${card.summary}`)
     }
   }
-  // The final consequential result is more important than a preceding discovery result.
+  const choices = projectChatChoiceActions(cards)
+  const details = choices.filter(choice => choice.toolId === 'registry.tools.describe')
+  const selected = details.length > 0 ? details : choices
+  const next = selected.some(choice => choice.reviewInputs)
+    ? 'Choose Review inputs on the eligible Tool card.'
+    : selected.length > 1 && selected.every(choice => choice.compare)
+      ? 'Select Compare on their cards to inspect the reported facts.'
+      : 'Open a Tool card to check its exact inputs and current terms.'
+  const choiceAnswer = selected.length === 0 ? null
+    : `**Tools to inspect:** ${selected.map(({ choice }) =>
+      `${choice.title}${choice.price === undefined ? '' : ` (${choice.price})`}${choice.readiness === undefined ? '' : ` — ${choice.readiness}`}`)
+      .join('; ')}. Next: ${next}`
   return facts.findLast(fact => fact.startsWith('**Call '))
+    ?? facts.findLast(fact => fact.startsWith('**Quote '))
     ?? facts.findLast(fact => fact.startsWith('**Current Quote '))
-    ?? searchAnswer
+    ?? (details.length > 0 ? choiceAnswer : searchAnswer ?? choiceAnswer)
     ?? facts.at(-1)
     ?? null
 }
@@ -56,4 +69,3 @@ export function factsFromSavedTurn(messages: readonly { role?: string; content?:
   }
   return toolResults.length === 0 ? null : completedChatFacts([{ toolResults }])
 }
-

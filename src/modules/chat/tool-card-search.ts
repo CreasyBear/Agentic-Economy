@@ -6,6 +6,11 @@ export function addRef(refs: string[], value: unknown): void {
   refs.push(value)
 }
 
+export function isExternalChatLookupRef(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0 && value.length <= 200
+    && /^[\u0021-\u007e]+$/u.test(value)
+}
+
 export function collectToolRefs(output: Record<string, unknown>, choices: readonly { toolRef: string }[]): string[] {
   const toolRefs: string[] = []
   addRef(toolRefs, output.toolRef)

@@ -25,6 +25,42 @@ afterEach(cleanup)
 
 describe('generative chat leaves', () => {
   it.each(['completed', 'pending', 'needs_authority', 'refused', 'reconciliation_required'] as const)(
+    'keeps the %s Call visible before evidence, collapsing choices only after completion', state => {
+      const { container } = render(<ChatTranscript onSuggest={vi.fn()} messages={[{
+        id: 'result', role: 'assistant', parts: [
+          { type: 'tool-card', toolId: 'registry.tools.search', kind: 'choices', state: 'complete',
+            choices: [{ toolRef: `registry:${'c'.repeat(64)}`, title: 'Outside lookup', access: 'external_listing' }] },
+          { type: 'tool-card', toolId: 'tool.call', kind: 'execute', state, callRef: 'call:lookup',
+            summary: 'Recorded Call status', paid: 'A$0.01' },
+          { type: 'text', text: '**Your lookup answer.**' },
+        ],
+      }]} />)
+      const answer = screen.getByRole('region', { name: 'Answer' })
+      const call = container.querySelector('[data-tool-card="tool.call"]')
+      const options = container.querySelector('[aria-label="Options"]')
+      const work = screen.getByRole('button', { name: /external listing.*to inspect/iu })
+      if (call === null || options === null) throw new Error('Missing result or evidence')
+      expect(answer.compareDocumentPosition(call) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+      expect(call.compareDocumentPosition(options) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+      expect(options.compareDocumentPosition(work) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+      expect(container.querySelectorAll('[data-tool-card="tool.call"]')).toHaveLength(1)
+      expect(call.closest('details')).toBeNull()
+      const disclosure = options.closest('details')
+      if (state === 'completed') {
+        expect(disclosure).not.toHaveAttribute('open')
+        expect(call).toHaveTextContent('A$0.01')
+        expect(call.querySelector('a[href="/calls/call:lookup"]')).not.toBeNull()
+        fireEvent.click(screen.getByText('Tool evidence'))
+        expect(disclosure).toHaveAttribute('open')
+      } else {
+        expect(disclosure).toBeNull()
+        expect(call).not.toHaveTextContent('A$0.01')
+      }
+      expect(options).toHaveTextContent('External listing · not callable through Agentic Economy')
+      expect(screen.queryByRole('button', { name: /Run|Review inputs/iu })).not.toBeInTheDocument()
+    },
+  )
+  it.each(['completed', 'pending', 'needs_authority', 'refused', 'reconciliation_required'] as const)(
     'keeps Trust accessible on a %s Call without adding an unsafe retry', (state) => {
       render(<ToolCard projection={{ kind: 'execute', toolId: 'tool.call', title: 'Lookup',
         state, toolRefs: ['tool:lookup'], callRef: 'call:lookup', facts: [], summary: 'Recorded Call status',
@@ -103,7 +139,9 @@ describe('generative chat leaves', () => {
   })
   it('renders seller and readiness honestly; selection and comparison remain separate', () => {
     const onSelect = vi.fn(), onCompare = vi.fn()
-    render(<OptionsGrid view={{ options, comparedIds: [] }} onSelect={onSelect} onCompare={onCompare} />)
+    const additional: OptionView = { id: 'tool:other', name: 'Another option', href: '/tools/tool%3Aother',
+      price: 'Price to be confirmed', readiness: 'unverified', selectable: true }
+    render(<OptionsGrid view={{ options: [...options, additional], comparedIds: [] }} onSelect={onSelect} onCompare={onCompare} />)
     expect(screen.getByText('Provider: Acme')).toBeInTheDocument()
     expect(screen.getByText('Listed on example.com')).toBeInTheDocument()
     expect(screen.getByText('Used 1,200× this month')).toBeInTheDocument()
@@ -225,7 +263,7 @@ describe('generative chat leaves', () => {
     })
     if (card === null) throw new Error('missing_directory_card')
     const view = projectOptionsFromCard(card)
-    expect(view.options.every(option => option.quoteable !== true)).toBe(true)
+    expect(view.options.every(option => option.reviewInputs !== true)).toBe(true)
     render(<OptionsGrid view={view} onReview={vi.fn()} />)
     expect(screen.getAllByRole('link', { name: 'Weather lookup' })).toHaveLength(2)
     expect(screen.getByText('weather-one.example/v1/current')).toBeInTheDocument()

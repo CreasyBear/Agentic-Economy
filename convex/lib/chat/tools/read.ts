@@ -5,10 +5,20 @@ import { deserializeToolCompareResult, deserializeToolDetailResult, type ToolCom
 import { CHAT_TOOL_NAME_MAP } from '@/modules/chat/tool-card'
 import { projectToolCompareChoices, projectToolDescription } from '@/modules/registry/tool-choice-contracts'
 import { registryToolsCompareContract, registryToolsDescribeContract } from '@/modules/registry/tool-action-contracts'
-import { internal } from '../../../_generated/api'
+import { selectedChatDetailRequest } from './step'
+import { api, internal } from '../../../_generated/api'
 import { descriptionFor, failure, type ReserveChatTool } from './contracts'
-import { callableToolRef } from './callableRef'
 import { projectedModelFacingOutput } from './output'
+
+const externalDetailSchema = z.strictObject({
+  kind: z.literal('external'),
+  tool: z.strictObject({
+    id: z.string(), toolRef: z.string(), title: z.string(), description: z.string(),
+    source: z.literal('coinbase'), access: z.literal('external_listing'),
+    readiness: z.literal('unverified'), provider: z.string(),
+    input: z.unknown().optional(), output: z.unknown().optional(),
+  }),
+})
 
 export function createReadTools(reserve: ReserveChatTool) {
   const describeContract = registryToolsDescribeContract
@@ -16,18 +26,35 @@ export function createReadTools(reserve: ReserveChatTool) {
   return {
     [CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.describe']]: createTool({
       description: descriptionFor(describeContract),
-      // Chat also accepts a directory listing id; it resolves to the operation so the
-      // model can read the listing's input schema before it quotes.
       inputSchema: z.strictObject({ toolRef: z.string().min(1).max(200) }),
-      execute: async (ctx: ToolCtx, input: { toolRef: string }) => {
+      execute: async (ctx: ToolCtx, input: { toolRef: string }, options) => {
         const denied = reserve('registry.tools.describe')
         if (denied !== null) return denied
-        const toolRef = await callableToolRef(ctx, input.toolRef)
-        if (toolRef === null) return failure('registry.tools.describe', 'tool_unavailable')
+        const selected = selectedChatDetailRequest(options.messages)
+        if (selected !== null && input.toolRef !== selected.toolRef) {
+          return failure('registry.tools.describe', 'selected_tool_mismatch')
+        }
+        let toolRef = input.toolRef
+        if (/^registry:[0-9a-f]{64}$/u.test(toolRef)) {
+          const detail = await ctx.runQuery(api.x402DirectoryIndex.detailById, { id: toolRef })
+          if (detail.kind !== 'found') return failure('registry.tools.describe', 'tool_unavailable')
+          if (detail.item.toolRef === undefined) {
+            const entry = detail.item.entry
+            return projectedModelFacingOutput('registry.tools.describe', externalDetailSchema, () => ({
+              kind: 'external', tool: {
+                id: toolRef, toolRef, source: 'coinbase', access: 'external_listing', readiness: 'unverified',
+                title: entry.title, description: entry.description, provider: entry.provider,
+                ...(entry.input === undefined ? {} : { input: entry.input }),
+                ...(entry.output === undefined ? {} : { output: entry.output }),
+              },
+            }))
+          }
+          toolRef = detail.item.toolRef
+        }
+        if (!/^operation:v1:[0-9a-f]{64}$/u.test(toolRef)) return failure('registry.tools.describe', 'tool_unavailable')
         const result = await ctx.runAction(internal.capabilityToolCatalog.detailInternal, { toolRef })
         return projectedModelFacingOutput(
-          'registry.tools.describe',
-          describeContract.outputSchema,
+          'registry.tools.describe', describeContract.outputSchema,
           () => projectToolDescription(deserializeToolDetailResult(result)),
         )
       },

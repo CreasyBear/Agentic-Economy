@@ -5,7 +5,7 @@ import { boundaryCauseKind, captureBackendException, degradeBackend } from '@/li
 import { isBoundedJsonValue, type JsonValue } from '@/modules/common/bounded-json'
 import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import { chatClarifyInputSchema, storedClarifyAnswer } from '@/modules/chat/agent-turn.contracts'
-import { addRef, boundedString, collectToolRefs, directoryChoiceFields, matchedCount } from '@/modules/chat/tool-card-search'
+import { addRef, boundedString, collectToolRefs, directoryChoiceFields, isExternalChatLookupRef, matchedCount } from '@/modules/chat/tool-card-search'
 import { isRecord } from '@/modules/common/is-record'
 import { isPublicToolRef } from '@/modules/common/tool-ref'
 import { publicToolDisplayPriceSchema } from '@/modules/capability-supply/tool-schemas'
@@ -210,7 +210,7 @@ function firstSearchNext(output: Record<string, unknown>): RegistryNextAction | 
 
 function rowFromChoiceFields(value: unknown): ToolChoiceRow | null {
   if (!isRecord(value)) return null
-  if (value.access === 'external_listing' && typeof value.id === 'string'
+  if (value.access === 'external_listing' && isExternalChatLookupRef(value.id)
     && value.source === 'coinbase' && typeof value.title === 'string') {
     const provider = stringField(value.provider)
     return {
@@ -314,7 +314,7 @@ function projectStoredChoice(value: unknown): ToolChoiceRow | null {
   if (!isRecord(value)) return null
   const refs: string[] = []
   addRef(refs, value.toolRef)
-  const toolRef = refs[0] ?? (value.access === 'external_listing' && typeof value.toolRef === 'string' ? value.toolRef : undefined)
+  const toolRef = refs[0] ?? (value.access === 'external_listing' && isExternalChatLookupRef(value.toolRef) ? value.toolRef : undefined)
   const title = stringField(value.title)
   if (toolRef === undefined || title === undefined) return null
   const provider = stringField(value.provider)
@@ -876,7 +876,7 @@ export function projectToolCard(part: unknown): ToolCardProjection | null {
     return statusCard(toolId, 'refused', summary, typeof output?.reason === 'string' ? output.reason : kind === 'not_found' ? 'tool_not_found' : undefined)
   }
   if (output === undefined) return statusCard(toolId, 'error', 'Tool unavailable')
-  if (kind !== 'ok' && kind !== 'found' && !(toolId === 'registry.tools.search'
+  if (kind !== 'ok' && kind !== 'found' && !(toolId === 'registry.tools.describe' && kind === 'external') && !(toolId === 'registry.tools.search'
     && (kind === 'match' || kind === 'scoped' || kind === 'noMatch' || kind === 'unavailable'))) {
     return statusCard(toolId, 'error', 'Tool unavailable')
   }

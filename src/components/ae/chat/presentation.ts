@@ -12,6 +12,7 @@ import type { ComparisonTableView, FollowUpsView, OptionsGridView, SourcesInline
 import type { RegistryNextAction } from '@/modules/registry/tool-choice-contracts'
 import type { ChatRecoveryReason } from './recovery/recovery.contracts'
 import { readChatRecoveryReason } from './recovery/recovery.view-model'
+import { projectChatChoiceActions } from '@/modules/chat/tool-card-actions'
 
 export type SearchNextProps = Readonly<{
   next?: RegistryNextAction
@@ -217,11 +218,13 @@ export function projectGenerativeTurn(turn: TranscriptTurn): Readonly<{
   const searchedOptions = searched.flatMap((card) => card.kind === 'choices'
     ? [projectOptionsFromCard(card, [], Date.now(), card.recommendation)]
     : [])
-  // Later returned facts replace the earlier shortlist for the same reference.
-  const visibleOptions = [...new Map(searchedOptions.flatMap((view) => view.options)
-    .map((option) => [option.id, option])).values()]
+  const visibleOptions = projectChatChoiceActions(turn.tools).flatMap(({ choice, toolId }) => {
+    const card = turn.tools.findLast(entry => entry.kind === 'choices' && entry.toolId === toolId
+      && entry.choices.includes(choice))
+    return card?.kind === 'choices' ? projectOptionsFromCard({ ...card, choices: [choice] }).options : []
+  })
   const recommended = searchedOptions.find((view) => view.recommendedId !== undefined
-    && visibleOptions.some((option) => option.id === view.recommendedId && option.quoteable === true))
+    && visibleOptions.some((option) => option.id === view.recommendedId && option.reviewInputs === true))
   const options: OptionsGridView = {
     comparedIds: [],
     options: visibleOptions,
@@ -265,11 +268,12 @@ export function projectAnonymousTranscript(messages: readonly TranscriptMessage[
     const text = question === undefined || prose.includes(question)
       ? prose
       : [prose, question].filter((part) => part.length > 0).join('\n\n')
-    const choices = !includeToolReferences || message.role !== 'assistant' ? [] : message.parts.flatMap(part => {
+    const cards = !includeToolReferences || message.role !== 'assistant' ? [] : message.parts.flatMap(part => {
       const card = projectToolCard(part)
-      return card?.kind === 'choices' ? card.choices.filter(choice =>
-        card.toolRefs.includes(choice.toolRef) || choice.access === 'external_listing') : []
-    }).slice(0, 4).map(({ title, toolRef }) => ({ title: title.slice(0, 200), toolRef }))
+      return card === null ? [] : [card]
+    })
+    const choices = projectChatChoiceActions(cards).map(({ choice }) =>
+      ({ title: choice.title.slice(0, 200), toolRef: choice.toolRef }))
     const content = choices.length === 0 ? text
       : [text, `Tool cards shown (reference data): ${JSON.stringify(choices)}`].filter(Boolean).join('\n\n')
     return content.length === 0 ? [] : [{ role: message.role, content }]
