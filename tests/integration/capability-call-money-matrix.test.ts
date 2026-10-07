@@ -502,7 +502,7 @@ describe('native nine-row money contract matrix', () => {
       if (pending.kind !== 'pending') throw new Error('first_use_call_not_pending')
       callRef = pending.callRef
       watchedCallRef = callRef
-      expect(called.structuredContent).toMatchObject({ next: [{ action: 'status', args: { ref: { kind: 'call', ref: callRef } } }] })
+      expect(called.structuredContent).toMatchObject({ next: [{ action: 'call.status', args: { callRef } }] })
       expect((await readLive()).liveCalls).toEqual(expect.arrayContaining([expect.objectContaining({
         callRef, credentialRef: buyer.buyer.principal.credentialId, phase: 'queued',
       })]))

@@ -383,6 +383,7 @@ describe('AE CLI account interface', () => {
       origin: 'https://market.example',
       profile: 'market',
       removed: true,
+      ownerHandoff: { actor: 'account_owner', reason: 'connect_required', destination: 'https://market.example/agent-access' },
       nextAction: 'Run ae connect to authorize a new credential for this origin.',
     })
     expect(output).not.toContain('hidden-market-secret')
@@ -435,7 +436,7 @@ describe('AE CLI account interface', () => {
         kind: 'available', principalRef: 'prn_current', accountRef: 'acc_owner',
         balance: { currency: 'AUD', units: '4200', exponent: 2 },
         accountState: 'active', version: 2, updatedAt: 10,
-        funding: { kind: 'agent_funding_handoff', configAction: 'funding.handoff.config', createAction: 'funding.handoff.create', statusAction: 'funding.handoff.status' },
+        funding: { kind: 'agent_funding_handoff', next: { action: 'funding.handoff.config', args: {}, authority: 'agent_key' }, },
       })
     })
     vi.stubGlobal('fetch', fetch)

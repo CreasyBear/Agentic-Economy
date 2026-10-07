@@ -156,7 +156,7 @@ export async function retrieveImmediateTools(
     return {
       ...page,
       pagination: { ...page.pagination, nextCursor: token },
-      next: page.next.map(action => action.action === 'next-page'
+      next: page.next.map(action => action.action === 'registry.tools.search' && action.args.cursor !== undefined
         ? { ...action, args: { ...action.args, cursor: token } } : action),
     }
   } catch (cause) {

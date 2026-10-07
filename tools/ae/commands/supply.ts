@@ -20,6 +20,7 @@ import {
   supplyWithdrawAction,
 } from '@/modules/capability-supply/supply-actions'
 import { MARKET_SUPPLY_MANAGE_SCOPE } from '@/modules/agent-access/contract'
+import { providerToolReasonPresentation } from '@/modules/capability-supply/provider-tool-status'
 
 import type { CliOptions } from '../lib/args'
 import {
@@ -113,7 +114,11 @@ function inputFor(subcommand: string, args: readonly string[], options: CliOptio
     if (businessRef === undefined || args.length > 2) {
       throw usageFailure('supply tools', 'supply-tools-usage')
     }
-    return { businessRef }
+    return {
+      businessRef,
+      ...(options.limit === undefined ? {} : { limit: Number(options.limit) }),
+      ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
+    }
   }
   if (subcommand === 'status') {
     const businessRef = args[1]
@@ -247,9 +252,36 @@ function printSupplyResult(subcommand: string, result: unknown, options: CliOpti
           ? String(usefulOutcome.qualifiedUseCount ?? 0)
           : String(usefulOutcome?.kind ?? 'unobserved')],
       ])
-      if (typeof continuation?.action === 'string') table([['next', continuation.action]])
-      else if (typeof ownerHandoff?.cta === 'string') table([['next', ownerHandoff.cta]])
+      const reasonCodes = Array.isArray(tool.reasonCodes) ? tool.reasonCodes : []
+      for (const code of reasonCodes) {
+        if (typeof code !== 'string') continue
+        const reason = providerToolReasonPresentation(code)
+        table([['reason', `${reason.title}: ${reason.description}`]])
+      }
+      if (typeof continuation?.action === 'string') {
+        const args = isRecord(continuation.args) ? continuation.args : undefined
+        const command = continuation.action === 'supply.status' && args !== undefined
+          ? cliContinuation(options, ['ae', 'supply', 'status', String(args.businessRef), String(args.toolRef)])
+          : continuation.action === 'supply.offboarding.status' && args !== undefined
+            ? cliContinuation(options, ['ae', 'supply', 'offboarding', String(args.businessRef)])
+            : continuation.action
+        table([['next', command]])
+        if (Array.isArray(continuation.requiredInput)) {
+          table([
+            ['input', JSON.stringify(args ?? {})],
+            ['required input', continuation.requiredInput.join(', ')],
+          ])
+        }
+      } else if (typeof ownerHandoff?.destination === 'string') table([['owner handoff', new URL(ownerHandoff.destination, options.baseUrl).href]])
       line()
+    }
+    if (subcommand === 'tools' && result.isDone === false && typeof result.continueCursor === 'string') {
+      const nextCommand = cliContinuation(options, [
+        'ae', 'supply', 'tools', String(result.businessRef),
+        '--limit', options.limit ?? 50,
+        '--cursor', result.continueCursor,
+      ])
+      process.stdout.write(`Next: ${nextCommand}\n`)
     }
     return
   }
@@ -295,6 +327,15 @@ function printSupplyResult(subcommand: string, result: unknown, options: CliOpti
       ['new work frozen', result.status.routeabilityFrozen === true ? 'yes' : 'no'],
       ['blockers', blockers === '' ? 'none' : blockers],
     ])
+    const continuation = isRecord(result.status.continuation) ? result.status.continuation : undefined
+    const args = isRecord(continuation?.args) ? continuation.args : undefined
+    const ownerHandoff = isRecord(result.status.ownerHandoff) ? result.status.ownerHandoff : undefined
+    if (continuation?.action === 'supply.offboarding.status' && typeof args?.businessRef === 'string') {
+      table([['next', cliContinuation(options, ['ae', 'supply', 'offboarding', args.businessRef])]])
+    }
+    if (typeof ownerHandoff?.destination === 'string') {
+      table([['owner handoff', new URL(ownerHandoff.destination, options.baseUrl).href]])
+    }
     return
   }
   printJson(result)

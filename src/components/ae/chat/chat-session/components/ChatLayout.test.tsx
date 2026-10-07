@@ -183,7 +183,7 @@ describe('ChatLayout', () => {
         { id: 'reply', role: 'assistant', parts: [
           { type: `tool-${providerSafeActionToolName('registry.tools.search')}`, state: 'output-available',
             output: { kind: 'noMatch', results: [], assessed: { source: 'current', scope: 'complete', examined: 0, coverage: 'complete' },
-              next: [{ action: 'broaden', args: { query: 'non-existent Tool' }, authority: 'public' }] } },
+              next: [] } },
           { type: 'text', text: 'No suitable Tool in the assessed catalogue.' },
         ] },
       ],

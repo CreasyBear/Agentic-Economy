@@ -1,3 +1,4 @@
+import { parseStoredToolQuoteOutput } from './tool-card-quote'
 import { projectChatPlan, storedPlanReference } from './tool-card-plan'
 import type { z } from 'zod'
 import { boundaryCauseKind, captureBackendException, degradeBackend } from '@/lib/observability/degrade-backend'
@@ -15,11 +16,11 @@ import { formatToolAuthentication } from '@/modules/market/tool-view-model'
 import {
   callResultKindValues,
   callResultSchema,
+  callMachineResultSchema,
   type CallResult,
 } from '@/modules/capability-execution/call-contracts'
 import {
   toolQuoteInputSchema,
-  toolQuoteResultSchema,
   type ToolQuoteResult,
 } from '@/modules/capability-execution/quote'
 import {
@@ -196,7 +197,12 @@ function readAuthentication(value: unknown): PublicToolAuthentication | undefine
 function firstSearchNext(output: Record<string, unknown>): RegistryNextAction | undefined {
   const actions = Array.isArray(output.next) ? output.next : output.next === undefined ? [] : [output.next]
   for (const action of actions) {
-    const parsed = registryNextActionSchema.safeParse(action)
+    const retained = isRecord(action) && isRecord(action.args)
+      ? action.action === 'describe' ? { ...action, action: 'registry.tools.describe' }
+        : action.action === 'next-page' || action.action === 'retry' ? { ...action, action: 'registry.tools.search' }
+          : action
+      : action
+    const parsed = registryNextActionSchema.safeParse(retained)
     if (parsed.success) return parsed.data
   }
   return undefined
@@ -809,7 +815,20 @@ export function projectToolCard(part: unknown): ToolCardProjection | null {
       return statusCard(toolId, 'refused', reason ?? 'Request refused', typeof output?.reason === 'string' ? output.reason : undefined)
     }
     if (output === undefined) return statusCard(toolId, 'error', 'Tool unavailable')
-    const result = callResultSchema.safeParse(output)
+    const machine = callMachineResultSchema.safeParse(output)
+    const result = machine.success
+      ? (() => {
+        const value = machine.data
+        if (value.kind === 'completed') return callResultSchema.safeParse(value)
+        const { next: _next, ...facts } = value
+        if (value.kind === 'outcome_unknown') return callResultSchema.safeParse({ ...facts, kind: 'reconciliation_required' })
+        if (value.kind === 'refused') {
+          const { detail, ownerHandoff: _handoff, callRef: _callRef, ...refusal } = facts as Extract<typeof value, { kind: 'refused' }>
+          return callResultSchema.safeParse({ ...refusal, ...(detail === undefined ? {} : { nextAction: detail }) })
+        }
+        return callResultSchema.safeParse(facts)
+      })()
+      : callResultSchema.safeParse(output)
     return result.success
       ? projectCallResult(result.data)
       : statusCard(toolId, 'error', 'Tool unavailable')
@@ -826,21 +845,21 @@ export function projectToolCard(part: unknown): ToolCardProjection | null {
       }
     }
     if (output === undefined) return statusCard(toolId, 'error', 'Tool unavailable')
-    const result = toolQuoteResultSchema.safeParse(output)
+    const result = parseStoredToolQuoteOutput(output)
     if (!result.success) return statusCard(toolId, 'error', 'Tool unavailable')
     if (result.data.kind === 'committed') return projectInspectResult(result.data)
     const funding = result.data.code === 'insufficient_balance'
       && result.data.continuation?.action === 'funding.handoff.create'
       ? {
-          units: result.data.continuation.input.principalAmount.units,
-          exponent: result.data.continuation.input.principalAmount.exponent,
+          units: result.data.continuation.args.principalAmount.units,
+          exponent: result.data.continuation.args.principalAmount.exponent,
         }
       : undefined
     return {
       ...statusCard(
         toolId,
         'refused',
-        result.data.requiredActions?.[0]?.description
+        result.data.ownerHandoff?.reason
           ?? REFUSAL_SUMMARIES[result.data.code] ?? result.data.code.replaceAll('_', ' '),
         result.data.code,
       ),

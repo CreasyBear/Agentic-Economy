@@ -125,8 +125,8 @@ async function compactBazaarPage(ctx: SearchContext, data: SearchInput, targetNe
       actionClass: row.actionClass, objectClass: row.objectClass,
       ...(row.category === undefined ? {} : { category: row.category }),
       readiness: 'unverified', price: { kind: 'unavailable' },
-      detailRef: row.id,
-      next: [{ action: 'describe-external', args: { id: row.id }, authority: 'public' }],
+      detailRef: `/api/v1/registry/detail?id=${encodeURIComponent(row.id)}`,
+      next: [],
     }]
   })
   return {
@@ -150,7 +150,7 @@ async function signNextPage(
   })
   const pagination = { ...page.pagination, nextCursor: token }
   return { ...page, pagination, next: page.next.map(action =>
-    action.action === 'next-page' ? { ...action, args: { ...action.args, cursor: token } } : action) }
+    action.action === 'registry.tools.search' && action.args.cursor !== undefined ? { ...action, args: { ...action.args, cursor: token } } : action) }
 }
 
 type SearchContext = Pick<ActionCtx, 'runAction' | 'runQuery' | 'runMutation'>
@@ -304,7 +304,7 @@ async function executeChatSearch(
       return projectedModelFacingOutput('registry.tools.search', searchContract.outputSchema, () => ({
         ...choices, kind: 'unavailable', reason: 'capacity_exceeded', results: [], partialResults: true,
         pagination: { limit: data.limit, hasMore: false },
-        next: [{ action: 'retry', args: { query: data.query }, authority: 'public' }],
+        next: [{ action: 'registry.tools.search', args: { query: data.query }, authority: 'public' }],
       }))
     }
   } catch (cause) {

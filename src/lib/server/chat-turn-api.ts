@@ -10,6 +10,7 @@ import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { callPublicSourceMutation, callPublicSourceQuery, callSourceMutation, callSourceQuery, sourceMutation, sourceQuery, ConvexSourceError } from '@/lib/server/convex-source'
 import { projectedPart } from '@/lib/server/chat-turn-projection'
 import { isJsonContentType } from '@/lib/server/json-content-type'
+import { resolveCanonicalOrigin } from '@/lib/server/canonical-url'
 import { problem, zodIssueDetail } from '@/lib/server/problem'
 import { rateLimitedResponse, withHttpRateLimit } from '@/lib/server/rate-limit'
 import { runWithRequestCorrelation, withRequestCorrelationHeader } from '@/lib/server/request-correlation'
@@ -149,7 +150,7 @@ function turnEvent(turn: TurnSnapshot, correlationId: string, sequence: number):
 
 
 function streamTurn(request: Request, turn: TurnSnapshot, source: ChatTurnSource, correlationId: string): Response {
-  const origin = new URL(request.url).origin
+  const origin = resolveCanonicalOrigin(request)
   const stream = createUIMessageStream({
     execute: async ({ writer }) => {
       let sequence = turn.sequence
@@ -177,7 +178,7 @@ function streamTurn(request: Request, turn: TurnSnapshot, source: ChatTurnSource
                     const callRef = (projected.data as CallEvent).callRef
                     const guidance = projectStreamJourneyProblem({
                       ...buildProblem({ status: 409, kind: 'FAILED_PRECONDITION', code: 'outcome_unknown', detail: 'Call outcome is unknown; read its status before retrying.', retryable: true }), requestId: correlationId,
-                      refs: { callRef }, next: [{ action: 'status', args: { ref: { kind: 'call', ref: callRef } }, authority: 'same_principal' }],
+                      refs: { callRef }, next: [{ action: 'call.status', args: { callRef }, authority: 'same_principal' }],
                     }, { origin })
                     writer.write({ type: guidance.type, data: guidance.value })
                     sequence++
@@ -207,7 +208,7 @@ function streamTurn(request: Request, turn: TurnSnapshot, source: ChatTurnSource
           const projected = projectStreamJourneyProblem({
             ...body, requestId: correlationId,
             next: failure.status === 401 || failure.status === 403 ? body.next
-              : [{ action: 'status', args: { ref: { kind: 'turn', ref: turn.turnRef } }, authority: 'same_principal' }],
+              : [{ action: 'journey.status', args: { ref: { kind: 'turn', ref: turn.turnRef } }, authority: 'same_principal' }],
           }, { origin })
           writer.write({ type: projected.type, data: projected.value })
           break

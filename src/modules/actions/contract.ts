@@ -1,9 +1,17 @@
+import { brandedStringSchema } from '@/modules/common/branded-string-schema'
 import { z } from 'zod'
 import { PROBLEM_KINDS, type ProblemDetails } from '@/lib/errors'
 import { jsonValueSchema, type JsonValue } from '@/modules/capability-contract/public'
 import { parseCallRef, parseQuoteRef, type CallRef, type QuoteRef } from '@/modules/capability-execution/call-contracts'
 import type { CallStatusResult } from '@/modules/capability-execution/call-recovery-contracts'
-import { toolProcureInputSchema, type ToolProcureInput, type ToolProcureResult } from '@/modules/capability-execution/procure'
+import { toolQuoteResultSchema, type ToolQuoteResult } from '@/modules/capability-execution/quote'
+import { fundingStatusNextSchema, fundingCreateNextSchema, fundingCreateReplayNextSchema } from '@/modules/money/funding-handoff.actions'
+import { providerToolContinuationSchema } from '@/modules/capability-supply/provider-tool-status'
+import { agentAccountFundingContinuationSchema } from '@/modules/agent-access/contract'
+import { toolProcureInputSchema, procureExactNextSchema, type ProcureExactNext, type ToolProcureInput, type ToolProcureResult } from '@/modules/capability-execution/procure'
+import { callNextSchema, type CallNext } from '@/modules/capability-execution/call-contracts'
+import { projectCallRecoveryNext } from '@/modules/capability-execution/call-recovery.actions'
+import { planReferenceNextSchema, type PlanReferenceNext } from '@/modules/capability-execution/plan/runtime.schemas'
 import { idempotencyKeySchema } from '@/modules/common/action'
 import type { Brand } from '@/modules/common/ids'
 import type { PublicToolRef } from '@/modules/common/tool-ref'
@@ -70,7 +78,7 @@ export type JourneyRef =
 
 export type WorkState =
   | 'submitted' | 'working' | 'input-required' | 'auth-required'
-  | 'completed' | 'failed' | 'canceled' | 'rejected'
+  | 'completed' | 'failed' | 'canceled' | 'rejected' | 'outcome-unknown'
 export const CHAT_TURN_FAILURE_REASONS = [
   'generation_failed', 'generation_timed_out', 'outcome_unknown',
 ] as const
@@ -105,17 +113,19 @@ export type JourneyEvent = TurnEvent | CallEvent
 
 export type JourneyNext =
   | RegistryNextAction
-  | Readonly<{ action: 'quote'; args: { toolRef: PublicToolRef; input: Record<string, JsonValue> }; authority: 'agent_key' }>
-  | Readonly<{ action: 'call'; args: { quoteRef: QuoteRef; idempotencyKey: string }; authority: 'agent_key' }>
-  | Readonly<{ action: 'procure'; args: ToolProcureInput; authority: 'agent_key' }>
-  | Readonly<{ action: 'status'; args: { ref: JourneyRef }; authority: 'same_principal' }>
-  | Readonly<{ action: 'wait'; args: { callRef: CallRef; afterVersion?: number }; authority: 'same_principal' }>
-  | Readonly<{ action: 'fund'; args: Record<string, never>; authority: 'agent_key' }>
-  | Readonly<{ action: 'describe'; args: { toolRef: PublicToolRef }; authority: 'public' }>
-  | Readonly<{ action: 'connect'; args: { via: 'cli'; command: 'ae connect' }; authority: 'human_owner' }>
-  | Readonly<{ action: 'connect'; args: { via: 'oauth_device'; url: string; pollHandle?: string }; authority: 'human_owner' }>
-  | Readonly<{ action: 'approve'; args: { callRef: CallRef; url: string }; authority: 'human_owner' }>
-  | Readonly<{ action: 'provide-input'; args: { taskId: TurnRef; fields: readonly string[] }; authority: 'same_principal' }>
+  | PlanReferenceNext
+  | CallNext
+  | ProcureExactNext
+  | NonNullable<ToolQuoteResult['continuation']>
+  | z.infer<typeof providerToolContinuationSchema>
+  | z.infer<typeof fundingCreateReplayNextSchema>
+  | z.infer<typeof fundingStatusNextSchema>
+  | z.infer<typeof fundingCreateNextSchema>
+  | z.infer<typeof agentAccountFundingContinuationSchema.shape.next>
+  | Readonly<{ action: 'tool.quote'; args: { toolRef: PublicToolRef; input: Record<string, JsonValue> }; authority?: 'agent_key' }>
+  | Readonly<{ action: 'tool.call'; args: { quoteRef: QuoteRef; idempotencyKey: string }; authority?: 'agent_key' }>
+  | Readonly<{ action: 'tool.procure'; args: ToolProcureInput; authority?: 'agent_key' }>
+  | Readonly<{ action: 'journey.status'; args: { ref: JourneyRef }; authority: 'same_principal' }>
 
 export type JourneyStatus =
   | Readonly<{ kind: 'tool'; ref: PublicToolRef; readiness: SearchResult['readiness']; next: readonly JourneyNext[]; workState?: never }>
@@ -128,6 +138,7 @@ type JourneyProblemBase = Pick<ProblemDetails,
 > & Readonly<{
   retryable: boolean
   next: readonly JourneyNext[]
+  ownerHandoff?: z.infer<typeof authOwnerHandoffSchema>
   refs?: Readonly<{
     callRef?: CallRef
     quoteRef?: QuoteRef
@@ -148,10 +159,10 @@ export type JourneyProjectionOptions = Readonly<{
   source?: 'remote' | 'local'
 }>
 
-const toolRefSchema = z.string().regex(/^operation:v1:[0-9a-f]{64}$/u).transform((value) => value as PublicToolRef)
-const quoteRefSchema = z.string().regex(/^operation-commitment:v1:[0-9a-f]{64}$/u).transform((value) => value as QuoteRef)
-const callRefSchema = z.string().regex(/^operation-invocation:v1:[0-9a-f]{64}$/u).transform((value) => value as CallRef)
-const taskRefSchema = z.string().regex(/^turn_[0-9a-f-]{36}$/u).transform((value) => value as TurnRef)
+const toolRefSchema = brandedStringSchema(z.string().regex(/^operation:v1:[0-9a-f]{64}$/u), (value) => value as PublicToolRef)
+const quoteRefSchema = brandedStringSchema(z.string().regex(/^operation-commitment:v1:[0-9a-f]{64}$/u), (value) => value as QuoteRef)
+const callRefSchema = brandedStringSchema(z.string().regex(/^operation-invocation:v1:[0-9a-f]{64}$/u), (value) => value as CallRef)
+const taskRefSchema = brandedStringSchema(z.string().regex(/^turn_[0-9a-f-]{36}$/u), (value) => value as TurnRef)
 export const statusRefSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('tool'), ref: toolRefSchema }),
   z.strictObject({ kind: z.literal('quote'), ref: quoteRefSchema }),
@@ -162,20 +173,31 @@ const safeContinuationUrlSchema = z.union([
   z.url(),
   z.string().startsWith('/').refine((url) => !url.startsWith('//') && !url.includes('\\')),
 ])
+export const journeyStatusReadNextSchema = z.strictObject({ action: z.literal('journey.status'), args: z.strictObject({ ref: statusRefSchema }), authority: z.literal('same_principal') })
+export const journeyStatusNextSchema = z.union([registryNextActionSchema.options[0], callNextSchema, journeyStatusReadNextSchema])
+
 export const journeyNextSchema = z.union([
   registryNextActionSchema,
-  z.strictObject({ action: z.literal('quote'), args: z.strictObject({ toolRef: toolRefSchema, input: z.record(z.string(), jsonValueSchema) }), authority: z.literal('agent_key') }),
-  z.strictObject({ action: z.literal('call'), args: z.strictObject({ quoteRef: quoteRefSchema, idempotencyKey: idempotencyKeySchema }), authority: z.literal('agent_key') }),
-  z.strictObject({ action: z.literal('procure'), args: toolProcureInputSchema, authority: z.literal('agent_key') }),
-  z.strictObject({ action: z.literal('status'), args: z.strictObject({ ref: statusRefSchema }), authority: z.literal('same_principal') }),
-  z.strictObject({ action: z.literal('wait'), args: z.strictObject({ callRef: callRefSchema, afterVersion: z.number().int().nonnegative().optional() }), authority: z.literal('same_principal') }),
-  z.strictObject({ action: z.literal('fund'), args: z.strictObject({}), authority: z.literal('agent_key') }),
-  z.strictObject({ action: z.literal('describe'), args: z.strictObject({ toolRef: toolRefSchema }), authority: z.literal('public') }),
-  z.strictObject({ action: z.literal('connect'), args: z.strictObject({ via: z.literal('cli'), command: z.literal('ae connect') }), authority: z.literal('human_owner') }),
-  z.strictObject({ action: z.literal('connect'), args: z.strictObject({ via: z.literal('oauth_device'), url: safeContinuationUrlSchema, pollHandle: z.string().min(1).optional() }), authority: z.literal('human_owner') }),
-  z.strictObject({ action: z.literal('approve'), args: z.strictObject({ callRef: callRefSchema, url: safeContinuationUrlSchema }), authority: z.literal('human_owner') }),
-  z.strictObject({ action: z.literal('provide-input'), args: z.strictObject({ taskId: taskRefSchema, fields: z.array(z.string()) }), authority: z.literal('same_principal') }),
+  planReferenceNextSchema,
+  callNextSchema,
+  procureExactNextSchema,
+  toolQuoteResultSchema.options[0].shape.continuation,
+  toolQuoteResultSchema.options[1].shape.continuation.unwrap(),
+  providerToolContinuationSchema,
+  fundingCreateReplayNextSchema,
+  fundingStatusNextSchema,
+  fundingCreateNextSchema,
+  agentAccountFundingContinuationSchema.shape.next,
+  z.strictObject({ action: z.literal('tool.quote'), args: z.strictObject({ toolRef: toolRefSchema, input: z.record(z.string(), jsonValueSchema) }), authority: z.literal('agent_key').exactOptional() }),
+  z.strictObject({ action: z.literal('tool.call'), args: z.strictObject({ quoteRef: quoteRefSchema, idempotencyKey: idempotencyKeySchema }), authority: z.literal('agent_key').exactOptional() }),
+  z.strictObject({ action: z.literal('tool.procure'), args: toolProcureInputSchema, authority: z.literal('agent_key').exactOptional() }),
+  journeyStatusReadNextSchema,
 ])
+
+const authOwnerHandoffSchema = z.strictObject({
+  actor: z.literal('account_owner'), reason: z.literal('connect_required'), destination: safeContinuationUrlSchema,
+})
+
 const problemSchema = z.object({
   type: z.literal('about:blank'),
   title: z.string(),
@@ -196,25 +218,21 @@ const refsSchema = z.strictObject({
   identityPreserved: z.boolean().exactOptional(),
 })
 
+export const journeyProblemSchema = z.discriminatedUnion('source', [
+  z.strictObject({ ...problemSchema.shape, next: z.array(journeyNextSchema).max(1), refs: refsSchema.exactOptional(), ownerHandoff: authOwnerHandoffSchema.exactOptional(), source: z.literal('local') }),
+  z.strictObject({ ...problemSchema.shape, next: z.array(journeyNextSchema).max(1), refs: refsSchema.exactOptional(), ownerHandoff: authOwnerHandoffSchema.exactOptional(), source: z.literal('remote'), requestId: z.string().min(1) }),
+])
+
 /** Parse action facts from a trusted result; reject remote extensions and off-origin URLs. */
 export function validateJourneyNext(value: unknown, options: JourneyProjectionOptions): readonly JourneyNext[] {
   if (!Array.isArray(value)) return []
-  const origins = new Set([new URL(options.origin).origin, ...(options.allowedOrigins ?? []).map((url) => new URL(url).origin)])
+  new URL(options.origin) // Reject an invalid caller origin even for operation-only continuations.
   return value.flatMap((candidate): JourneyNext[] => {
     const parsed = journeyNextSchema.safeParse(candidate)
     if (!parsed.success) return []
     const next = parsed.data
-    const target = next.action === 'approve' ? next.args.url
-      : next.action === 'connect' && next.args.via === 'oauth_device' ? next.args.url
-      : undefined
-    if (target !== undefined) {
-      if (!URL.canParse(target, options.origin)) return []
-      const url = new URL(target, options.origin)
-      if (!origins.has(url.origin) || url.username !== '' || url.password !== '' ||
-        (url.protocol !== 'https:' && url.protocol !== 'http:')) return []
-    }
     return [next as JourneyNext]
-  })
+  }).slice(0, 1)
 }
 
 /** Whitelist canonical RFC 9457 fields before projecting the one continuation channel. */
@@ -223,7 +241,13 @@ export function projectJourneyProblem(input: unknown, options: JourneyProjection
   const record = input as Record<string, unknown>
   const next = validateJourneyNext(record.next, options)
   const refs = refsSchema.safeParse(record.refs)
-  const base = { ...problem, next, ...(refs.success ? { refs: refs.data } : {}) }
+  const handoff = authOwnerHandoffSchema.safeParse(record.ownerHandoff)
+  const allowedOrigins = new Set([new URL(options.origin).origin, ...(options.allowedOrigins ?? []).map(url => new URL(url).origin)])
+  const destination = handoff.success ? new URL(handoff.data.destination, options.origin) : undefined
+  const ownerHandoff = handoff.success && destination !== undefined && allowedOrigins.has(destination.origin)
+    && destination.username === '' && destination.password === '' && ['http:', 'https:'].includes(destination.protocol)
+    ? handoff.data : undefined
+  const base = { ...problem, next, ...(refs.success ? { refs: refs.data } : {}), ...(ownerHandoff === undefined ? {} : { ownerHandoff }) }
   if (options.source === 'local') return { ...base, source: 'local' }
   const requestId = z.string().min(1).parse(record.requestId)
   return { ...base, source: 'remote', requestId }
@@ -231,29 +255,25 @@ export function projectJourneyProblem(input: unknown, options: JourneyProjection
 
 /** Recovery and remedial actions are derived only from validated refs and refusal facts. */
 export function projectProcureNext(result: ToolProcureResult): readonly JourneyNext[] {
-  if (result.status === 'needs_input') return []
-  if (result.status === 'refused') {
-    const next: JourneyNext[] = result.code === 'budget_exceeded'
-      ? [{ action: 'fund', args: {}, authority: 'agent_key' }]
-      : []
-    if (result.quoteRef === undefined) return next
+  if (result.status === 'needs_input') return [result.next]
+  if ((result.status === 'delivered' || result.status === 'remedied')
+    && result.money.kind === 'recorded' && result.money.usage.chargeState !== 'outcome_unknown') return []
+  if ('callRef' in result) {
+    const call = parseCallRef(result.callRef)
+    if (call.kind !== 'valid') throw new Error('procure_result_call_ref_invalid')
+    return [{ action: 'call.status', args: { callRef: call.ref }, authority: 'same_principal' }]
+  }
+  if (result.status === 'refused' && result.quoteRef !== undefined) {
     const quote = parseQuoteRef(result.quoteRef)
     if (quote.kind !== 'valid') throw new Error('procure_result_quote_ref_invalid')
-    return [...next, { action: 'status', args: { ref: { kind: 'quote', ref: quote.ref } }, authority: 'same_principal' }]
+    return [{ action: 'journey.status', args: { ref: { kind: 'quote', ref: quote.ref } }, authority: 'same_principal' }]
   }
-  const call = parseCallRef(result.callRef)
-  if (call.kind !== 'valid') throw new Error('procure_result_call_ref_invalid')
-  return [{ action: 'status', args: { ref: { kind: 'call', ref: call.ref } }, authority: 'same_principal' }]
+  return []
 }
 
-/** Recovery remains pinned to the same Call; no continuation creates a fresh purchase. */
-export function projectCallStatusNext(ref: CallRef, recovery: CallStatusResult): readonly JourneyNext[] {
-  return recovery.kind === 'found' && (recovery.state === 'terminal' || recovery.state === 'cancelled')
-    ? []
-    : [
-        { action: 'status', args: { ref: { kind: 'call', ref } }, authority: 'same_principal' },
-        { action: 'wait', args: { callRef: ref, ...(recovery.kind === 'found' ? { afterVersion: recovery.version } : {}) }, authority: 'same_principal' },
-      ]
+/** The Call recovery owner determines exactly one read; a CLI wait is its presentation. */
+export function projectCallStatusNext(_ref: CallRef, recovery: CallStatusResult): readonly JourneyNext[] {
+  return projectCallRecoveryNext(recovery)
 }
 
 export function projectCliJourneyProblem(

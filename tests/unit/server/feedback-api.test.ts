@@ -153,11 +153,29 @@ describe('explicit product feedback', () => {
 describe('MCP feedback adapter', () => {
   it('advertises the disclosure only to authenticated write-enabled connections', async () => {
     for (const [scopes, readOnly, present] of [[[], false, false], [['market_tools:call'], false, true], [['market_supply:manage'], false, true], [['market_tools:call'], true, false]] as const) {
-      const response = await handleMcpRequest(new Request(`https://ae.example/mcp${readOnly ? '?readonly=1' : ''}`, {
-        method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', ...(scopes.length ? { authorization: 'Bearer test' } : {}) }, body: JSON.stringify(list),
-      }), scopes.length ? authFor(scopes) : {})
-      const body = await readMcpBody(response)
-      const tool = ((body.result?.tools ?? []) as Array<{ name: string; annotations: unknown }>).find(tool => tool.name === 'ae_feedback_submit')
+      const tools: Array<{ name: string; annotations: unknown }> = []
+      const seenCursors = new Set<string>()
+      let cursor: string | undefined
+      do {
+        const response = await handleMcpRequest(new Request(`https://ae.example/mcp${readOnly ? '?readonly=1' : ''}`, {
+          method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', ...(scopes.length ? { authorization: 'Bearer test' } : {}) },
+          body: JSON.stringify({ ...list, params: cursor === undefined ? {} : { cursor } }),
+        }), scopes.length ? authFor(scopes) : {})
+        expect(response.status).toBe(200)
+        const body = await readMcpBody(response)
+        expect(body.error).toBeUndefined()
+        expect(Array.isArray(body.result?.tools)).toBe(true)
+        tools.push(...body.result!.tools as Array<{ name: string; annotations: unknown }>)
+        const nextCursor = body.result?.nextCursor
+        expect(nextCursor === undefined || typeof nextCursor === 'string').toBe(true)
+        cursor = typeof nextCursor === 'string' ? nextCursor : undefined
+        if (cursor !== undefined) {
+          expect(seenCursors.has(cursor)).toBe(false)
+          seenCursors.add(cursor)
+          expect(seenCursors.size).toBeLessThan(100)
+        }
+      } while (cursor !== undefined)
+      const tool = tools.find(tool => tool.name === 'ae_feedback_submit')
       expect(tool !== undefined).toBe(present)
       if (tool) expect(tool.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true })
     }
@@ -170,7 +188,7 @@ describe('MCP feedback adapter', () => {
     expect(accepted.result).toMatchObject({ structuredContent: { result: { kind: 'accepted' } } })
     mocks.send.mockRejectedValueOnce(new Error('ingestion failed'))
     const refused = await readMcpBody(await postMcp(call, options, { authorization: 'Bearer test' }))
-    expect(refused.result).toMatchObject({ isError: true, structuredContent: { kind: 'UNAVAILABLE', code: 'feedback_unavailable', retryable: false, next: [] } })
+    expect(refused.result).toMatchObject({ isError: true, structuredContent: { result: { kind: 'refused', code: 'feedback_unavailable', retryable: false }, next: [] } })
     expect(mocks.send).toHaveBeenCalledTimes(2)
   })
 })

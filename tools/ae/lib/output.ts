@@ -2,7 +2,7 @@ import { isRecord } from '@/modules/common/is-record'
 import { ConvexSourceError } from '@/lib/server/convex-source'
 import { buildProblem, remoteProblemToProblem, type ProblemKind } from '@/lib/errors'
 import { HOSTED_DEFAULT_BASE_URL, safeOriginForDiagnostics } from './args'
-import { authContinuation } from '@/lib/http/auth-continuation'
+import { authOwnerHandoff } from '@/lib/http/auth-continuation'
 import { projectCliJourneyProblem, validateJourneyNext, type JourneyNext } from '@/modules/actions'
 import { journeyNextCommand } from './journey-next-command'
 
@@ -111,10 +111,7 @@ export function cliFailureToProblem(
   presentation: Readonly<{ suggestion?: string; nextCommand?: string; origin?: string }> = {},
 ): Record<string, unknown> {
   const detail = typeof failure.detail === 'string' ? failure.detail : failure.message
-  const next = [
-    ...(failure.kind === 'UNAUTHENTICATED' && failure.nextCommand === undefined ? authContinuation() : []),
-    ...(failure.next ?? []),
-  ]
+  const next = failure.kind === 'UNAUTHENTICATED' ? [] : (failure.next ?? [])
   const refs = isRecord(failure.detail)
     ? Object.fromEntries(Object.entries(failure.detail)
       .filter(([key, value]) => /^(?:callRef|quoteRef|recoveryRef|toolRef|idempotencyKey|identityPreserved)$/u.test(key)
@@ -147,6 +144,7 @@ export function cliFailureToProblem(
   return {
     ...projected,
     message: failure.message,
+    ...(failure.kind === 'UNAUTHENTICATED' ? { ownerHandoff: authOwnerHandoff(presentation.origin) } : {}),
     ...(failure.retryAfter === undefined ? {} : { retryAfter: failure.retryAfter }),
     ...((presentation.suggestion ?? failure.suggestion) === undefined ? {} : { suggestion: presentation.suggestion ?? failure.suggestion }),
     ...(nextCommand === undefined ? {} : { nextCommand }),
@@ -185,16 +183,15 @@ export async function callJson(
   const deadline = new AbortController()
   const timer = setTimeout(() => deadline.abort(), timeoutMs)
   try {
+    const headers = new Headers(init.headers)
+    if (!headers.has('Accept')) headers.set('Accept', 'application/json')
+    if (init.body !== undefined && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
     const response = await fetch(`${baseUrl}${path}`, {
       ...init,
       signal: init.signal === undefined || init.signal === null
         ? deadline.signal : AbortSignal.any([init.signal, deadline.signal]),
       redirect: 'manual',
-      headers: {
-        Accept: 'application/json',
-        ...(init.body === undefined ? {} : { 'Content-Type': 'application/json' }),
-        ...init.headers,
-      },
+      headers,
     })
     // Keep the same deadline active until the entire response has been consumed.
     return { ...await readHttpOutcome(response, startedAt), baseUrl }

@@ -148,7 +148,7 @@ export type ChatTranscriptViewProps = Readonly<{
   onRetryQuestion?: (prompt: string) => void
   onNewChat?: () => void
   onClarifyAnswer?: (answer: string) => void
-  onContinueSearch?: (next: Extract<RegistryNextAction, { action: 'next-page' }>) => void
+  onContinueSearch?: (next: Extract<RegistryNextAction, { action: 'registry.tools.search' }> & { args: { cursor: string } }) => void
   onRepeatSearch?: (query: string) => void
   onRunTool?: (toolRef: string, input: RunIntent['input']) => Promise<ChatRunResult>
   ownerChatEnabled?: boolean

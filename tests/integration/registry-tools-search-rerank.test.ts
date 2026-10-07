@@ -68,7 +68,7 @@ describe('POST /api/v1/market-tools/search Jev re-rank', () => {
       }
       expect(body.kind).toBe('match')
       expect(body.results.map(item => item.toolRef)).toEqual([TOOL_CRYPTO_TX.toolRef])
-      expect(body.results[0]).toMatchObject({ access: 'ae_callable', next: [{ action: 'describe' }] })
+      expect(body.results[0]).toMatchObject({ access: 'ae_callable', next: [{ action: 'registry.tools.describe' }] })
       expect(body).not.toHaveProperty('recommendation')
     } finally {
       if (previousKey === undefined) delete process.env.OPENROUTER_API_KEY

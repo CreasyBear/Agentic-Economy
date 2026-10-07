@@ -344,7 +344,7 @@ describe('operation recovery HTTP adapters', () => {
         toolRef,
         toolVersion: 1,
         expiresAt: 1_900_000_000_000,
-        normalizedInput: nestedInput,
+
         price: { currency: 'AUD', units: '100', exponent: 2 },
         account: {
           accountRef: 'account:operation-key',
@@ -358,9 +358,7 @@ describe('operation recovery HTTP adapters', () => {
         evidenceDigest: 'evidence:quote',
         continuation: {
           action: 'tool.call',
-          method: 'POST',
-          path: '/api/v1/tools/call',
-          input: { quoteRef, idempotencyKey: 'invoke:one' },
+          args: { quoteRef, idempotencyKey: 'invoke:one' },
         },
       },
       'capabilityCalls:listCalls': {

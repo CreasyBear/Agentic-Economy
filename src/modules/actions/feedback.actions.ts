@@ -28,12 +28,12 @@ export const feedbackResultSchema = z.discriminatedUnion('kind', [
 export const feedbackSubmitAction = defineAction({
   id: FEEDBACK_ROUTE_CONTRACT.actionId,
   name: 'Send product feedback',
-  summary: 'Send optional AE product feedback through PostHog.',
+  summary: 'Optional AE feedback via PostHog.',
   boundaries: [
-    'Report expected/actual behaviour or missing functionality; continue the task afterward.',
-    'Exclude credentials, personal/business data and Tool payloads. Attribution is pseudonymous.',
-    'Acceptance confirms ingestion only; no Call rating, refund or authority changes.',
-    'Skip disabled/unavailable feedback. Never auto-retry: ingestion may have succeeded.',
+    'Report expected/actual behaviour; continue.',
+    'Pseudonymous. No credentials, personal/business data or Tool payloads.',
+    'Ingestion only; no ratings, refunds or authority changes.',
+    'Skip disabled/unavailable; no auto-retry: ingestion may succeed.',
   ],
   schema: feedbackInputSchema,
   parameters: [{ name: 'message', type: 'string', required: true, description: 'Explicit product feedback, 1–10,000 characters. Include expected and actual behaviour without sensitive data.' }],

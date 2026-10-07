@@ -4,7 +4,7 @@ import { readClerkMfaConsequenceProof, type ClerkMfaConsequenceProofInput } from
 import { sourceWriteAdmissionFromContext, sourceWriteRequestFromAdmission } from './source-write-admission'
 import type { SourceWriteAdmission, SourceWriteAdmissionRequest } from '@/modules/security/source-write-admission'
 import { planQuoteResultSchema, parsePlan } from '@/modules/capability-execution/plan/parse'
-import { parsePlanReadback, planGetResultSchema, planRunResultSchema } from '@/modules/capability-execution/plan/runtime.schemas'
+import { parsePlanReadback, planGetResultSchema, parsePlanRunReadback } from '@/modules/capability-execution/plan/runtime.schemas'
 import { ownerPlanSummarySchema, type OwnerPlanDecision, type OwnerPlanRead, type OwnerPlanPageRead, type OwnerPlanSummary } from '@/modules/capability-execution/plan/owner.contracts'
 import { ownerCallStatusResultSchema } from '@/modules/capability-execution/call-recovery.actions'
 import type { PublicCallStatusRead } from '@/modules/capability-execution/call-receipt-view'
@@ -39,7 +39,7 @@ export async function decideOwnerPlanThroughSource(data: OwnerPlanDecision, cont
   const proof = data.decision === 'approve' ? await readClerkMfaConsequenceProof() : undefined
   const command = { ...data, operationKey, correlationId: operationKey, ...(proof === undefined ? {} : { proof }) }
   const sourceWrite = await sourceWriteAdmissionFromContext({ context, command, scope: 'protected_action', operationKey, correlationId: operationKey })
-  return planRunResultSchema.parse(await callSourceMutation(decideOwner, { ...command, sourceWrite, sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite) }))
+  return parsePlanRunReadback(await callSourceMutation(decideOwner, { ...command, sourceWrite, sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite) }))
 }
 
 const readOwnerCall = sourceAction<{ callRef: string }, unknown>('capabilityCalls:readOwnerCallStatus')
@@ -65,5 +65,5 @@ export async function cancelOwnerPlanThroughSource(planRef: string, context: unk
   const operationKey = `plan-cancel:${planRef}`
   const command = { planRef, operationKey, correlationId: operationKey }
   const sourceWrite = await sourceWriteAdmissionFromContext({ context, command, scope: 'protected_action', operationKey, correlationId: operationKey })
-  return planRunResultSchema.parse(await callSourceMutation(cancelOwner, { ...command, sourceWrite, sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite) }))
+  return parsePlanRunReadback(await callSourceMutation(cancelOwner, { ...command, sourceWrite, sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite) }))
 }

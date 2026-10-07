@@ -95,7 +95,11 @@ it('renders the single source correction from the shared status contract', async
       reasonCodes: ['source_drift'],
       routeability: { available: false, reasonCodes: ['source_drift'] },
       health: { ...status.health, freshness: 'failed', operationalConditions: ['source_drift'] },
-      continuation: { action: 'supply.recheck' },
+      continuation: {
+        action: 'supply.recheck',
+        args: { businessId: 'business:one', offeringRef: 'offering:one', offeringRevision: 2, offeringSourceHash: 'source:one', publicationRef: 'publication:one', publicationRevision: 3 },
+        requiredInput: ['idempotencyKey'],
+      },
     }}
     onRecheck={recheck}
   />)
@@ -104,6 +108,24 @@ it('renders the single source correction from the shared status contract', async
   expect(screen.getAllByRole('button').map((button) => button.textContent)).toEqual(['Recheck source'])
   fireEvent.click(screen.getByRole('button', { name: 'Recheck source' }))
   await waitFor(() => expect(recheck).toHaveBeenCalledTimes(1))
+})
+
+it('explains unavailable maintenance beside the causal blocker without offering an invalid recheck', () => {
+  render(<AeProviderToolDetail
+    name="Reference lookup"
+    status={{
+      ...status,
+      state: 'Action required',
+      reasonCodes: ['source_drift', 'maintenance_identity_unavailable'],
+      routeability: { available: false, reasonCodes: ['source_drift'] },
+    }}
+    onRecheck={vi.fn()}
+  />)
+
+  expect(screen.getByText('Source changed')).toBeTruthy()
+  expect(screen.getByText('Publication identity unavailable')).toBeTruthy()
+  expect(screen.getByText(/Resolve the owner records before rechecking or republishing/u)).toBeTruthy()
+  expect(screen.queryByRole('button', { name: 'Recheck source' })).toBeNull()
 })
 
 it('keeps a pending Provider review on status readback instead of starting another source check', () => {
@@ -116,7 +138,7 @@ it('keeps a pending Provider review on status readback instead of starting anoth
       reasonCodes: ['provider_authority_unverified', 'health_unobserved'],
       routeability: { available: false, reasonCodes: ['provider_authority_unverified', 'health_unobserved'] },
       health: { ...status.health, validation: 'in_progress', freshness: 'unobserved', operationalConditions: ['provider_authority_unverified', 'health_unobserved'] },
-      continuation: { action: 'supply.status' },
+      continuation: { action: 'supply.status', args: { businessRef: status.businessRef, toolRef: status.toolRef } },
     }}
     onRefresh={refresh}
     onRecheck={vi.fn()}
@@ -136,19 +158,17 @@ it('sends connection repair to the hosted owner handoff', () => {
       routeability: { available: false, reasonCodes: ['credential_lost'] },
       health: { ...status.health, connection: 'action_required', operationalConditions: ['credential_lost'] },
       ownerHandoff: {
-        action: 'supply.connection.reconnect',
-        blockedCapabilities: ['supply.publish'],
-        cta: '/owner/supply/connections',
+        actor: 'business_owner',
+        reason: 'credential_lost',
+        destination: '/owner/settings/integrations#provider-connections',
         ctaLabel: 'Reconnect source',
         description: 'The source connection is unavailable. Reconnect it before continuing.',
-        iconUrl: null,
-        status: 'required',
         title: 'Reconnect source',
       },
     }}
   />)
 
-  expect(screen.getByRole('link', { name: 'Reconnect source' }).getAttribute('href')).toBe('/owner/supply/connections')
+  expect(screen.getByRole('link', { name: 'Reconnect source' }).getAttribute('href')).toBe('/owner/settings/integrations#provider-connections')
   expect(screen.queryByRole('button')).toBeNull()
 })
 
@@ -157,7 +177,7 @@ it('resumes only the saved draft and never labels a fresh form as continuation',
     ...status,
     state: 'Draft' as const,
     routeability: { available: false, reasonCodes: [] },
-    continuation: { action: 'supply.source.preview' as const },
+    continuation: { action: 'supply.source.preview' as const, args: { kind: 'x402' as const }, requiredInput: ['resourceUrl'] as ['resourceUrl'] },
   }
   const { rerender } = render(
     <AeProviderToolDetail name="Reference lookup" status={draft} resumeHref="/owner/operations/new?draft=sha256%3Aabc" />,

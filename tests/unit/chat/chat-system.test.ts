@@ -280,10 +280,10 @@ describe('transcript projector', () => {
               },
               detailRef: searchRef,
               details: { capabilityId: 'weather.forecast', provider: { name: 'Sky Co', slug: 'sky-co' }, description: 'Look up forecasts', listingTier: 'listed' },
-              next: [{ action: 'describe', args: { toolRef: searchRef }, authority: 'public' }],
+              next: [{ action: 'registry.tools.describe', args: { toolRef: searchRef }, authority: 'public' }],
             }],
             pagination: { limit: 10, hasMore: true, nextCursor: 'next' },
-            next: [{ action: 'next-page', args: { query: 'weather', cursor: 'next' }, authority: 'public' }],
+            next: [{ action: 'registry.tools.search', args: { query: 'weather', cursor: 'next' }, authority: 'public' }],
           },
         },
         {
@@ -295,7 +295,7 @@ describe('transcript projector', () => {
             toolRef: searchRef,
             toolVersion: 1,
             expiresAt: 60_000,
-            normalizedInput: { location: 'Perth' },
+
             price: { currency: 'AUD', units: '199', exponent: 2 },
             account: {
               accountRef: 'account:chat:1',
@@ -309,9 +309,7 @@ describe('transcript projector', () => {
             evidenceDigest: 'evidence:inspection:1',
             continuation: {
               action: 'tool.call',
-              method: 'POST',
-              path: '/api/v1/tools/call',
-              input: { quoteRef, idempotencyKey: 'invoke-weather-1' },
+              args: { quoteRef, idempotencyKey: 'invoke-weather-1' },
             },
           },
         },
@@ -730,11 +728,11 @@ describe('transcript projector', () => {
             },
             detailRef: searchRef,
             details: { capabilityId: 'weather.forecast', provider: { name: 'Sky Co', slug: 'sky-co' }, description: 'Look up forecasts', listingTier: 'listed', raw: 'HANDOFF_RAW_SECRET' },
-            next: [{ action: 'describe', args: { toolRef: searchRef }, authority: 'public' }],
+            next: [{ action: 'registry.tools.describe', args: { toolRef: searchRef }, authority: 'public' }],
             raw: 'HANDOFF_RAW_SECRET',
           }],
           pagination: { limit: 10, hasMore: false },
-          next: [{ action: 'broaden', args: { query: 'weather' }, authority: 'public' }],
+          next: [],
         },
       }],
     }])

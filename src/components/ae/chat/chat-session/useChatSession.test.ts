@@ -143,7 +143,7 @@ describe('useChatSession', () => {
     const { result } = renderHook(() => useChatSession({ ...baseProps, threadId: 'thread-owned' }))
     act(() => result.current.composer.onPromptChange('A draft for another question'))
     act(() => result.current.transcript.onContinueSearch?.({
-      action: 'next-page', authority: 'public', args: { query: 'weather', cursor: 'sc1.private-cursor' },
+      action: 'registry.tools.search', authority: 'public', args: { query: 'weather', cursor: 'sc1.private-cursor' },
     }))
     await waitFor(() => expect(sendMessageMutationMock).toHaveBeenCalledOnce())
     expect(sendMessageMutationMock).toHaveBeenCalledWith({ data: expect.objectContaining({
@@ -167,7 +167,7 @@ describe('useChatSession', () => {
     expect(outcome).toEqual({ kind: 'outcome_unknown' })
     expect(sendMessageMutationMock).toHaveBeenCalledWith({ data: expect.objectContaining({
       threadId: 'thread-owned',
-      prompt: `Run Tool ${toolRef} with this exact JSON input: {\"city\":\"Sydney\"}.`,
+      prompt: `Run Tool ${toolRef} with this exact JSON input: {"city":"Sydney"}.`,
     }) })
   })
 

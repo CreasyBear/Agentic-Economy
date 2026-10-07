@@ -7,7 +7,7 @@ import type { CallService } from '@/modules/capability-execution/call-authority'
 import { recordSelectionDecision } from '@/modules/capability-execution/selection-decision-recorder'
 import { toolProcureInputSchema, toolProcureResultSchema, type ToolProcureInput } from '@/modules/capability-execution/procure'
 import {
-  CapabilityProcurementEngine, ProcureConflictError, ProcureSelectionUnavailableError,
+  CapabilityProcurementEngine, ProcureConflictError, ProcureInProgressError, ProcureSelectionUnavailableError,
   type ProcureIdentityPort, type ToolCatalogSearcher,
 } from '@/modules/capability-execution/procure-engine'
 vi.mock('@/modules/decision-engine/public', async (importOriginal) => ({
@@ -64,11 +64,11 @@ function identityPort(): ProcureIdentityPort {
   }
 }
 
-function service(callResult: unknown): CallService {
+function service(callResult: unknown, quotePrice = { currency: 'AUD', units: '2000', exponent: 6 }): CallService {
   return {
     quoteTool: vi.fn().mockResolvedValue({
       kind: 'committed', quoteRef: 'quote:one', toolRef,
-      price: { currency: 'AUD', units: '2000', exponent: 6 },
+      price: quotePrice,
     }),
     callTool: vi.fn().mockResolvedValue(callResult),
     readCallStatus: vi.fn(), cancelCall: vi.fn(), reconcileCall: vi.fn(),
@@ -80,6 +80,61 @@ function engine(callService: CallService, identity = identityPort(), catalogSear
 }
 
 describe('native procurement replay and recovery', () => {
+  it('preserves an unresolved reservation after the reserve response is lost', async () => {
+    const identity = identityPort()
+    const reserve = identity.reserve.bind(identity)
+    vi.spyOn(identity, 'reserve').mockImplementationOnce(async (request, actor) => {
+      await reserve(request, actor)
+      throw new Error('reserve response lost')
+    })
+    const callService = service(undefined)
+    const procure = engine(callService, identity)
+    await expect(procure.procure(input)).rejects.toThrow('reserve response lost')
+    await expect(procure.procure(input)).rejects.toThrow('Quote preparation is unresolved')
+    expect(callService.quoteTool).not.toHaveBeenCalled()
+    expect(callService.callTool).not.toHaveBeenCalled()
+  })
+
+  it('never repeats an uncertain Quote inspection or a Quote whose checkpoint was not committed', async () => {
+    for (const phase of ['quote', 'checkpoint'] as const) {
+      const identity = identityPort()
+      const callService = service(undefined)
+      if (phase === 'quote') vi.mocked(callService.quoteTool!).mockRejectedValueOnce(new Error('quote response lost'))
+      else vi.spyOn(identity, 'checkpoint').mockRejectedValueOnce(new Error('checkpoint not committed'))
+      const procure = engine(callService, identity)
+      await expect(procure.procure(input)).rejects.toThrow()
+      await expect(procure.procure(input)).rejects.toBeInstanceOf(ProcureInProgressError)
+      expect(callService.quoteTool).toHaveBeenCalledTimes(1)
+      expect(callService.callTool).not.toHaveBeenCalled()
+    }
+  })
+
+  it('resumes the saved Quote when only the committed checkpoint response was lost', async () => {
+    const identity = identityPort()
+    const checkpoint = identity.checkpoint.bind(identity)
+    vi.spyOn(identity, 'checkpoint').mockImplementationOnce(async (request, actor, quote) => {
+      await checkpoint(request, actor, quote)
+      throw new Error('checkpoint response lost')
+    })
+    const callService = service({ kind: 'pending', callRef: 'call:one', toolRef, retryAfterMs: 1000 })
+    const procure = engine(callService, identity)
+    await expect(procure.procure(input)).rejects.toThrow('checkpoint response lost')
+    expect(await procure.procure(input)).toMatchObject({ status: 'pending', quoteRef: 'quote:one', callRef: 'call:one' })
+    expect(callService.quoteTool).toHaveBeenCalledTimes(1)
+    expect(callService.callTool).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not re-Quote a retained identity with an unusable checkpoint', async () => {
+    for (const resultJson of [null, '{', JSON.stringify({ quoteRef: 'quote:one' })]) {
+      const identity = identityPort()
+      vi.spyOn(identity, 'reserve').mockResolvedValue({ kind: 'replay', quoteRef: 'quote:one', resultJson })
+      const callService = service(undefined)
+      await expect(engine(callService, identity).procure(input)).rejects.toBeInstanceOf(ProcureInProgressError)
+      expect(callService.quoteTool).not.toHaveBeenCalled()
+      expect(callService.callTool).not.toHaveBeenCalled()
+    }
+  })
+
   it('records no-match and unavailable selection without persisting the requested need or purchasing', async () => {
     const callService = service({ kind: 'refused' })
     const request = { kind: 'need' as const, need: 'private customer need' }
@@ -178,10 +233,52 @@ describe('native procurement replay and recovery', () => {
     expect(callService.callTool).not.toHaveBeenCalled()
   })
 
+  it.each(['1', '2000', '9007199254740993'])('retains exact money units %s without inferred net or GST', async (units) => {
+    const amount = { currency: 'AUD', units, exponent: 6 }
+    const usage = { usageRef: 'usage:exact', observedAt: 1, chargeState: 'paid', amount, priceDigest: 'sha256:exact' }
+    const callService = service({ kind: 'completed', callRef: 'call:one', toolRef, output: {}, usage }, amount)
+    const result = await engine(callService).procure({ ...input, maxSpendAud: '10000000000' })
+    expect(result).toMatchObject({ status: 'delivered', money: { kind: 'recorded', price: amount, usage } })
+    expect(result).not.toHaveProperty('price')
+    expect(JSON.stringify(result)).not.toMatch(/totalAud|netAud|gstAud/)
+  })
+
+  it('reports refund evidence without inventing a refund amount from Call usage', async () => {
+    const usage = { usageRef: 'usage:refund', observedAt: 1, chargeState: 'refunded',
+      amount: { currency: 'AUD', units: '0', exponent: 6 }, priceDigest: 'sha256:price' }
+    const result = await engine(service({ kind: 'completed', callRef: 'call:one', toolRef, output: {}, usage })).procure(input)
+    expect(result).toMatchObject({ status: 'remedied', money: { kind: 'recorded', usage } })
+    expect(result).not.toHaveProperty('refundedAmountAud')
+    expect(result).not.toHaveProperty('netChargeAud')
+  })
+
+  it('projects historical display-only delivery without rewriting or executing its purchase', async () => {
+    const legacy = { schemaVersion: 'tool.procure:v1', kind: 'delivered', status: 'delivered',
+      idempotencyKey: input.idempotencyKey, quoteRef: 'quote:one', callRef: 'call:one', toolRef,
+      input: input.input, output: { answer: 42 }, price: { totalAud: 'A$0.01', netAud: 'A$0.01', gstAud: 'A$0.00' },
+      audit: { routingLatencyMs: 0, executionLatencyMs: 1, totalLatencyMs: 1, jevDecisionsCostAud: 'unknown' } }
+    const resultJson = JSON.stringify(legacy)
+    const originalHash = canonicalDigest(legacy)
+    const identity = identityPort()
+    vi.spyOn(identity, 'reserve').mockResolvedValue({ kind: 'replay', quoteRef: 'quote:one', resultJson })
+    const complete = vi.spyOn(identity, 'complete')
+    const callService = service(undefined)
+    const result = await engine(callService, identity).procure(input)
+    expect(result).toMatchObject({ status: 'delivered', output: legacy.output, money: { kind: 'historical_display_only' } })
+    expect(result).not.toHaveProperty('price')
+    expect(toolProcureResultSchema.safeParse(legacy).success).toBe(false)
+    expect(toolProcureResultSchema.parse(result)).toEqual(result)
+    expect(JSON.stringify(legacy)).toBe(resultJson)
+    expect(canonicalDigest(legacy)).toBe(originalHash)
+    expect(complete).not.toHaveBeenCalled()
+    expect(callService.quoteTool).not.toHaveBeenCalled()
+    expect(callService.callTool).not.toHaveBeenCalled()
+  })
+
   it('binds caller key before Quote; identical replay returns the first refs without another Quote or Call', async () => {
     const callService = service({
       kind: 'completed', callRef: 'call:one', toolRef, output: { answer: 42 },
-      usage: { chargeState: 'paid', amount: { currency: 'AUD', units: '2000', exponent: 6 } },
+      usage: { usageRef: 'usage:one', observedAt: 1, priceDigest: 'sha256:price', chargeState: 'paid', amount: { currency: 'AUD', units: '2000', exponent: 6 } },
     })
     const catalogSearcher = vi.fn(async () => [])
     const procure = engine(callService, identityPort(), catalogSearcher)
@@ -239,7 +336,7 @@ describe('native procurement replay and recovery', () => {
 
   it('advances a pending and then reconciliation-required purchase using its original Quote and Call identity', async () => {
     const callService = service({ kind: 'completed', callRef: 'call:one', toolRef, output: { answer: 42 },
-      usage: { chargeState: 'paid', amount: { currency: 'AUD', units: '2000', exponent: 6 } } })
+      usage: { usageRef: 'usage:one', observedAt: 1, priceDigest: 'sha256:price', chargeState: 'paid', amount: { currency: 'AUD', units: '2000', exponent: 6 } } })
     const callTool = vi.mocked(callService.callTool)
     callTool.mockResolvedValueOnce({ kind: 'pending', callRef: 'call:one', toolRef, retryAfterMs: 1000 })
     callTool.mockResolvedValueOnce({ kind: 'reconciliation_required', callRef: 'call:one', toolRef, evidence: {
@@ -301,7 +398,7 @@ describe('native procurement replay and recovery', () => {
     }]).procure({ kind: 'need', need: 'Read this PDF' })
     expect(result).toMatchObject({
       status: 'needs_input', toolRef, inputJsonSchema: inputSchema,
-      requiredFields: ['file', 'file.url'], next: { kind: 'exact', toolRef },
+      requiredFields: ['file', 'file.url'], next: { action: 'tool.procure', args: { kind: 'exact', toolRef }, requiredInput: ['input', 'maxSpendAud', 'idempotencyKey'], authority: 'agent_key' },
     })
     expect(reserve).not.toHaveBeenCalled()
     expect(callService.quoteTool).not.toHaveBeenCalled()

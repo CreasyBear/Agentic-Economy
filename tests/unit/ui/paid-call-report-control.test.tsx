@@ -51,7 +51,7 @@ describe('paid Call report control', () => {
     await screen.findByText('Credit returned: A$2.00.')
     expect(screen.getByText('Credit returned')).toBeTruthy()
     expect(calls.report).toHaveBeenCalledTimes(2)
-    expect(onPosted).toHaveBeenCalledOnce()
+    await waitFor(() => expect(onPosted).toHaveBeenCalledOnce())
   })
 
   it('keeps expired promotional credit explicit and leaves failure open to checking', async () => {

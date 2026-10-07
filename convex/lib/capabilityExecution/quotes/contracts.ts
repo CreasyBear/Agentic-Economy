@@ -3,16 +3,6 @@ import { v, type Infer } from 'convex/values'
 import type { JsonValue } from '@/modules/capability-contract/public'
 import type { LiveX402Requirement } from '@/modules/capability-execution/live-x402-requirement'
 import { jsonObject } from '@/modules/capability-execution/convex'
-import {
-  FUNDING_HANDOFF_CONFIG_PATH,
-  FUNDING_HANDOFF_CREATE_PATH,
-} from '@/modules/money/funding-handoff.actions'
-import {
-  TOOL_MARKET_DESCRIBE_PATH,
-  TOOL_MARKET_LIST_PATH,
-  TOOL_MARKET_SEARCH_PATH,
-} from '@/modules/common/market-tool-paths'
-import { TOOL_QUOTE_PATH } from '@/modules/capability-execution/quote'
 import type { ReferenceRate } from '@/modules/money/public'
 import {
   spendingPeriodAdjustmentValue,
@@ -44,39 +34,31 @@ export const exactUsdc = v.object({ currency: v.literal('USDC'), units: v.string
 
 const quoteContinuation = v.union(
   v.object({
-    action: v.literal('registry.tools.list'), method: v.literal('POST'),
-    path: v.literal(TOOL_MARKET_LIST_PATH), input: v.object({ limit: v.literal(10) }),
+    action: v.literal('registry.tools.list'), args: v.object({ limit: v.literal(10) }),
   }),
   v.object({
-    action: v.literal('registry.tools.search'), method: v.literal('POST'),
-    path: v.literal(TOOL_MARKET_SEARCH_PATH), input: v.object({ query: v.string(), limit: v.literal(10) }),
+    action: v.literal('registry.tools.search'), args: v.object({ query: v.string(), limit: v.literal(10) }),
   }),
   v.object({
-    action: v.literal('registry.tools.describe'), method: v.literal('POST'),
-    path: v.literal(TOOL_MARKET_DESCRIBE_PATH), input: v.object({ toolRef: v.string() }),
+    action: v.literal('registry.tools.describe'), args: v.object({ toolRef: v.string() }),
   }),
   v.object({
-    action: v.literal('tool.quote'), method: v.literal('POST'),
-    path: v.literal(TOOL_QUOTE_PATH), input: v.object({ toolRef: v.string(), input: jsonObject }),
+    action: v.literal('tool.quote'), args: v.object({ toolRef: v.string(), input: jsonObject }),
     retryAfterMs: v.union(v.literal(5000), v.literal(30000)),
   }),
   v.object({
-    action: v.literal('funding.handoff.create'), method: v.literal('POST'),
-    path: v.literal(FUNDING_HANDOFF_CREATE_PATH),
-    input: v.object({ principalAmount: exactAud, idempotencyKey: v.string() }),
+    action: v.literal('funding.handoff.create'),
+    args: v.object({ principalAmount: exactAud, idempotencyKey: v.string() }),
   }),
   v.object({
-    action: v.literal('funding.handoff.config'), method: v.literal('GET'),
-    path: v.literal(FUNDING_HANDOFF_CONFIG_PATH), input: v.object({}),
+    action: v.literal('funding.handoff.config'), args: v.object({}),
   }),
 )
 
-const requiredAction = v.object({
-  action: v.string(),
-  blockedCapabilities: v.array(v.literal('tool.call')),
-  cta: v.union(v.literal('/agent-access'), v.literal('/support'), v.null()),
-  ctaLabel: v.string(), description: v.string(), iconUrl: v.null(),
-  status: v.union(v.literal('required'), v.literal('pending')), title: v.string(),
+const ownerHandoff = v.object({
+  actor: v.union(v.literal('account_owner'), v.literal('ae_support')),
+  reason: v.string(),
+  destination: v.optional(v.union(v.literal('/agent-access'), v.literal('/support'))),
 })
 
 export const quoteResult = v.union(
@@ -86,7 +68,6 @@ export const quoteResult = v.union(
     toolRef: v.string(),
     toolVersion: v.number(),
     expiresAt: v.number(),
-    normalizedInput: jsonObject,
     price: exactAud,
     sourceRequirement: v.optional(exactUsdc),
     account: v.object({ accountRef: v.string(), available: exactAud }),
@@ -100,9 +81,7 @@ export const quoteResult = v.union(
     }),
     continuation: v.object({
       action: v.literal('tool.call'),
-      method: v.literal('POST'),
-      path: v.literal('/api/v1/tools/call'),
-      input: v.object({ quoteRef: v.string(), idempotencyKey: v.string() }),
+      args: v.object({ quoteRef: v.string(), idempotencyKey: v.string() }),
     }),
   }),
   v.object({
@@ -113,7 +92,7 @@ export const quoteResult = v.union(
     retryable: v.boolean(),
     correlationRef: v.string(),
     continuation: v.optional(quoteContinuation),
-    requiredActions: v.optional(v.array(requiredAction)),
+    ownerHandoff: v.optional(ownerHandoff),
   }),
 )
 

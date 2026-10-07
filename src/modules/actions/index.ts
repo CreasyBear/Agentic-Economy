@@ -14,6 +14,8 @@
 export {
   CURRENT_TOOL_PROJECTION_NAVIGATION,
   validateJourneyNext,
+  journeyProblemSchema,
+  journeyNextSchema,
   projectJourneyProblem,
   projectCliJourneyProblem,
   projectMcpJourneyProblem,
@@ -31,7 +33,7 @@ export {
   type JourneyProblem,
   type JourneyProjectionOptions,
 } from './contract'
-export { projectMcpActionNext } from './mcp-journey'
+export { projectMcpActionNext, mcpActionNextSchema } from './mcp-journey'
 export { MCP_TOOLSETS, mcpToolsetAdmitted, mcpToolsetRole, type McpToolsetRole } from './mcp-toolsets'
 export { journeyStatusAction, journeyStatusResultSchema } from './status.actions'
 

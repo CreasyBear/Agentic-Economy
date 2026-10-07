@@ -21,7 +21,8 @@ import { callAction } from '@/modules/capability-execution/call.actions'
 import {
   toolQuoteAction,
 } from '@/modules/capability-execution/quote.actions'
-import { planRunResultSchema, parsePlanReadback } from '@/modules/capability-execution/plan/runtime.schemas'
+import { parsePlanRunReadback, parsePlanReadback } from '@/modules/capability-execution/plan/runtime.schemas'
+import { projectToolQuoteRefusal } from '@/modules/capability-execution/quote'
 import { toolPlanQuoteAction } from '@/modules/capability-execution/plan/quote.actions'
 import {
   callListInputSchema,
@@ -32,6 +33,8 @@ import {
   callRecoveryResultSchema,
   callStatusInputSchema,
   callStatusResultSchema,
+  projectCallStatusResult,
+  projectCallRecoveryResult,
   callReconcileInputSchema,
 } from '@/modules/capability-execution/call-recovery.actions'
 import type { CallRecoveryResult } from '@/modules/capability-execution/call-recovery-contracts'
@@ -134,10 +137,9 @@ export function createCallService(
     return callResultSchema.parse(result)
   }
   const quoteTool: NonNullable<CallService['quoteTool']> = async (input) => {
-    if (!productionMoneyManifestReady()) return {
-      kind: 'refused' as const, toolRef: input.input.toolRef, code: 'payments_not_ready' as const,
-      retryable: true, correlationRef: input.correlationId,
-    }
+    if (!productionMoneyManifestReady()) return projectToolQuoteRefusal({
+      ...input.input, code: 'payments_not_ready', retryable: true, correlationRef: input.correlationId,
+    })
     const operationKey = operationKeyFor(
       {
         operationRef: input.input.toolRef,
@@ -236,7 +238,7 @@ export function createCallService(
       sourceWrite,
       principal: input.principal,
     })
-    return callStatusResultSchema.parse(result)
+    return projectCallStatusResult(callStatusResultSchema.parse(result))
   }
   const cancelCall = async (input: CallCancelRequest) => {
     const operationKey = operationKeyFor({ invocationRef: input.callRef, idempotencyKey: input.idempotencyKey }, input.principal.principalId, input.principal.credentialId, input.principal.applicationRef, input.principal.environment)
@@ -265,7 +267,7 @@ export function createCallService(
       sourceWrite,
       principal: input.principal,
     })
-    return callRecoveryResultSchema.parse(result)
+    return projectCallRecoveryResult(callRecoveryResultSchema.parse(result))
   }
   const reconcileCall = async (input: CallReconcileRequest) => {
     const operationKey = operationKeyFor({ invocationRef: input.callRef, idempotencyKey: input.idempotencyKey, evidence: input.evidence }, input.principal.principalId, input.principal.credentialId, input.principal.applicationRef, input.principal.environment)
@@ -295,7 +297,7 @@ export function createCallService(
       sourceWrite,
       principal: input.principal,
     })
-    return callRecoveryResultSchema.parse(result)
+    return projectCallRecoveryResult(callRecoveryResultSchema.parse(result))
   }
   const planQuote: NonNullable<CallService['planQuote']> = async ({ input, principal, correlationId }) => {
     const operationKey = canonicalDigest({
@@ -318,11 +320,11 @@ export function createCallService(
     return { ...command, sourceWrite, sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite) }
   }
   const planRun: NonNullable<CallService['planRun']> = async ({ input, principal, correlationId }) =>
-    planRunResultSchema.parse(await callPublicSourceAction(planRunSourceAction, await planCommand('tool.plan.run', input, principal, correlationId)))
+    parsePlanRunReadback(await callPublicSourceAction(planRunSourceAction, await planCommand('tool.plan.run', input, principal, correlationId)))
   const planGet: NonNullable<CallService['planGet']> = async ({ input, principal, correlationId }) =>
     parsePlanReadback(await callPublicSourceQuery(planGetSourceQuery, await planCommand('tool.plan.get', input, principal, correlationId)))
   const planCancel: NonNullable<CallService['planCancel']> = async ({ input, principal, correlationId }) =>
-    planRunResultSchema.parse(await callPublicSourceMutation(planCancelSourceMutation, await planCommand('tool.plan.cancel', input, principal, correlationId)))
+    parsePlanRunReadback(await callPublicSourceMutation(planCancelSourceMutation, await planCommand('tool.plan.cancel', input, principal, correlationId)))
   return { callTool, quoteTool, planQuote, planRun, planGet, planCancel, listCalls, readCallStatus, cancelCall, reconcileCall }
 }
 
@@ -468,10 +470,9 @@ export async function handleToolQuotePost(
         detail: 'The request did not match tool.quote:v2.',
       }), correlationId)
     }
-    if (!productionMoneyManifestReady()) {telemetry({...principalTelemetry(admitted.principal),outcome:'refused',stage:'pre_admission',refusalCode:'payments_not_ready',retryable:true});return withRequestCorrelationHeader(response({
-      kind: 'refused', toolRef: parsed.data.toolRef, code: 'payments_not_ready',
-      retryable: true, correlationRef: correlationId,
-    }, 200, callJsonResponseHeaders), correlationId)}
+    if (!productionMoneyManifestReady()) {telemetry({...principalTelemetry(admitted.principal),outcome:'refused',stage:'pre_admission',refusalCode:'payments_not_ready',retryable:true});return withRequestCorrelationHeader(response(projectToolQuoteRefusal({
+      ...parsed.data, code: 'payments_not_ready', retryable: true, correlationRef: correlationId,
+    }), 200, callJsonResponseHeaders), correlationId)}
     try {
       const service = options.callService ?? createCallService(request, bounded.text)
       if (service.quoteTool === undefined) throw new Error('tool_quote_unavailable')
@@ -707,7 +708,7 @@ export async function handleCallStatusGet(
           detail: gatewayDetail(refusalProblem.code),
         }), correlationId)
       }
-      return withRequestCorrelationHeader(response(projected.data, 200, callJsonResponseHeaders), correlationId)
+      return withRequestCorrelationHeader(response(projectCallStatusResult(projected.data), 200, callJsonResponseHeaders), correlationId)
     } catch (error) {
       const mapped = gatewayErrorCode(error, 'call_runtime_unavailable')
       telemetry({
@@ -811,7 +812,7 @@ async function executeRecoveryAction(
           }), correlationId)
         }
         telemetry(recoveryTelemetryForResult(projected.data, callRef))
-        return withRequestCorrelationHeader(response(projected.data, 200, callJsonResponseHeaders), correlationId)
+        return withRequestCorrelationHeader(response(projectCallRecoveryResult(projected.data), 200, callJsonResponseHeaders), correlationId)
       } catch (error) {
         const mapped = gatewayErrorCode(error, 'call_runtime_unavailable')
         telemetry({

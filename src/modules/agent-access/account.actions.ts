@@ -12,6 +12,7 @@ import { defineAction } from '@/modules/common/action'
 import { exactAmountSchema } from '@/modules/money/public'
 
 import {
+  agentAccountFundingContinuationSchema,
   AGENT_ACCESS_AUTHORITY_MODE_VALUES,
   MARKET_TOOLS_CALL_SCOPE,
   MARKET_SUPPLY_MANAGE_SCOPE,
@@ -72,12 +73,7 @@ export const agentAccountBalanceInputSchema = z.strictObject({
   currency: z.literal('AUD').default('AUD'),
 })
 
-const agentAccountFundingContinuationSchema = z.strictObject({
-  kind: z.literal('agent_funding_handoff'),
-  configAction: z.literal('funding.handoff.config'),
-  createAction: z.literal('funding.handoff.create'),
-  statusAction: z.literal('funding.handoff.status'),
-})
+export { agentAccountFundingContinuationSchema } from './contract'
 
 export const agentAccountBalanceResultSchema = z.discriminatedUnion('kind', [
   z.strictObject({
@@ -342,11 +338,11 @@ export const agentAccountBalanceAction = defineAction<AgentAccountBalanceInput, 
 export const agentAccountActivityAction = defineAction<AgentAccountActivityInput, AgentAccountActivityResult>({
   id: AGENT_ACCOUNT_ACTIVITY_ACTION_ID,
   name: 'List agent account activity',
-  summary: 'List the authenticated buyer credential’s own bounded charge activity, newest first.',
+  summary: 'List the authenticated Agent Principal’s bounded Call activity for its Account, newest first.',
   boundaries: [
-    'Rows are bound to the exact authenticated principal and credential, not every credential owned by the account.',
-    'Returns Charge evidence and Call references without Call inputs, outputs, bearer secrets, or payment-provider data.',
-    'The cursor is opaque and remains bound to the same credential and currency.',
+    'Rows are bound to the authenticated Agent Principal and Account across credential rotation; each row retains its original credential reference.',
+    'Returns Call and payment-state evidence without Call inputs, outputs, bearer secrets, or payment-provider data.',
+    'The cursor is opaque and remains bound to the same Agent Principal and Account.',
   ],
   schema: agentAccountActivityInputSchema,
   outputSchema: agentAccountActivityResultSchema,
@@ -365,7 +361,7 @@ export const agentAccountActivityAction = defineAction<AgentAccountActivityInput
   invocationContract: {
     version: AGENT_ACCOUNT_MONEY_ROUTE_CONTRACTS.activity.contractVersion,
     consequenceClass: 'read_only', materialInputPaths: ['currency', 'limit', 'cursor'], authorityRequirement: 'principal',
-    retryClass: 'replayable', expectedEvidence: ['credential_charge_activity'], safeContinuations: ['call.status'],
+    retryClass: 'replayable', expectedEvidence: ['principal_call_activity'], safeContinuations: ['call.status'],
     invalidationConditions: ['credential_revoked', 'currency_changed', 'cursor_changed'],
   },
   run: async ({ data, context }) => {

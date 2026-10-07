@@ -519,11 +519,10 @@ describe('registry public API routes', () => {
     })
 
     /**
-     * Price filters are optional on a route agents already call. A value the
-     * route cannot read is dropped, never turned into a 400: a malformed
-     * budget must not cost the caller the whole search.
+     * Normalizers are used only after the public transport validates filters.
+     * Malformed supplied ceilings must be refused before search executes.
      */
-    it('reads an exact price ceiling and ignores incomplete or malformed triples', () => {
+    it('normalizes validated optional price and presence filters', () => {
       expect(optionalMaxPrice('USDC', '7000', '6')).toEqual({
         maxPrice: { currency: 'USDC', units: '7000', exponent: 6 },
       })
@@ -544,7 +543,27 @@ describe('registry public API routes', () => {
       expect(optionalHasPrice('maybe')).toEqual({})
     })
 
-    it('accepts exact price parameters on the live search route without narrowing supply that published no price', async () => {
+    it.each([
+      'max_price_currency=USDC',
+      'max_price_currency=USDC&max_price_units=-1&max_price_exponent=6',
+      'max_price_currency=USDC&max_price_units=7000&max_price_exponent=6.5',
+      'has_price=maybe',
+      'mode=',
+      'limit=',
+      `location=${'x'.repeat(81)}`,
+    ])('refuses malformed supplied search filters on both business projections: %s', async (query) => {
+      for (const [path, handler] of [
+        ['/api/businesses/search', handleDurableSearchBusinessesRequest],
+        ['/api/v1/businesses/search', handleDurableSearchServicesRequest],
+      ] as const) {
+        const response = await handler(new Request(`https://ae.example${path}?q=repair&${query}`))
+        expect(response.status).toBe(400)
+        expect(response.headers.get('content-type')).toBe('application/problem+json')
+        expect(await response.json()).toMatchObject({ kind: 'INVALID_ARGUMENT', code: 'invalid_query_parameter' })
+      }
+    })
+
+    it('excludes unknown prices when a valid exact price ceiling is supplied', async () => {
       const baseline = await (await handleDurableSearchBusinessesRequest(
         new Request('https://ae.example/api/businesses/search?q=listed+offering+parramatta'),
       )).json()
@@ -556,11 +575,11 @@ describe('registry public API routes', () => {
       )
 
       expect(budgeted.status).toBe(200)
-      expect(malformed.status).toBe(200)
-      // This seed publishes prose pricing only. A budget must leave it alone:
-      // `pricingSummary` is never read as a number.
-      expect(await budgeted.json()).toMatchObject({ items: baseline.items })
-      expect(await malformed.json()).toMatchObject({ items: baseline.items })
+      expect(malformed.status).toBe(400)
+      expect(baseline.items.length).toBeGreaterThan(0)
+      // Prose pricing cannot establish a comparable ceiling.
+      expect(await budgeted.json()).toMatchObject({ items: [] })
+      expect(await malformed.json()).toMatchObject({ kind: 'INVALID_ARGUMENT', code: 'invalid_query_parameter' })
     })
   })
 

@@ -122,9 +122,8 @@ describe("Package 5 owner connection rollout", () => {
 
     expect(result).toMatchObject({
       kind: "action_required",
-      requiredAction: {
-        blockedCapabilities: ["supply.publish"],
-        cta: "/owner/operations",
+      ownerHandoff: {
+        destination: "/owner/operations",
       },
     });
     expect(sourceMocks.callSourceQuery).not.toHaveBeenCalled();
@@ -137,14 +136,12 @@ describe("Package 5 owner connection rollout", () => {
     vi.stubEnv("AE_SUPPLY_HTTP_CREDENTIALS_ENABLED", undefined);
     sourceMocks.startOwnerSupplySourceConnection.mockResolvedValue({
       kind: "action_required",
-      requiredAction: {
-        action: "supply.source.preview",
-        blockedCapabilities: ["supply.publish"],
-        cta: "/owner/settings/integrations?connect=x402",
+      ownerHandoff: {
+        actor: "business_owner",
+        reason: "payee_proof_required",
+        destination: "/owner/settings/integrations?connect=x402",
         ctaLabel: "Connect service",
         description: "Inspect the exact x402 lane.",
-        iconUrl: null,
-        status: "required",
         title: "Connect service",
       },
     });
@@ -164,7 +161,7 @@ describe("Package 5 owner connection rollout", () => {
       },
     });
 
-    expect(result).toMatchObject({ kind: "action_required", requiredAction: { title: "Connect service" } });
+    expect(result).toMatchObject({ kind: "action_required", ownerHandoff: { title: "Connect service" } });
     expect(sourceMocks.startOwnerSupplySourceConnection).toHaveBeenCalledTimes(1);
   });
 });

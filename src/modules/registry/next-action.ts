@@ -1,19 +1,30 @@
+import type { z } from 'zod'
+
 import type { PublicToolRef } from '@/modules/capability-supply/public'
+import type { toolCatalogSearchInputSchema } from './tool-search-input'
+
+export type RegistrySearchArgs = Omit<z.input<typeof toolCatalogSearchInputSchema>, 'cursor'>
+export type RegistryRetryArgs = RegistrySearchArgs & Pick<z.input<typeof toolCatalogSearchInputSchema>, 'cursor'>
 
 export type RegistryNextAction =
-  | Readonly<{ action: 'describe'; args: { toolRef: PublicToolRef }; authority: 'public' }>
-  | Readonly<{ action: 'describe-external'; args: { id: string }; authority: 'public' }>
-  | Readonly<{ action: 'next-page'; args: { query: string; cursor: string }; authority: 'public' }>
-  | Readonly<{ action: 'broaden'; args: { query: string }; authority: 'public' }>
-  | Readonly<{ action: 'retry'; args: { query: string }; authority: 'public' }>
+  | Readonly<{ action: 'registry.tools.describe'; args: { toolRef: PublicToolRef }; authority: 'public' }>
+  | Readonly<{ action: 'registry.tools.search'; args: RegistryRetryArgs; authority: 'public' }>
 
-/** Public, read-only continuation derived only from the search page. */
+export type RegistryPageNext = Extract<RegistryNextAction, { action: 'registry.tools.search' }> &
+  Readonly<{ args: RegistrySearchArgs & { cursor: string } }>
+
+/** A page read retains the exact cursor and query scope; it creates no purchase. */
+export function isRegistryPageNext(next: RegistryNextAction | undefined): next is RegistryPageNext {
+  return next?.action === 'registry.tools.search' && typeof next.args.cursor === 'string'
+}
+
+/** A completed assessment needs caller refinement, not a replay of its unchanged query. */
 export function searchNextActions(
   query: string,
   pagination: Readonly<{ nextCursor?: string; hasMore: boolean }>,
+  scope: Omit<RegistrySearchArgs, 'query'> = {},
 ): readonly RegistryNextAction[] {
-  if (pagination.hasMore && pagination.nextCursor !== undefined) {
-    return [{ action: 'next-page', args: { query, cursor: pagination.nextCursor }, authority: 'public' }]
-  }
-  return [{ action: 'broaden', args: { query }, authority: 'public' }]
+  return pagination.hasMore && pagination.nextCursor !== undefined
+    ? [{ action: 'registry.tools.search', args: { ...scope, query, cursor: pagination.nextCursor }, authority: 'public' }]
+    : []
 }

@@ -37,9 +37,7 @@ export const agentBalanceResult = v.union(
     updatedAt: v.number(),
     funding: v.object({
       kind: v.literal('agent_funding_handoff'),
-      configAction: v.literal('funding.handoff.config'),
-      createAction: v.literal('funding.handoff.create'),
-      statusAction: v.literal('funding.handoff.status'),
+      next: v.object({ action: v.literal('funding.handoff.config'), args: v.object({}), authority: v.literal('agent_key') }),
     }),
   }),
   v.object({ kind: v.literal('not_found') }),

@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 
+import { withHttpRateLimit } from '@/lib/server/rate-limit'
 import { problem } from '@/lib/server/problem'
 import { methodNotAllowed } from '@/lib/server/method-guard'
 import { registryDetailAction } from '@/modules/registry/registry.actions'
@@ -8,7 +9,7 @@ import { jsonResponse } from './api.businesses'
 export const Route = createFileRoute('/api/businesses/$slug')({
   server: {
     handlers: {
-      GET: ({ params, request }) => handleDurableBusinessDetailRequest(params.slug, request),
+      GET: ({ params, request }) => withHttpRateLimit(request, 'public-read', () => handleDurableBusinessDetailRequest(params.slug, request)),
       POST: () => methodNotAllowed(['GET']),
       PUT: () => methodNotAllowed(['GET']),
       PATCH: () => methodNotAllowed(['GET']),

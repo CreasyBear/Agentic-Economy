@@ -31,7 +31,8 @@ export type ProviderOffboardingStatus = Readonly<{
   blockerCodes: readonly ProviderOffboardingBlocker[]
   observedAt: number
   retentionPolicyVersion: string
-  continuation?: Readonly<{ action: 'supply.offboarding.status' | 'supply.offboarding.resume' }> | undefined
+  continuation?: Readonly<{ action: 'supply.offboarding.status'; args: Readonly<{ businessRef: string }> }> | undefined
+  ownerHandoff?: Readonly<{ actor: 'business_owner'; reason: 'offboarding_action_required'; destination: '/owner/operations#offboarding'; caseRef: string; businessRef: string }> | undefined
 }>
 
 export type ProviderOffboardingCompletionFacts = Readonly<{
@@ -78,6 +79,14 @@ export const providerOffboardingStatusSchema: z.ZodType<ProviderOffboardingStatu
   observedAt: z.number(),
   retentionPolicyVersion: z.string().min(1),
   continuation: z.strictObject({
-    action: z.enum(['supply.offboarding.status', 'supply.offboarding.resume']),
+    action: z.literal('supply.offboarding.status'),
+    args: z.strictObject({ businessRef: z.string().min(1) }),
+  }).optional(),
+  ownerHandoff: z.strictObject({
+    actor: z.literal('business_owner'),
+    reason: z.literal('offboarding_action_required'),
+    destination: z.literal('/owner/operations#offboarding'),
+    caseRef: z.string().min(1),
+    businessRef: z.string().min(1),
   }).optional(),
 })

@@ -245,7 +245,7 @@ function projectRow(
     : {
         kind: 'navigate' as const,
         label: status.ownerHandoff.ctaLabel,
-        href: status.ownerHandoff.cta,
+        href: status.ownerHandoff.destination,
       }
   const protocolLabel = ownerToolProtocolLabel(status.source)
   return {

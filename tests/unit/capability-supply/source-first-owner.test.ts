@@ -103,9 +103,9 @@ describe('owner source-first resumption', () => {
     })
     expect(result).toMatchObject({
       kind: 'action_required',
-      requiredAction: {
+      ownerHandoff: {
         title: 'Prove the payee',
-        cta: `/owner/settings/integrations?${query.toString()}`,
+        destination: `/owner/settings/integrations?${query.toString()}`,
       },
     })
     expect(mocks.callSourceQuery).toHaveBeenCalledTimes(1)
@@ -150,7 +150,7 @@ describe('owner source-first resumption', () => {
         idempotencyKey: 'x402-source-refused',
       },
       context: {},
-    })).resolves.toMatchObject({ kind: 'action_required', requiredAction: { title: 'Business unavailable' } })
+    })).resolves.toMatchObject({ kind: 'action_required', ownerHandoff: { title: 'Business unavailable' } })
   })
 
   it('resumes only the exact source draft bound to the completed connection', async () => {

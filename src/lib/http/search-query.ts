@@ -1,3 +1,5 @@
+import { z } from 'zod'
+
 import { exactAmountSchema } from '@/modules/money/public'
 import type { ExactAmount } from '@/modules/money/public'
 
@@ -14,16 +16,15 @@ export function optionalSearchMode(
 }
 
 export function optionalSearchLocation(value: string | null): { location?: string } {
-  const normalized = value?.trim().replace(/\s+/g, ' ').slice(0, 80)
+  const normalized = value?.trim().replace(/\s+/g, ' ')
   return normalized === undefined || normalized.length === 0
     ? {}
     : { location: normalized }
 }
 
 /**
- * A budget an agent cannot express is a budget it will not send. Anything that
- * is not a complete, valid ExactAmount is dropped rather than rejected: a
- * malformed ceiling must not turn a real search into an error.
+ * Normalize an already-validated optional ExactAmount query triple. Public
+ * search adapters validate supplied filters before invoking these normalizers.
  */
 
 export function optionalMaxPrice(
@@ -48,3 +49,33 @@ export function optionalHasPrice(value: string | null): { hasPrice?: boolean } {
   if (normalized === 'false' || normalized === '0') return { hasPrice: false }
   return {}
 }
+
+
+/** Raw query transport shape; the registered action still validates normalized inputs. */
+export const businessListQuerySchema = z.strictObject({
+  cursor: z.string().optional(),
+  limit: z.string().optional(),
+})
+
+export const businessSearchQuerySchema = z.strictObject({
+  q: z.string().optional(),
+  mode: z.string().optional(),
+  location: z.string().optional(),
+  max_price_currency: z.string().optional(),
+  max_price_units: z.string().optional(),
+  max_price_exponent: z.string().optional(),
+  has_price: z.string().optional(),
+  ...businessListQuerySchema.shape,
+}).superRefine((query, context) => {
+  const priceKeys = ['max_price_currency', 'max_price_units', 'max_price_exponent'] as const
+  if (priceKeys.some((key) => query[key] !== undefined)
+    && optionalMaxPrice(query.max_price_currency ?? null, query.max_price_units ?? null, query.max_price_exponent ?? null).maxPrice === undefined) {
+    context.addIssue({ code: 'custom', path: ['max_price_currency'], message: 'Supply a complete, valid exact price ceiling with currency, integer units and exponent.' })
+  }
+  if (query.has_price !== undefined && optionalHasPrice(query.has_price).hasPrice === undefined) {
+    context.addIssue({ code: 'custom', path: ['has_price'], message: 'has_price must be true, false, 1, or 0.' })
+  }
+  if (query.limit !== undefined && query.limit.trim() === '') {
+    context.addIssue({ code: 'custom', path: ['limit'], message: 'limit must be an integer from 1 through 50.' })
+  }
+})

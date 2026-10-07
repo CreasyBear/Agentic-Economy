@@ -3,7 +3,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { createHttpRateLimitAdmission } from '@/lib/server/rate-limit'
 import { sanitizeTelemetryError } from '@/lib/observability/private-route-safety'
 import { createConvexAgentAccessOAuthStore } from '@/lib/server/agent-access-oauth-store'
-import { handleOAuthAuthorizeGet, handleOAuthConsentPost, oauthAuthorizationUnavailableResponse } from '@/lib/server/agent-access-oauth-api'
+import { handleOAuthAuthorizeGet, handleOAuthConsentPost, oauthAuthorizationUnavailableResponse, readOAuthRequestBody, oauthError } from '@/lib/server/agent-access-oauth-api'
 import { methodNotAllowed } from '@/lib/server/method-guard'
 const admitOAuth = createHttpRateLimitAdmission('oauth-issuance')
 
@@ -20,7 +20,9 @@ export const Route = createFileRoute('/oauth/authorize')({
     },
     POST: async ({ request }) => {
       try {
-        const body = await request.clone().text()
+        const bounded = await readOAuthRequestBody(request)
+        if (bounded.kind !== 'ok') return oauthError('invalid_request', bounded.kind === 'too_large' ? 413 : 400)
+        const body = bounded.text
         return await handleOAuthConsentPost(request, { store: createConvexAgentAccessOAuthStore(request, body), rateLimit: admitOAuth })
       } catch (error) {
         console.error('[oauth.authorize] POST failed', sanitizeTelemetryError(error))

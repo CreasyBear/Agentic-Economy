@@ -10,7 +10,7 @@ import {
 } from '../presentation'
 import { messageId, toTransportMessages } from './anonymous-session'
 
-type SearchContinuation = Extract<RegistryNextAction, { action: 'next-page' }>['args']
+type SearchContinuation = Extract<RegistryNextAction, { action: 'registry.tools.search' }>['args'] & { cursor: string }
 
 export async function sendAnonymousChatTurn(input: Readonly<{
   nextPrompt: string

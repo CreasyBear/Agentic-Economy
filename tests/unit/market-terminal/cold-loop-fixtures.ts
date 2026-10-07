@@ -76,10 +76,10 @@ export function operationSearchResult(query: string, operations: readonly ToolDe
       readiness: 'ready',
       price: { kind: 'indicative', label: 'A$0.01' },
       detailRef: operation.toolRef,
-      next: [{ action: 'describe', authority: 'public', args: { toolRef: operation.toolRef } }],
+      next: [{ action: 'registry.tools.describe', authority: 'public', args: { toolRef: operation.toolRef } }],
     })),
     pagination: { limit: 8, hasMore: false },
-    next: [{ action: 'broaden', authority: 'public', args: { query } }],
+    next: [],
   })
 }
 
@@ -132,7 +132,7 @@ export function operationInspection(
     toolRef,
     toolVersion: 1,
     expiresAt: 1_900_000_000_000,
-    normalizedInput: input,
+
     price: { currency: 'AUD', units: '1000000', exponent: 6 },
     account: {
       accountRef: 'account:cold-loop',
@@ -146,9 +146,7 @@ export function operationInspection(
     evidenceDigest: 'sha256:inspection',
     continuation: {
       action: 'tool.call',
-      method: 'POST',
-      path: '/api/v1/tools/call',
-      input: { quoteRef: quoteCommitmentRef, idempotencyKey: 'replace-at-call' },
+      args: { quoteRef: quoteCommitmentRef, idempotencyKey: 'replace-at-call' },
     },
   }
 }

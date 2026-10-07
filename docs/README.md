@@ -18,7 +18,10 @@ implemented behavior; a plan, proposal or dated review does not establish a rele
 
 ## Maintained contracts and operations
 
-- [Accounts, Agents and Tool Calls](foundations.md): current setup, access and recovery guide for customers, admins, integrators and Providers.
+- [Accounts, Agents and Tool Calls](foundations.md): current setup, purchase entry points, lifecycle and recovery handoffs.
+- Persona journeys: [Customer](foundations.md#choose-and-use-a-tool), [Administrator](foundations.md#administrator-journey), [Integrator](foundations.md#integrator-journey), [Provider](foundations.md#provider-journey). These are supported source steps; completed persona qualification remains recorded separately.
+- [CLI guide](../packages/cli/README.md): install a verified release, discover an exact Tool, inspect and Call it, recover, and disconnect. Its public sandbox journey remains unqualified.
+- [Canonical Agent skill](../plugins/agentic-economy/skills/use-agentic-economy/SKILL.md): source for the public `/SKILL.md` instructions; keep its machine guidance consistent with the guides and owner schemas.
 - [DESIGN.md](../DESIGN.md): product presentation and interaction principles.
 - [Operating model](operating-model.md): current commercial/alpha boundaries and outstanding qualification.
 - [Agent operating contract](designs/agent-operating-contract.md): the machine-facing control loop.
@@ -55,11 +58,48 @@ from dated comparisons and experiments. [Strategy](strategy) supports the thesis
 [AEcon Signals](workflow/aecon-signals-proposal.md) remains a proposal.
 None of these changes scope or activates a service by being indexed here.
 
+## Build the public documentation candidate
+
+The private `packages/docs` app uses the official Fumadocs TanStack Start/MDX
+scaffold with Scalar-generated Markdown reference. Install its pinned dependencies
+separately from the application, then generate and qualify the approved content:
+
+```sh
+npm ci --prefix packages/docs
+npm run docs:build
+npm run docs:dev
+```
+
+Use Node 22 and npm 11.5.1. The docs app has its own lockfile to preserve its
+upstream renderer dependencies without changing the application. `docs:build`
+checks tooling, exports from canonical owners, verifies examples and publication
+boundaries, builds HTML, typechecks the app and checks emitted files/anchors.
+It also runs inside the existing merge/release gate; the docs install is a
+prerequisite for that gate. These commands do not publish or deploy.
+
+To inspect the built site locally, run `HOST=127.0.0.1 PORT=3197 npm --prefix packages/docs start`
+and open `http://127.0.0.1:3197/docs`. Stop the process when finished.
+
+The generated Start here page leads to four persona guides, authority, purchase
+choice and recovery. Official Fumadocs `meta.json` files order the pages; do not
+build another navigation system. The API index records every owner operation,
+including exact OpenAPI fallbacks where Scalar cannot preserve the constraints.
+Fallback links use this build's `/openapi.json`, never another hosted revision.
+
+Edit the existing authored guide or action/schema owner, then regenerate.
+`packages/docs/content`, `public`, `src/routeTree.gen.ts` and build outputs are
+generated and ignored. [The manifest](../tools/docs/publication-manifest.ts)
+selects precise public sections; a link never adds another document automatically.
+[MM-055](operations/mercator-maturity-register.md#mm-055) and the deployment record
+retain qualification and remaining public-sandbox/client gates.
+
 ## History and maintenance
 
 [The archive](archive/README.md) preserves superseded plans, review dumps,
 execution journals, copied references and raw conversation material. Its index
 identifies current successors and retained open questions.
+
+This repository index includes internal design and operating material; it is not a public publication allowlist. A public renderer must select content roots and their permitted links/assets explicitly. Linking a guide to a deployment record or privacy design does not authorise publishing that document or its transitive content. Maintain each permitted guide once for human HTML and Agent Markdown, and generate structural reference from owner schemas rather than maintaining another operation registry.
 
 Keep one maintained owner for each question above. Update it when behavior or a
 supported boundary changes. Put dated evidence in the release/issue record and

@@ -107,7 +107,7 @@ export function committedQuote(
     toolRef: selectedToolRef,
     toolVersion: 1,
     expiresAt: Math.max(observedAt, Date.now()) + 60_000,
-    normalizedInput: { city: "Perth" },
+
     price,
     account: {
       accountRef: "account:buyer",
@@ -121,9 +121,7 @@ export function committedQuote(
     evidenceDigest: digest("9"),
     continuation: {
       action: "tool.call",
-      method: "POST",
-      path: "/api/v1/tools/call",
-      input: { quoteRef, idempotencyKey: "run:key1" },
+      args: { quoteRef, idempotencyKey: "run:key1" },
     },
   };
 }

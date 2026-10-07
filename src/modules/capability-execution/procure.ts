@@ -1,9 +1,11 @@
+import { brandedStringSchema } from '@/modules/common/branded-string-schema'
 import { idempotencyKeySchema } from '@/modules/common/action'
 import { jsonValueSchema } from '@/modules/capability-contract/public'
 import { isPublicToolRef, type PublicToolRef } from '@/modules/common/tool-ref'
 import { z } from 'zod'
 import { TOOL_SELECTION_PREFERENCES } from '@/modules/common/tool-selection-score'
-import { callRefusalCodeSchema } from './call-contracts'
+import { exactAmountSchema } from '@/modules/money/public'
+import { callReceiptSchema, callUsageSchema, callRefusalCodeSchema } from './call-contracts'
 import { toolQuoteRefusalCodeSchema } from './quote'
 
 export const TOOL_PROCURE_ACTION_ID = 'tool.procure' as const
@@ -17,12 +19,20 @@ export const toolProcureInputSchema = z.discriminatedUnion('kind', [
   }),
   z.strictObject({
     kind: z.literal('exact'),
-    toolRef: z.string().refine(isPublicToolRef).transform((ref): PublicToolRef => ref as PublicToolRef),
+    toolRef: brandedStringSchema(z.string().refine(isPublicToolRef), (ref): PublicToolRef => ref as PublicToolRef),
     input: z.record(z.string(), jsonValueSchema),
     maxSpendAud: z.string().trim().regex(/^\d+(?:\.\d{1,6})?$/),
     idempotencyKey: idempotencyKeySchema,
   }),
 ])
+
+export const procureExactNextSchema = z.strictObject({
+  action: z.literal(TOOL_PROCURE_ACTION_ID),
+  args: z.strictObject({ kind: z.literal('exact'), toolRef: brandedStringSchema(z.string().refine(isPublicToolRef), ref => ref as PublicToolRef) }),
+  requiredInput: z.tuple([z.literal('input'), z.literal('maxSpendAud'), z.literal('idempotencyKey')]),
+  authority: z.literal('agent_key'),
+})
+export type ProcureExactNext = z.infer<typeof procureExactNextSchema>
 
 export type ToolProcureInput = z.infer<typeof toolProcureInputSchema>
 
@@ -56,6 +66,17 @@ const committedResult = {
   callRef: z.string().min(1),
 } as const
 
+/** Quote price and Call money remain distinct recorded facts, with no inferred tax. */
+export const procureMoneySchema = z.discriminatedUnion('kind', [
+  z.strictObject({
+    kind: z.literal('recorded'),
+    price: exactAmountSchema,
+    usage: callUsageSchema,
+    receipt: callReceiptSchema.exactOptional(),
+  }),
+  z.strictObject({ kind: z.literal('historical_display_only') }),
+])
+
 const deliveredResultFields = {
     ...committedResult,
     kind: z.literal('delivered'),
@@ -63,11 +84,7 @@ const deliveredResultFields = {
     toolRef: z.string(),
     toolName: z.string().optional(),
     quoteRef: z.string().min(1),
-    price: z.strictObject({
-      totalAud: z.string(),
-      netAud: z.string(),
-      gstAud: z.string(),
-    }),
+    money: procureMoneySchema,
     audit: z.strictObject({
       routingLatencyMs: z.number(),
       executionLatencyMs: z.number(),
@@ -91,20 +108,17 @@ export const toolProcureResultSchema = z.union([
     schemaVersion: z.literal('tool.procure:v1'),
     kind: z.literal('needs_input'),
     status: z.literal('needs_input'),
-    toolRef: z.string().refine(isPublicToolRef).transform((ref): PublicToolRef => ref as PublicToolRef),
+    toolRef: brandedStringSchema(z.string().refine(isPublicToolRef), (ref): PublicToolRef => ref as PublicToolRef),
     toolName: z.string(),
     reasons: z.array(z.string()),
     alternates: z.array(z.strictObject({
-      toolRef: z.string().refine(isPublicToolRef).transform((ref): PublicToolRef => ref as PublicToolRef),
+      toolRef: brandedStringSchema(z.string().refine(isPublicToolRef), (ref): PublicToolRef => ref as PublicToolRef),
       title: z.string(),
       reasons: z.array(z.string()),
     })).max(2),
     inputJsonSchema: z.record(z.string(), jsonValueSchema),
     requiredFields: z.array(z.string()),
-    next: z.strictObject({
-      kind: z.literal('exact'),
-      toolRef: z.string().refine(isPublicToolRef).transform((ref): PublicToolRef => ref as PublicToolRef),
-    }),
+    next: procureExactNextSchema,
   }),
   z.strictObject({
     ...committedResult,
@@ -113,8 +127,7 @@ export const toolProcureResultSchema = z.union([
     toolRef: z.string(),
     toolName: z.string().optional(),
     quoteRef: z.string().min(1),
-    refundedAmountAud: z.string(),
-    netChargeAud: z.literal('A$0.00'),
+    money: procureMoneySchema,
     diagnostic: diagnosticTripletSchema,
     alternativeTool: z.string().optional(),
     audit: z.strictObject({
@@ -123,7 +136,10 @@ export const toolProcureResultSchema = z.union([
       remedyLatencyMs: z.number(),
       totalLatencyMs: z.number(),
     }),
-  }),
+  }).refine(result => result.money.kind === 'historical_display_only'
+    || result.money.usage.chargeState === 'refunded'
+    || result.money.receipt?.state === 'refunded'
+    || result.money.receipt?.refundState === 'released', { message: 'A remedy requires recorded buyer-funds release evidence.' }),
   z.strictObject({
     ...commonResult,
     kind: z.literal('refused'),
@@ -167,7 +183,7 @@ export function expireProcureResultContent(result: ToolProcureResult, expiredAt:
     return { ...result, detail: 'Original diagnostic content expired.' }
   }
   if (result.kind === 'remedied') return { ...result, diagnostic: {
-    whatHappened: 'Original diagnostic content expired.', financialImpact: `Refund recorded: ${result.refundedAmountAud}`,
+    whatHappened: 'Original diagnostic content expired.', financialImpact: 'Read the retained Call usage and receipt for recorded financial amounts.',
     nextStep: 'The purchase record remains available.',
   } }
   return null

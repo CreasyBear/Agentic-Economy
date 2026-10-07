@@ -215,14 +215,12 @@ export const republishOwnerCapabilityServer = createServerFn({ method: 'POST' })
 function disabledProviderConnectionPreview() {
   return {
     kind: 'action_required' as const,
-    requiredAction: {
-      action: 'supply.source.preview' as const,
-      blockedCapabilities: ['supply.publish'] as const,
-      cta: '/owner/operations',
+    ownerHandoff: {
+      actor: 'business_owner' as const,
+      reason: 'provider_connections_unavailable' as const,
+      destination: '/owner/operations',
       ctaLabel: 'Return to Tools',
       description: 'Provider connections are not enabled for this deployment.',
-      iconUrl: null,
-      status: 'required' as const,
       title: 'Provider connections unavailable',
     },
   }

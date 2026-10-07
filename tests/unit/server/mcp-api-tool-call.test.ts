@@ -94,6 +94,7 @@ describe('MCP host adapter tool.call', () => {
       usage: { inputTokens: 0, outputTokens: 0, estimatedCostAud: null },
       durationMs: 0, attemptedTiers: ['jev_system_one'],
     })
+    const record = vi.fn()
     const inputJsonSchema = { type: 'object', required: ['query'], properties: { query: { type: 'string' } } }
     const callTool = vi.fn()
     const quoteTool = vi.fn()
@@ -105,6 +106,7 @@ describe('MCP host adapter tool.call', () => {
         isAuthenticated: true, tokenType: 'api_key', id: 'key:test', subject: 'user_test', scopes: ['market_tools:call'],
         claims: { aeEnvironment: 'sandbox' },
       }),
+      timing: { record },
       catalogSearcher: async () => [{
         toolRef: currentToolRef, name: 'Dataset search', description: 'Searches datasets',
         endpoint: 'https://provider.example/search', priceAud: '0.25', inputSchema: inputJsonSchema,
@@ -114,19 +116,21 @@ describe('MCP host adapter tool.call', () => {
     expect(response.status).toBe(200)
     const body = await readMcpBody(response)
     expect(body.result?.structuredContent).toMatchObject({
-      result: { status: 'needs_input', toolRef: currentToolRef, inputJsonSchema, requiredFields: ['query'], next: { kind: 'exact', toolRef: currentToolRef } },
-      next: [{ kind: 'exact', toolRef: currentToolRef }],
+      result: { status: 'needs_input', toolRef: currentToolRef, inputJsonSchema, requiredFields: ['query'], next: { action: 'tool.procure', args: { kind: 'exact', toolRef:currentToolRef }, requiredInput: ['input', 'maxSpendAud', 'idempotencyKey'], authority: 'agent_key' } },
+      next: [{ action: 'tool.procure', args: { kind: 'exact', toolRef: currentToolRef }, requiredInput: ['input', 'maxSpendAud', 'idempotencyKey'], authority: 'agent_key' }],
     })
     expect(JSON.stringify(body.result?.content)).toContain('query')
     expect(JSON.stringify(body.result?.content)).toContain(currentToolRef)
     expect(quoteTool).not.toHaveBeenCalled()
     expect(callTool).not.toHaveBeenCalled()
+    expect(record.mock.calls.filter(([metric]) => metric === 'gateway.operation')).toEqual([])
   })
 
   it('preserves a refused Call reference and status continuation without prose leakage', async () => {
+    const record = vi.fn()
     const callRef = `operation-invocation:v1:${'d'.repeat(64)}`
     const callTool = vi.fn().mockResolvedValue({
-      kind: 'refused', callRef, toolRef: currentToolRef, code: 'authority_required', retryable: false,
+      kind: 'needs_authority', callRef, toolRef: currentToolRef, authorityRequest: { kind: 'approval_required', toolRef: currentToolRef, consequence: 'external_effect', retryClass: 'reconcile_before_retry', dataFields: [] },
     })
     const response = await postMcp({
       jsonrpc: '2.0', id: 'refused-call', method: 'tools/call',
@@ -136,17 +140,19 @@ describe('MCP host adapter tool.call', () => {
         isAuthenticated: true, tokenType: 'api_key', id: 'key:test', subject: 'user_test', scopes: ['market_tools:call'],
         claims: { aeEnvironment: 'sandbox' },
       }),
+      timing: { record },
       callService: { callTool, readCallStatus: vi.fn(), cancelCall: vi.fn(), reconcileCall: vi.fn() },
     }, { authorization: 'Bearer buyer' })
     const body = await readMcpBody(response)
     expect(body.result).toMatchObject({
       isError: true,
       structuredContent: {
-        kind: 'FAILED_PRECONDITION', code: 'authority_required',
-        next: [{ action: 'status', args: { ref: { kind: 'call', ref: callRef } }, authority: 'same_principal' }],
+        result: { kind: 'refused', code: 'authority_required', callRef, ownerHandoff: { actor: 'account_owner', reason: 'authority_required' } },
+        next: [{ action: 'call.status', args: { callRef }, authority: 'same_principal' }],
       },
     })
     expect(JSON.stringify(body.result?.content)).not.toContain(callRef)
     expect(callTool).toHaveBeenCalledOnce()
+    expect(record).toHaveBeenCalledWith('gateway.operation', expect.any(Number), expect.objectContaining({ operation: 'call', outcome: 'needs_authority', approval: 'required', invocationRef: callRef }))
   })
 })

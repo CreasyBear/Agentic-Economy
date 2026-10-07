@@ -4,6 +4,8 @@ import { topologicalStages } from '@/modules/capability-execution/plan/graph'
 import { checkPlanReferences } from '@/modules/capability-execution/plan/references'
 import { resolvePlanInput } from '@/modules/capability-execution/plan/resolve'
 import { mercatorFlowPlanToPlanJson } from '@/modules/capability-execution/plan/mercator'
+import { parsePlanReadback, parsePlanRunReadback, projectPlanControls, projectPlanNext, planGetResultSchema } from '@/modules/capability-execution/plan/runtime.schemas'
+import { projectMcpActionNext } from '@/modules/actions'
 import type { PlanJson } from '@/modules/capability-execution/plan/contracts'
 
 const toolRef = `operation:v1:${'a'.repeat(64)}`
@@ -67,5 +69,60 @@ describe('bounded Plan inputs and data flow', () => {
     expect(await mercatorFlowPlanToPlanJson(flow, { 'remote-service': 'provider.example' }, resolve)).toEqual(plan([root]))
     expect(resolve).toHaveBeenCalledWith({ providerHost: 'provider.example', method: 'GET', path: '/lookup' })
     expect(await mercatorFlowPlanToPlanJson(flow, { 'remote-service': 'provider.example' }, async () => undefined)).toMatchObject({ code: 'tool_not_admitted' })
+  })
+})
+
+const callRef = `operation-invocation:v1:${'c'.repeat(64)}`
+const readback = {
+  kind: 'available', planRef: 'plan:v1:recovery', planDigest: 'digest', state: 'running',
+  approvedTotalAudUnits: '1000000', currency: 'AUD', exponent: 6, expiresAt: 100, runDeadlineAt: 200,
+  maximumConcurrentNodes: 1, stages: [['source']], nodes: [], dataFlows: [],
+  hold: { status: 'reserved', settledAudUnits: '0', releasedAudUnits: '0', heldAudUnits: '1000000' },
+}
+function progress(overrides: Record<string, unknown> = {}) {
+  const parsed = planGetResultSchema.parse({ ...readback, ...overrides })
+  if (parsed.kind !== 'available') throw new Error('expected_plan_progress')
+  return parsed
+}
+
+describe('Plan recovery projections', () => {
+  it('publishes the same primary continuation through source readbacks without changing run identity', () => {
+    const next = [{ action: 'tool.plan.get', args: { planRef: readback.planRef }, authority: 'same_principal' }]
+    const running = { kind: 'running', planRef: readback.planRef, state: 'running' }
+    expect(parsePlanRunReadback(running)).toEqual({ ...running, next })
+    expect(parsePlanReadback(readback)).toMatchObject({ next })
+    expect(parsePlanRunReadback({ ...running, kind: 'replayed', state: 'cancelled' })).toMatchObject({ next: [] })
+    expect(parsePlanRunReadback({ kind: 'refused', code: 'plan_access_denied' })).toEqual({ kind: 'refused', code: 'plan_access_denied' })
+  })
+
+  it('returns one validated read after run or cancellation and stops at terminal states', () => {
+    const next = [{ action: 'tool.plan.get', args: { planRef: readback.planRef }, authority: 'same_principal' }]
+    expect(projectMcpActionNext('tool.plan.run', { kind: 'running', planRef: readback.planRef, state: 'running' }, 'https://ae.test')).toEqual(next)
+    expect(projectMcpActionNext('tool.plan.cancel', { kind: 'replayed', planRef: readback.planRef, state: 'reconciliation_required' }, 'https://ae.test')).toEqual(next)
+    for (const state of ['succeeded', 'partially_succeeded', 'failed', 'cancelled', 'expired']) {
+      expect(projectPlanNext(progress({ state }))).toEqual([])
+      expect(projectPlanControls(progress({ state }))).toEqual({})
+    }
+    expect(projectPlanNext(progress({ state: 'quoted' }))).toEqual([])
+    expect(projectMcpActionNext('tool.plan.run', { kind: 'running', planRef: readback.planRef, state: 'invented' }, 'https://ae.test')).toEqual([])
+  })
+
+  it('keeps uncertain recovery pinned to an admitted Call without constructing evidence or a new purchase', () => {
+    const nodes = [{ nodeId: 'source', toolRef, providerHost: 'provider.test', dependsOn: [], ceilingAudUnits: '1000000', state: 'admitted', callRef }]
+    const uncertain = progress({ state: 'reconciliation_required', nodes })
+    expect(projectPlanNext(uncertain)).toEqual([{ action: 'call.status', args: { callRef }, authority: 'same_principal' }])
+    expect(projectMcpActionNext('tool.plan.get', { ...uncertain, next: [{ action: 'call', args: {} }] }, 'https://ae.test')).toEqual([])
+    expect(projectPlanNext(progress({ state: 'reconciliation_required', nodes: [{ ...nodes[0], callRef: 'invalid' }] })))
+      .toEqual([{ action: 'tool.plan.get', args: { planRef: readback.planRef }, authority: 'same_principal' }])
+  })
+
+  it('exposes cancellation until termination and owner attention only through existing destinations', () => {
+    const awaiting = parsePlanReadback({ ...readback, state: 'awaiting_approval' })
+    expect(awaiting).toMatchObject({ cancellation: { action: 'tool.plan.cancel', args: { planRef: readback.planRef }, authority: 'same_principal' },
+      ownerHandoff: { kind: 'attention_required', reason: 'owner_approval_required', planRef: readback.planRef, path: '/plans/plan%3Av1%3Arecovery' } })
+    expect(projectPlanControls(progress({ state: 'reconciliation_required', terminationIntent: 'cancelled' }))).toEqual({})
+    expect(projectPlanControls(progress({ state: 'reconciliation_required', failureCode: 'workflow_failed' })))
+      .toMatchObject({ ownerHandoff: { reason: 'plan_recovery_required', path: '/support' } })
+    expect(projectPlanControls(progress({ state: 'reconciliation_required' }))).not.toHaveProperty('ownerHandoff')
   })
 })

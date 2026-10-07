@@ -35,7 +35,7 @@ describe('supply agent mutation argument validators', () => {
       currency: 'AUD',
       operationKey: 'sha256:test-operation-key',
       correlationId: 'test-correlation-id',
-    })).resolves.toMatchObject({ kind: 'error', code: 'source_unavailable' })
+    })).resolves.toMatchObject({ kind: 'error', code: 'capability_unsupported', capability: 'supply.earnings', retryable: false })
   })
 
   it('accepts the exact args shape supply-actions.ts builds for capabilityProviderTools:listAgent', async () => {

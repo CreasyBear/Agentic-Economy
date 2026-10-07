@@ -111,7 +111,7 @@ export const registrySearchAction = defineAction({
     'Returns only public supply facts: slug, name, category, suburb, trust tier, and each offering\'s summary, service area, availability, price, and published access paths.',
     'An access path is how a person can reach the business, not a bookable slot. An AE-supported offering is still not a booking, payment, or dispatch.',
     'The registry is literal. Misspelled suburbs (e.g. "paramata") do not auto-correct; choose better search arguments instead.',
-    'maxPrice filters on the published comparable price using exact currency units and exponent. A business is kept when any one of its offerings fits the budget. An offering quoted on request has no comparable ceiling, so it is never removed by a budget: absence of a price is not evidence of an expensive one.',
+    'maxPrice filters on the published comparable price using exact currency units and exponent. A business is kept when any one of its offerings fits the budget. A supplied budget excludes unknown, quote-only and starting prices; a business must publish at least one comparable fixed or bounded-range ceiling in the same currency.',
     'hasPrice set to true narrows to businesses publishing at least one comparable price. Most local supply quotes on request, so this filter hides real options; use it only when a number is genuinely required.',
     'Availability, quotes, and job acceptance require a published business contact channel.',
   ],

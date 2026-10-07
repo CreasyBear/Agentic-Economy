@@ -22,7 +22,7 @@ export async function handleFeedbackPost(request: Request, options: FeedbackHand
       return problem({ status: 403, kind: 'PERMISSION_DENIED', code: 'origin_not_allowed', detail: 'This Origin cannot submit feedback to this server.' })
     }
     if (request.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase() !== 'application/json') {
-      return problem({ status: 415, kind: 'INVALID_ARGUMENT', code: 'invalid_content_type', detail: 'Feedback requires Content-Type: application/json.' })
+      return problem({ status: 415, kind: 'UNSUPPORTED_MEDIA_TYPE', code: 'invalid_content_type', detail: 'Feedback requires Content-Type: application/json.' })
     }
     const bounded = await readBoundedRequestText(request, 64 * 1024)
     if (!bounded.ok) return problem({ status: 413, kind: 'PAYLOAD_TOO_LARGE', code: bounded.code, detail: 'The feedback request exceeds 64 KiB.' })

@@ -73,6 +73,7 @@ function splitActionSchemaForTransport(
     pathParams,
     queryParams: [],
     requestBodySchema: withLocalDefs({
+      ...inputJsonSchema,
       type: 'object',
       properties: Object.fromEntries(remainingEntries),
       required: remainingEntries.map(([name]) => name).filter((name) => required.has(name)),
@@ -113,19 +114,19 @@ const CALL_ROUTE_FACTS: Readonly<Record<string, Readonly<{ summary: string; prob
   },
   [CALL_ROUTE_CONTRACT.list.actionId]: {
     summary: 'List the caller’s own Calls, newest first.',
-    problemKinds: ['UNAUTHENTICATED', 'PERMISSION_DENIED', 'RESOURCE_EXHAUSTED'],
+    problemKinds: ['UNAUTHENTICATED', 'PERMISSION_DENIED', 'INVALID_ARGUMENT', 'RESOURCE_EXHAUSTED', 'UNAVAILABLE', 'INTERNAL'],
   },
   [CALL_ROUTE_CONTRACT.status.actionId]: {
     summary: 'Read one Call’s current state and receipt.',
-    problemKinds: ['UNAUTHENTICATED', 'PERMISSION_DENIED', 'NOT_FOUND', 'RESOURCE_EXHAUSTED'],
+    problemKinds: ['UNAUTHENTICATED', 'PERMISSION_DENIED', 'INVALID_ARGUMENT', 'NOT_FOUND', 'RESOURCE_EXHAUSTED', 'UNAVAILABLE', 'INTERNAL'],
   },
   [CALL_ROUTE_CONTRACT.cancel.actionId]: {
     summary: 'Cancel one Call before it settles.',
-    problemKinds: ['UNAUTHENTICATED', 'PERMISSION_DENIED', 'NOT_FOUND', 'FAILED_PRECONDITION', 'RESOURCE_EXHAUSTED'],
+    problemKinds: ['UNAUTHENTICATED', 'PERMISSION_DENIED', 'INVALID_ARGUMENT', 'NOT_FOUND', 'FAILED_PRECONDITION', 'RESOURCE_EXHAUSTED', 'UNAVAILABLE', 'INTERNAL'],
   },
   [CALL_ROUTE_CONTRACT.reconcile.actionId]: {
     summary: 'Recover an uncertain Call outcome before retrying.',
-    problemKinds: ['UNAUTHENTICATED', 'PERMISSION_DENIED', 'NOT_FOUND', 'FAILED_PRECONDITION', 'RESOURCE_EXHAUSTED', 'UNAVAILABLE'],
+    problemKinds: ['UNAUTHENTICATED', 'PERMISSION_DENIED', 'INVALID_ARGUMENT', 'NOT_FOUND', 'FAILED_PRECONDITION', 'RESOURCE_EXHAUSTED', 'UNAVAILABLE', 'INTERNAL'],
   },
 }
 
@@ -134,16 +135,18 @@ export function callRouteOperations(): readonly NormalizedOperation[] {
     const facts = CALL_ROUTE_FACTS[descriptor.actionId]
     if (facts === undefined) throw new Error(`openapi_call_route_facts_missing:${descriptor.actionId}`)
     const method = descriptor.method as 'GET' | 'POST'
-    const split = splitActionSchemaForTransport(descriptor.inputJsonSchema, descriptor.path, method)
-    const successSchema = descriptor.outputJsonSchema ?? { type: 'object' }
+    const action = requireAction(descriptor.actionId)
+    const inputJsonSchema = jsonSchemaOf(action.schema)
+    const split = splitActionSchemaForTransport(inputJsonSchema, descriptor.path, method)
+    const successSchema = jsonSchemaOf(action.outputSchema)
     return {
       operationId: descriptor.actionId,
       summary: facts.summary,
-      readOnly: requireAction(descriptor.actionId).readOnly,
+      readOnly: action.readOnly,
       tags: ['Call gateway'],
       ...(method === 'POST' && descriptor.actionId === TOOL_PROCURE_ACTION_ID
         ? { description: 'Need selection returns the Tool input schema without a Quote, Call or reservation. Submit kind: exact with caller-supplied input, maximum AUD spend and a fresh idempotencyKey. Retry only that exact request unchanged after uncertainty.' }
-        : method === 'POST' && descriptor.inputJsonSchema?.properties?.idempotencyKey !== undefined
+        : method === 'POST' && inputJsonSchema.properties?.idempotencyKey !== undefined
           ? { description: 'Retry the same logical operation with the same idempotencyKey in the JSON body; a changed payload conflicts.' }
           : {}),
       method,
@@ -154,7 +157,7 @@ export function callRouteOperations(): readonly NormalizedOperation[] {
       ...(split.requestBodySchema === undefined ? {} : { requestBodySchema: split.requestBodySchema }),
       responses: [
         { status: 200, schema: successSchema, mediaType: 'application/json', description: 'Success.' },
-        ...problemResponses(facts.problemKinds),
+        ...problemResponses([...facts.problemKinds, ...(method === 'POST' ? ['PAYLOAD_TOO_LARGE', 'UNSUPPORTED_MEDIA_TYPE'] as const : [])]),
       ],
     }
   })
@@ -167,8 +170,8 @@ export function marketToolOperations(): readonly NormalizedOperation[] {
     const action = findAction(entry.actionId)
     if (action === undefined) throw new Error(`openapi_market_tool_action_missing:${entry.actionId}`)
     const descriptor = describeActionForAgent(action)
-    const requestBodySchema = descriptor.inputJsonSchema
-    const successSchema = descriptor.outputJsonSchema ?? { type: 'object' }
+    const requestBodySchema = jsonSchemaOf(action.schema)
+    const successSchema = jsonSchemaOf(action.outputSchema)
     return {
       operationId: entry.actionId,
       summary: `${descriptor.name}.`,
@@ -202,7 +205,7 @@ export function fundingOperations(): readonly NormalizedOperation[] {
     ...('inputSchema' in route ? { requestBodySchema: jsonSchemaOf(route.inputSchema) } : {}),
     responses: [
       { status: 200, schema: jsonSchemaOf(route.outputSchema), mediaType: 'application/json', description: 'Success.' },
-      ...problemResponses(['INVALID_ARGUMENT', 'RESOURCE_EXHAUSTED']),
+      ...problemResponses(['INVALID_ARGUMENT', 'RESOURCE_EXHAUSTED', 'UNAVAILABLE', ...(route.method === 'POST' ? ['PAYLOAD_TOO_LARGE', 'UNSUPPORTED_MEDIA_TYPE'] as const : [])]),
     ],
   }))
 }
@@ -211,7 +214,7 @@ export function supplementalOperations(): readonly NormalizedOperation[] {
   return OPENAPI_SUPPLEMENTAL_ROUTES.map((route) => {
     const outputSchema = route.actionIdForOutput === undefined
       ? (route.outputSchema === undefined ? undefined : jsonSchemaOf(route.outputSchema))
-      : describeActionForAgent(requireAction(route.actionIdForOutput)).outputJsonSchema
+      : jsonSchemaOf(requireAction(route.actionIdForOutput).outputSchema)
     if (outputSchema === undefined) throw new Error(`openapi_supplemental_output_missing:${route.operationId}`)
     const successStatuses = route.successStatuses ?? [200]
     return {

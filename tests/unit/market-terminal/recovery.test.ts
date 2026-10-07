@@ -8,7 +8,8 @@ import {
   MARKET_TOOLS_CALL_SCOPE,
   MARKET_SUPPLY_MANAGE_SCOPE,
 } from '@/modules/agent-access/contract'
-import { callReconciliationEvidenceSchema } from '@/modules/capability-execution/call-recovery.actions'
+import { callMachineResultSchema, callNextSchema, projectCallMachineResult } from '@/modules/capability-execution/call-contracts'
+import { projectCallRecoveryNext, callReconciliationEvidenceSchema } from '@/modules/capability-execution/call-recovery.actions'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 import { runCancelCommand } from '../../../tools/ae/commands/cancel'
@@ -49,7 +50,7 @@ const inspection = {
   toolRef: OPERATION_REF,
   toolVersion: 1,
   expiresAt: 1_000,
-  normalizedInput: {},
+
   price: { currency: 'AUD' as const, units: '0', exponent: 6 as const },
   account: {
     accountRef: 'account:one',
@@ -63,9 +64,7 @@ const inspection = {
   evidenceDigest: 'sha256:evidence',
   continuation: {
     action: 'tool.call' as const,
-    method: 'POST' as const,
-    path: '/api/v1/tools/call' as const,
-    input: { quoteRef: COMMITMENT_REF, idempotencyKey: `call:${COMMITMENT_REF}` },
+    args: { quoteRef: COMMITMENT_REF, idempotencyKey: `call:${COMMITMENT_REF}` },
   },
 }
 
@@ -272,6 +271,14 @@ describe('CLI Call recovery projections', () => {
       expect(JSON.parse(help.stdout)).toMatchObject({ kind: 'HELP', command: step })
     }
   })
+  it('keeps historical Call evidence readable without advertising an invalid runnable reference', () => {
+    const historical = { kind: 'pending' as const, callRef: 'invocation:historical', toolRef: OPERATION_REF, retryAfterMs: 100 }
+    const projected = callMachineResultSchema.parse(projectCallMachineResult(historical))
+    expect(projected).toMatchObject({ kind: 'pending', callRef: historical.callRef, next: [] })
+    expect(projectCallRecoveryNext({ kind: 'found', callRef: historical.callRef, version: 1, toolRef: OPERATION_REF, state: 'in_progress' })).toEqual([])
+    expect(callNextSchema.safeParse({ action: 'call.status', args: { callRef: historical.callRef }, authority: 'same_principal' }).success).toBe(false)
+  })
+
   it('runs accepted -> status -> terminal with canonical JSON and one stdout value per command', async () => {
     setApiKey('ae-test-caller-key')
     const output = capture(process.stdout)
@@ -281,17 +288,18 @@ describe('CLI Call recovery projections', () => {
       }), { status: 200, headers: { 'content-type': 'application/json' } }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
         kind: 'pending',
-        callRef: 'invocation:one',
+        callRef: CALL_REF,
         toolRef: OPERATION_REF,
         retryAfterMs: 100,
+        next: [{ action: 'call.status', args: { callRef: CALL_REF }, authority: 'same_principal', retryAfterMs: 100 }],
       }), { status: 200, headers: { 'content-type': 'application/json' } }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
         kind: 'found',
-        callRef: 'invocation:one',
+        callRef: CALL_REF,
         version: 1,
         toolRef: OPERATION_REF,
         state: 'terminal',
-        result: completed,
+        result: { ...completed, callRef: CALL_REF },
       }), { status: 200, headers: { 'content-type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
 
@@ -301,7 +309,7 @@ describe('CLI Call recovery projections', () => {
       output.restore()
     }
 
-    expect(JSON.parse(output.read())).toEqual({ ...completed, recoveryRef: expect.stringMatching(/^[0-9a-f-]{36}$/u) })
+    expect(JSON.parse(output.read())).toEqual({ ...completed, callRef: CALL_REF, recoveryRef: expect.stringMatching(/^[0-9a-f-]{36}$/u) })
     expect(fetchMock).toHaveBeenCalledTimes(3)
   })
 
@@ -408,6 +416,7 @@ describe('CLI Call recovery projections', () => {
     try {
       renderStatusResult('Call status', CALL_REF, {
         kind: 'found', callRef: CALL_REF, version: 1, toolRef: OPERATION_REF, state: 'reconciliation_required',
+        next: [{ action: 'call.status', args: { callRef: CALL_REF, afterVersion: 1 }, authority: 'same_principal' }],
       }, baseOptions)
     } finally {
       output.restore()
@@ -415,12 +424,11 @@ describe('CLI Call recovery projections', () => {
 
     expect(JSON.parse(output.read())).toMatchObject({
       state: 'reconciliation_required',
-      nextCommand: 'ae help recover --json',
-      warning: 'The external effect may have started. Reconcile before retrying.',
+      nextCommand: `ae status ${CALL_REF} --json`,
     })
   })
 
-  it('keeps the legacy funding continuation for insufficient credit', () => {
+  it('preserves recorded insufficient credit without inventing an owner funding operation', () => {
     const output = capture(process.stdout)
     try {
       renderStatusResult('Call status', CALL_REF, {
@@ -434,10 +442,10 @@ describe('CLI Call recovery projections', () => {
       output.restore()
     }
 
-    expect(JSON.parse(output.read())).toMatchObject({ nextCommand: 'ae account balance --json' })
+    expect(JSON.parse(output.read())).not.toHaveProperty('nextCommand')
   })
 
-  it('fails an unknown legacy Call and points at history instead of itself', () => {
+  it('fails an unknown Call without inventing another machine operation', () => {
     const output = capture(process.stdout)
     let exitCode: number
     try {
@@ -450,7 +458,7 @@ describe('CLI Call recovery projections', () => {
 
     expect(exitCode).toBe(1)
     expect(JSON.parse(output.read())).toMatchObject({
-      kind: 'refused', code: 'invocation_not_found', nextCommand: 'ae history --json',
+      kind: 'refused', code: 'invocation_not_found',
     })
   })
 
@@ -469,7 +477,7 @@ describe('CLI Call recovery projections', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('shows the legacy funding continuation without circular status polling', () => {
+  it('shows recorded insufficient credit without inventing funding or status commands', () => {
     const output = capture(process.stdout)
     try {
       renderStatusResult('Call status', CALL_REF, {
@@ -483,7 +491,7 @@ describe('CLI Call recovery projections', () => {
       output.restore()
     }
 
-    expect(output.read()).toContain('next: ae account balance')
+    expect(output.read()).not.toContain('next: ae account balance')
     expect(output.read()).not.toContain(`next: ae status ${CALL_REF}`)
   })
 

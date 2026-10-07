@@ -113,7 +113,7 @@ export const refuse = (
     }>
   }> = {},
 ): QuoteRefusalResult => {
-  const { reason, continuation, requiredActions, ...rest } = projectToolQuoteRefusal({
+  const { reason, continuation, ownerHandoff, ...rest } = projectToolQuoteRefusal({
     toolRef: args.toolRef,
     input: args.input,
     code,
@@ -124,7 +124,7 @@ export const refuse = (
   const base = {
     ...rest,
     ...(reason === undefined ? {} : { reason }),
-    ...(requiredActions === undefined ? {} : { requiredActions }),
+    ...(ownerHandoff === undefined ? {} : { ownerHandoff }),
   }
   if (continuation === undefined) return base
   if (continuation.action !== 'funding.handoff.create') return { ...base, continuation }
@@ -134,9 +134,7 @@ export const refuse = (
     ...base,
     continuation: {
       action: 'funding.handoff.create' as const,
-      method: 'POST' as const,
-      path: continuation.path,
-      input: { principalAmount: funding.principalAmount, idempotencyKey: funding.idempotencyKey },
+      args: { principalAmount: funding.principalAmount, idempotencyKey: funding.idempotencyKey },
     },
   }
 }

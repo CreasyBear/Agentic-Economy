@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { api, internal } from '../../convex/_generated/api'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { providerToolStatusSchema } from '@/modules/capability-supply/provider-tool-status'
 import { convexTestWithWorkers } from '../helpers/convex-fixtures'
 import { withoutSourceWrite, withSourceWrite } from '../helpers/source-write-admission'
 import {
@@ -386,13 +387,30 @@ describe('owner capability withdraw and republish', () => {
     }
     expect(published.kind).toBe('published')
 
-    const maintenanceBase = {
-      businessId,
+    const readback = await backend.query(
+      api.capabilityProviderTools.readAgent,
+      await withSourceWrite('catalog_publish', {
+        businessId,
+        toolRef: published.toolRef,
+        agentPrincipal,
+        operationKey: 'agent-publication:status',
+        correlationId: 'agent-publication:status',
+      }),
+    )
+    if (readback.kind !== 'available') throw new Error('agent_publication_status_unavailable')
+    const status = providerToolStatusSchema.parse(JSON.parse(readback.statusJson) as unknown)
+    expect(status.maintenance).toEqual({
+      businessId: String(businessId),
       offeringRef,
       offeringRevision: 1,
       offeringSourceHash: sourceHash,
       publicationRef: published.publicationRef,
       publicationRevision: published.publicationRevision,
+    })
+    if (status.maintenance === undefined) throw new Error('agent_publication_maintenance_missing')
+    const maintenanceBase = {
+      ...status.maintenance,
+      businessId,
       reasonCode: 'agent_publication_consequence',
       evidenceRefs: ['agent-publication:consequence'],
       agentPrincipal,
@@ -418,6 +436,23 @@ describe('owner capability withdraw and republish', () => {
     expect(republished).toMatchObject({
       kind: 'republished',
       revision: published.publicationRevision + 1,
+    })
+
+    if (republished.kind !== 'republished') throw new Error('agent_republication_failed')
+    const refreshed = await backend.query(
+      api.capabilityProviderTools.readAgent,
+      await withSourceWrite('catalog_publish', {
+        businessId,
+        toolRef: republished.toolRef,
+        agentPrincipal,
+        operationKey: 'agent-publication:status-after-republish',
+        correlationId: 'agent-publication:status-after-republish',
+      }),
+    )
+    if (refreshed.kind !== 'available') throw new Error('agent_republication_status_unavailable')
+    expect(providerToolStatusSchema.parse(JSON.parse(refreshed.statusJson) as unknown).maintenance).toEqual({
+      ...status.maintenance,
+      publicationRevision: republished.revision,
     })
 
     const evidence = await backend.run(async (ctx) => ({

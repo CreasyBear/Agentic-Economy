@@ -6,8 +6,7 @@ import { join } from 'node:path'
 
 import { runCallCommand, runProcureCommand, runQuoteCommand } from '../../../tools/ae/commands/call'
 import type { CliOptions } from '../../../tools/ae/lib/args'
-import { TOOL_MARKET_DESCRIBE_PATH } from '@/modules/common/market-tool-paths'
-import { FUNDING_HANDOFF_CREATE_PATH } from '@/modules/money/funding-handoff.actions'
+import { callResultSchema, projectCallMachineResult } from '@/modules/capability-execution/call-contracts'
 import { CliFailure, callJson, cliFailureToProblem, CLI_REQUEST_TIMEOUT_MS } from '../../../tools/ae/lib/output'
 
 const options: CliOptions = {
@@ -26,14 +25,14 @@ beforeEach(() => {
   vi.stubEnv('AE_CONFIG_DIR', testConfigDirectory)
 })
 
-function toolQuote(input: Record<string, unknown> = {}) {
+function toolQuote(_input: Record<string, unknown> = {}) {
   return {
     kind: 'committed',
     quoteRef,
     toolRef,
     toolVersion: 1,
     expiresAt: 1_900_000_000_000,
-    normalizedInput: input,
+
     price: { currency: 'AUD', units: '0', exponent: 6 },
     account: {
       accountRef: 'account:test',
@@ -47,9 +46,7 @@ function toolQuote(input: Record<string, unknown> = {}) {
     evidenceDigest: 'sha256:inspection',
     continuation: {
       action: 'tool.call',
-      method: 'POST',
-      path: '/api/v1/tools/call',
-      input: { quoteRef, idempotencyKey: 'replace-at-call' },
+      args: { quoteRef, idempotencyKey: 'replace-at-call' },
     },
   }
 }
@@ -57,7 +54,7 @@ function toolQuote(input: Record<string, unknown> = {}) {
 function completedCall(overrides: Record<string, unknown> = {}) {
   return {
     kind: 'completed',
-    callRef: 'call:one',
+    callRef: `operation-invocation:v1:${'c'.repeat(64)}`,
     toolRef,
     output: { value: 1 },
     evidenceHash: 'sha256:test',
@@ -73,7 +70,8 @@ function completedCall(overrides: Record<string, unknown> = {}) {
 }
 
 function jsonResponse(body: unknown): Response {
-  return new Response(JSON.stringify(body), {
+  const owner = callResultSchema.safeParse(body)
+  return new Response(JSON.stringify(owner.success ? projectCallMachineResult(owner.data) : body), {
     status: 200,
     headers: { 'content-type': 'application/json' },
   })
@@ -207,14 +205,14 @@ describe('market-terminal authenticated Tool Call', () => {
       toolRef, toolName: 'Search', reasons: ['Matches dataset search', 'Accepts text query'],
       alternates: [{ toolRef: `operation:v1:${'c'.repeat(64)}`, title: 'Archive Search', reasons: ['Related data'] }],
       inputJsonSchema: inputSchema, requiredFields: ['query'],
-      next: { kind: 'exact', toolRef },
+      next: { action: 'tool.procure', args: { kind: 'exact', toolRef }, requiredInput: ['input', 'maxSpendAud', 'idempotencyKey'], authority: 'agent_key' },
     }))
     vi.stubGlobal('fetch', send)
     const output = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
     await runProcureCommand([], { ...options, json: false, input: JSON.stringify({ kind: 'need', need: 'Search for a dataset' }) })
     const request = send.mock.calls[0]?.[1]
     expect(request?.body).toBe(JSON.stringify({ kind: 'need', need: 'Search for a dataset' }))
-    expect(output.mock.calls.map(([part]) => String(part)).join('')).toContain(`\"toolRef\":\"${toolRef}\"`)
+    expect(output.mock.calls.map(([part]) => String(part)).join('')).toContain(`"toolRef":"${toolRef}"`)
     expect(output.mock.calls.map(([part]) => String(part)).join('')).toContain('query')
     const humanOutput = output.mock.calls.map(([part]) => String(part)).join('')
     expect(humanOutput).toContain('Selected Search · Matches dataset search · Accepts text query')
@@ -257,20 +255,18 @@ describe('market-terminal authenticated Tool Call', () => {
     setApiKey('ae-test-key')
     vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({
       kind: 'refused', toolRef, code: 'input_invalid', retryable: false, correlationRef: 'correlation:invalid',
-      continuation: { action: 'registry.tools.describe', method: 'POST', path: TOOL_MARKET_DESCRIBE_PATH, input: { toolRef } },
+      continuation: { action: 'registry.tools.describe', args: { toolRef } },
     })))
     await expect(runCallCommand([toolRef], { ...options, input: '{}' })).rejects.toMatchObject({
-      retryable: false, nextCommand: `ae describe ${toolRef} --base-url https://market.example --json`,
+      retryable: false, nextCommand: `ae describe ${toolRef} --json`,
     })
   })
 
-  it('sends a funding refusal to the same fund handoff doctor reports, without placeholder fields', async () => {
+  it('preserves the exact funding create operation without substituting the owner browser workflow', async () => {
     setApiKey('ae-test-caller-key')
     const funding = {
       action: 'funding.handoff.create',
-      method: 'POST',
-      path: FUNDING_HANDOFF_CREATE_PATH,
-      input: {
+      args: {
         principalAmount: { currency: 'AUD', units: '1000000', exponent: 6 },
         idempotencyKey: 'funding:one',
       },
@@ -290,8 +286,9 @@ describe('market-terminal authenticated Tool Call', () => {
     expect(thrown).toBeInstanceOf(CliFailure)
     if (!(thrown instanceof CliFailure)) return
     expect(thrown.code).toBe('insufficient_balance')
-    expect(thrown.nextCommand).toBe('ae fund --base-url https://market.example --json')
-    expect(thrown.suggestion).toBe('Add Account credit as the owner, then repeat this call.')
+    expect(thrown.nextCommand).toBeUndefined()
+    expect(thrown.next).toEqual([funding])
+    expect(thrown.suggestion).toBeUndefined()
     expect(thrown.detail).toMatchObject({ continuation: funding })
     expect(JSON.stringify(thrown.detail)).not.toContain('<redacted>')
   })
@@ -306,9 +303,7 @@ describe('market-terminal authenticated Tool Call', () => {
       correlationRef: 'correlation:quote',
       continuation: {
         action: 'tool.quote',
-        method: 'POST',
-        path: '/api/v1/tools/quote',
-        input: { toolRef, input: {} },
+        args: { toolRef, input: {} },
         retryAfterMs: 5000,
       },
     }))
@@ -458,7 +453,7 @@ describe('market-terminal authenticated Tool Call', () => {
       .mockResolvedValueOnce(jsonResponse(toolQuote()))
       .mockResolvedValueOnce(jsonResponse({
         kind: 'pending',
-        callRef: 'call:one',
+        callRef: `operation-invocation:v1:${'c'.repeat(64)}`,
         toolRef,
         retryAfterMs: 100,
       })))
@@ -545,13 +540,13 @@ describe('market-terminal authenticated Tool Call', () => {
       .mockResolvedValueOnce(jsonResponse(toolQuote({ query: 'hello' })))
       .mockResolvedValueOnce(jsonResponse({
         kind: 'pending',
-        callRef: 'call:one',
+        callRef: `operation-invocation:v1:${'c'.repeat(64)}`,
         toolRef,
         retryAfterMs: 100,
       }))
       .mockResolvedValueOnce(jsonResponse({
         kind: 'found',
-        callRef: 'call:one',
+        callRef: `operation-invocation:v1:${'c'.repeat(64)}`,
         version: 1,
         toolRef,
         state: 'terminal',
@@ -567,13 +562,13 @@ describe('market-terminal authenticated Tool Call', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(3)
     const [statusUrl, statusInit] = fetchMock.mock.calls[2]!
-    expect(statusUrl).toBe('https://market.example/api/v1/calls/call%3Aone')
+    expect(statusUrl).toBe(`https://market.example/api/v1/calls/${encodeURIComponent("operation-invocation:v1:" + 'c'.repeat(64))}`)
     expect(statusInit?.method).toBe('GET')
     expect(new Headers(statusInit?.headers).get('Authorization')).toBe('Bearer ae-test-caller-key')
     const printed = JSON.parse(write.mock.calls.flat().join('')) as { kind?: string; callRef?: string; evidenceHash?: string }
     expect(printed).toMatchObject({
       kind: 'completed',
-      callRef: 'call:one',
+      callRef: `operation-invocation:v1:${'c'.repeat(64)}`,
       evidenceHash: 'sha256:test',
     })
   })
@@ -592,17 +587,17 @@ describe('market-terminal authenticated Tool Call', () => {
     })
     const fetchMock = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(jsonResponse(toolQuote()))
-      .mockResolvedValueOnce(jsonResponse({ kind: 'pending', toolRef, callRef: 'call:one', retryAfterMs: 2_000 }))
+      .mockResolvedValueOnce(jsonResponse({ kind: 'pending', toolRef, callRef: `operation-invocation:v1:${'c'.repeat(64)}`, retryAfterMs: 2_000 }))
       .mockImplementationOnce(() => {
         vi.setSystemTime(deadline)
-        return Promise.resolve(jsonResponse({ kind: 'found', callRef: 'call:one', version: 1, toolRef, state: 'terminal', result: completedCall() }))
+        return Promise.resolve(jsonResponse({ kind: 'found', callRef: `operation-invocation:v1:${'c'.repeat(64)}`, version: 1, toolRef, state: 'terminal', result: completedCall() }))
       })
     vi.stubGlobal('fetch', fetchMock)
     const pending = runCallCommand([toolRef], { ...options, input: '{}', wait: true })
     await firstPollScheduled.promise
     await vi.advanceTimersByTimeAsync(2_000)
     await pending
-    expect(JSON.parse(stdout.mock.calls.flat().join(''))).toMatchObject({ kind: 'completed', callRef: 'call:one', recoveryRef: expect.any(String) })
+    expect(JSON.parse(stdout.mock.calls.flat().join(''))).toMatchObject({ kind: 'completed', callRef: `operation-invocation:v1:${'c'.repeat(64)}`, recoveryRef: expect.any(String) })
     expect(fetchMock).toHaveBeenCalledTimes(3)
     expect(vi.getTimerCount()).toBe(0)
   })
@@ -613,7 +608,7 @@ describe('market-terminal authenticated Tool Call', () => {
       .mockResolvedValueOnce(jsonResponse(toolQuote()))
       .mockResolvedValueOnce(jsonResponse({
         kind: 'pending',
-        callRef: 'call:one',
+        callRef: `operation-invocation:v1:${'c'.repeat(64)}`,
         toolRef,
         retryAfterMs: 100,
       }))
@@ -639,7 +634,7 @@ describe('market-terminal authenticated Tool Call', () => {
     expect(fetchMock).toHaveBeenCalledTimes(3)
   })
 
-  it('uses the shared insufficient-credit continuation instead of status', async () => {
+  it('preserves completed usage without deriving a funding operation from charge state', async () => {
     setApiKey('ae-test-caller-key')
     const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
     vi.stubGlobal('fetch', vi.fn<typeof fetch>()
@@ -661,10 +656,9 @@ describe('market-terminal authenticated Tool Call', () => {
       idempotencyKey: 'idem-credit',
     })
 
-    expect(JSON.parse(write.mock.calls.flat().join(''))).toMatchObject({
-      kind: 'completed',
-      nextCommand: 'ae account balance --json',
-    })
+    const output = JSON.parse(write.mock.calls.flat().join(''))
+    expect(output).toMatchObject({ kind: 'completed', usage: { chargeState: 'insufficient_credit' } })
+    expect(output).not.toHaveProperty('nextCommand')
   })
 
   it('retains the prepared Call on a stalled acknowledgement and refuses a fresh purchase', async () => {

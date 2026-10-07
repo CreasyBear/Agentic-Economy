@@ -101,14 +101,21 @@ describe('MCP 2026-07-28 HTTP compatibility', () => {
   it('isolates concurrent public, buyer, Provider and read-only requests and refuses read-only purchases', async () => {
     const scopes = [null, ['market_tools:call'], ['market_supply:manage'], ['market_tools:call', 'market_supply:manage']] as const
     const responses = await Promise.all(scopes.map(async (scope, index) => {
-      const response = await handleMcpRequest(currentRequest('tools/list', {}, {
-        ...(scope === null ? {} : { headers: { authorization: `Bearer caller-${index}` } }),
-        ...(index === 3 ? { path: '/mcp?readonly=1' } : {}),
-      }), scope === null ? {} : { authenticate: authenticateWithScopes(scope), resolvePrincipal: principal })
-      expect(response.status).toBe(200)
-      const body = await readMcpBody(response)
-      expect(body.result).toMatchObject({ ttlMs: 0, cacheScope: 'private' })
-      return ((body.result?.tools ?? []) as Array<{ name: string }>).map((tool) => tool.name)
+      const names: string[] = []
+      let cursor: string | undefined
+      do {
+        const response = await handleMcpRequest(currentRequest('tools/list', cursor === undefined ? {} : { cursor }, {
+          ...(scope === null ? {} : { headers: { authorization: `Bearer caller-${index}` } }),
+          ...(index === 3 ? { path: '/mcp?readonly=1' } : {}),
+        }), scope === null ? {} : { authenticate: authenticateWithScopes(scope), resolvePrincipal: principal })
+        expect(response.status).toBe(200)
+        const body = await readMcpBody(response)
+        expect(body.result).toMatchObject({ ttlMs: 0, cacheScope: 'private' })
+        expect(new TextEncoder().encode(JSON.stringify(body.result)).length).toBeLessThanOrEqual(40_000)
+        names.push(...((body.result?.tools ?? []) as Array<{ name: string }>).map(tool => tool.name))
+        cursor = body.result?.nextCursor as string | undefined
+      } while (cursor !== undefined)
+      return names
     }))
     expect(responses[0]).toEqual(publicNames)
     expect(responses[1]).toContain('ae_tool_call')

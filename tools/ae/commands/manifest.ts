@@ -317,7 +317,7 @@ export const COMMANDS: Readonly<Record<string, RootCommandManifestEntry>> = {
     ],
     commands: {
       preview: { summary: 'Discover candidate Tools from one native Provider source without publishing or calling.', args: "--input '<json>'", json: true, guidance: requiredInputFieldsGuidance(supplySourcePreviewAction.schema) },
-      tools: { summary: 'Inventory the Provider’s admitted Tools for one business.', args: '<businessRef>', json: true },
+      tools: { summary: 'Inventory one bounded page of Provider Tools for one business.', args: '<businessRef> [--limit <n>] [--cursor <c>]', json: true },
       status: { summary: 'Read one exact Provider Tool lifecycle.', args: '<businessRef> <toolRef>', json: true },
       publish: { summary: 'Publish one admitted provider Tool artifact.', args: "--input '<json>' [--idempotency-key <key>]", json: true, guidance: requiredInputFieldsGuidance(supplyPublishAction.schema) },
       withdraw: { summary: 'Withdraw one exact current provider publication.', args: "--input '<json>' [--idempotency-key <key>]", json: true, guidance: requiredInputFieldsGuidance(supplyWithdrawAction.schema) },
@@ -343,7 +343,7 @@ export const COMMANDS: Readonly<Record<string, RootCommandManifestEntry>> = {
   },
   plan: {
     summary: 'Quote, run and follow a bounded Plan of Tool purchases.',
-    args: '<quote|run|get|watch|cancel> ...',
+    args: '<quote|run|resume|get|watch|cancel> ...',
     json: true,
     authentication: 'buyer',
     group: 'call_recover',
@@ -355,7 +355,9 @@ export const COMMANDS: Readonly<Record<string, RootCommandManifestEntry>> = {
         guidance: ['Read a JSON file containing {nodes:[...]}. Quoting creates no Hold or Call.'],
       },
       run: { ...deriveCliCommand(PLAN_RUNTIME_ROUTES.run.actionId), args: '<plan-ref> <approved-total-aud-units> --idempotency-key <key>',
-        guidance: ['Copy the exact approvedTotalAudUnits from the quote. After an interruption, read the same Plan or replay this exact command and key.'] },
+        guidance: ['Copy the exact approvedTotalAudUnits from the quote. The CLI retains the run before submission; after an interruption use ae plan resume <recovery-ref>.'] },
+      resume: { summary: 'Read or resume the exact retained Plan run.', args: '<recovery-ref>', json: true,
+        guidance: ['Requires the original origin, Account and Agent. Reads the Plan first; only an untouched quoted Plan can submit the saved command. No new input or key.'] },
       get: { ...deriveCliCommand(PLAN_RUNTIME_ROUTES.get.actionId), args: '<plan-ref>' },
       watch: { summary: 'Wait for a Plan to conclude or need attention, preserving its identity.', args: '<plan-ref>', json: true,
         guidance: ['Stops at approval, reconciliation or a terminal outcome. A timeout never cancels or reruns the Plan.'] },
@@ -379,7 +381,11 @@ export const COMMANDS: Readonly<Record<string, RootCommandManifestEntry>> = {
       'Need: --input \'{"kind":"need","need":"<capability>"}\' selects without a Quote, Call or purchase key. Use --prefer to choose cheapest, balanced (default), or reliable.',
       'Exact: supply the returned ToolRef, complete caller-owned input, maxSpendAud and a fresh idempotencyKey in --input JSON.',
       'Pass --input - to read one bounded JSON request from standard input.',
+      'Exact purchases retain the complete input locally with user-only permissions before submission. After interruption use ae procure resume <recovery-ref>.',
+      'A refusal without a Call reference can remain unresolved; preserve the original request and key before another purchase.',
     ],
+    commands: { resume: { summary: 'Read or resume the exact retained procurement purchase.', args: '<recovery-ref>', json: true,
+      guidance: ['Requires the original origin, Account and Agent. Known Calls are observed only; otherwise the saved exact input and key are replayed. No input, preference or new key.'] } },
   },
   // callAction.parameters are quoteRef and idempotencyKey (the internal purchase step); the CLI's `call` wraps tool.quote and tool.call together and takes tool-ref/--input/--wait, so summary and args stay hand-specified here.
   call: {
@@ -542,6 +548,8 @@ export async function runManifestCommand(_args: readonly string[], options: CliO
     recovery: {
       history: 'Use root history to recover Call references owned by this Agent and Account, including earlier credentials, before reading exact status or waiting for a recorded result.',
       resume: 'If an interrupted call returns recoveryRef, run ae call resume <recovery-ref> at the same origin to resume its exact saved Quote and idempotency identity. Do not supply new input or a new key.',
+      planResume: 'Use ae plan resume <recovery-ref> to read the same Plan before any exact retained run replay.',
+      procureResume: 'Use ae procure resume <recovery-ref> to observe its known Call or replay only the retained exact request and key.',
       statusFirst: true,
       cancel: 'Use root cancel with the same callRef and a stable idempotency key when cancellation is supported and the Call should stop.',
       reconcile: 'Use root recover only after a genuinely uncertain outcome, with canonical evidence for the same Call and the same idempotency identity; recover never replays a known result.',
@@ -694,7 +702,7 @@ export async function runManifestCommand(_args: readonly string[], options: CliO
     },
     supply: {
       connect: 'ae connect --provider',
-      tools: 'ae supply tools <businessRef>',
+      tools: 'ae supply tools <businessRef> [--limit <n>] [--cursor <c>]',
       status: 'ae supply status <businessRef> <toolRef>',
       connections: 'ae supply connections <businessId>',
       connection: 'ae supply connection <connectionRef>',

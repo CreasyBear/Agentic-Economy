@@ -6,6 +6,9 @@ import { exactAmountSchema } from '@/modules/money/public'
 import { defineAction, type ActionParameter } from '@/modules/common/action'
 import {
   callReceiptSchema,
+  callNextSchema,
+  parseCallRef,
+  type CallNext,
   callResultSchema,
   callUsageSchema,
 } from './call-contracts'
@@ -26,6 +29,7 @@ const boundedText = (maximum: number) => z.string().trim().min(1).max(maximum)
 const callStatusVariants = [
   z.strictObject({
     kind: z.literal('found'),
+    next: z.array(callNextSchema).max(1).exactOptional(),
     callRef: boundedText(300),
     version: z.number().int().nonnegative(),
     toolRef: boundedText(300),
@@ -41,12 +45,14 @@ const callStatusVariants = [
   }),
   z.strictObject({
     kind: z.literal('unchanged'),
+    next: z.array(callNextSchema).max(1).exactOptional(),
     callRef: boundedText(300),
     version: z.number().int().nonnegative(),
     retryAfterMs: z.number().int().positive(),
   }),
   z.strictObject({
     kind: z.literal('refused'),
+    next: z.array(callNextSchema).max(1).exactOptional(),
     callRef: boundedText(300),
     code: callStatusRefusalCodeSchema,
     retryable: z.boolean(),
@@ -74,12 +80,39 @@ export const callRecoveryResultSchema: z.ZodType<CallRecoveryResult> = z.union([
   callStatusResultSchema,
   z.strictObject({
     kind: z.literal('reconciliation_required'),
+    next: z.array(callNextSchema).max(1).exactOptional(),
     callRef: boundedText(300),
     toolRef: boundedText(300),
     evidence: publicReconciliationStateSchema,
     receipt: callReceiptSchema.exactOptional(),
   }),
 ])
+
+/** Project one read from the current durable Call; no projection starts another purchase. */
+export function projectCallRecoveryNext(result: CallRecoveryResult): readonly CallNext[] {
+  const call = parseCallRef(result.callRef)
+  if (call.kind !== 'valid') return []
+  if (result.kind === 'found') {
+    if (result.state === 'cancelled' || result.state === 'invalidated') return []
+    if (result.state === 'terminal') {
+      if (result.result?.kind === 'refused' || (result.result?.kind === 'completed' && result.result.usage.chargeState !== 'outcome_unknown')) return []
+      return [{ action: 'call.status', args: { callRef: call.ref }, authority: 'same_principal', retryAfterMs: 5000 }]
+    }
+  }
+  if (result.kind === 'refused' && (!result.retryable || result.code === 'invocation_not_found')) return []
+  return [{ action: 'call.status', args: {
+    callRef: call.ref,
+    ...(result.kind === 'found' || result.kind === 'unchanged' ? { afterVersion: result.version } : {}),
+  }, authority: 'same_principal', ...(result.kind === 'unchanged' ? { retryAfterMs: result.retryAfterMs } : {}) }]
+}
+
+export function projectCallStatusResult(result: CallStatusResult): CallStatusResult {
+  return { ...result, next: projectCallRecoveryNext(result) }
+}
+
+export function projectCallRecoveryResult(result: CallRecoveryResult): CallRecoveryResult {
+  return { ...result, next: projectCallRecoveryNext(result) }
+}
 
 export type CallStatusActionInput = Readonly<{
   callRef: string
@@ -258,12 +291,12 @@ export const callStatusAction = defineAction<CallStatusActionInput, CallStatusRe
   run: async ({ data, context }) => {
     if (context.agentAccessPrincipal === undefined) throw new Error('agent_access_context_missing')
     if (context.callService === undefined) throw new Error('call_service_unavailable')
-    return await context.callService.readCallStatus({
+    return projectCallStatusResult(await context.callService.readCallStatus({
       callRef: data.callRef,
       ...(data.afterVersion === undefined ? {} : { afterVersion: data.afterVersion }),
       principal: context.agentAccessPrincipal,
       correlationId: correlationId(context),
-    })
+    }))
   },
 })
 
@@ -300,12 +333,12 @@ export const callCancelAction = defineAction<CallCancelActionInput, CallRecovery
   run: async ({ data, context }) => {
     if (context.agentAccessPrincipal === undefined) throw new Error('agent_access_context_missing')
     if (context.callService === undefined) throw new Error('call_service_unavailable')
-    return await context.callService.cancelCall({
+    return projectCallRecoveryResult(await context.callService.cancelCall({
       callRef: data.callRef,
       idempotencyKey: data.idempotencyKey,
       principal: context.agentAccessPrincipal,
       correlationId: correlationId(context),
-    })
+    }))
   },
 })
 
@@ -342,12 +375,12 @@ export const callReconcileAction = defineAction<CallReconcileActionInput, CallRe
   run: async ({ data, context }) => {
     if (context.agentAccessPrincipal === undefined) throw new Error('agent_access_context_missing')
     if (context.callService === undefined) throw new Error('call_service_unavailable')
-    return await context.callService.reconcileCall({
+    return projectCallRecoveryResult(await context.callService.reconcileCall({
       callRef: data.callRef,
       evidence: data.evidence,
       idempotencyKey: data.idempotencyKey,
       principal: context.agentAccessPrincipal,
       correlationId: correlationId(context),
-    })
+    }))
   },
 })

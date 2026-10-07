@@ -47,11 +47,19 @@ describe('Tool chat prune boundary', () => {
     const boundedCommercialIds = chatActions
       .filter(({ effect }) => effect.class === 'payment' || effect.spendExposure !== 'none')
       .map(({ id }) => id)
-    expect(boundedCommercialIds).toEqual(['tool.quote', 'tool.plan.quote', 'tool.plan.run', 'tool.call'])
-    expect(chatActions.find(({ id }) => id === 'tool.quote')?.effect).toMatchObject({
-      class: 'commitment',
-      reversible: true,
-      recipientKind: 'none',
-    })
+    expect(boundedCommercialIds).toEqual(['tool.plan.run', 'tool.call'])
+    for (const id of ['tool.quote', 'tool.plan.quote']) {
+      const quote = chatActions.find((action) => action.id === id)
+      expect(quote?.readOnly).toBe(false)
+      expect(quote?.effect).toMatchObject({
+        class: 'disclosure',
+        reversible: false,
+        recipientKind: 'provider_system',
+        dataClasses: ['operation_input'],
+        spendExposure: 'none',
+      })
+      expect(quote?.invocationContract).toMatchObject({ consequenceClass: 'communication' })
+      expect(quote?.mcp).toMatchObject({ idempotent: false, openWorld: true, destructive: false })
+    }
   })
 })

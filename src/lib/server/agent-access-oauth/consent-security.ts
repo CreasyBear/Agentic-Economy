@@ -216,7 +216,6 @@ function consentApprovalFields(form: URLSearchParams): ConsentApprovalFields | u
 }
 
 export async function handleOAuthConsentPost(request: Request, options: OAuthApiOptions = {}): Promise<Response> {
-  const sourceBody = await request.clone().text()
   const formResult = await readForm(request)
   if (formResult.kind === 'too_large') return oauthError('invalid_request', 413)
   if (formResult.kind !== 'ok') return oauthError('invalid_request', 400)
@@ -262,7 +261,7 @@ export async function handleOAuthConsentPost(request: Request, options: OAuthApi
   return await reserveAndFinalizeConsent({
     environment,
     request,
-    sourceBody,
+    sourceBody: formResult.sourceBody,
     store,
     authObject,
     ownerId: owner.userId,

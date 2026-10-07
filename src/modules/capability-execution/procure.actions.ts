@@ -68,7 +68,7 @@ export const toolProcureAction = defineAction<ToolProcureInput, ToolProcureResul
   name: 'Procure a Tool capability',
   summary: 'Select a published Tool by need and return typed input requirements, or Quote and Call an exact Tool with caller-supplied input and a new purchase key.',
   boundaries: [
-    'Enforces caller-specific authority and exact Australian GST itemization.',
+    'Enforces caller-specific authority and reports exact recorded Quote price and Call money; tax and net amounts are not inferred.',
     'Provider failure is not proof of a refund; inspect the original Call for its authoritative outcome.',
     'Returns the original Quote and Call references for recovery without a second purchase.',
   ],
@@ -97,7 +97,7 @@ export const toolProcureAction = defineAction<ToolProcureInput, ToolProcureResul
     authorityRequirement: 'principal',
     retryClass: 'reconcile_before_retry',
     expectedEvidence: ['operation_commitment', 'purchase_receipt'],
-    safeContinuations: [],
+    safeContinuations: ['tool.procure', 'call.status', 'journey.status'],
     invalidationConditions: [],
   },
   run: async ({ data, context }) => {

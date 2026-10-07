@@ -83,20 +83,36 @@ describe('MCP host adapter operation recovery', () => {
   })
 
   it('lists all operation invocation and recovery tools for an operation principal', async () => {
-    const response = await postMcp({
-      jsonrpc: '2.0',
-      id: 'operation-recovery-list',
-      method: 'tools/list',
-      params: {},
-    }, {
-      authenticate: authenticateWithScopes(['market_tools:call']),
-    }, {
-      authorization: 'Bearer operation-recovery',
-    })
+    const tools: unknown[] = []
+    const seenCursors = new Set<string>()
+    let cursor: string | undefined
+    do {
+      const response = await postMcp({
+        jsonrpc: '2.0',
+        id: 'operation-recovery-list',
+        method: 'tools/list',
+        params: cursor === undefined ? {} : { cursor },
+      }, {
+        authenticate: authenticateWithScopes(['market_tools:call']),
+      }, {
+        authorization: 'Bearer operation-recovery',
+      })
 
-    expect(response.status).toBe(200)
-    const body = await readMcpBody(response)
-    expect(body.result).toMatchObject({
+      expect(response.status).toBe(200)
+      const body = await readMcpBody(response)
+      expect(body.error).toBeUndefined()
+      expect(Array.isArray(body.result?.tools)).toBe(true)
+      tools.push(...body.result!.tools as unknown[])
+      const nextCursor = body.result?.nextCursor
+      expect(nextCursor === undefined || typeof nextCursor === 'string').toBe(true)
+      cursor = typeof nextCursor === 'string' ? nextCursor : undefined
+      if (cursor !== undefined) {
+        expect(seenCursors.has(cursor)).toBe(false)
+        seenCursors.add(cursor)
+        expect(seenCursors.size).toBeLessThan(100)
+      }
+    } while (cursor !== undefined)
+    expect({ tools }).toMatchObject({
       tools: expect.arrayContaining([
         expect.objectContaining({ name: 'ae_tool_call' }),
         expect.objectContaining({ name: 'ae_call_list' }),
@@ -108,6 +124,7 @@ describe('MCP host adapter operation recovery', () => {
   })
 
   it('delegates one bounded history page without exposing invocation input or output', async () => {
+    const record = vi.fn()
     const historyResult = {
       kind: 'available' as const,
       items: [{
@@ -136,7 +153,7 @@ describe('MCP host adapter operation recovery', () => {
       },
     }, {
       authenticate: authenticateWithScopes(['market_tools:call']),
-      callService,
+      callService, timing: { record },
     }, {
       authorization: 'Bearer operation-recovery',
     })
@@ -144,6 +161,7 @@ describe('MCP host adapter operation recovery', () => {
     expect(response.status).toBe(200)
     const body = await readMcpBody(response)
     expect(body.result).toMatchObject({ structuredContent: { result: historyResult } })
+    expect(record).toHaveBeenCalledWith('gateway.operation', expect.any(Number), expect.objectContaining({ operation: 'list', outcome: 'completed' }))
     expect(JSON.stringify(body)).not.toContain('previousInput')
     expect(callService.listCalls).toHaveBeenCalledWith(expect.objectContaining({
       input: { limit: 5, state: 'completed' },
@@ -151,6 +169,7 @@ describe('MCP host adapter operation recovery', () => {
   })
 
   it('delegates authenticated status once and returns a structured found reconciliation state', async () => {
+    const record = vi.fn()
     const statusResult: CallStatusResult = {
       kind: 'found',
       version: 1,
@@ -176,7 +195,7 @@ describe('MCP host adapter operation recovery', () => {
       },
     }, {
       authenticate: authenticateWithScopes(['market_tools:call']),
-      callService,
+      callService, timing: { record },
     }, {
       authorization: 'Bearer operation-recovery',
     })
@@ -184,9 +203,9 @@ describe('MCP host adapter operation recovery', () => {
     expect(response.status).toBe(200)
     const body = await readMcpBody(response)
     expect(body.result?.structuredContent).toMatchObject({ result: statusResult, next: [
-      { action: 'status', args: { ref: { kind: 'call', ref: callRef } }, authority: 'same_principal' },
-      { action: 'wait', args: { callRef, afterVersion: 1 }, authority: 'same_principal' },
+      { action: 'call.status', args: { callRef, afterVersion: 1 }, authority: 'same_principal' },
     ] })
+    expect(record).toHaveBeenCalledWith('gateway.operation', expect.any(Number), expect.objectContaining({ operation: 'status', outcome: 'unknown', unknown: true, invocationRef: callRef }))
     expect(callService.readCallStatus).toHaveBeenCalledOnce()
     expect(callService.readCallStatus).toHaveBeenCalledWith(expect.objectContaining({
       callRef,
@@ -196,6 +215,26 @@ describe('MCP host adapter operation recovery', () => {
       }),
       correlationId: expect.any(String),
     }))
+  })
+
+  it.each([
+    { label: 'unchanged', status: { kind: 'unchanged', callRef, version: 1, retryAfterMs: 100 }, outcome: 'pending', unknown: false },
+    { label: 'invalidated', status: { kind: 'found', callRef, version: 1, toolRef: currentToolRef, state: 'invalidated' }, outcome: 'refused', unknown: false },
+    { label: 'terminal with inconclusive result', status: { kind: 'found', callRef, version: 1, toolRef: currentToolRef, state: 'terminal', result: { kind: 'pending', callRef, toolRef: currentToolRef, retryAfterMs: 100 } }, outcome: 'unknown', unknown: true },
+    { label: 'terminal without result', status: { kind: 'found', callRef, version: 1, toolRef: currentToolRef, state: 'terminal' }, outcome: 'unknown', unknown: true },
+    { label: 'delivered with unknown charge', status: { kind: 'found', callRef, version: 1, toolRef: currentToolRef, state: 'terminal', result: {
+      kind: 'completed', callRef, toolRef: currentToolRef, output: { delivered: true }, evidenceHash: 'sha256:recorded',
+      usage: { usageRef: 'usage:recorded', observedAt: 100, chargeState: 'outcome_unknown', priceDigest: 'sha256:price', amount: { currency: 'USD', units: '10', exponent: 2 } },
+    } }, outcome: 'unknown', unknown: true },
+  ] as const)('records $label status truthfully while preserving the owner result', async ({ status, outcome, unknown }) => {
+    const record = vi.fn()
+    const response = await postMcp({ jsonrpc: '2.0', id: 'recorded-status', method: 'tools/call', params: { name: 'ae_call_status', arguments: { callRef } } }, {
+      authenticate: authenticateWithScopes(['market_tools:call']), timing: { record },
+      callService: { callTool: vi.fn(), readCallStatus: vi.fn().mockResolvedValue(status), cancelCall: vi.fn(), reconcileCall: vi.fn() },
+    }, { authorization: 'Bearer operation-recovery' })
+    const body = await readMcpBody(response)
+    expect(body.result?.structuredContent).toMatchObject({ result: status })
+    expect(record).toHaveBeenCalledWith('gateway.operation', expect.any(Number), expect.objectContaining({ operation: 'status', outcome, invocationRef: callRef, ...(unknown ? { unknown: true } : {}) }))
   })
 
   it('delegates the caller cancellation key once and returns reconciliation required', async () => {

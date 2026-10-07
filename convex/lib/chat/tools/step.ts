@@ -58,7 +58,13 @@ export function chatSearchResolution(steps: readonly ChatStepEvidence[]): string
       typeof row === 'object' && row !== null && 'title' in row && typeof row.title === 'string'
         && 'summary' in row && typeof row.summary === 'string')
     if (rows.length > 0) {
-      return `**${rows.length === 1 ? 'One Tool matches' : `${rows.length} Tools match`} this request.** Review the inputs below to continue; the final price is confirmed before a Call.`
+      const canReviewInputs = rows.some(row =>
+        !('readiness' in row && row.readiness === 'unavailable')
+        && !('access' in row && row.access === 'external_listing'))
+      const next = canReviewInputs
+        ? 'Review the inputs below to continue; the final price is confirmed before a Call.'
+        : 'Ask about a Tool below to check its availability, or try another search.'
+      return `**${rows.length === 1 ? 'One Tool matches' : `${rows.length} Tools match`} this request.** ${next}`
     }
     return null
   }

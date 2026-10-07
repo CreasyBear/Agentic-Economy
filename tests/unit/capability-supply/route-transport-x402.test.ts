@@ -727,6 +727,7 @@ describe('registered route transport runtime', () => {
 
   it.each([
     [200, 'not-json', 'response_json_invalid'],
+    [202, '{"status":"queued"}', 'response_accepted_without_completion'],
     [402, 'payment error after settlement', 'provider_http_402'],
     [500, 'provider failed', 'provider_http_500'],
   ] as const)('checkpoints paid HTTP %s before settlement verification with no output', async (status, body, failureCode) => {
@@ -750,6 +751,7 @@ describe('registered route transport runtime', () => {
     expect(checkpointX402Response.mock.calls[0]?.[0]).not.toHaveProperty('outputJson')
     expect(checkpointX402Response.mock.calls[0]?.[0]).not.toHaveProperty('responseDigest')
     expect(observed).toMatchObject({ responseStatus: status, failureCode, settlementEvidence: { kind: 'settled' } })
+    if (status === 202) expect(observed).toMatchObject({ disposition: 'unknown', quoteDeliveryStatus: 'unknown' })
     expect(observed).not.toHaveProperty('outputJson')
   })
 

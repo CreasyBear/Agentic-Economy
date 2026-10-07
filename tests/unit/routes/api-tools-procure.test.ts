@@ -56,13 +56,12 @@ function testEngine(catalogSearcher: ToolCatalogSearcher = vi.fn(async () => [])
     quoteTool: vi.fn(async () => ({
       kind: 'committed' as const, quoteRef, toolRef,
       toolVersion: 1, expiresAt: Date.now() + 60_000,
-      normalizedInput: exactRequest.input,
+
       price: { currency: 'AUD' as const, units: '2000', exponent: 6 },
       account: { accountRef: 'account:test', available: { currency: 'AUD' as const, units: '1000000', exponent: 6 } },
       budget: { principalRef: principal.principalId, maximumPerCall: { currency: 'AUD' as const, units: '1000000', exponent: 6 } },
       policyRefs: [], evidenceDigest: 'quote-evidence',
-      continuation: { action: 'tool.call' as const, method: 'POST' as const, path: '/api/v1/tools/call' as const,
-        input: { quoteRef, idempotencyKey: exactRequest.idempotencyKey } },
+      continuation: { action: 'tool.call' as const, args: { quoteRef, idempotencyKey: exactRequest.idempotencyKey } },
     })),
     callTool: vi.fn(async () => ({
       kind: 'completed' as const, callRef, toolRef,
@@ -94,6 +93,21 @@ function postProcureRequest(body: unknown, headers: Record<string, string> = {})
 describe('POST /api/v1/tools/procure route', () => {
   afterEach(() => setHttpRateLimitAdmissionForTests(undefined))
 
+  it('preserves the original key and request ID for unresolved Quote preparation', async () => {
+    setHttpRateLimitAdmissionForTests(async () => ({ ok: true }))
+    const { engine, service, identity } = testEngine()
+    vi.spyOn(identity, 'reserve').mockResolvedValue({ kind: 'replay', quoteRef: null, resultJson: null })
+    const response = await handleToolProcurePost(postProcureRequest(exactRequest, { 'x-ae-request-id': 'unresolved-quote-test' }), engine)
+    expect(response.status).toBe(503)
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'procurement_in_progress', retryable: true, requestId: 'unresolved-quote-test', next: [],
+      detail: expect.stringContaining('Quote preparation is unresolved'),
+      refs: { idempotencyKey: exactRequest.idempotencyKey, toolRef, identityPreserved: true },
+    })
+    expect(service.quoteTool).not.toHaveBeenCalled()
+    expect(service.callTool).not.toHaveBeenCalled()
+  })
+
   it('delivers an exact Tool with native Quote/Call references and a status continuation', async () => {
     setHttpRateLimitAdmissionForTests(async () => ({ ok: true }))
     const { engine, service } = testEngine()
@@ -102,8 +116,9 @@ describe('POST /api/v1/tools/procure route', () => {
     const body = await response.json()
     expect(body).toMatchObject({
       status: 'delivered', quoteRef, callRef, idempotencyKey: exactRequest.idempotencyKey,
-      price: { totalAud: 'A$0.01', netAud: 'A$0.01', gstAud: 'A$0.00' },
-      next: [{ action: 'status', args: { ref: { kind: 'call', ref: callRef } }, authority: 'same_principal' }],
+      money: { kind: 'recorded', price: { currency: 'AUD', units: '2000', exponent: 6 },
+        usage: { chargeState: 'paid', amount: { currency: 'AUD', units: '2000', exponent: 6 } } },
+      next: [],
     })
     expect(service.quoteTool).toHaveBeenCalledTimes(1)
     expect(service.callTool).toHaveBeenCalledTimes(1)
@@ -133,8 +148,7 @@ describe('POST /api/v1/tools/procure route', () => {
       kind: 'RESOURCE_EXHAUSTED', code: 'budget_exceeded', retryable: false,
       refs: { quoteRef, idempotencyKey: exactRequest.idempotencyKey },
       next: [
-        { action: 'fund', args: {}, authority: 'agent_key' },
-        { action: 'status', args: { ref: { kind: 'quote', ref: quoteRef } }, authority: 'same_principal' },
+        { action: 'journey.status', args: { ref: { kind: 'quote', ref: quoteRef } }, authority: 'same_principal' },
       ],
     })
     const replay = await handleToolProcurePost(postProcureRequest({ ...exactRequest, maxSpendAud: '0.001' }), engine)
@@ -156,8 +170,7 @@ describe('POST /api/v1/tools/procure route', () => {
     await expect(first.json()).resolves.toMatchObject({
       kind: 'RESOURCE_EXHAUSTED', code: 'budget_exceeded', retryable: false,
       next: [
-        { action: 'fund', args: {}, authority: 'agent_key' },
-        { action: 'status', args: { ref: { kind: 'quote', ref: quoteRef } }, authority: 'same_principal' },
+        { action: 'journey.status', args: { ref: { kind: 'quote', ref: quoteRef } }, authority: 'same_principal' },
       ],
     })
     expect(service.quoteTool).toHaveBeenCalledTimes(1)
@@ -193,7 +206,7 @@ describe('POST /api/v1/tools/procure route', () => {
     const response = await handleToolProcurePost(postProcureRequest({ kind: 'need', need: 'Search for a dataset' }), engine)
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toMatchObject({
-      status: 'needs_input', toolRef, inputJsonSchema, requiredFields: ['query'], next: { kind: 'exact', toolRef },
+      status: 'needs_input', toolRef, inputJsonSchema, requiredFields: ['query'], next: { action: 'tool.procure', args: { kind: 'exact', toolRef }, requiredInput: ['input', 'maxSpendAud', 'idempotencyKey'], authority: 'agent_key' },
     })
     expect(reserve).not.toHaveBeenCalled()
     expect(service.quoteTool).not.toHaveBeenCalled()

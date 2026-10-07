@@ -3,6 +3,7 @@ import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 import {
   AGENT_ACCESS_AUTHORITY_MODE_VALUES,
   MARKET_TOOLS_CALL_SCOPE,
+  MARKET_SUPPLY_MANAGE_SCOPE,
   agentAuthorityScopeForMode,
   type AgentAccessAuthorityMode,
 } from '@/modules/agent-access/contract'
@@ -12,6 +13,7 @@ export const AGENT_ACCESS_BEARER_METHOD = 'header' as const
 export const AGENT_ACCESS_OAUTH_SCOPES = Object.freeze([
   MARKET_TOOLS_CALL_SCOPE,
   ...AGENT_ACCESS_AUTHORITY_MODE_VALUES.map(agentAuthorityScopeForMode),
+  MARKET_SUPPLY_MANAGE_SCOPE,
 ])
 export const AGENT_ACCESS_OAUTH_AUTHORIZATION_SCOPES = Object.freeze([
   ...AGENT_ACCESS_OAUTH_SCOPES,

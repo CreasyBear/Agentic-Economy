@@ -21,7 +21,15 @@ export const statusValue = v.object({
   observedAt: v.number(),
   retentionPolicyVersion: v.string(),
   continuation: v.optional(v.object({
-    action: v.union(v.literal('supply.offboarding.status'), v.literal('supply.offboarding.resume')),
+    action: v.literal('supply.offboarding.status'),
+    args: v.object({ businessRef: v.string() }),
+  })),
+  ownerHandoff: v.optional(v.object({
+    actor: v.literal('business_owner'),
+    reason: v.literal('offboarding_action_required'),
+    destination: v.literal('/owner/operations#offboarding'),
+    caseRef: v.string(),
+    businessRef: v.string(),
   })),
 })
 

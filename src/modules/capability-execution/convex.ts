@@ -51,3 +51,6 @@ export type {
 export { providerConsequenceTicketClaimsDigest } from './provider-consequence-digest'
 export { toCallDispatchCommand } from './call-projection/dispatch-command'
 export { canonicalTerminalOutcome } from './terminal-projection'
+
+/** Historical procurement caches belong to the existing durable storage boundary. */
+export { expireStoredProcureResultContent, projectStoredProcureResult, storedToolProcureResultSchema } from './procure-storage'

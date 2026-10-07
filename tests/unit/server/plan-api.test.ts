@@ -89,6 +89,47 @@ describe('Plan runtime HTTP contract', () => {
     expect((await handleToolPlanGet(new Request('https://ae.example/api/v1/tools/plans/plan:test?force=true'), command.planRef, services)).status).toBe(400)
     expect(services.callService.planGet).toHaveBeenCalledOnce()
   })
+  it('preserves accepted Call readback and complete recovery controls', async () => {
+    const callResult = {
+      kind: 'completed', callRef: `operation-invocation:v1:${'b'.repeat(64)}`, toolRef: plan.nodes[0]!.toolRef,
+      output: { location: 'Perth' }, evidenceHash: 'evidence:accepted',
+      usage: { usageRef: 'usage:accepted', observedAt: 10, chargeState: 'paid',
+        amount: { currency: 'AUD', exponent: 6, units: '1000001' }, priceDigest: 'price:accepted' },
+    }
+    // Accepted purchase fields remain intact alongside the current recovery controls.
+    const retained = {
+      kind: 'available', planRef: command.planRef, planDigest: 'plan:accepted', state: 'reconciliation_required',
+      approvedTotalAudUnits: '1000001', currency: 'AUD', exponent: 6, expiresAt: 2000, runDeadlineAt: 3000,
+      maximumConcurrentNodes: 1, failureCode: 'release_uncertain', stages: [['geo']],
+      nodes: [{ nodeId: 'geo', toolRef: plan.nodes[0]!.toolRef, providerHost: 'provider.example', dependsOn: [],
+        ceilingAudUnits: '1000001', state: 'succeeded', callRef: callResult.callRef, result: callResult }],
+      dataFlows: [], hold: { status: 'uncertain', settledAudUnits: '1000001', releasedAudUnits: '0' },
+    }
+    const complete = { ...retained,
+      next: [{ action: 'tool.plan.get', args: { planRef: command.planRef }, authority: 'same_principal' }],
+      cancellation: { action: 'tool.plan.cancel', args: { planRef: command.planRef }, authority: 'same_principal' },
+      ownerHandoff: { kind: 'attention_required', reason: 'plan_recovery_required', planRef: command.planRef,
+        path: '/support', detail: 'Review the recorded Plan before another run.' },
+    }
+    const services = options(complete)
+    const read = new Request(`https://ae.example/api/v1/tools/plans/${command.planRef}`)
+    const response = await handleToolPlanGet(read, command.planRef, services)
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual(complete)
+    expect(services.callService.planGet).toHaveBeenCalledWith(expect.objectContaining({ input: { planRef: command.planRef } }))
+    expect(services.callService.planRun).not.toHaveBeenCalled()
+  })
+
+  it.each([handleToolPlanRunPost, handleToolPlanCancelPost])('returns complete controls while preserving the submitted command', async handler => {
+    const complete = { ...running, next: [{ action: 'tool.plan.get', args: { planRef: command.planRef }, authority: 'same_principal' }] }
+    const body = handler === handleToolPlanRunPost ? command : { planRef: command.planRef }
+    const services = options(complete)
+    const response = await handler(request(body), services)
+    expect(await response.json()).toEqual(complete)
+    const dispatch = handler === handleToolPlanRunPost ? services.callService.planRun : services.callService.planCancel
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({ input: body }))
+  })
+
   it('records cancellation for only the named Plan', async () => {
     const services = options(running)
     expect((await handleToolPlanCancelPost(request({ planRef: command.planRef }), services)).status).toBe(200)

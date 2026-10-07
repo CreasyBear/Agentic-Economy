@@ -198,7 +198,7 @@ describe('AE CLI provider Tool lifecycle', () => {
           blockerCodes: ['payout_resolution_required'],
           observedAt: 10,
           retentionPolicyVersion: 'retention:2026-09',
-          continuation: { action: 'supply.offboarding.status' },
+          ownerHandoff: { actor: 'business_owner', reason: 'offboarding_action_required', destination: '/owner/operations#offboarding', caseRef: 'offboarding:one', businessRef: 'business:one' },
         },
       })
     })
@@ -212,6 +212,7 @@ describe('AE CLI provider Tool lifecycle', () => {
     expect(output).toContain('state            Action required')
     expect(output).toContain('new work frozen  yes')
     expect(output).toContain('payout_resolution_required')
+    expect(output).toContain('https://market.example/owner/operations#offboarding')
   })
 
   it('renders the shared provider continuation from current lifecycle facts', async () => {
@@ -257,7 +258,7 @@ describe('AE CLI provider Tool lifecycle', () => {
           },
           operationalConditions: [],
         },
-        continuation: { action: 'supply.status' },
+        continuation: { action: 'supply.status', args: { businessRef: 'business:one', toolRef: 'operation:one' } },
       }],
       isDone: true,
       continueCursor: null,
@@ -268,9 +269,82 @@ describe('AE CLI provider Tool lifecycle', () => {
     await runSupplyCommand(['tools', 'business:one'], { ...baseOptions, json: false })
 
     const output = write.mock.calls.flat().join('')
-    expect(output).toContain('next  supply.status')
+    expect(output).toContain('next  ae supply status business:one operation:one')
     expect(output).toContain('4/5 delivered; 1 not delivered; 0 unknown')
     expect(output).toContain('Qualified Use  3')
+  })
+
+  it('pages Provider Tools with the validated limit and opaque cursor without changing JSON output', async () => {
+    const result = {
+      kind: 'available', schemaVersion: 'provider_tools:v1', businessRef: 'business:one',
+      page: [], isDone: false, continueCursor: 'next opaque cursor',
+    }
+    const fetch = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      expect(JSON.parse(String(init?.body))).toEqual({ businessRef: 'business:one', limit: 5, cursor: 'current opaque cursor' })
+      return Response.json(result)
+    })
+    vi.stubGlobal('fetch', fetch)
+    const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+
+    await runSupplyCommand(['tools', 'business:one'], { ...baseOptions, limit: '5', cursor: 'current opaque cursor' })
+
+    expect(JSON.parse(write.mock.calls.flat().join(''))).toEqual(result)
+  })
+
+  it('renders a human next-page command preserving business, page size, origin and opaque cursor', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({
+      kind: 'available', schemaVersion: 'provider_tools:v1', businessRef: 'business:one',
+      page: [], isDone: false, continueCursor: 'opaque cursor',
+    })))
+    const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+
+    await runSupplyCommand(['tools', 'business:one'], {
+      ...baseOptions, json: false, limit: '5', baseUrlSource: 'flag',
+    })
+
+    expect(write.mock.calls.flat().join('')).toContain(
+      "Next: ae supply tools business:one --limit 5 --cursor 'opaque cursor' --base-url https://market.example",
+    )
+  })
+
+  it('uses the effective default page size on the human next page', async () => {
+    const fetch = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      expect(JSON.parse(String(init?.body))).toEqual({ businessRef: 'business:one', limit: 50 })
+      return Response.json({
+        kind: 'available', schemaVersion: 'provider_tools:v1', businessRef: 'business:one',
+        page: [], isDone: false, continueCursor: 'next-cursor',
+      })
+    })
+    vi.stubGlobal('fetch', fetch)
+    const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+
+    await runSupplyCommand(['tools', 'business:one'], { ...baseOptions, json: false })
+
+    expect(write.mock.calls.flat().join('')).toContain('Next: ae supply tools business:one --limit 50 --cursor next-cursor')
+  })
+
+  it.each([
+    { limit: '0' }, { limit: '101' }, { limit: '1.5' }, { limit: 'invalid' }, { cursor: ' ' },
+  ])('refuses invalid Provider Tool pagination before any fetch: %o', async (flags) => {
+    const fetch = vi.fn()
+    vi.stubGlobal('fetch', fetch)
+
+    await expect(runSupplyCommand(['tools', 'business:one'], { ...baseOptions, ...flags })).rejects.toMatchObject({
+      code: 'supply-input-invalid',
+    })
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('does not offer another page for a completed Provider Tool result even when a cursor is present', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({
+      kind: 'available', schemaVersion: 'provider_tools:v1', businessRef: 'business:one',
+      page: [], isDone: true, continueCursor: 'unused-cursor',
+    })))
+    const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+
+    await runSupplyCommand(['tools', 'business:one'], { ...baseOptions, json: false })
+
+    expect(write.mock.calls.flat().join('')).not.toContain('Next:')
   })
 
   it('rejects the retired supply operations command without a compatibility alias', async () => {

@@ -738,7 +738,7 @@ describe('operator command panel', () => {
         assessed: { source: 'all', scope: 'page', examined: 1, coverage: 'partial' },
         partialResults: true,
         results: withResult ? initial.results : [],
-        next: [{ action: 'next-page', authority: 'public', args: { query: continuationQuery, cursor } }],
+        next: [{ action: 'registry.tools.search', authority: 'public', args: { query: continuationQuery, cursor } }],
         pagination: { limit: 8, hasMore: true, nextCursor: cursor },
       })
       const second = twoOperationSearchPayload().results[1]
@@ -841,7 +841,7 @@ function operationSearchPayload(authentication?: unknown) {
         readiness: 'ready',
         price: { kind: 'indicative', label: 'Price confirmed at inspection' },
         detailRef: TEST_OPERATION_REF,
-        next: [{ action: 'describe', args: { toolRef: TEST_OPERATION_REF }, authority: 'public' }],
+        next: [{ action: 'registry.tools.describe', args: { toolRef: TEST_OPERATION_REF }, authority: 'public' }],
         ...(authentication === undefined ? {} : { authentication }),
       },
     ],
@@ -866,7 +866,7 @@ function twoOperationSearchPayload() {
         title: 'Currency exchange rate',
         summary: 'Current exchange rate for a currency pair.',
         detailRef: SECOND_TEST_OPERATION_REF,
-        next: [{ action: 'describe', args: { toolRef: SECOND_TEST_OPERATION_REF }, authority: 'public' }],
+        next: [{ action: 'registry.tools.describe', args: { toolRef: SECOND_TEST_OPERATION_REF }, authority: 'public' }],
       },
     ],
   }

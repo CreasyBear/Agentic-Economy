@@ -1,6 +1,8 @@
+import { brandedStringSchema } from '@/modules/common/branded-string-schema'
 import { z } from 'zod'
 
 import { jsonValueSchema } from '@/modules/capability-contract/public'
+import { matchesToolFilters } from '@/modules/capability-supply/public'
 import type {
   ToolDetailResult,
   ToolSearchResult,
@@ -15,8 +17,8 @@ import {
   publicToolDisplayPriceSchema,
   publicToolPriceSchema,
 } from '@/modules/capability-supply/tool-schemas'
-import { exactAmountSchema, formatDisplayAmount, formatDisplayPrice } from '@/modules/money/public'
-import { projectToolHealth, type ToolHealthStatus } from '@/modules/capability-supply/tool-health'
+import { formatDisplayAmount, formatDisplayPrice } from '@/modules/money/public'
+import { projectToolHealth } from '@/modules/capability-supply/tool-health'
 import { SEARCH_QUERY_MAX_LENGTH } from '@/modules/common/search-query'
 import { truncateText } from '@/modules/common/truncate-text'
 import { isPublicToolRef } from '@/modules/common/tool-ref'
@@ -24,43 +26,17 @@ import { isPublicToolRef } from '@/modules/common/tool-ref'
 import { projectToolChoiceEvidence } from './tool-choice-evidence'
 import { searchVerdict } from './search-verdict'
 import { searchNextActions } from './next-action'
+import { toolCatalogFiltersSchema, toolCatalogSearchInputSchema, toolHealthStatusSchema } from './tool-search-input'
 import { toolLatencyEvidenceSchema } from './tool-latency'
 
+export { toolCatalogFiltersSchema, toolCatalogSearchInputSchema, toolHealthStatusSchema } from './tool-search-input'
 export type { ToolHealthStatus } from '@/modules/capability-supply/tool-health'
 
-export const toolHealthStatusSchema = z.enum([
-  'operational',
-  'degraded',
-  'unverified',
-])
 const choiceEvidenceSchema = { verification: z.enum(['verified', 'not_verified']), network: z.enum(['mainnet', 'testnet', 'unknown']), claimSource: z.enum(['provider', 'listing']) }
-
-export const toolCatalogFiltersSchema = z.strictObject({
-  actionClass: z.enum(['retrieve', 'transform', 'analyze', 'create', 'mutate', 'other', 'unclassified']).optional(),
-  objectClass: z.enum(['web', 'document', 'image', 'location', 'chain', 'data', 'other', 'unclassified']).optional(),
-  category: z.string().max(80).optional(),
-  provider: z.string().max(200).optional(),
-  access: z.enum(['ae_callable', 'external_listing']).optional(),
-  priceBand: z.enum(['lt_0_01', '0_01_to_0_03', '0_03_to_0_10', '0_10_to_1', '1_to_10', '10_plus', 'unknown']).optional(),
-  networkId: z.string().trim().min(1).max(200).optional(),
-  location: z.string().trim().min(1).max(200).optional(),
-  effects: z.array(z.enum(['data_release', 'financial_exposure', 'external_state_change'])).max(3).optional(),
-  dataUse: z.array(z.enum(['public', 'personal', 'sensitive', 'credential'])).max(4).optional(),
-  healthStatus: z.array(toolHealthStatusSchema).min(1).max(3).optional(),
-  currency: z.string().regex(/^[A-Z]{3}$/).optional(),
-  maximumPrice: exactAmountSchema.optional(),
-})
 
 export const toolListInputSchema = z.strictObject({
   source: z.enum(['current', 'coinbase', 'payai']).optional(),
   limit: z.number().int().min(1).max(100).default(50),
-  cursor: z.string().max(8192).optional(),
-  filters: toolCatalogFiltersSchema.optional(),
-})
-export const toolCatalogSearchInputSchema = z.strictObject({
-  source: z.enum(['current', 'coinbase']).optional(),
-  query: z.string().trim().min(1).max(SEARCH_QUERY_MAX_LENGTH),
-  limit: z.number().int().min(1).max(12).default(8),
   cursor: z.string().max(8192).optional(),
   filters: toolCatalogFiltersSchema.optional(),
 })
@@ -90,13 +66,14 @@ export const supplyProjectionFreshnessSchema = z.strictObject({
 })
 export type SearchResult = z.output<typeof searchResultSchema>
 export type SupplyProjectionFreshness = z.infer<typeof supplyProjectionFreshnessSchema>
-export type { RegistryNextAction } from './next-action'
+export { isRegistryPageNext } from './next-action'
+export type { RegistryNextAction, RegistryPageNext } from './next-action'
+const registrySearchArgsSchema = toolCatalogSearchInputSchema.omit({ cursor: true }).extend({
+  limit: toolCatalogSearchInputSchema.shape.limit.removeDefault().optional(),
+})
 export const registryNextActionSchema = z.discriminatedUnion('action', [
-  z.strictObject({ action: z.literal('describe'), args: z.strictObject({ toolRef: z.string().regex(/^operation:v1:[0-9a-f]{64}$/).transform((ref) => ref as PublicToolRef) }), authority: z.literal('public') }),
-  z.strictObject({ action: z.literal('describe-external'), args: z.strictObject({ id: z.string() }), authority: z.literal('public') }),
-  z.strictObject({ action: z.literal('next-page'), args: z.strictObject({ query: z.string(), cursor: z.string() }), authority: z.literal('public') }),
-  z.strictObject({ action: z.literal('broaden'), args: z.strictObject({ query: z.string() }), authority: z.literal('public') }),
-  z.strictObject({ action: z.literal('retry'), args: z.strictObject({ query: z.string() }), authority: z.literal('public') }),
+  z.strictObject({ action: z.literal('registry.tools.describe'), args: z.strictObject({ toolRef: brandedStringSchema(z.string().regex(/^operation:v1:[0-9a-f]{64}$/), (ref) => ref as PublicToolRef) }), authority: z.literal('public') }),
+  z.strictObject({ action: z.literal('registry.tools.search'), args: registrySearchArgsSchema.extend({ cursor: toolCatalogSearchInputSchema.shape.cursor }), authority: z.literal('public') }),
 ])
 export const listingTierSchema = z.enum(['reviewed', 'listed'])
 
@@ -143,7 +120,7 @@ export const toolChoiceListOutputSchema = z.union([
   }),
   catalogUnavailableSchema,
 ])
-const publicToolRefSchema = z.string().regex(/^operation:v1:[0-9a-f]{64}$/).transform((ref) => ref as PublicToolRef)
+const publicToolRefSchema = brandedStringSchema(z.string().regex(/^operation:v1:[0-9a-f]{64}$/), (ref) => ref as PublicToolRef)
 const searchResultSchema = z.strictObject({
   id: z.string(),
   source: z.enum(['current', 'coinbase']),
@@ -166,7 +143,7 @@ const searchResultSchema = z.strictObject({
     z.strictObject({ kind: z.literal('unavailable') }),
   ]),
   detailRef: z.string(),
-  next: z.array(registryNextActionSchema).length(1),
+  next: z.array(registryNextActionSchema).max(1),
   freshness: z.union([supplyProjectionFreshnessSchema, z.strictObject({
     source: z.literal('x402_directory'), state: z.enum(['absent', 'failed', 'stale', 'fresh']),
     completedAt: z.number().optional(), staleAfterMs: z.number(),
@@ -188,7 +165,7 @@ const searchMetaSchema = {
     completedAt: z.number().optional(),
   }),
   pagination: toolCatalogPaginationSchema,
-  next: z.array(registryNextActionSchema),
+  next: z.array(registryNextActionSchema).max(1),
 }
 export const saveNeedDescriptorSchema = z.strictObject({
   action: z.literal('marketDemand.record'),
@@ -197,6 +174,7 @@ export const saveNeedDescriptorSchema = z.strictObject({
     source: toolCatalogSearchInputSchema.shape.source,
     filters: toolCatalogFiltersSchema.optional(),
   }),
+  requiredInput: z.tuple([z.literal('idempotencyKey')]),
   authority: z.literal('owner_or_connected_agent'),
 })
 
@@ -227,6 +205,7 @@ export function withAuthorizedSaveNeed(
         ...(input.source === undefined ? {} : { source: input.source }),
         ...(input.filters === undefined ? {} : { filters: input.filters }),
       },
+      requiredInput: ['idempotencyKey'],
       authority: 'owner_or_connected_agent',
     },
   }
@@ -346,21 +325,63 @@ function projectCompactTool(tool: PublicToolDescriptor) {
   })
 }
 
-function admittedHealth(filters: unknown): Set<ToolHealthStatus> {
-  const parsed = toolCatalogFiltersSchema.safeParse(filters)
-  return new Set(parsed.success && parsed.data.healthStatus !== undefined
-    ? parsed.data.healthStatus
-    : ['operational'])
+type CatalogFilters = z.output<typeof toolCatalogFiltersSchema>
+
+function matchesAdmittedFilters(tool: PublicToolDescriptor, filters: CatalogFilters): boolean {
+  // The descriptor has no geographic fact or Bazaar classification. A Provider
+  // name is not location evidence; unknown facts cannot satisfy a hard filter.
+  if (filters.location !== undefined || filters.category !== undefined
+    || (filters.actionClass !== undefined && filters.actionClass !== 'unclassified')
+    || (filters.objectClass !== undefined && filters.objectClass !== 'unclassified')
+    || (filters.priceBand !== undefined && filters.priceBand !== 'unknown')) return false
+  const provider = filters.provider?.toLocaleLowerCase()
+  if (provider !== undefined && tool.business.name.toLocaleLowerCase() !== provider
+    && tool.business.slug.toLocaleLowerCase() !== provider) return false
+  const access = tool.availability.posture === 'routeable' ? 'ae_callable' : tool.availability.posture
+  if (filters.access !== undefined && filters.access !== access) return false
+  if (!matchesToolFilters(tool, {
+    ...(filters.effects === undefined ? {} : { effects: filters.effects }),
+    ...(filters.dataUse === undefined ? {} : { dataUse: filters.dataUse }),
+    ...(filters.currency === undefined ? {} : { currency: filters.currency }),
+    ...(filters.maximumPrice === undefined ? {} : { maximumPrice: filters.maximumPrice }),
+  })) return false
+  const health = projectToolHealth(tool.availability, Date.now()).healthStatus
+  return filters.healthStatus === undefined
+    ? health === 'operational' || tool.availability.reason === 'inspection_required'
+    : filters.healthStatus.includes(health)
+}
+
+/** Apply descriptor facts before ranking and again at the public projection. */
+export function filterToolSearchCandidates(result: ToolSearchResult, filters?: unknown): ToolSearchResult {
+  if (result.kind !== 'ok') return result
+  const parsed = toolCatalogFiltersSchema.safeParse(filters ?? {})
+  return { ...result, items: parsed.success
+    ? result.items.filter(tool => matchesAdmittedFilters(tool, parsed.data)) : [] }
+}
+
+/** Directory rows do not carry contract data-use, geographic or price-ceiling facts. */
+export function filterExternalSearchRows(rows: readonly SearchResult[], filters?: unknown): SearchResult[] {
+  const parsed = toolCatalogFiltersSchema.safeParse(filters ?? {})
+  if (!parsed.success) return []
+  const selected = parsed.data
+  if (selected.location !== undefined || selected.effects !== undefined || selected.dataUse !== undefined
+    || selected.currency !== undefined || selected.maximumPrice !== undefined) return []
+  return rows.filter(row => {
+    if (selected.access !== undefined && selected.access !== row.access) return false
+    if (selected.actionClass !== undefined && selected.actionClass !== row.actionClass) return false
+    if (selected.objectClass !== undefined && selected.objectClass !== row.objectClass) return false
+    if (selected.category !== undefined && selected.category !== row.category) return false
+    // Call access is a qualified publication join, not a health observation.
+    // External listings have no observed health and are explicitly unverified.
+    return selected.healthStatus === undefined
+      || (row.access === 'external_listing' && selected.healthStatus.includes('unverified'))
+  })
 }
 
 function visibleTools(tools: readonly PublicToolDescriptor[], filters: unknown) {
-  const admitted = admittedHealth(filters)
-  const parsed = toolCatalogFiltersSchema.safeParse(filters)
-  const explicitHealthFilter = parsed.success && parsed.data.healthStatus !== undefined
-  return tools.flatMap((tool) => {
-    const compact = projectCompactTool(tool)
-    return admitted.has(compact.healthStatus) || (!explicitHealthFilter && tool.availability.reason === 'inspection_required') ? [compact] : []
-  })
+  const parsed = toolCatalogFiltersSchema.safeParse(filters ?? {})
+  return parsed.success
+    ? tools.filter(tool => matchesAdmittedFilters(tool, parsed.data)).map(projectCompactTool) : []
 }
 
 export function projectToolListChoices(result: ToolSearchResult, filters?: unknown) {
@@ -389,6 +410,9 @@ export function projectToolSearchChoices(
   context: Readonly<{
     query?: string
     source?: 'current' | 'coinbase' | 'all'
+    // Preserve the requested source; assessed supply can differ from cursor scope.
+    searchSource?: 'current' | 'coinbase'
+    searchCursor?: string
     complete?: boolean
     external?: readonly SearchResult[]
     pagination?: { limit: number; nextCursor?: string; hasMore: boolean }
@@ -404,13 +428,9 @@ export function projectToolSearchChoices(
     : context.pagination ?? (result.kind === 'ok' ? result.pagination : { limit: visibleLimit, hasMore: false })
   const query = context.query ?? (result.kind === 'unavailable' ? '' : result.query)
   const unavailable = result.kind === 'unavailable'
-  const admitted = admittedHealth(filters)
   const parsedFilters = toolCatalogFiltersSchema.safeParse(filters)
-  const explicitHealthFilter = parsedFilters.success && parsedFilters.data.healthStatus !== undefined
-  const tools = result.kind === 'ok' && assessment.verdict === 'matched'
-    ? result.items.filter(tool => admitted.has(projectToolHealth(tool.availability, Date.now()).healthStatus)
-      || (!explicitHealthFilter && tool.availability.reason === 'inspection_required'))
-    : []
+  const filtered = filterToolSearchCandidates(result, filters)
+  const tools = filtered.kind === 'ok' && assessment.verdict === 'matched' ? filtered.items : []
   const rows: SearchResult[] = tools.map(tool => {
     const display = tool.commercial.displayPrice
     const formatted = display?.kind === 'indicative' && display.validUntil > Date.now()
@@ -429,12 +449,28 @@ export function projectToolSearchChoices(
       price: formatted === undefined || !formatted.includes('A$') || display?.kind !== 'indicative'
         ? { kind: 'unavailable' } : { kind: 'indicative', label: formatted, validUntil: display.validUntil },
       detailRef: tool.toolRef,
-      next: [{ action: 'describe', args: { toolRef: tool.toolRef }, authority: 'public' }],
-      ...(freshness === undefined ? {} : { freshness }),
+      next: [{ action: 'registry.tools.describe', args: { toolRef: tool.toolRef }, authority: 'public' }],
     }
   })
-  const displayedRows = [...rows, ...context.external ?? []].slice(0, visibleLimit)
-  const complete = context.complete === true && !pagination.hasMore && (result.kind !== 'ok' || result.partialResults !== true)
+  const displayedRows = [...rows, ...filterExternalSearchRows(context.external ?? [], filters)].slice(0, visibleLimit)
+  const selected = parsedFilters.success ? parsedFilters.data : undefined
+  const missingEvidence = [
+    ...(selected?.location === undefined ? [] : ['location']),
+    ...((context.source ?? 'current') === 'current' ? [
+      ...(selected?.category === undefined ? [] : ['category']),
+      ...(selected?.actionClass === undefined || selected.actionClass === 'unclassified' ? [] : ['actionClass']),
+      ...(selected?.objectClass === undefined || selected.objectClass === 'unclassified' ? [] : ['objectClass']),
+      ...(selected?.priceBand === undefined || selected.priceBand === 'unknown' ? [] : ['priceBand']),
+    ] : [
+      ...(selected?.effects === undefined ? [] : ['effects']),
+      ...(selected?.dataUse === undefined ? [] : ['dataUse']),
+      ...(selected?.currency === undefined ? [] : ['currency']),
+      ...(selected?.maximumPrice === undefined ? [] : ['maximumPrice']),
+      ...(selected?.healthStatus === undefined || selected.healthStatus.includes('unverified') ? [] : ['healthStatus']),
+    ]),
+  ]
+  const complete = context.complete === true && missingEvidence.length === 0
+    && !pagination.hasMore && (result.kind !== 'ok' || result.partialResults !== true)
   const kind = searchVerdict({ matches: displayedRows.length, assessedComplete: complete && displayedRows.length === 0, available: !unavailable })
   const assessed = {
     source: context.source ?? 'current',
@@ -444,6 +480,11 @@ export function projectToolSearchChoices(
     ...(context.generation === undefined ? {} : { generation: context.generation }),
     ...(context.completedAt === undefined ? {} : { completedAt: context.completedAt }),
   }
+  const searchArgs = {
+    query, limit: visibleLimit,
+    ...(context.searchSource === undefined ? {} : { source: context.searchSource }),
+    ...(parsedFilters.success ? { filters: parsedFilters.data } : {}),
+  }
   const meta = {
     schemaVersion: PublicToolRegistrySchemaVersion,
     query, partialResults: !complete,
@@ -451,15 +492,18 @@ export function projectToolSearchChoices(
     ...(context.recipient === undefined ? {} : { recipient: context.recipient }),
     assessed, pagination,
     next: kind === 'unavailable'
-      ? [{ action: 'retry' as const, args: { query }, authority: 'public' as const }]
-      : searchNextActions(query, pagination),
+      ? [{ action: 'registry.tools.search' as const, args: { ...searchArgs, ...(context.searchCursor === undefined ? {} : { cursor: context.searchCursor }) }, authority: 'public' as const }]
+      : searchNextActions(query, pagination, searchArgs),
   }
   if (kind === 'unavailable') return toolChoiceSearchOutputSchema.parse({
     ...meta, kind, results: [], reason: result.kind === 'unavailable' && result.reason === 'source_capacity_exceeded' ? 'capacity_exceeded' : 'source_unavailable',
   })
   if (kind === 'match') return toolChoiceSearchOutputSchema.parse({ ...meta, kind, results: displayedRows })
   if (kind === 'scoped') return toolChoiceSearchOutputSchema.parse({
-    ...meta, kind, results: displayedRows, reason: 'More of the selected catalogue remains to assess.',
+    ...meta, kind, results: displayedRows,
+    reason: displayedRows.length === 0 && missingEvidence.length > 0
+      ? `Required ${missingEvidence.join(', ')} evidence is unavailable in the assessed supply.`
+      : 'More of the selected catalogue remains to assess.',
   })
   return toolChoiceSearchOutputSchema.parse({ ...meta, kind, results: [], reason: 'No suitable Tool in the assessed supply.' })
 }

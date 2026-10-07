@@ -82,7 +82,8 @@ export async function handleToolPlanGet(request: Request, planRef: string, optio
       try {
         const service = options.callService ?? createCallService(request, '')
         if (service.planGet === undefined) throw new Error('tool_plan_get_unavailable')
-        return response(toolPlanGetAction.outputSchema.parse(await service.planGet({ input: parsed.data, principal: admitted.principal, correlationId })), 200, { 'Content-Type': 'application/json' })
+        const output = toolPlanGetAction.outputSchema.parse(await service.planGet({ input: parsed.data, principal: admitted.principal, correlationId }))
+        return response(output, 200, { 'Content-Type': 'application/json' })
       } catch (error) { return unavailable(error, toolPlanGetAction.id) }
     })
     return withRequestCorrelationHeader(result, correlationId)

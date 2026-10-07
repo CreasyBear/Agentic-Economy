@@ -1,6 +1,7 @@
 import type * as ConvexSourceModule from '@/lib/server/convex-source'
 import type * as SourceWriteAdmissionModule from '@/lib/server/source-write-admission'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { z } from 'zod'
 
 const mocks = vi.hoisted(() => ({
   callPublicSourceMutation: vi.fn(),
@@ -284,7 +285,18 @@ describe('supply action runtime boundaries', () => {
   it('persists the selected native-source draft before submitting exact prepared material', async () => {
     setHappyPublishResponses()
     const service = createSupplyManagementService(new Request('https://agent.example/api'), '{}')
-    await service.publish({ input: publishInput, principal, correlationId: 'transport:source-shape' })
+    const result = await service.publish({ input: publishInput, principal, correlationId: 'transport:source-shape' })
+    expect(result).toMatchObject({
+      kind: 'submitted',
+      maintenance: {
+        businessId: publishInput.businessRef,
+        offeringRef: 'offering:one',
+        offeringRevision: 1,
+        offeringSourceHash: 'source-hash:one',
+        publicationRef: 'publication:one',
+        publicationRevision: 1,
+      },
+    })
 
     const publishCall = mocks.callPublicSourceMutation.mock.calls.find(
       ([mutation]) => mutation.name === 'capabilitySupply:publishPreparedCapability',
@@ -625,16 +637,14 @@ describe('supply action runtime boundaries', () => {
       kind: 'action_required',
       attemptRef: `provider-connection-attempt:${expectedKind}`,
       expiresAt: 600_000,
-      requiredAction: {
-        action: 'supply.connection.connect',
-        blockedCapabilities: ['supply.publish'],
-        cta: `/owner/supply/connections/new?attempt=${encodeURIComponent(`provider-connection-attempt:${expectedKind}`)}`,
+      ownerHandoff: {
+        actor: 'business_owner',
+        reason: 'provider_connection_required',
+        destination: `/owner/supply/connections/new?attempt=${encodeURIComponent(`provider-connection-attempt:${expectedKind}`)}`,
         ctaLabel: 'Connect service',
         description: expectedKind === 'mcp_oauth'
           ? 'Sign in to the MCP service in your browser, then return to your agent.'
           : 'Enter the service credential securely in your browser, then return to your agent.',
-        iconUrl: null,
-        status: 'required',
         title: 'Connect service',
       },
     })
@@ -651,6 +661,34 @@ describe('supply action runtime boundaries', () => {
     expect(command).not.toHaveProperty('credential')
     expect(command).not.toHaveProperty('token')
     expect(command).not.toHaveProperty('secret')
+  })
+
+  it('exports the required and forbidden fields for each connection kind', () => {
+    const exported = z.toJSONSchema(supplyConnectionConnectInputSchema)
+    expect(exported.oneOf).toHaveLength(3)
+    for (const [index, required] of [
+      ['sourceUrl', 'authentication'],
+      ['serverUrl'],
+      ['resourceUrl', 'method', 'observationDigest', 'payTo', 'claimExpiresAt', 'claimSignature'],
+    ].entries()) {
+      expect(exported.oneOf?.[index]).toMatchObject({
+        additionalProperties: false,
+        required: expect.arrayContaining(['kind', 'businessRef', 'environment', 'idempotencyKey', ...required]),
+      })
+    }
+  })
+
+  it('preserves the unsupported earnings result without presenting a transient outage', async () => {
+    const unsupported = {
+      kind: 'error',
+      code: 'capability_unsupported',
+      capability: 'supply.earnings',
+      retryable: false,
+      detail: 'Agent Provider earnings readback is not supported. The Business owner can review recorded Provider obligations in the owner earnings view.',
+    }
+    mocks.callPublicSourceMutation.mockResolvedValue(unsupported)
+    const service = createSupplyManagementService(new Request('https://agent.example/api'), '{}')
+    await expect(service.earnings({ input: { currency: 'AUD' }, principal, correlationId: 'earnings:one' })).resolves.toEqual(unsupported)
   })
 
   it('rejects credential material in the shared connection action', () => {

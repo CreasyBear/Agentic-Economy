@@ -1,3 +1,5 @@
+import { z } from 'zod'
+
 export const MARKET_TOOLS_CALL_SCOPE = 'market_tools:call' as const
 export const MARKET_SUPPLY_MANAGE_SCOPE = 'market_supply:manage' as const
 export const CUSTOMER_REQUEST_AGENT_SCOPE = 'customer_requests:create' as const
@@ -66,3 +68,8 @@ export function agentAuthorityScopeForMode(mode: AgentAccessAuthorityMode): stri
 export function agentAuthorityModeAllows(granted: AgentAccessAuthorityMode, required: AgentAccessAuthorityMode): boolean {
   return AUTHORITY_MODE_RANK[granted] >= AUTHORITY_MODE_RANK[required]
 }
+
+export const agentAccountFundingContinuationSchema = z.strictObject({
+  kind: z.literal('agent_funding_handoff'),
+  next: z.strictObject({ action: z.literal('funding.handoff.config'), args: z.strictObject({}), authority: z.literal('agent_key') }),
+})

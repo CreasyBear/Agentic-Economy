@@ -2,7 +2,8 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 import { validate } from '@scalar/openapi-parser'
-import { describe, expect, it } from 'vitest'
+import { Validator, type Schema } from '@cfworker/json-schema'
+import { describe, expect, it, vi } from 'vitest'
 
 import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
 import { AGENT_ACCOUNT_SELF_ROUTE_CONTRACT } from '@/modules/agent-access/account.actions'
@@ -10,6 +11,14 @@ import { createDevelopersApiViewModel } from '@/components/ae/developers/api-ref
 import { toolCatalogSearchInputSchema } from '@/modules/registry/tool-choice-contracts'
 
 import { buildOpenApiDocumentWithMetrics } from '@/modules/discovery/public'
+import applicationPackage from '../../../package.json'
+import { providerToolContinuationSchema } from '@/modules/capability-supply/provider-tool-status'
+
+// App package releases do not determine the public API contract revision.
+vi.mock('../../../package.json', async importOriginal => {
+  const original = await importOriginal<{ default: Record<string, unknown> }>()
+  return { default: { ...original.default, version: '9.9.9-application-test' } }
+})
 
 /** Route source, not OpenAPI declarations, is the parity authority. */
 
@@ -17,6 +26,7 @@ const origin = 'https://ae.test'
 const result = buildOpenApiDocumentWithMetrics({ canonicalBaseUrl: `${origin}/` })
 const document = result.document as Readonly<{
   openapi: string
+  info: Readonly<{ version: string }>
   servers: readonly Readonly<{ url: string }>[]
   paths: Readonly<Record<string, Readonly<Record<string, Readonly<{ operationId: string }>>>>>
 }>
@@ -60,7 +70,73 @@ function actualRouteMethods(): string[] {
     }).sort()
 }
 
+function atPointer(pointer: string): unknown {
+  let value: unknown = result.document
+  for (const key of pointer.split('/').slice(1)) {
+    if (value === null || typeof value !== 'object') throw new Error(`Missing published contract: ${pointer}`)
+    value = (value as Record<string, unknown>)[key]
+  }
+  return value
+}
+
 describe('openapi document', () => {
+  it('matches supplemental bounds, exact price constraints and emitted transport errors', () => {
+    const paths = result.document.paths as Record<string, Record<string, {
+      parameters?: readonly { name: string; schema: Record<string, unknown> }[]
+      responses: Record<string, unknown>
+    }>>
+    const parameter = (path: string, name: string) => paths[path]?.get?.parameters?.find(item => item.name === name)?.schema
+    expect(parameter('/api/v1/registry', 'cursor')).toMatchObject({ maxLength: 16384 })
+    expect(parameter('/api/businesses/{slug}', 'slug')).toMatchObject({ maxLength: 200 })
+    expect(parameter('/api/v1/businesses/{businessId}', 'businessId')).toMatchObject({ maxLength: 200 })
+    expect(parameter('/api/businesses/search', 'max_price_currency')).toHaveProperty('pattern')
+    expect(parameter('/api/businesses/search', 'max_price_exponent')).toMatchObject({ minimum: 0, maximum: 18 })
+    for (const path of ['/api/v1/tools/call', '/api/v1/tools/quote', '/api/v1/tools/procure', '/api/v1/tools/plans/quote', '/api/v1/tools/plans/run', '/api/v1/tools/plans/cancel', '/api/v1/calls/{callRef}/cancel', '/api/v1/calls/{callRef}/reconcile']) {
+      expect(paths[path]?.post?.responses).toHaveProperty('413')
+      expect(paths[path]?.post?.responses).toHaveProperty('415')
+    }
+    for (const path of ['/api/v1/calls', '/api/v1/calls/{callRef}']) {
+      for (const status of ['400', '500', '503']) expect(paths[path]?.get?.responses).toHaveProperty(status)
+    }
+    expect(paths['/api/v1/feedback']?.post?.responses).toHaveProperty('415')
+    expect(paths['/api/v1/sandbox-reference']?.post?.responses).toHaveProperty('404')
+    for (const method of ['get', 'head']) expect(paths['/api/v1/funding/constraints']?.[method]?.responses).toHaveProperty('503')
+    for (const status of ['413', '415', '503']) expect(paths['/api/v1/funding/quote']?.post?.responses).toHaveProperty(status)
+  })
+
+  it('emits 2020-12 tuple schemas throughout the owner document', () => {
+    const visit = (value: unknown): void => {
+      if (value === null || typeof value !== 'object') return
+      if (Array.isArray(value)) { value.forEach(visit); return }
+      const node = value as Record<string, unknown>
+      expect(Array.isArray(node.items)).toBe(false)
+      if (Array.isArray(node.prefixItems)) {
+        expect(node.minItems).toBe(node.prefixItems.length)
+        expect(node.maxItems).toBe(node.prefixItems.length)
+      }
+      Object.values(node).forEach(visit)
+    }
+    visit(result.document)
+  })
+
+  it('preserves actual Provider continuation tuple literals and arity', () => {
+    const tuple = providerToolContinuationSchema.options[0].shape.requiredInput
+    const published = atPointer('/components/schemas/SupplyStatusResponse/anyOf/0/properties/status/properties/continuation/oneOf/0/properties/requiredInput')
+    const validator = new Validator(published as Schema, '2020-12')
+    expect(tuple.safeParse(['resourceUrl']).success).toBe(true)
+    for (const value of [['resourceUrl'], [], ['wrong'], ['resourceUrl', 'extra']]) {
+      expect(validator.validate(value).valid).toBe(tuple.safeParse(value).success)
+    }
+  })
+
+  it('retains descriptions beside hoisted price references', () => {
+    const published = atPointer('/components/schemas/RegistryToolsDescribeResponse/anyOf/0/properties/tool/properties/commercialPrice/oneOf/0/properties/amount')
+    expect(published).toMatchObject({
+      $ref: expect.stringMatching(/^#\/components\/schemas\//u),
+      description: 'Exact executable price: currency, integer units, and decimal exponent',
+    })
+  })
+
   it('validates as a well-formed OpenAPI 3.1 document', async () => {
     const validated = await validate(document)
     expect(validated.errors ?? [], JSON.stringify(validated.errors)).toEqual([])
@@ -69,6 +145,9 @@ describe('openapi document', () => {
 
   it('declares the canonical version and one server anchored to the caller-supplied origin', () => {
     expect(document.openapi).toBe('3.1.0')
+    expect(document.info.version).toBe('1.0.0-alpha.2')
+    expect(applicationPackage.version).toBe('9.9.9-application-test')
+    expect(document.info.version).not.toBe(applicationPackage.version)
     expect(document.servers).toEqual([{ url: origin }])
   })
 
@@ -80,12 +159,12 @@ describe('openapi document', () => {
   })
   it('documents funding header idempotency and complete Call/procure body contracts', () => {
     const paths = document.paths as unknown as Record<string, Record<string, {
-      requestBody?: { content: { 'application/json': { schema: { $ref?: string; properties?: Record<string, unknown>; oneOf?: readonly unknown[] } } } }
+      requestBody?: { content: { 'application/json': { schema: { $ref?: string; properties?: Record<string, unknown>; additionalProperties?: boolean; oneOf?: readonly unknown[] } } } }
       parameters?: readonly { name: string; in: string; required: boolean }[]
       responses: Record<string, { content?: Record<string, unknown> }>
       security: readonly Record<string, readonly string[]>[]
     }>>
-    const schemaDocument = result.document as { components: { schemas: Record<string, { properties?: Record<string, unknown>; oneOf?: readonly unknown[] }> } }
+    const schemaDocument = result.document as { components: { schemas: Record<string, { properties?: Record<string, unknown>; additionalProperties?: boolean; oneOf?: readonly unknown[] }> } }
     const schemas = schemaDocument.components.schemas
     const resolveBody = (path: string) => {
       const body = paths[path]?.post?.requestBody?.content['application/json'].schema
@@ -100,6 +179,8 @@ describe('openapi document', () => {
     expect(funding.responses['400']?.content?.['application/problem+json']).toBeDefined()
     expect(funding.security).toEqual([{ agentAccessKey: [] }])
     expect(resolveBody('/api/v1/tools/call')?.properties).toHaveProperty('idempotencyKey')
+    expect(resolveBody('/api/v1/tools/call')?.additionalProperties).toBe(false)
+    expect(resolveBody('/api/v1/tools/quote')?.additionalProperties).toBe(false)
     expect(resolveBody('/api/v1/tools/procure')?.oneOf).toHaveLength(2)
     expect(paths['/api/v1/account/funding-sessions/public/{fundingSessionId}']?.get?.security).toEqual([])
   })

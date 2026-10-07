@@ -60,7 +60,7 @@ describe('privacy removal unknown outcomes', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Submit request' }))
 
     await waitFor(() => expect(routeMocks.openRemoval).toHaveBeenCalledTimes(1))
-    expect(screen.getByRole('alert').textContent).toContain('The request outcome could not be confirmed.')
+    expect((await screen.findByRole('alert')).textContent).toContain('The request outcome could not be confirmed.')
     expect(screen.getByRole('alert').textContent).not.toContain('private transport detail')
     expect(screen.getByDisplayValue('owner@example.com')).toBeTruthy()
     expect(screen.getByDisplayValue('Remove the duplicate supplier profile.')).toBeTruthy()

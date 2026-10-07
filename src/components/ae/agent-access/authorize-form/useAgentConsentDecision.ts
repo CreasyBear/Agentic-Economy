@@ -231,11 +231,11 @@ export function useAgentConsentDecision({
       if (result.kind === 'match' || result.kind === 'scoped') {
         const results = result.results.flatMap(row => row.access === 'ae_callable' && row.toolRef !== undefined
           ? [{ toolRef: row.toolRef, title: row.title }] : [])
-        const nextPage = result.next.find(action => action.action === 'next-page')
+        const nextPage = result.pagination.hasMore ? result.next.find(action => action.action === 'registry.tools.search' && action.args.cursor !== undefined) : undefined
         setToolSearch({
           pending: false,
           results,
-          ...(nextPage === undefined ? {} : { continuation: nextPage.args }),
+          ...(nextPage?.action !== 'registry.tools.search' || nextPage.args.cursor === undefined ? {} : { continuation: { ...nextPage.args, cursor: nextPage.args.cursor } }),
           ...(result.kind === 'scoped'
             ? {
                 noMatchMessage: nextPage === undefined

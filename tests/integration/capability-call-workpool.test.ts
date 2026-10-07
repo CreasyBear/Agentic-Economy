@@ -82,6 +82,7 @@ import { callAction } from '@/modules/capability-execution/call.actions'
 import { callResultSchema, type CallResult } from '@/modules/capability-execution/call-contracts'
 import { projectCallReceipt } from '@/modules/capability-execution/call-receipt-view'
 import { journeyStatusResultSchema } from '@/modules/actions'
+import { toolChoiceSearchOutputSchema } from '@/modules/registry/tool-choice-contracts'
 import { callStatusResultSchema } from '@/modules/capability-execution/call-recovery.actions'
 import { issuedAgentGrantRef } from '@/modules/agent-access/issued-agent-binding'
 import { createFormanceContext, readFormanceAccount, readFormanceTransactionByReference } from '@/modules/money/formance'
@@ -362,8 +363,7 @@ async function serveCallRoutes(input: Readonly<{
   }
 }
 
-async function installPackagedCli(root: string): Promise<string> {
-  const preparedCli = process.env.AE_TEST_INSTALLED_CLI
+async function installPackagedCli(root: string, preparedCli = process.env.AE_TEST_INSTALLED_CLI): Promise<string> {
   if (preparedCli !== undefined) {
     await access(preparedCli)
     return preparedCli
@@ -1039,14 +1039,14 @@ describe('capability Call Workpool lifecycle', () => {
     const replayedShortfall = await quote('funds-refresh-repeat')
     if (replayedShortfall.kind !== 'refused') throw new Error('funds_handoff_replay_missing')
     expect(replayedShortfall.continuation).toEqual(shortfall.continuation)
-    const amount = shortfall.continuation.input.principalAmount
+    const amount = shortfall.continuation.args.principalAmount
     expect(amount).toMatchObject({ currency: 'AUD', exponent: 6 })
     const fundingQuote = quoteAudAccountFunding(BigInt(amount.units), audFundingPolicyFromCommercialControls(PRODUCTION_COMMERCIAL_POLICY_CONTROLS))
     if (fundingQuote === undefined) throw new Error('funds_topup_quote_invalid')
     // Verified funding settlement enters through the existing ledger workflow;
     // Stripe Checkout itself is outside this source integration fixture.
     const funding = {
-      commandRef: 'funds-topup', idempotencyKey: shortfall.continuation.input.idempotencyKey,
+      commandRef: 'funds-topup', idempotencyKey: shortfall.continuation.args.idempotencyKey,
       accountRef: buyer.principal.ownerId, processorRef: 'stripe:sandbox:funds-topup',
       principalUnits: amount.units, serviceFeeUnits: fundingQuote.serviceFeeUnits.toString(),
       taxUnits: fundingQuote.taxUnits.toString(), totalUnits: fundingQuote.totalUnits.toString(),
@@ -1855,7 +1855,7 @@ describe('capability Call Workpool lifecycle', () => {
           kind: 'call', ref: callRef, principalRef: buyer.principal.principalId, workState: 'working',
           recovery: { kind: 'found', callRef, state: interruption === 'before claim' ? 'in_progress' : 'reconciliation_required' },
           next: [
-            { action: 'status', args: { ref: { kind: 'call', ref: callRef } }, authority: 'same_principal' },
+            { action: 'call.status', args: { callRef }, authority: 'same_principal' },
             { action: 'wait', args: { callRef, afterVersion: expect.any(Number) }, authority: 'same_principal' },
           ],
         } })
@@ -2412,6 +2412,9 @@ describe('capability Call Workpool lifecycle', () => {
   }, 15_000)
 
   it('runs the installed CLI through served routes and one real durable backend receipt', async () => {
+    // Source fixture only: authority is seeded and Provider delivery is mocked.
+    const preparedCli = process.env.AE_TEST_INSTALLED_CLI
+    vi.stubEnv('AE_TEST_INSTALLED_CLI', undefined)
     // This native-suite selector is not deployed web configuration.
     vi.stubEnv('AE_FORMANCE_INTEGRATION', undefined)
     vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
@@ -2430,10 +2433,10 @@ describe('capability Call Workpool lifecycle', () => {
 
     const backend = convexTestWithWorkers()
     await seedCommercialPolicies(backend, Date.now())
-    const toolRef = await seedKeylessLookup(backend, 'workpool-lookup-primary')
-    const alternativeToolRef = await seedKeylessLookup(backend, 'workpool-lookup-alternative')
+    const seededToolRef = await seedKeylessLookup(backend, 'workpool-lookup-primary')
+    await seedKeylessLookup(backend, 'workpool-lookup-alternative')
     const scopes = [CUSTOMER_REQUEST_SPENDING_POLICY_SCOPE, MARKET_TOOLS_CALL_SCOPE] as const
-    const seeded = await seedPrincipal(backend, 'served-cli', Date.now(), toolRef, scopes)
+    const seeded = await seedPrincipal(backend, 'served-cli', Date.now(), seededToolRef, scopes)
     const principal = seeded.principal
     const apiKeyId = principal.credentialId
     const apiKeySubject = 'user_served_cli'
@@ -2464,6 +2467,8 @@ describe('capability Call Workpool lifecycle', () => {
     // Native-runner selection is not deployed web configuration. The test list
     // was selected before this fixture; afterEach restores the runner flag.
     vi.stubEnv('AE_FORMANCE_INTEGRATION', undefined)
+    // Exercise deterministic catalogue search without an external ranker.
+    vi.stubEnv('AE_JEV_DISCOVERY_ENABLED', 'false')
     const webValidation = validateEnvironment(process.env, 'production')
     if (!webValidation.ok) throw new Error(`served_cli_fixture_configuration:${JSON.stringify(webValidation.problems)}`)
     // The served production initiation path requires current configuration-bound
@@ -2477,13 +2482,14 @@ describe('capability Call Workpool lifecycle', () => {
     const cliDistWasPresent = await access(cliDist).then(() => true, () => false)
     await mkdir(cliHome)
     try {
-      const cli = await installPackagedCli(temporaryRoot)
-      const runCli = async (args: readonly string[]): Promise<unknown> => {
+      const cli = await installPackagedCli(temporaryRoot, preparedCli)
+      const runCli = async (args: readonly string[], authenticated = true): Promise<unknown> => {
         const executed = await execFileAsync(cli, [...args, '--base-url', served.origin, '--json'], {
           env: {
             ...process.env,
-            AE_API_KEY: apiKeyId,
-            AE_API_KEY_ORIGIN: served.origin,
+            AE_API_KEY: authenticated ? apiKeyId : undefined,
+            AE_API_KEY_ORIGIN: authenticated ? served.origin : undefined,
+            AE_CONFIG_DIR: cliHome,
             XDG_CONFIG_HOME: cliHome,
           },
           maxBuffer: 4 * 1024 * 1024,
@@ -2496,17 +2502,32 @@ describe('capability Call Workpool lifecycle', () => {
         return JSON.parse(executed.stdout) as unknown
       }
 
-      const comparedToolRefs = [toolRef, alternativeToolRef]
-      await expect(runCli(['describe', toolRef])).resolves.toMatchObject({
+      const search = toolChoiceSearchOutputSchema.parse(await runCli([
+        'search', 'lookup', '--source', 'current',
+      ], false))
+      expect(search.kind).toBe('match')
+      const selected = search.results.find(candidate => (
+        candidate.title === 'workpool-lookup-primary lookup'
+        && candidate.access === 'ae_callable'
+        && candidate.readiness === 'ready'
+        && candidate.toolRef !== undefined
+      ))
+      if (selected?.toolRef === undefined) throw new Error('served_cli_ready_tool_missing')
+      const toolRef = selected.toolRef
+      expect(toolRef).toBe(seededToolRef)
+      expect(selected.next).toEqual([{ action: 'registry.tools.describe', args: { toolRef }, authority: 'public' }])
+      const comparedToolRefs = search.results.flatMap(candidate => (
+        candidate.access === 'ae_callable' && candidate.readiness === 'ready' && candidate.toolRef !== undefined
+          ? [candidate.toolRef] : []
+      ))
+      expect(comparedToolRefs).toHaveLength(2)
+      await expect(runCli(['describe', toolRef], false)).resolves.toMatchObject({
         kind: 'found',
         tool: { toolRef },
       })
-      await expect(runCli(['compare', ...comparedToolRefs])).resolves.toMatchObject({
+      await expect(runCli(['compare', ...comparedToolRefs], false)).resolves.toMatchObject({
         kind: 'ok',
-        tools: expect.arrayContaining([
-          expect.objectContaining({ toolRef }),
-          expect.objectContaining({ toolRef: alternativeToolRef }),
-        ]),
+        tools: expect.arrayContaining(comparedToolRefs.map(ref => expect.objectContaining({ toolRef: ref }))),
       })
       const idempotencyKey = 'served-cli-golden-replay'
       const completed = await runCli([

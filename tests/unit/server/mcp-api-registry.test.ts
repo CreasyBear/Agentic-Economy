@@ -46,7 +46,7 @@ describe('MCP host adapter registry', () => {
         summary: 'Retrieve data', provider: 'Outside', actionClass: 'retrieve', objectClass: 'data',
         readiness: 'unverified', price: { kind: 'unavailable' },
         detailRef: '/api/v1/registry/detail?id=opaque-1',
-        next: [{ action: 'describe-external', authority: 'public', args: { id: 'opaque-1' } }],
+        next: [],
       }],
     }))
     const response = await handleMcpRequest(new Request(`${requestOrigin}/mcp`, {
@@ -165,10 +165,8 @@ describe('MCP host adapter registry', () => {
   })
 
 
-  it('carries a broaden nextAction when a filtered search is exhausted', async () => {
-    const run = vi.spyOn(registryToolsSearchAction, 'run').mockResolvedValue(noMatch([
-      { action: 'broaden', args: { query: 'plumbing' }, authority: 'public' },
-    ]))
+  it('preserves the exhausted search scope without advertising a broaden operation', async () => {
+    const run = vi.spyOn(registryToolsSearchAction, 'run').mockResolvedValue(noMatch([]))
 
     const response = await postMcp({
       jsonrpc: '2.0',
@@ -183,17 +181,15 @@ describe('MCP host adapter registry', () => {
     expect(response.status).toBe(200)
     const body = await readMcpBody(response)
     const result = body.result as Record<string, unknown>
-    expect((result.structuredContent as { result?: { next: unknown } } | undefined)?.result?.next).toEqual([
-      { action: 'broaden', args: { query: 'plumbing' }, authority: 'public' },
-    ])
-    expect(JSON.stringify(result.content)).toContain('ae_registry_tools_search({\\"query\\":\\"plumbing\\"})')
+    expect((result.structuredContent as { result?: { next: unknown } } | undefined)?.result?.next).toEqual([])
+    expect(JSON.stringify(result.content)).not.toContain('ae_registry_tools_search(')
     expect(JSON.stringify(result.content)).toContain('scope: all/complete')
     run.mockRestore()
   })
 
   it('carries a next_page nextAction ahead of a request or broaden decision', async () => {
     const run = vi.spyOn(registryToolsSearchAction, 'run').mockResolvedValue(noMatch([
-      { action: 'next-page', args: { query: 'plumbing', cursor: 'cursor-1' }, authority: 'public' },
+      { action: 'registry.tools.search', args: { query: 'plumbing', cursor: 'cursor-1' }, authority: 'public' },
     ], { limit: 8, hasMore: true, nextCursor: 'cursor-1' }))
 
     const response = await postMcp({
@@ -210,7 +206,7 @@ describe('MCP host adapter registry', () => {
     const body = await readMcpBody(response)
     const result = body.result as Record<string, unknown>
     expect((result.structuredContent as { result?: { next: unknown } } | undefined)?.result?.next).toEqual([
-      { action: 'next-page', args: { query: 'plumbing', cursor: 'cursor-1' }, authority: 'public' },
+      { action: 'registry.tools.search', args: { query: 'plumbing', cursor: 'cursor-1' }, authority: 'public' },
     ])
     expect(JSON.stringify(result.content)).toContain('ae_registry_tools_search({\\"query\\":\\"plumbing\\",\\"cursor\\":\\"cursor-1\\"})')
     expect(JSON.stringify(result.content)).toContain('scope: all/page')
@@ -233,26 +229,26 @@ describe('MCP host adapter registry', () => {
           id: toolRef, source: 'current', access: 'ae_callable', toolRef, title: 'AE Tool',
           summary: 'Retrieve data', provider: 'AE', actionClass: 'retrieve', objectClass: 'data',
           readiness: 'ready', price: { kind: 'indicative', label: 'A$0.02' }, detailRef: toolRef,
-          next: [{ action: 'describe', authority: 'public', args: { toolRef } }],
+          next: [{ action: 'registry.tools.describe', authority: 'public', args: { toolRef } }],
         },
         {
           id: 'opaque-1', source: 'coinbase', access: 'external_listing', title: 'External Tool',
           summary: 'Retrieve data', provider: 'Outside', actionClass: 'retrieve', objectClass: 'data',
           readiness: 'unverified', price: { kind: 'unavailable' },
           detailRef: '/api/v1/registry/detail?id=opaque-1',
-          next: [{ action: 'describe-external', authority: 'public', args: { id: 'opaque-1' } }],
+          next: [],
         },
       ],
     }))
     run.mockResolvedValueOnce(toolChoiceSearchOutputSchema.parse({
-      ...noMatch([{ action: 'retry', authority: 'public', args: { query: 'plumbing' } }]),
+      ...noMatch([{ action: 'registry.tools.search', authority: 'public', args: { query: 'plumbing' } }]),
       kind: 'unavailable',
       reason: 'source_unavailable',
       assessed: { source: 'all', scope: 'page', examined: 0, coverage: 'partial' },
     }))
 
     for (const [id, expected] of [
-      [31, ['ae_registry_tools_describe(', 'curl --fail', '/api/v1/registry/detail?id=opaque-1']],
+      [31, ['ae_registry_tools_describe(', '/api/v1/registry/detail?id=opaque-1']],
       [32, ['Search unavailable', 'ae_registry_tools_search(']],
     ] as const) {
       const response = await postMcp({
@@ -293,8 +289,10 @@ describe('MCP host adapter registry', () => {
       params: { name: 'ae_marketDemand_record', arguments: { query: 'rare service', idempotencyKey: 'demand-fault-1' } },
     }, { authenticate: authenticateWithScopes(['market_tools:call']) }, { authorization: 'Bearer buyer' })
     expect(response.status).toBe(200)
-    expect((await readMcpBody(response)).result?.structuredContent).toMatchObject({
-      status: 503, kind: 'UNAVAILABLE', code: 'source_unavailable', retryable: true,
+    const body = await readMcpBody(response)
+    expect(body.result?.isError).toBe(true)
+    expect(body.result?.structuredContent).toMatchObject({
+      result: { kind: 'refused', code: 'source_unavailable' }, next: [],
     })
   })
 })

@@ -389,19 +389,19 @@ export const DeveloperDiscoveryUnsupportedCapabilities = [
     reason: 'Only the AE-hosted manifest has source-owned readback; merchant-origin serving is not proven.',
   },
   {
-    label: 'Credentialed developer access',
+    label: 'Private business-catalog reads',
     state: 'unavailable',
     reason: 'Public reads need no credentials, and no quota or private-readback need is source-owned.',
   },
   {
-    label: 'Integration packages',
+    label: 'Business-catalog integration packages',
     state: 'deferred',
-    reason: 'The listed public routes and artifacts are enough for this read-only slice.',
+    reason: 'Dedicated business-catalog packages are not implemented; use the listed public HTTP reads. CLI and plugin Tool journeys are separate supported source surfaces.',
   },
   {
-    label: 'Protocol projection exports',
+    label: 'Dedicated business-catalog projection exports',
     state: 'deferred',
-    reason: 'Separate projection artifacts stay withheld until parity evidence exists.',
+    reason: 'Dedicated business-catalog projection artifacts are not served. The existing /openapi.json describes the implemented HTTP operations; /mcp exposes the role-scoped Tool workflows.',
   },
   {
     label: 'Commercial or owner-action authority',

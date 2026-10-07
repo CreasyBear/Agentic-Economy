@@ -1,3 +1,4 @@
+import { brandedStringSchema } from '@/modules/common/branded-string-schema'
 import { brandNonEmpty } from '@/modules/common/ids'
 import { z } from 'zod'
 
@@ -85,10 +86,10 @@ function isPlanInput(value: unknown): value is PlanInput {
   return Object.values(value).every(isPlanInput)
 }
 
-const planNodeIdSchema = z.string().regex(nodeIdPattern).transform((value) => (
+const planNodeIdSchema = brandedStringSchema(z.string().regex(nodeIdPattern), (value) => (
   brandNonEmpty(value, 'PlanNodeId')
 ))
-const toolRefSchema = z.string().regex(toolRefPattern).transform((value) => (
+const toolRefSchema = brandedStringSchema(z.string().regex(toolRefPattern), (value) => (
   brandNonEmpty(value, 'ToolRef')
 ))
 const jsonPointerPattern = /^(?:\/(?:[^~/]|~[01])+)*$/u
@@ -108,10 +109,10 @@ const planJsonShapeSchema: z.ZodType<PlanJson> = z.strictObject({ nodes: planNod
 export const planJsonSchema: z.ZodType<PlanJson> = planJsonShapeSchema
 export const planQuoteInputSchema: z.ZodType<PlanQuoteInput> = z.strictObject({ plan: planJsonSchema })
 
-const planRefSchema = z.string().min(1).max(300).regex(/^[\s\S]*\S[\s\S]*$/u).transform((value) => (
+const planRefSchema = brandedStringSchema(z.string().min(1).max(300).regex(/^[\s\S]*\S[\s\S]*$/u), (value) => (
   brandNonEmpty(value, 'PlanRef')
 ))
-const audUnitsSchema = z.string().regex(/^(?:0|[1-9]\d*)$/u).transform((value) => (
+const audUnitsSchema = brandedStringSchema(z.string().regex(/^(?:0|[1-9]\d*)$/u), (value) => (
   brandNonEmpty(value, 'AudUnits')
 ))
 const planNodePriceClassSchema: z.ZodType<PlanNodePriceClass> = z.enum([

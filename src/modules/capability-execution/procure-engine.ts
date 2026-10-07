@@ -17,11 +17,11 @@ import {
   compareExactAmounts,
   formatDisplayAmount,
   parseDecimalExactAmount,
-  type ExactAmount,
 } from '@/modules/money/public'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { rankToolsForSelection, type ToolSelectionEvidence } from '@/modules/common/tool-selection-score'
 import { procureQuoteSnapshotSchema, toolProcureResultSchema, type ToolProcureInput, type ToolProcureResult } from './procure'
+import { projectStoredProcureResult, storedToolProcureResultSchema } from './procure-storage'
 import { MIN_MODEL_CONFIDENCE, routeSelection } from './route-selection'
 import { recordSelectionDecision } from './selection-decision-recorder'
 
@@ -111,28 +111,6 @@ function acceptedIdentity(result: IdentityResult): Extract<IdentityResult, { kin
   if (result.kind === 'conflict') throw new ProcureConflictError('The procurement key is bound to different material.')
   if (result.kind === 'unauthorized') throw new ProcureAuthorityError('Procurement principal is not authorised.')
   return result
-}
-
-/** Buyer display amounts never determine Quote, budget or ledger arithmetic. */
-function procurePriceBreakdownFromUnits(totalUnits: string): Readonly<{
-  totalAud: string
-  netAud: string
-  gstAud: string
-}> {
-  const totalAud = formatDisplayAmount({ currency: 'AUD', exponent: 6, units: totalUnits })
-  return {
-    totalAud,
-    netAud: totalAud,
-    gstAud: formatDisplayAmount({ currency: 'AUD', exponent: 6, units: '0' }),
-  }
-}
-
-function procurePriceBreakdownFromQuote(quotePrice: ExactAmount): Readonly<{
-  totalAud: string
-  netAud: string
-  gstAud: string
-}> {
-  return procurePriceBreakdownFromUnits(quotePrice.units)
 }
 
 function completedCallBuyerRefundAuthoritative(
@@ -288,7 +266,7 @@ export class CapabilityProcurementEngine {
       reasons: [...(selectedScore?.reasons ?? [])],
       alternates,
       inputJsonSchema: schema, requiredFields,
-      next: { kind: 'exact' as const, toolRef: routing.tool.toolRef },
+      next: { action: 'tool.procure' as const, args: { kind: 'exact' as const, toolRef: routing.tool.toolRef }, requiredInput: ['input', 'maxSpendAud', 'idempotencyKey'] as const, authority: 'agent_key' as const },
     }
     return toolProcureResultSchema.parse(selected)
   }
@@ -299,27 +277,33 @@ export class CapabilityProcurementEngine {
     const { principal, callService, identity } = this.dependencies
     const correlationId = this.dependencies.correlationId ?? globalThis.crypto.randomUUID()
     const reserved = acceptedIdentity(await identity.reserve(input, principal))
+    let saved: unknown
     if (reserved.kind === 'replay' && reserved.resultJson !== null) {
-      const completed = toolProcureResultSchema.safeParse(JSON.parse(reserved.resultJson))
-      if (completed.success && completed.data.status !== 'pending' && completed.data.status !== 'outcome_unknown') return completed.data
+      try { saved = JSON.parse(reserved.resultJson) } catch {
+        throw new ProcureInProgressError('The saved procurement checkpoint cannot be read. Contact support with the original key and request ID.')
+      }
+      const completed = storedToolProcureResultSchema.safeParse(saved)
+      if (completed.success && completed.data.status !== 'pending' && completed.data.status !== 'outcome_unknown') return projectStoredProcureResult(completed.data)
     }
     if (reserved.kind === 'replay' && reserved.quoteRef === null) {
-      // A concurrent request may still be obtaining its Quote. The caller must
-      // retry the SAME key; starting a second Quote here would race the owner.
-      throw new ProcureInProgressError('Procurement is preparing its Quote; retry with the same key.')
+      // The owner may still be obtaining its Quote, or may have stopped after
+      // an external inspection. The durable key cannot distinguish those cases.
+      throw new ProcureInProgressError('Quote preparation is unresolved. Retry the unchanged request with the same key; if this persists, contact support with the key and request ID.')
     }
     const common = { schemaVersion: 'tool.procure:v1' as const, idempotencyKey: input.idempotencyKey }
     const finish = async (result: ToolProcureResult): Promise<ToolProcureResult> => {
       const saved = acceptedIdentity(await identity.complete(input, principal, result))
       if (saved.kind !== 'replay' || saved.resultJson === null) throw new Error('procurement_result_not_persisted')
-      return toolProcureResultSchema.parse(JSON.parse(saved.resultJson))
+      return projectStoredProcureResult(JSON.parse(saved.resultJson))
     }
 
     const toolRef = input.toolRef
     const suppliedInput = input.input
-    let quote = reserved.kind === 'replay' && reserved.resultJson !== null
-      ? quoteSnapshotSchema.safeParse(JSON.parse(reserved.resultJson)).data
-      : undefined
+    let quote = reserved.kind === 'replay' ? quoteSnapshotSchema.safeParse(saved).data : undefined
+    if (reserved.kind === 'replay' && (quote === undefined || quote.quoteRef !== reserved.quoteRef)) {
+      // Missing or invalid retained material never authorises another Quote.
+      throw new ProcureInProgressError('The saved Quote checkpoint cannot be recovered. Contact support with the original key and request ID.')
+    }
     if (quote === undefined) {
       if (callService.quoteTool === undefined) throw new Error('call_service_quote_unavailable')
       const quoteRes = await callService.quoteTool({
@@ -344,8 +328,8 @@ export class CapabilityProcurementEngine {
         throw new Error('procurement_quote_not_persisted')
       }
       if (checkpoint.resultJson !== null) {
-        const completed = toolProcureResultSchema.safeParse(JSON.parse(checkpoint.resultJson))
-        if (completed.success && completed.data.status !== 'pending' && completed.data.status !== 'outcome_unknown') return completed.data
+        const completed = storedToolProcureResultSchema.safeParse(JSON.parse(checkpoint.resultJson))
+        if (completed.success && completed.data.status !== 'pending' && completed.data.status !== 'outcome_unknown') return projectStoredProcureResult(completed.data)
       }
     }
     const { quoteRef, price: quotePrice } = quote
@@ -393,15 +377,15 @@ export class CapabilityProcurementEngine {
       return await finish({ ...committed, kind: 'outcome_unknown', status: 'outcome_unknown' })
     }
     if (completedCallBuyerRefundAuthoritative(callRes)) {
-      const refundedDisplay = formatDisplayAmount(callRes.usage.amount)
       return await finish({
         ...committed, kind: 'remedied', status: 'remedied',
         toolRef: callRes.toolRef,
         ...(quote.toolName === undefined ? {} : { toolName: quote.toolName }),
-        refundedAmountAud: refundedDisplay, netChargeAud: 'A$0.00',
+        money: { kind: 'recorded', price: quotePrice, usage: callRes.usage,
+          ...(callRes.receipt === undefined ? {} : { receipt: callRes.receipt }) },
         diagnostic: {
           whatHappened: `Call ${callRes.callRef} completed with buyer funds released per platform settlement.`,
-          financialImpact: `A$0.00 deducted — ${refundedDisplay} refunded immediately to available balance.`,
+          financialImpact: 'The Call reports buyer funds released. Read its usage and receipt for recorded financial amounts.',
           nextStep: 'Buyer funds were released. Check the original Call status before another purchase.',
         },
         audit: {
@@ -417,7 +401,8 @@ export class CapabilityProcurementEngine {
       ...committed, kind: 'delivered', status: 'delivered',
       toolRef: callRes.toolRef,
       ...(quote.toolName === undefined ? {} : { toolName: quote.toolName }),
-      price: procurePriceBreakdownFromQuote(quotePrice),
+      money: { kind: 'recorded', price: quotePrice, usage: callRes.usage,
+        ...(callRes.receipt === undefined ? {} : { receipt: callRes.receipt }) },
       ...(callRes.contentExpiredAt === undefined
         ? {
             ...(!('endpoint' in quote) || quote.endpoint === undefined ? {} : { endpoint: quote.endpoint }),

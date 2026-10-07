@@ -1,11 +1,9 @@
-import type { JourneyNext } from '@/modules/actions/contract'
 import { TOOL_QUOTE_PATH, toolQuoteResultSchema } from '@/modules/capability-execution/quote'
 import { toolChoiceDescribeOutputSchema } from '@/modules/registry/tool-choice-contracts'
 import { TOOL_MARKET_DESCRIBE_PATH } from '@/modules/registry/tool-entry'
 import type { CliOptions } from '../../lib/args'
 import { isLoopbackCliBaseUrl } from '../../lib/args'
 import { continuationCommand } from '../../lib/continuation-command'
-import { journeyNextCommand } from '../../lib/journey-next-command'
 import { callJson } from '../../lib/output'
 import { listCommandDescriptor } from '../list'
 import { originFlags, type DoctorCheckDraft } from './shared'
@@ -92,7 +90,7 @@ function quoteRefusalCommand(options: CliOptions, code: string): string | undefi
   // Sandbox authority is what a local refusal usually lacks: `ae connect` first,
   // then reseed the grant the Quote path resolves.
   if (QUOTE_AUTHORITY_REFUSAL_CODES.includes(code)) return LOCAL_DEV_COMMAND
-  if (QUOTE_FUNDING_REFUSAL_PATTERN.test(code)) return journeyNextCommand({ action: 'fund', args: {}, authority: 'agent_key' } satisfies JourneyNext, options)
+  if (QUOTE_FUNDING_REFUSAL_PATTERN.test(code)) return continuationCommand(['ae', 'fund', ...originFlags(options), '--json'])
   return continuationCommand(['ae', 'doctor', ...originFlags(options), '--json'])
 }
 

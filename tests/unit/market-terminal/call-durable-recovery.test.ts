@@ -7,7 +7,7 @@ import { spawnCli } from './cli-errors-harness'
 
 const toolRef = `operation:v1:${'8'.repeat(64)}`
 const quoteRef = `operation-commitment:v1:${'9'.repeat(64)}`
-const callRef = 'call:durable-test'
+const callRef = `operation-invocation:v1:${'d'.repeat(64)}`
 const input = { privateValue: 'RAW_INPUT_MUST_NOT_BE_STORED', order: 1 }
 const completed = {
   kind: 'completed', callRef, toolRef, output: { value: 42 }, evidenceHash: 'sha256:test',
@@ -58,11 +58,11 @@ beforeEach(async () => {
       quotes += 1
       await body(request)
       return json(response, {
-        kind: 'committed', quoteRef, toolRef, toolVersion: 1, expiresAt: Date.now() + 60_000, normalizedInput: input,
+        kind: 'committed', quoteRef, toolRef, toolVersion: 1, expiresAt: Date.now() + 60_000,
         price: { currency: 'AUD', units: '0', exponent: 2 }, account: { accountRef: account, available: { currency: 'AUD', units: '10000', exponent: 2 } },
         budget: { principalRef: principal, maximumPerCall: { currency: 'AUD', units: '1000', exponent: 2 } },
         policyRefs: ['commercial-policy:sandbox'], evidenceDigest: 'sha256:test',
-        continuation: { action: 'tool.call', method: 'POST', path: '/api/v1/tools/call', input: { quoteRef, idempotencyKey: 'replace-at-call' } },
+        continuation: { action: 'tool.call', args: { quoteRef, idempotencyKey: 'replace-at-call' } },
       })
     }
     if (request.url === '/api/v1/tools/call') {
@@ -120,7 +120,7 @@ describe('durable CLI Call recovery across processes', () => {
   }, 30_000)
 
   it('reads the acknowledged Call after restart and never reposts it', async () => {
-    onCall = (response) => json(response, { kind: 'pending', callRef, toolRef, retryAfterMs: 100 })
+    onCall = (response) => json(response, { kind: 'pending', callRef, toolRef, retryAfterMs: 100, next: [{ action: 'call.status', args: { callRef }, authority: 'same_principal' }] })
     const first = await startCall()
     expect(first.status).toBe(0)
     const { recoveryRef } = JSON.parse(first.stdout)
@@ -195,7 +195,7 @@ describe('durable CLI Call recovery across processes', () => {
   }, 30_000)
 
   it('blocks competing fresh processes from submitting duplicate unresolved requests', async () => {
-    onCall = (response) => json(response, { kind: 'pending', callRef, toolRef, retryAfterMs: 100 })
+    onCall = (response) => json(response, { kind: 'pending', callRef, toolRef, retryAfterMs: 100, next: [{ action: 'call.status', args: { callRef }, authority: 'same_principal' }] })
     const [left, right] = await Promise.all([startCall(), startCall()])
     expect([left.status, right.status].sort()).toEqual([0, 1])
     const failed = left.status === 1 ? left : right

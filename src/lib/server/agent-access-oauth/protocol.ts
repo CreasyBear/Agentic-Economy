@@ -1,4 +1,4 @@
-import { readBoundedRequestJson, readBoundedRequestText } from '@/lib/server/bounded-request-body'
+import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import {
   MARKET_SUPPLY_MANAGE_SCOPE,
   agentAuthorityModeForScopes,
@@ -25,13 +25,37 @@ import { exactAmountSchema, formatExactAmount, type ExactAmount } from '@/module
 import { degrade } from '@/lib/observability/degrade'
 
 const MAX_OAUTH_FORM_BODY_BYTES = 16 * 1024
-const MAX_OAUTH_JSON_BODY_BYTES = 16 * 1024
 export const AUTHORIZATION_CODE_GRANT_TYPE = AGENT_ACCESS_OAUTH_GRANT_TYPES[0]
 export const DEVICE_GRANT_TYPE = AGENT_ACCESS_OAUTH_GRANT_TYPES[1]
 export const PUBLIC_CLIENT_AUTH_METHOD = AGENT_ACCESS_OAUTH_TOKEN_ENDPOINT_AUTH_METHODS[0]
 
+type OAuthRequestBodyResult =
+  | Readonly<{ kind: 'ok'; text: string }>
+  | Readonly<{ kind: 'invalid' }>
+  | Readonly<{ kind: 'too_large' }>
+
+// Routes and protocol handlers share the exact bounded body used for request hashing.
+const requestBodies = new WeakMap<Request, Promise<OAuthRequestBodyResult>>()
+
+export function readOAuthRequestBody(request: Request): Promise<OAuthRequestBodyResult> {
+  const existing = requestBodies.get(request)
+  if (existing !== undefined) return existing
+  const pending = readOAuthRequestBodyOnce(request)
+  requestBodies.set(request, pending)
+  return pending
+}
+
+async function readOAuthRequestBodyOnce(request: Request): Promise<OAuthRequestBodyResult> {
+  try {
+    const bounded = await readBoundedRequestText(request, MAX_OAUTH_FORM_BODY_BYTES)
+    return bounded.ok ? { kind: 'ok', text: bounded.text } : { kind: 'too_large' }
+  } catch (cause) {
+    return degrade(cause, { kind: 'invalid' }, { site: 'readOAuthRequestBody', reason: 'invalid_response' })
+  }
+}
+
 type OAuthFormResult =
-  | Readonly<{ kind: 'ok'; value: URLSearchParams }>
+  | Readonly<{ kind: 'ok'; value: URLSearchParams; sourceBody: string }>
   | Readonly<{ kind: 'invalid' }>
   | Readonly<{ kind: 'too_large' }>
 
@@ -71,9 +95,9 @@ function singleRecord(value: unknown): Record<string, unknown> | undefined {
 export async function readForm(request: Request): Promise<OAuthFormResult> {
   if (!request.headers.get('content-type')?.toLowerCase().includes('application/x-www-form-urlencoded')) return { kind: 'invalid' }
   try {
-    const bounded = await readBoundedRequestText(request, MAX_OAUTH_FORM_BODY_BYTES)
-    if (!bounded.ok) return { kind: 'too_large' }
-    return { kind: 'ok', value: new URLSearchParams(bounded.text) }
+    const bounded = await readOAuthRequestBody(request)
+    if (bounded.kind !== 'ok') return bounded
+    return { kind: 'ok', value: new URLSearchParams(bounded.text), sourceBody: bounded.text }
   } catch (cause) {
     return degrade(cause, { kind: 'invalid' }, { site: 'readForm', reason: 'invalid_response' })
   }
@@ -83,9 +107,9 @@ export async function readJson(request: Request): Promise<OAuthJsonResult> {
   const mediaType = request.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase()
   if (mediaType !== 'application/json') return { kind: 'invalid' }
   try {
-    const bounded = await readBoundedRequestJson(request, MAX_OAUTH_JSON_BODY_BYTES)
-    if (!bounded.ok) return { kind: bounded.code === 'payload_too_large' ? 'too_large' : 'invalid' }
-    return { kind: 'ok', value: bounded.value }
+    const bounded = await readOAuthRequestBody(request)
+    if (bounded.kind !== 'ok') return bounded
+    return { kind: 'ok', value: JSON.parse(bounded.text) as unknown }
   } catch (cause) {
     return degrade(cause, { kind: 'invalid' }, { site: 'readJson', reason: 'invalid_response' })
   }

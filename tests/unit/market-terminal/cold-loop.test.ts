@@ -3,6 +3,7 @@ import { mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
+import { callResultSchema, projectCallMachineResult } from '@/modules/capability-execution/call-contracts'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const childProcessMockState = vi.hoisted(() => ({
@@ -143,11 +144,11 @@ describe('external-agent Market Tool cold loop', () => {
     stubFetchResolved(result)
     const output = parseJson(await withStdout(() => runSearchCommand(['invoice extraction'], options)))
     expect(output).toMatchObject({ kind: 'noMatch', results: [], assessed: { scope: 'complete' },
-      next: [{ action: 'broaden', authority: 'public', args: { query: 'invoice extraction' } }] })
+      next: [] })
     expect(output).not.toHaveProperty('nextCommand')
     const human = await withStdout(() => runSearchCommand(['invoice extraction'], { ...options, json: false }))
     expect(human).toContain('No suitable Tools found')
-    expect(human).toContain('Next: broaden {"query":"invoice extraction"} · ae search')
+    expect(human).not.toContain('Next:')
     expect(human).not.toContain('request create')
   })
   it('keeps scoped page and exhausted no-match distinct when supply is not assessed', async () => {
@@ -157,10 +158,10 @@ describe('external-agent Market Tool cold loop', () => {
       kind: 'scoped',
       assessed: { source: 'current', scope: 'page', examined: 1, coverage: 'partial' },
       pagination: { limit: 1, nextCursor: 'opaque-page-cursor', hasMore: true },
-      next: [{ action: 'next-page', authority: 'public', args: { query, cursor: 'opaque-page-cursor' } }],
+      next: [{ action: 'registry.tools.search', authority: 'public', args: { query, cursor: 'opaque-page-cursor' } }],
     })
     expect(page).toMatchObject({ kind: 'scoped', results: [], next: [
-      { action: 'next-page', args: { cursor: 'opaque-page-cursor' } },
+      { action: 'registry.tools.search', args: { cursor: 'opaque-page-cursor' } },
     ] })
     const exhausted = operationSearchResult(query, [])
     expect(exhausted).toMatchObject({ kind: 'noMatch', assessed: { scope: 'complete' }, results: [] })
@@ -172,7 +173,7 @@ describe('external-agent Market Tool cold loop', () => {
     const human = await withStdout(() => runSearchCommand(['reference lookup'], {
       ...options, json: false, filters: JSON.stringify({ healthStatus: ['degraded'] }),
     }))
-    expect(human).toContain('Next: next-page {"query":"reference lookup","cursor":"opaque-page-cursor"}')
+    expect(human).toContain('Next: registry.tools.search {"query":"reference lookup","cursor":"opaque-page-cursor"}')
     expect(human).toContain('--cursor opaque-page-cursor')
   })
 
@@ -211,7 +212,7 @@ describe('external-agent Market Tool cold loop', () => {
     const result = {
       ...operationSearchResult('reference lookup', [operationDescriptor(toolRef)]),
       pagination: { limit: 3, nextCursor: 'opaque-next-cursor', hasMore: true },
-      next: [{ action: 'next-page', authority: 'public', args: { query: 'reference lookup', cursor: 'opaque-next-cursor' } }],
+      next: [{ action: 'registry.tools.search', authority: 'public', args: { query: 'reference lookup', cursor: 'opaque-next-cursor' } }],
     }
     const fetchMock = stubFetchJsonResponse(result)
     const output = parseJson(await withStdout(() => runSearchCommand(['reference lookup'], {
@@ -244,8 +245,8 @@ describe('external-agent Market Tool cold loop', () => {
     stubFetchJsonResponse(result)
     const output = parseJson(await withStdout(() => runSearchCommand(['reference lookup'], options)))
     expect(output).toMatchObject({ kind: 'match', results: [
-      { toolRef: refs[0], next: [{ action: 'describe', args: { toolRef: refs[0] } }] },
-      { toolRef: refs[1], next: [{ action: 'describe', args: { toolRef: refs[1] } }] },
+      { toolRef: refs[0], next: [{ action: 'registry.tools.describe', args: { toolRef: refs[0] } }] },
+      { toolRef: refs[1], next: [{ action: 'registry.tools.describe', args: { toolRef: refs[1] } }] },
     ] })
     expect(output).not.toHaveProperty('nextCommand')
   })
@@ -260,17 +261,17 @@ describe('external-agent Market Tool cold loop', () => {
         title: 'External lookup', summary: 'Unadmitted search', provider: 'Outside',
         actionClass: 'retrieve', objectClass: 'data', readiness: 'unverified',
         price: { kind: 'unavailable' }, detailRef: '/api/v1/registry/detail?id=opaque-1',
-        next: [{ action: 'describe-external', authority: 'public', args: { id: 'opaque-1' } }],
+        next: [],
       }],
     })
     stubFetchJsonResponse(result)
     const human = await withStdout(() => runSearchCommand(['lookup'], { ...options, json: false }))
     expect(human).toContain('scope: all/complete')
     expect(human).toContain(`describe {"toolRef":"${toolRef}"} · ae describe ${toolRef}`)
-    expect(human).toContain('describe-external {"id":"opaque-1"} · curl --fail')
+    expect(human).not.toContain('describe-external')
     expect(human).toContain('detail?id=opaque-1')
     expect(human).toContain('External listing (not AE callable)')
-    expect(human).toContain('Next: broaden {"query":"lookup"} · ae search lookup')
+    expect(human).not.toContain('Next:')
   })
 
   it('returns unavailable as a retryable classified outcome, not a thrown CLI failure', async () => {
@@ -279,16 +280,16 @@ describe('external-agent Market Tool cold loop', () => {
       kind: 'unavailable',
       reason: 'source_unavailable',
       assessed: { source: 'all', scope: 'page', examined: 0, coverage: 'partial' },
-      next: [{ action: 'retry', authority: 'public', args: { query: 'lookup' } }],
+      next: [{ action: 'registry.tools.search', authority: 'public', args: { query: 'lookup' } }],
     })
     stubFetchJsonResponse(result)
     const json = parseJson(await withStdout(() => runSearchCommand(['lookup'], options)))
     expect(json).toMatchObject({ kind: 'unavailable', next: [
-      { action: 'retry', args: { query: 'lookup' } },
+      { action: 'registry.tools.search', args: { query: 'lookup' } },
     ] })
     const human = await withStdout(() => runSearchCommand(['lookup'], { ...options, json: false }))
     expect(human).toContain('scope: all/page')
-    expect(human).toContain('Next: retry {"query":"lookup"} · ae search lookup')
+    expect(human).toContain('Next: registry.tools.search {"query":"lookup"} · ae search lookup')
   })
 
   it('rejects an out-of-range search limit before network work', async () => {
@@ -480,7 +481,7 @@ describe('external-agent Market Tool cold loop', () => {
     }>()
     let providerEffects = 0
     const jsonResponse = (body: unknown, status = 200, contentType = 'application/json') => (
-      new Response(JSON.stringify(body), { status, headers: { 'content-type': contentType } })
+      new Response(JSON.stringify(callResultSchema.safeParse(body).success ? projectCallMachineResult(callResultSchema.parse(body)) : body), { status, headers: { 'content-type': contentType } })
     )
     const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
       const url = String(input)
@@ -721,6 +722,7 @@ describe('external-agent Market Tool cold loop', () => {
       callRef: CURRENT_CALL_REF,
       toolRef: CURRENT_OPERATION_REF,
       retryAfterMs: 100,
+      next: [{ action: 'call.status', args: { callRef: CURRENT_CALL_REF }, authority: 'same_principal', retryAfterMs: 100 }],
       nextCommand: `ae status ${CURRENT_CALL_REF} --base-url https://market.example --json`,
       recoveryRef: expect.stringMatching(/^[0-9a-f-]{36}$/u),
     })
@@ -742,7 +744,7 @@ describe('external-agent Market Tool cold loop', () => {
         state: 'in_progress',
       },
       workState: 'working',
-      next: [{ action: 'status', args: { ref: { kind: 'call', ref: CURRENT_CALL_REF } }, authority: 'same_principal' }],
+      next: [{ action: 'call.status', args: { callRef: CURRENT_CALL_REF }, authority: 'same_principal' }],
     }
     const fetchMock = stubFetchJsonResponse(statusBody)
     const outputText = await withStdout(async () => { await runStatusCommand([CURRENT_CALL_REF], options) })
@@ -794,7 +796,7 @@ describe('external-agent Market Tool cold loop', () => {
         state: 'in_progress',
       },
       workState: 'working',
-      next: [{ action: 'status', args: { ref: { kind: 'call', ref: CURRENT_CALL_REF } }, authority: 'same_principal' }],
+      next: [{ action: 'call.status', args: { callRef: CURRENT_CALL_REF }, authority: 'same_principal' }],
     }
     const fetchMock = stubFetchJsonResponse(statusBody)
     const outputText = await withStdout(async () => { await runStatusCommand([CURRENT_CALL_REF], loopbackOptions) })
@@ -835,7 +837,7 @@ describe('external-agent Market Tool cold loop', () => {
     vi.stubGlobal('fetch', fetchMock)
     try {
       await runConnectCommand([], options)
-      expect(JSON.parse(output.read()).kind).toBe('pending')
+      expect(JSON.parse(output.read())).toMatchObject({ kind: 'pending', ownerHandoff: { actor: 'account_owner', reason: 'device_authorization_required', destination: 'https://market.example/agent-access/authorize' } })
       const pendingDirectory = pendingConnectionsDir(testConfigDirectory)
       const files = readdirSync(pendingDirectory)
       expect(files).toHaveLength(1)

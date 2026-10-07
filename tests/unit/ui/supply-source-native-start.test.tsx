@@ -232,14 +232,12 @@ describe('Add Tool', () => {
     const onPreview = vi.fn()
       .mockResolvedValueOnce({
         kind: 'action_required',
-        requiredAction: {
-          action: 'supply.source.preview',
-          blockedCapabilities: ['supply.publish'],
-          cta: null,
+        ownerHandoff: {
+          actor: 'business_owner',
+          reason: 'source_attention_required',
+          destination: '/owner/operations/new',
           ctaLabel: 'Check source',
           description: 'Both GET and POST returned an x402 payment challenge. Choose one method, then preview again.',
-          iconUrl: null,
-          status: 'required',
           title: 'Choose the request method',
         },
       })
@@ -312,14 +310,12 @@ describe('Add Tool', () => {
       .mockResolvedValueOnce(ready)
       .mockResolvedValueOnce({
         kind: 'action_required',
-        requiredAction: {
-          action: 'supply.source.preview',
-          blockedCapabilities: ['supply.publish'],
-          cta: null,
+        ownerHandoff: {
+          actor: 'business_owner',
+          reason: 'source_attention_required',
+          destination: '/owner/operations/new',
           ctaLabel: 'Check source',
           description: 'Both GET and POST returned an x402 payment challenge. Choose one method, then preview again.',
-          iconUrl: null,
-          status: 'required',
           title: 'Choose the request method',
         },
       })
@@ -337,14 +333,12 @@ describe('Add Tool', () => {
   it('shows one named preview correction', async () => {
     const onPreview = vi.fn().mockResolvedValue({
       kind: 'action_required',
-      requiredAction: {
-        action: 'supply.source.preview',
-        blockedCapabilities: ['supply.publish'],
-        cta: null,
+      ownerHandoff: {
+        actor: 'business_owner',
+          reason: 'source_attention_required',
+        destination: '/owner/operations/new',
         ctaLabel: 'Check source',
         description: 'The unpaid endpoint must answer with HTTP 402 and an x402 v2 PaymentRequired challenge.',
-        iconUrl: null,
-        status: 'required',
         title: 'x402 source needs attention',
       },
     })

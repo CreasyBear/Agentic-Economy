@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { toolPlanQuoteAction } from '@/modules/capability-execution/plan/quote.actions'
 import {
   toolQuoteAction,
 } from '@/modules/capability-execution/quote.actions'
@@ -12,25 +13,31 @@ import {
   COMMERCIAL_POLICY_REFUSAL_REASONS,
   type CommercialPolicyRefusalReason,
 } from '@/modules/money/public'
-import { FUNDING_HANDOFF_CONFIG_PATH } from '@/modules/money/funding-handoff.actions'
 
 const toolRef = `operation:v1:${'a'.repeat(64)}`
 const input = { city: 'Perth' }
 
 describe('tool.quote continuations', () => {
+  it.each([toolQuoteAction, toolPlanQuoteAction])('discloses unpaid Provider inspection in $id metadata', action => {
+    expect(action.effect).toMatchObject({ class: 'disclosure', reversible: false, recipientKind: 'provider_system', spendExposure: 'none' })
+    expect(action.invocationContract.consequenceClass).toBe('communication')
+    expect(action.mcp?.openWorld).toBe(true)
+    expect(action.boundaries.join(' ')).toContain('before the Quote exists')
+  })
+
   it.each<readonly [ToolQuoteRefusalCode, string | undefined, string | undefined]>([
     ['tool_not_found', 'registry.tools.list', undefined],
     ['tool_not_current', 'registry.tools.list', undefined],
     ['tool_not_ready', 'tool.quote', undefined],
     ['tool_unsupported', 'registry.tools.list', undefined],
     ['input_invalid', 'registry.tools.describe', undefined],
-    ['grant_not_found', undefined, 'Review agent access'],
-    ['budget_exceeded', undefined, 'Review agent access'],
+    ['grant_not_found', undefined, 'account_owner'],
+    ['budget_exceeded', undefined, 'account_owner'],
     ['treasury_capacity_unavailable', 'tool.quote', undefined],
     ['pricing_setup_required', 'registry.tools.list', undefined],
-    ['commercial_policy_unavailable', undefined, 'Contact support'],
+    ['commercial_policy_unavailable', undefined, 'ae_support'],
     ['inspection_unavailable', 'tool.quote', undefined],
-  ])('projects %s to exactly one safe next step', (code, action, requiredTitle) => {
+  ])('projects %s to exactly one safe next step', (code, action, requiredActor) => {
     const result = projectToolQuoteRefusal({
       toolRef,
       input,
@@ -41,15 +48,14 @@ describe('tool.quote continuations', () => {
 
     expect(toolQuoteResultSchema.safeParse(result).success).toBe(true)
     expect(result.continuation?.action).toBe(action)
-    expect(result.requiredActions?.[0]?.title).toBe(requiredTitle)
-    expect(Number(result.continuation !== undefined) + Number(result.requiredActions !== undefined)).toBe(1)
+    expect(result.ownerHandoff?.actor).toBe(requiredActor)
+    expect(Number(result.continuation !== undefined) + Number(result.ownerHandoff !== undefined)).toBe(1)
   })
 
   it('directs ambiguous earlier spending to support without an automatic retry loop', () => {
     const result = projectToolQuoteRefusal({ toolRef, input, code: 'inspection_unavailable', retryable: true,
       correlationRef: 'request:history', reason: 'spending_period_legacy_history_requires_support' })
-    expect(result).toMatchObject({ retryable: false, requiredActions: [{ cta: '/support',
-      title: 'Verify earlier spending', description: expect.stringContaining('earlier spending') }] })
+    expect(result).toMatchObject({ retryable: false, ownerHandoff: { actor: 'ae_support', destination: '/support', reason: expect.stringContaining('earlier spending') } })
     expect(result.continuation).toBeUndefined()
     expect(toolQuoteResultSchema.safeParse(result).success).toBe(true)
   })
@@ -57,7 +63,7 @@ describe('tool.quote continuations', () => {
   it.each(['daily_limit_exhausted', 'monthly_limit_exhausted'])('discloses UTC for %s without funding advice', reason => {
     const result = projectToolQuoteRefusal({ toolRef, input, code: 'budget_exceeded', retryable: false,
       correlationRef: 'request:period', reason })
-    expect(result.requiredActions?.[0]).toMatchObject({ cta: '/agent-access', description: expect.stringContaining('UTC') })
+    expect(result.ownerHandoff).toMatchObject({ destination: '/agent-access', reason: expect.stringContaining('UTC') })
     expect(result.continuation).toBeUndefined()
     expect(toolQuoteResultSchema.safeParse(result).success).toBe(true)
   })
@@ -100,7 +106,7 @@ describe('tool.quote continuations', () => {
     expect(result).toMatchObject({
       continuation: {
         action: 'funding.handoff.create',
-        input: {
+        args: {
           principalAmount: { currency: 'AUD', units: '5000000', exponent: 6 },
           idempotencyKey: 'funding:deterministic-test',
         },
@@ -121,27 +127,27 @@ describe('tool.quote commercial policy refusal reasons', () => {
   })
 
   it.each<readonly [CommercialPolicyRefusalReason, string, string, string]>([
-    ['legal_customer_required', 'funding.handoff.config', 'review_account_legal_customer', 'legal customer'],
-    ['commercial_policy_fixture_required', 'tool.quote', 'contact_support', 'AE could not establish'],
-    ['commercial_policy_deployment_profile_invalid', 'tool.quote', 'contact_support', 'AE could not establish'],
-    ['commercial_policy_missing', 'tool.quote', 'contact_support', 'AE could not establish'],
-    ['commercial_policy_not_effective', 'tool.quote', 'contact_support', 'AE could not establish'],
-    ['commercial_policy_expired', 'tool.quote', 'contact_support', 'AE could not establish'],
-    ['commercial_policy_suspended', 'tool.quote', 'contact_support', 'AE could not establish'],
-    ['commercial_policy_superseded', 'tool.quote', 'contact_support', 'AE could not establish'],
-    ['commercial_policy_environment_mismatch', 'tool.quote', 'contact_support', 'AE could not establish'],
-    ['commercial_policy_conflict', 'tool.quote', 'contact_support', 'AE could not establish'],
-  ])('gives %s a safe recheck and the responsible customer action', (reason, action, operatorAction, marker) => {
+    ['legal_customer_required', 'funding.handoff.config', 'account_owner', 'legal customer'],
+    ['commercial_policy_fixture_required', 'tool.quote', 'ae_support', 'AE could not establish'],
+    ['commercial_policy_deployment_profile_invalid', 'tool.quote', 'ae_support', 'AE could not establish'],
+    ['commercial_policy_missing', 'tool.quote', 'ae_support', 'AE could not establish'],
+    ['commercial_policy_not_effective', 'tool.quote', 'ae_support', 'AE could not establish'],
+    ['commercial_policy_expired', 'tool.quote', 'ae_support', 'AE could not establish'],
+    ['commercial_policy_suspended', 'tool.quote', 'ae_support', 'AE could not establish'],
+    ['commercial_policy_superseded', 'tool.quote', 'ae_support', 'AE could not establish'],
+    ['commercial_policy_environment_mismatch', 'tool.quote', 'ae_support', 'AE could not establish'],
+    ['commercial_policy_conflict', 'tool.quote', 'ae_support', 'AE could not establish'],
+  ])('gives %s a safe recheck and the responsible customer action', (reason, action, actor, marker) => {
     const result = refuse(reason)
 
     expect(toolQuoteResultSchema.safeParse(result).success).toBe(true)
     expect(result).toMatchObject({
       reason,
       continuation: { action },
-      requiredActions: [{ action: operatorAction }],
+      ownerHandoff: { actor },
     })
-    expect(result.requiredActions?.[0]?.description).toContain(marker)
-    expect(JSON.stringify(result.requiredActions)).not.toMatch(/PACKAGE4|local_ci|synthetic_vps_fixture|moneyCommercialPolicy|activate_commercial_policy|set_sandbox_deployment_profile/u)
+    expect(result.ownerHandoff?.reason).toContain(marker)
+    expect(JSON.stringify(result.ownerHandoff)).not.toMatch(/PACKAGE4|local_ci|synthetic_vps_fixture|moneyCommercialPolicy|activate_commercial_policy|set_sandbox_deployment_profile/u)
   })
 
   it('covers every enumerated reason', () => {
@@ -161,7 +167,7 @@ describe('tool.quote commercial policy refusal reasons', () => {
     })
 
     expect(result.continuation).toBeUndefined()
-    expect(result.requiredActions?.[0]?.title).toBe('Contact support')
+    expect(result.ownerHandoff?.actor).toBe('ae_support')
   })
 
   it('projects the public refusal shape for legal_customer_required', () => {
@@ -174,20 +180,13 @@ describe('tool.quote commercial policy refusal reasons', () => {
       correlationRef: 'request:test-commercial-policy',
       continuation: {
         action: 'funding.handoff.config',
-        method: 'GET',
-        path: FUNDING_HANDOFF_CONFIG_PATH,
-        input: {},
+        args: {},
       },
-      requiredActions: [{
-        action: 'review_account_legal_customer',
-        blockedCapabilities: ['tool.call'],
-        cta: '/agent-access',
-        ctaLabel: 'Review agent access',
-        description: 'The owner must confirm this Account\u2019s legal customer on the AE Account page before this Agent can call Tools.',
-        iconUrl: null,
-        status: 'required',
-        title: 'Review account ownership',
-      }],
+      ownerHandoff: {
+        actor: 'account_owner',
+        destination: '/agent-access',
+        reason: 'The owner must confirm this Account\u2019s legal customer on the AE Account page before this Agent can call Tools.',
+      },
     })
   })
 })

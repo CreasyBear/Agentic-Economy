@@ -440,6 +440,25 @@ describe("capability publication importers", () => {
       reason: "openapi_response_status_unsupported",
     });
   });
+  it("refuses accepted-only responses as synchronous delivered output", async () => {
+    const document = openApiDocument();
+    const post = lookupPost(document) as { responses: Record<string, unknown> };
+    post.responses = {
+      "202": { content: { "application/json": { schema: outputSchema() } } },
+    };
+    await expect(importOpenApiHttpCapability({
+      kind: "openapi_http",
+      document,
+      operation: { path: "/lookup", method: "post" },
+      contract: contractMetadata("independent.lookup-accepted"),
+      commercial: commercialInput(),
+      evidenceRefs: ["source:openapi:accepted"],
+    })).resolves.toEqual({
+      kind: "refused",
+      reason: "openapi_response_status_unsupported",
+    });
+  });
+
   it("carries the exact selected 2xx response status into the HTTP descriptor", async () => {
     const document = openApiDocument();
     const post = lookupPost(document) as { responses: Record<string, unknown> };

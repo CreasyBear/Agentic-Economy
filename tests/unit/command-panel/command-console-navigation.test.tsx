@@ -106,7 +106,7 @@ describe('command console navigation groups', () => {
               readiness: 'ready',
               price: { kind: 'indicative', label: 'Price confirmed at inspection' },
               detailRef: `operation:v1:${'d'.repeat(64)}`,
-              next: [{ action: 'describe', args: { toolRef: `operation:v1:${'d'.repeat(64)}` }, authority: 'public' }],
+              next: [{ action: 'registry.tools.describe', args: { toolRef: `operation:v1:${'d'.repeat(64)}` }, authority: 'public' }],
             }],
             next: [],
             pagination: { limit: 8, hasMore: false },

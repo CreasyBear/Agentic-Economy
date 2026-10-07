@@ -26,7 +26,7 @@ const principal = {
 const status = {
   kind: 'found' as const,
   version: 1,
-  callRef: 'operation-invocation:v1:one',
+  callRef: `operation-invocation:v1:${'a'.repeat(64)}`,
   toolRef: 'operation:one',
   state: 'terminal' as const,
 }
@@ -250,16 +250,16 @@ describe('Call recovery actions', () => {
 
   it('rejects transport and provider overrides at the action boundary', () => {
     expect(callStatusAction.schema.safeParse({
-      callRef: 'operation-invocation:v1:one',
+      callRef: `operation-invocation:v1:${'a'.repeat(64)}`,
       endpoint: 'https://supplier.example',
     }).success).toBe(false)
     expect(callCancelAction.schema.safeParse({
-      callRef: 'operation-invocation:v1:one',
+      callRef: `operation-invocation:v1:${'a'.repeat(64)}`,
       idempotencyKey: 'cancel:one',
       provider: 'supplier:one',
     }).success).toBe(false)
     expect(callReconcileAction.schema.safeParse({
-      callRef: 'operation-invocation:v1:one',
+      callRef: `operation-invocation:v1:${'a'.repeat(64)}`,
       evidence: { resolution: 'not_released' },
       idempotencyKey: 'reconcile:one',
       credentialRef: 'secret-ref',
@@ -292,7 +292,7 @@ describe('Call recovery actions', () => {
     await expect(callStatusAction.run({
       data: { callRef: status.callRef },
       context,
-    })).resolves.toEqual(status)
+    })).resolves.toEqual({ ...status, next: [{ action: 'call.status', args: { callRef: status.callRef }, authority: 'same_principal', retryAfterMs: 5000 }] })
     await expect(callCancelAction.run({
       data: { callRef: status.callRef, idempotencyKey: 'cancel:one' },
       context,

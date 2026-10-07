@@ -3,7 +3,12 @@ import { z } from 'zod'
 import { idempotencyKeySchema } from '@/modules/common/action'
 import { currencySchema, exactAmountSchema, ProviderEarningsViewSchema } from '@/modules/money/public'
 import { providerOffboardingStatusSchema } from './provider-offboarding'
-import { providerToolStatusSchema } from './provider-tool-status'
+import {
+  providerToolMaintenanceIdentitySchema,
+  providerToolOffboardingStatusInputSchema,
+  providerToolStatusInputSchema,
+  providerToolStatusSchema,
+} from './provider-tool-status'
 import {
   publishSupplyToolV2InputSchema,
   type PublishSupplyToolV2Input,
@@ -57,10 +62,7 @@ export const supplyToolsListResultSchema = z.union([
 ])
 export type SupplyToolsListResult = z.infer<typeof supplyToolsListResultSchema>
 
-export const supplyStatusInputSchema = z.strictObject({
-  businessRef: z.string().trim().min(1),
-  toolRef: z.string().trim().min(1),
-})
+export const supplyStatusInputSchema = providerToolStatusInputSchema
 export type SupplyStatusInput = z.infer<typeof supplyStatusInputSchema>
 export const supplyStatusResultSchema = z.union([
   z.strictObject({
@@ -84,18 +86,13 @@ export const supplyPublishResultSchema = z.union([
     publicationRevision: z.number().int().positive(),
     toolRef: z.string(),
     state: z.literal('Submitted'),
+    maintenance: providerToolMaintenanceIdentitySchema.optional(),
   }),
   actionRefusalSchema,
 ])
 export type SupplyPublishResult = z.infer<typeof supplyPublishResultSchema>
 
-export const supplyWithdrawInputSchema = z.strictObject({
-  businessId: z.string().trim().min(1),
-  offeringRef: z.string().trim().min(1),
-  offeringRevision: z.number().int().positive(),
-  offeringSourceHash: z.string().trim().min(1),
-  publicationRef: z.string().trim().min(1),
-  publicationRevision: z.number().int().positive(),
+export const supplyWithdrawInputSchema = providerToolMaintenanceIdentitySchema.extend({
   idempotencyKey: idempotencyKeySchema,
 })
 export type SupplyWithdrawInput = z.infer<typeof supplyWithdrawInputSchema>
@@ -167,6 +164,13 @@ export const supplyEarningsResultSchema = z.union([
   }),
   z.strictObject({ kind: z.literal('not_found') }),
   z.strictObject({ kind: z.literal('error'), code: z.enum(['unauthenticated', 'source_unavailable']) }),
+  z.strictObject({
+    kind: z.literal('error'),
+    code: z.literal('capability_unsupported'),
+    capability: z.literal('supply.earnings'),
+    retryable: z.literal(false),
+    detail: z.literal('Agent Provider earnings readback is not supported. The Business owner can review recorded Provider obligations in the owner earnings view.'),
+  }),
 ])
 export type SupplyEarningsResult = z.infer<typeof supplyEarningsResultSchema>
 
@@ -296,51 +300,42 @@ export type SupplyConnectionConnectInput =
       idempotencyKey: string
     }>
 
-const supplyConnectionConnectTransportSchema = z.strictObject({
-  kind: z.enum(['http_credential', 'mcp_oauth', 'x402']),
+const connectionConnectFields = {
   businessRef: z.string().trim().min(1),
-  sourceUrl: z.string().url().max(2_048).optional(),
-  authentication: z.union([
-    z.strictObject({
-      kind: z.literal('api_key'),
-      location: z.enum(['header', 'query']),
-      name: z.string().trim().min(1).max(200),
-    }),
-    z.strictObject({ kind: z.literal('http_bearer') }),
-  ]).optional(),
-  serverUrl: z.string().url().max(2_048).optional(),
-  resourceUrl: z.string().url().max(2_048).optional(),
-  method: z.enum(['GET', 'POST']).optional(),
   environment: z.enum(['sandbox', 'production']),
-  observationDigest: z.string().regex(/^sha256:[0-9a-f]{64}$/u).optional(),
-  payTo: z.string().regex(/^0x[0-9a-fA-F]{40}$/u).optional(),
-  claimExpiresAt: z.number().int().nonnegative().optional(),
-  claimSignature: z.string().regex(/^0x[0-9a-fA-F]{130}$/u).optional(),
-  evidenceRefs: connectionEvidenceSchema.optional(),
   idempotencyKey: connectionIdempotencySchema,
-}).superRefine((input, context) => {
-  const exact = input.kind === 'http_credential'
-    ? ['sourceUrl', 'authentication'] as const
-    : input.kind === 'mcp_oauth'
-      ? ['serverUrl'] as const
-      : ['resourceUrl', 'method', 'observationDigest', 'payTo', 'claimExpiresAt', 'claimSignature'] as const
-  const laneFields = [
-    'sourceUrl', 'authentication', 'serverUrl', 'resourceUrl', 'method', 'observationDigest',
-    'payTo', 'claimExpiresAt', 'claimSignature', 'evidenceRefs',
-  ] as const
-  const permittedFields = new Set<string>(exact)
-  if (input.kind === 'x402') permittedFields.add('evidenceRefs')
-  for (const field of exact) {
-    if (input[field] === undefined) context.addIssue({ code: 'custom', path: [field], message: `${field} is required for ${input.kind}.` })
-  }
-  for (const field of laneFields) {
-    if (!permittedFields.has(field) && input[field] !== undefined) {
-      context.addIssue({ code: 'custom', path: [field], message: `${field} is not accepted for ${input.kind}.` })
-    }
-  }
-})
-
-export const supplyConnectionConnectInputSchema = supplyConnectionConnectTransportSchema as z.ZodType<SupplyConnectionConnectInput>
+}
+export const supplyConnectionConnectInputSchema = z.discriminatedUnion('kind', [
+  z.strictObject({
+    ...connectionConnectFields,
+    kind: z.literal('http_credential'),
+    sourceUrl: z.string().url().max(2_048),
+    authentication: z.discriminatedUnion('kind', [
+      z.strictObject({
+        kind: z.literal('api_key'),
+        location: z.enum(['header', 'query']),
+        name: z.string().trim().min(1).max(200),
+      }),
+      z.strictObject({ kind: z.literal('http_bearer') }),
+    ]),
+  }),
+  z.strictObject({
+    ...connectionConnectFields,
+    kind: z.literal('mcp_oauth'),
+    serverUrl: z.string().url().max(2_048),
+  }),
+  z.strictObject({
+    ...connectionConnectFields,
+    kind: z.literal('x402'),
+    resourceUrl: z.string().url().max(2_048),
+    method: z.enum(['GET', 'POST']),
+    observationDigest: z.string().regex(/^sha256:[0-9a-f]{64}$/u),
+    payTo: z.string().regex(/^0x[0-9a-fA-F]{40}$/u),
+    claimExpiresAt: z.number().int().nonnegative(),
+    claimSignature: z.string().regex(/^0x[0-9a-fA-F]{130}$/u),
+    evidenceRefs: connectionEvidenceSchema.exactOptional(),
+  }),
+])
 
 export const supplyConnectionTransitionInputSchema = z.strictObject({
   connectionRef: z.string().trim().min(1),
@@ -390,23 +385,19 @@ export const supplyConnectionCommandResultSchema = z.union([
     kind: z.literal('action_required'),
     attemptRef: z.string(),
     expiresAt: z.number().int().nonnegative(),
-    requiredAction: z.strictObject({
-      action: z.literal('supply.connection.connect'),
-      blockedCapabilities: z.tuple([z.literal('supply.publish')]),
-      cta: z.string(),
+    ownerHandoff: z.strictObject({
+      actor: z.literal('business_owner'),
+      reason: z.literal('provider_connection_required'),
+      destination: z.string().startsWith('/owner/supply/connections/new?attempt='),
       ctaLabel: z.string(),
       description: z.string(),
-      iconUrl: z.null(),
-      status: z.literal('required'),
       title: z.string(),
     }),
   }),
   z.strictObject({ kind: z.literal('refused'), reason: providerConnectionRefusalReasonSchema }),
 ])
 export type SupplyConnectionCommandResult = z.infer<typeof supplyConnectionCommandResultSchema>
-export const supplyOffboardingStatusInputSchema = z.strictObject({
-  businessRef: z.string().trim().min(1),
-})
+export const supplyOffboardingStatusInputSchema = providerToolOffboardingStatusInputSchema
 export type SupplyOffboardingStatusInput = z.infer<typeof supplyOffboardingStatusInputSchema>
 export const supplyOffboardingStatusResultSchema = z.union([
   z.strictObject({ kind: z.literal('available'), status: providerOffboardingStatusSchema }),

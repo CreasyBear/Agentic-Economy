@@ -10,7 +10,7 @@ import { z } from 'zod'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { toolQuoteInputSchema, type ToolQuoteInput } from '@/modules/capability-execution/quote'
-import type { CallResult } from '@/modules/capability-execution/call-contracts'
+import { projectCallMachineResult, type CallResult } from '@/modules/capability-execution/call-contracts'
 import type { TrustedChatAuthority } from '@/modules/chat/agent-turn.contracts'
 import { CHAT_TOOL_NAME_MAP } from '@/modules/chat/tool-card'
 import type { QuoteResult } from '../../capabilityExecution/quotes/contracts'
@@ -160,7 +160,7 @@ export function createPurchaseTools(authority: TrustedChatAuthority & { kind: 'a
           return projectedModelFacingOutput(
             'tool.call',
             callContract.outputSchema,
-            () => result,
+            () => projectCallMachineResult(result),
           )
         },
       }),

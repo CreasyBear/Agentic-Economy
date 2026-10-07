@@ -362,6 +362,14 @@ export async function normalizeJsonResponse(
     outputJson: JSON.stringify(output),
     ...providerReceipt,
   }
+  if (responseStatus === 202 && continuation === undefined) {
+    return {
+      ...unknown(transport, requestDigest, releaseStarted, 'response_accepted_without_completion'),
+      responseStatus,
+      responseDigest: common.responseDigest,
+      ...providerReceipt,
+    }
+  }
   return continuation === undefined
     ? { ...common, disposition: 'succeeded' as const }
     : {

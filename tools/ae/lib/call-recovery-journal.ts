@@ -5,7 +5,8 @@ import * as lockfile from 'proper-lockfile'
 import { z } from 'zod'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { callInputSchema } from '@/modules/capability-execution/call-contracts'
+import type { JsonValue } from '@/modules/capability-contract/public'
+import { continuationCommand } from './continuation-command'
 import { configPath } from './config'
 import { CliFailure } from './output'
 
@@ -18,7 +19,8 @@ const journalSchema = z.strictObject({
   toolRef: z.string().min(1),
   accountRef: z.string().min(1),
   principalRef: z.string().min(1),
-  command: callInputSchema,
+  // Freeze historical admission: an action-schema uprev cannot invalidate saved work.
+  command: z.strictObject({ quoteRef: z.string().regex(/^operation-commitment:v1:[0-9a-f]{64}$/u), idempotencyKey: z.string().min(8).max(200) }),
   createdAt: z.number().int().nonnegative(),
   callRef: z.string().min(1).optional(),
   terminal: z.boolean(),
@@ -194,6 +196,160 @@ export async function acknowledgeCallRecovery(record: CallRecoveryRecord, observ
     if (error instanceof CliFailure) throw error
     throw new CliFailure('The Call was submitted, but its latest acknowledgement could not be saved. Resume using the retained recovery reference.', {
       kind: 'UNAVAILABLE', code: 'call-recovery-acknowledgement-unavailable', detail: { recoveryRef: record.recoveryRef },
+    })
+  }
+}
+
+
+// These local records preserve exact purchase commands. They add no execution
+// queue or authority; existing HTTP/Call/Plan admission owns every effect.
+const purchaseFields = {
+  version: z.literal(2), recoveryRef: recoveryRefSchema, origin: z.string().url(),
+  accountRef: z.string().min(1), principalRef: z.string().min(1),
+  requestDigest: z.string().regex(/^[a-f0-9]{64}$/u), createdAt: z.number().int().nonnegative(), terminal: z.boolean(),
+} as const
+// Frozen persistence schemas deliberately do not trim or strengthen previously
+// admitted material when a future public action schema changes.
+const retainedPlanCommandSchema = z.strictObject({
+  planRef: z.string().min(1).max(300), approvedTotalAudUnits: z.string().regex(/^(?:0|[1-9]\d{0,30})$/u),
+  idempotencyKey: z.string().min(1).max(200),
+})
+const retainedJsonSchema: z.ZodType<JsonValue> = z.json()
+const retainedProcureCommandSchema = z.strictObject({
+  kind: z.literal('exact'), toolRef: z.string().min(1), input: z.record(z.string(), retainedJsonSchema),
+  maxSpendAud: z.string().regex(/^\d+(?:\.\d{1,6})?$/u), idempotencyKey: z.string().min(1).max(200),
+})
+const purchaseJournalSchema = z.discriminatedUnion('intent', [
+  z.strictObject({ ...purchaseFields, intent: z.literal('plan_run'), command: retainedPlanCommandSchema }),
+  z.strictObject({ ...purchaseFields, intent: z.literal('procure_exact'), command: retainedProcureCommandSchema,
+    quoteRef: z.string().min(1).optional(), callRef: z.string().min(1).optional() }),
+])
+export type PurchaseRecoveryRecord = z.infer<typeof purchaseJournalSchema>
+export type PlanRecoveryRecord = Extract<PurchaseRecoveryRecord, { intent: 'plan_run' }>
+export type ProcureRecoveryRecord = Extract<PurchaseRecoveryRecord, { intent: 'procure_exact' }>
+export type PurchaseRecoveryRequest = Pick<PurchaseRecoveryRecord, 'intent' | 'command' | 'origin' | 'accountRef' | 'principalRef'>
+
+function purchaseDigest(request: PurchaseRecoveryRequest): string {
+  const { idempotencyKey: _key, ...material } = request.command
+  return canonicalDigest({ version: 2, intent: request.intent, origin: new URL(request.origin).origin,
+    accountRef: request.accountRef, principalRef: request.principalRef, material }).slice('sha256:'.length)
+}
+function purchaseRequestIndex(request: PurchaseRecoveryRequest): string {
+  const { idempotencyKey: _key, ...material } = request.command
+  // A changed local Agent profile must not hide unresolved purchase material.
+  const digest = canonicalDigest({ version: 2, intent: request.intent, origin: new URL(request.origin).origin, material }).slice('sha256:'.length)
+  return join(directory(), `request-${digest}.json`)
+}
+function purchaseIdentityIndex(request: PurchaseRecoveryRequest): string {
+  return join(directory(), `identity-${canonicalDigest({ version: 2, intent: request.intent, origin: new URL(request.origin).origin,
+    identity: request.command.idempotencyKey })}.json`)
+}
+function purchaseStorageFailure(): CliFailure {
+  return new CliFailure('The local purchase recovery journal could not be read or saved. No new purchase was submitted.', {
+    kind: 'FAILED_PRECONDITION', code: 'purchase-recovery-storage-unavailable',
+    suggestion: 'Restore access to the AE configuration directory and preserve its calls folder before retrying.',
+  })
+}
+function readPurchaseRecord(ref: string): PurchaseRecoveryRecord {
+  const valid = recoveryRefSchema.safeParse(ref)
+  if (!valid.success) throw new CliFailure('Use the recovery reference returned by the purchase command.', { kind: 'INVALID_ARGUMENT', code: 'purchase-recovery-reference-invalid' })
+  const record = purchaseJournalSchema.parse(JSON.parse(readFileSync(recordPath(ref), 'utf8')))
+  if (record.recoveryRef !== ref || record.requestDigest !== purchaseDigest(record)) throw purchaseStorageFailure()
+  return record
+}
+export function readPurchaseRecovery(ref: string, origin: string, intent: PurchaseRecoveryRecord['intent']): PurchaseRecoveryRecord {
+  try {
+    const record = readPurchaseRecord(ref)
+    if (record.origin !== new URL(origin).origin) throw new CliFailure('This purchase recovery reference belongs to a different server origin.', {
+      kind: 'FAILED_PRECONDITION', code: 'purchase-recovery-origin-mismatch',
+    })
+    if (record.intent !== intent) throw new CliFailure('Use the resume command for the original purchase type.', {
+      kind: 'INVALID_ARGUMENT', code: 'purchase-recovery-intent-mismatch',
+    })
+    return record
+  } catch (error) {
+    if (error instanceof CliFailure) throw error
+    throw purchaseStorageFailure()
+  }
+}
+function indexedPurchase(path: string): PurchaseRecoveryRecord | undefined {
+  return existsSync(path) ? readPurchaseRecord(recoveryRefSchema.parse(JSON.parse(readFileSync(path, 'utf8')))) : undefined
+}
+function requireIndexedPurchaseOwner(record: PurchaseRecoveryRecord, request: PurchaseRecoveryRequest, output?: Readonly<{ json: boolean }>): void {
+  if (record.origin !== new URL(request.origin).origin || record.intent !== request.intent) throw purchaseStorageFailure()
+  if (record.accountRef !== request.accountRef || record.principalRef !== request.principalRef) {
+    throw new CliFailure('This retained purchase belongs to a different Account or Agent. Reconnect the original Agent before continuing.', {
+      kind: 'PERMISSION_DENIED', code: 'purchase-recovery-owner-mismatch',
+      detail: { recoveryRef: record.recoveryRef, identityPreserved: true },
+      nextCommand: continuationCommand(['ae', record.intent === 'plan_run' ? 'plan' : 'procure', 'resume', record.recoveryRef,
+        '--base-url', record.origin, ...(output?.json ? ['--json'] : [])]),
+    })
+  }
+}
+export function findPurchaseRecovery(request: PurchaseRecoveryRequest, output?: Readonly<{ json: boolean }>): PurchaseRecoveryRecord | undefined {
+  try {
+    const explicit = indexedPurchase(purchaseIdentityIndex(request))
+    if (explicit !== undefined) {
+      requireIndexedPurchaseOwner(explicit, request, output)
+      if (explicit.requestDigest !== purchaseDigest(request)) throw new CliFailure('This purchase key was already used with different material.', {
+        kind: 'FAILED_PRECONDITION', code: 'purchase-recovery-input-conflict',
+      })
+      return explicit
+    }
+    const previous = indexedPurchase(purchaseRequestIndex(request))
+    if (previous !== undefined && !previous.terminal) requireIndexedPurchaseOwner(previous, request, output)
+    if (previous !== undefined && !previous.terminal && previous.requestDigest !== purchaseDigest(request)) throw purchaseStorageFailure()
+    return previous?.terminal === false ? previous : undefined
+  } catch (error) {
+    if (error instanceof CliFailure) throw error
+    throw purchaseStorageFailure()
+  }
+}
+export async function retainPurchaseRecovery(request: PurchaseRecoveryRequest, output?: Readonly<{ json: boolean }>): Promise<Readonly<{ record: PurchaseRecoveryRecord; created: boolean }>> {
+  try {
+    return await writeLocked(() => {
+      const previous = findPurchaseRecovery(request, output)
+      if (previous !== undefined) return { record: previous, created: false }
+      const record = purchaseJournalSchema.parse({ ...request, origin: new URL(request.origin).origin,
+        version: 2, recoveryRef: randomUUID(), requestDigest: purchaseDigest(request), createdAt: Date.now(), terminal: false })
+      durableWrite(recordPath(record.recoveryRef), record)
+      durableWrite(purchaseRequestIndex(request), record.recoveryRef)
+      durableWrite(purchaseIdentityIndex(request), record.recoveryRef)
+      return { record, created: true }
+    })
+  } catch (error) {
+    if (error instanceof CliFailure && error.code !== 'call-recovery-storage-unavailable') throw error
+    throw purchaseStorageFailure()
+  }
+}
+export async function acknowledgePurchaseRecovery(record: PurchaseRecoveryRecord,
+  observation: Readonly<{ terminal: boolean; quoteRef?: string; callRef?: string }>,
+): Promise<PurchaseRecoveryRecord> {
+  try {
+    return await writeLocked(() => {
+      const current = readPurchaseRecord(record.recoveryRef)
+      if (current.intent !== record.intent) throw purchaseStorageFailure()
+      if (current.intent === 'procure_exact') {
+        for (const field of ['quoteRef', 'callRef'] as const) {
+          if (current[field] !== undefined && observation[field] !== undefined && current[field] !== observation[field]) {
+            throw new CliFailure('The gateway changed this purchase identity. Preserve the recovery reference and contact support.', {
+              kind: 'UNAVAILABLE', code: 'purchase-recovery-identity-conflict',
+            })
+          }
+        }
+      }
+      const updated = purchaseJournalSchema.parse({ ...current,
+        ...(current.intent === 'procure_exact' ? {
+          ...(observation.quoteRef === undefined ? {} : { quoteRef: observation.quoteRef }),
+          ...(observation.callRef === undefined ? {} : { callRef: observation.callRef }),
+        } : {}), terminal: current.terminal || observation.terminal })
+      durableWrite(recordPath(record.recoveryRef), updated)
+      return updated
+    })
+  } catch (error) {
+    if (error instanceof CliFailure && error.code === 'purchase-recovery-identity-conflict') throw error
+    throw new CliFailure('The purchase was submitted, but its latest acknowledgement could not be saved. Resume using the retained recovery reference.', {
+      kind: 'UNAVAILABLE', code: 'purchase-recovery-acknowledgement-unavailable', detail: { recoveryRef: record.recoveryRef },
     })
   }
 }

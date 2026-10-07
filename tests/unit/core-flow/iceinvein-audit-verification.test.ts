@@ -17,17 +17,21 @@ describe('Procurement boundaries and decision invariants', () => {
     expect(callPrice?.units).toBe('1000000')
   })
 
-  it('rejects a remedy claiming a nonzero buyer charge', () => {
+  it('requires recorded buyer-funds release evidence for a remedy', () => {
     const remedy = {
       schemaVersion: 'tool.procure:v1', idempotencyKey: 'original-key-1',
       kind: 'remedied', status: 'remedied',
       toolRef: 'operation:v1:test', quoteRef: 'quote:test', callRef: 'call:test',
-      refundedAmountAud: 'A$0.0330', netChargeAud: 'A$0.00',
+      money: { kind: 'recorded', price: { currency: 'AUD', units: '33000', exponent: 6 },
+        usage: { usageRef: 'usage:refund', observedAt: 1, chargeState: 'refunded',
+          amount: { currency: 'AUD', units: '0', exponent: 6 }, priceDigest: 'sha256:price' } },
       diagnostic: { whatHappened: 'Refunded', financialImpact: 'A$0.00 deducted', nextStep: 'Check call status' },
       audit: { adjudicator: 'call-service-settlement', confidence: 1, remedyLatencyMs: 0, totalLatencyMs: 40 },
     }
     expect(toolProcureResultSchema.safeParse(remedy).success).toBe(true)
-    expect(toolProcureResultSchema.safeParse({ ...remedy, netChargeAud: 'A$0.05' }).success).toBe(false)
+    expect(toolProcureResultSchema.safeParse({ ...remedy, money: { ...remedy.money,
+      usage: { ...remedy.money.usage, chargeState: 'paid' } } }).success).toBe(false)
+    expect(toolProcureResultSchema.safeParse({ ...remedy, netChargeAud: 'A$0.00' }).success).toBe(false)
   })
 
   it('preserves the decision gateway degradation order', async () => {

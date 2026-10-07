@@ -1,4 +1,5 @@
-import { expireProcureResultContent, procureQuoteSnapshotSchema, toolProcureResultSchema } from '@/modules/capability-execution/procure'
+import { procureQuoteSnapshotSchema } from '@/modules/capability-execution/procure'
+import { expireStoredProcureResultContent, storedToolProcureResultSchema } from '@/modules/capability-execution/convex'
 import type { Doc } from '../../../_generated/dataModel'
 import type { MutationCtx } from '../../../_generated/server'
 import { CALL_CONTENT_RETENTION_MS, expiredCallForCopy } from './callContent'
@@ -26,11 +27,11 @@ export async function expireProcureContent(ctx: MutationCtx, row: Doc<'operation
     await ctx.db.patch(row._id, { resultJson: JSON.stringify({ ...identity, contentExpiredAt: now }), contentExpiredAt: now })
     return true
   }
-  const parsed = toolProcureResultSchema.safeParse(json)
+  const parsed = storedToolProcureResultSchema.safeParse(json)
   if (!parsed.success) return false
   const result = parsed.data
   if ('callRef' in result && (callRef === undefined || result.callRef !== callRef)) return false
-  const expired = expireProcureResultContent(result, now)
+  const expired = expireStoredProcureResultContent(result, now)
   if (expired === null) return false
   await ctx.db.patch(row._id, { resultJson: JSON.stringify(expired), contentExpiredAt: now })
   return true

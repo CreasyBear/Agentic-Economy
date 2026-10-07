@@ -65,7 +65,7 @@ export function useSupplyNativeStartState({
   const [pending, setPending] = useState<'preview' | 'select' | 'connect' | 'terms' | 'publish'>()
   const [error, setError] = useState<string>()
   const [invalidField, setInvalidField] = useState<SupplyPublicationInvalidField>()
-  const [requiredAction, setRequiredAction] = useState<Extract<SupplySourcePreview, { kind: 'action_required' }>['requiredAction']>()
+  const [ownerHandoff, setOwnerHandoff] = useState<Extract<SupplySourcePreview, { kind: 'action_required' }>['ownerHandoff']>()
   const [success, setSuccess] = useState<string>()
   const continuation = success === undefined ? undefined : OPEN_TOOLS_CONTINUATION
   const [reviewing, setReviewing] = useState(false)
@@ -132,7 +132,7 @@ export function useSupplyNativeStartState({
     if (operationInFlight.current || publicationCommandLocked.current) return
     setPreview(undefined)
     setSelectedRef('')
-    setRequiredAction(undefined)
+    setOwnerHandoff(undefined)
     setSuccess(undefined)
     clearFieldError()
     setReviewing(false)
@@ -143,7 +143,7 @@ export function useSupplyNativeStartState({
     if (operationInFlight.current || publicationCommandLocked.current) return
     setSelectedRef('')
     setConnectionRef('')
-    setRequiredAction(undefined)
+    setOwnerHandoff(undefined)
     setSuccess(undefined)
     clearFieldError()
     setReviewing(false)
@@ -170,10 +170,10 @@ export function useSupplyNativeStartState({
       const result = await onPreview(source, previewIdempotencyKey.current)
       if (result.kind === 'action_required') {
         setPreview(undefined)
-        setRequiredAction(result.requiredAction)
+        setOwnerHandoff(result.ownerHandoff)
         return
       }
-      setRequiredAction(undefined)
+      setOwnerHandoff(undefined)
       setPreview(result)
       const derived = result.candidates.find((candidate) => candidate.disposition.kind === 'supported')?.x402
       if (derived !== undefined) setEnvironment(derived.environment)
@@ -390,7 +390,7 @@ export function useSupplyNativeStartState({
         setError('This source no longer requires a connection. Find Tools again to continue with its current contract.')
         return
       }
-      setRequiredAction(result.requiredAction)
+      setOwnerHandoff(result.ownerHandoff)
     } catch (cause) {
       captureClientExceptionOnClient(cause)
       setError('Agentic Economy could not start this connection. Find Tools again, then retry the current source.')
@@ -403,7 +403,7 @@ export function useSupplyNativeStartState({
     resourceUrl, x402Method, preview, selectedRef,
     name, description, category, serviceArea, availability,
     pricingKind, price, connectionRef, externalEffect, dataRelease, financialExposure, dataClassification, attestation,
-    pending, error, invalidField, requiredAction, success, continuation, reviewing, publicationLocked,
+    pending, error, invalidField, ownerHandoff, success, continuation, reviewing, publicationLocked,
     source, selected, eligibleConnections,
     setResourceUrl: changeResourceUrl, setX402Method,
     setName, setDescription, setCategory, setServiceArea, setAvailability,

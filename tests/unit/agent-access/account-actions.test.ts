@@ -45,7 +45,7 @@ describe('account management action service', () => {
       kind: 'available', principalRef: principal.principalId, accountRef: principal.ownerId,
       balance: { currency: 'AUD', units: '25000000', exponent: 6 },
       accountState: 'active', version: 3, updatedAt: 10,
-      funding: { kind: 'agent_funding_handoff', configAction: 'funding.handoff.config', createAction: 'funding.handoff.create', statusAction: 'funding.handoff.status' },
+      funding: { kind: 'agent_funding_handoff', next: { action: 'funding.handoff.config', args: {}, authority: 'agent_key' }, },
     })
     const service = createAccountManagementService(
       new Request('https://ae.example/api/v1/account/balance', { method: 'POST' }),
@@ -93,7 +93,7 @@ describe('account management action service', () => {
       kind: 'available', principalRef: principal.principalId, accountRef: principal.ownerId,
       balance: { currency: 'AUD', units: '25000000', exponent: 6 },
       accountState: 'active', version: 3, updatedAt: 10,
-      funding: { kind: 'agent_funding_handoff', configAction: 'funding.handoff.config', createAction: 'funding.handoff.create', statusAction: 'funding.handoff.status' },
+      funding: { kind: 'agent_funding_handoff', next: { action: 'funding.handoff.config', args: {}, authority: 'agent_key' }, },
       stripeCustomerId: 'cus_secret',
     })
     const service = createAccountManagementService(

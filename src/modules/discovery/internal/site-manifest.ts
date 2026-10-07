@@ -1,3 +1,5 @@
+import { FEEDBACK_ROUTE_CONTRACT } from '@/modules/actions/feedback.actions'
+
 import { MCP_HTTP_ENDPOINT_PATH, MCP_LATEST_PROTOCOL_VERSION } from '@/lib/mcp-protocol'
 import { convertSchemaToJsonSchema } from '@tanstack/ai'
 import { schemaDescriptorDigest } from '@/modules/common/canonical-digest'
@@ -17,7 +19,7 @@ import {
   callStatusStateValues,
   callStatusRefusalCodeValues,
 } from '@/modules/capability-execution/call-recovery-contracts'
-import { AGENT_ACCESS_OAUTH_SCOPES } from '@/lib/http/oauth-challenge'
+import { AGENT_ACCESS_OAUTH_AUTHORIZATION_SCOPES } from '@/lib/http/oauth-challenge'
 import {
   AGENT_ACCESS_OAUTH_GRANT_TYPES,
   AGENT_ACCESS_OAUTH_PATHS,
@@ -94,6 +96,7 @@ type SiteDiscoveryOAuthContract = Readonly<{
   deviceAuthorizationUrl: string
   authorizeUrl: string
   tokenUrl: string
+  revokeUrl: string
   grantTypes: readonly string[]
   responseTypes: readonly string[]
   tokenEndpointAuthMethods: readonly string[]
@@ -251,11 +254,12 @@ export function buildSiteDiscoveryManifest(
         deviceAuthorizationUrl: `${origin}${AGENT_ACCESS_OAUTH_PATHS.deviceAuthorization}`,
         authorizeUrl: `${origin}${AGENT_ACCESS_OAUTH_PATHS.authorize}`,
         tokenUrl: `${origin}${AGENT_ACCESS_OAUTH_PATHS.token}`,
+        revokeUrl: `${origin}${AGENT_ACCESS_OAUTH_PATHS.revoke}`,
         grantTypes: AGENT_ACCESS_OAUTH_GRANT_TYPES,
         responseTypes: AGENT_ACCESS_OAUTH_RESPONSE_TYPES,
         tokenEndpointAuthMethods: AGENT_ACCESS_OAUTH_TOKEN_ENDPOINT_AUTH_METHODS,
         codeChallengeMethods: AGENT_ACCESS_OAUTH_CODE_CHALLENGE_METHODS,
-        scopesSupported: AGENT_ACCESS_OAUTH_SCOPES,
+        scopesSupported: AGENT_ACCESS_OAUTH_AUTHORIZATION_SCOPES,
         errors: AGENT_ACCESS_OAUTH_ERROR_VALUES,
       },
       http: {
@@ -470,6 +474,14 @@ function accessFor(path: string, callRoutes: readonly SiteDiscoveryCallRouteSumm
   requiredScope?: string
   requiredHeaders?: Readonly<Record<string, string>>
 }> {
+  if (path === FEEDBACK_ROUTE_CONTRACT.path) {
+    return {
+      method: FEEDBACK_ROUTE_CONTRACT.method,
+      authentication: AGENT_HTTP_AUTHENTICATION,
+      requiredScope: FEEDBACK_ROUTE_CONTRACT.anyScopes.join(' or '),
+      requiredHeaders: { Authorization: 'required', 'Content-Type': 'required' },
+    }
+  }
   const fundingRoute = FUNDING_PREFLIGHT_ROUTE_CONTRACTS.find((route) => route.path === path)
   if (fundingRoute !== undefined) {
     return {

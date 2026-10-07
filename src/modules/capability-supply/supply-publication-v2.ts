@@ -16,6 +16,7 @@ import {
   supplySourceInputSchema,
   type SupplyToolCandidate,
   type SupplySourcePreviewDependencies,
+  type SupplySourcePreview,
 } from './source-preview'
 import type { X402SellerEndpointInspection } from './internal/x402-seller-endpoint-inspector'
 import type { ProviderConnectionOwnerProjection } from './provider-connection'
@@ -82,10 +83,12 @@ export type SupplyPublicationV2Preparation =
       kind: 'refused'
       reason: string
       next?: readonly CapabilityPublicationQualityNext[]
-      requiredAction?: Readonly<{
+      ownerHandoff?: Readonly<{
+        actor: 'business_owner'
+        reason: Extract<SupplySourcePreview, { kind: 'action_required' }>['ownerHandoff']['reason']
         title: string
         description: string
-        cta: string | null
+        destination: string
         ctaLabel: string
       }>
     }>
@@ -135,11 +138,13 @@ export async function prepareSupplyPublicationV2(
     return {
       kind: 'refused',
       reason: 'source_action_required',
-      requiredAction: {
-        title: preview.requiredAction.title,
-        description: preview.requiredAction.description,
-        cta: preview.requiredAction.cta,
-        ctaLabel: preview.requiredAction.ctaLabel,
+      ownerHandoff: {
+        actor: preview.ownerHandoff.actor,
+        reason: preview.ownerHandoff.reason,
+        title: preview.ownerHandoff.title,
+        description: preview.ownerHandoff.description,
+        destination: preview.ownerHandoff.destination,
+        ctaLabel: preview.ownerHandoff.ctaLabel,
       },
     }
   }

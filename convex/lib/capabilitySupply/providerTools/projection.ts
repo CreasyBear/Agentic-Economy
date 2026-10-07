@@ -63,6 +63,27 @@ export async function projectIdentity(
         },
         now,
       })
+  const capabilityOffering = publication === null
+    ? null
+    : await ctx.db.query('capabilityOfferings').withIndex('by_offeringId', (query) => query.eq('offeringId', publication.offeringId)).unique()
+  const origin = capabilityOffering?.origin
+  const maintenance = publication !== null
+    && publication.businessId === identity.businessId
+    && capabilityOffering?.businessId === identity.businessId
+    && offering.currentRevision === revision.revision
+    && origin?.kind === 'catalog_offering'
+    && origin.offeringRef === offering.offeringRef
+    && origin.offeringRevision === revision.revision
+    && origin.offeringSourceHash === revision.sourceHash
+      ? {
+          businessId: String(identity.businessId),
+          offeringRef: offering.offeringRef,
+          offeringRevision: revision.revision,
+          offeringSourceHash: revision.sourceHash,
+          publicationRef: publication.publicationRef,
+          publicationRevision: publication.revision,
+        }
+      : undefined
   const windowStartAt = now - EVIDENCE_WINDOW_MS
   const calls = includeEvidence
     ? await ctx.db.query('capabilityCallProjections').withIndex('by_toolRef_and_createdAt', (query) => query.eq('toolRef', identity.toolRef).gte('createdAt', windowStartAt)).take(EVIDENCE_READ_LIMIT + 1)
@@ -83,6 +104,7 @@ export async function projectIdentity(
     providerRef: identity.providerRef,
     toolRef: identity.toolRef,
     revision: identity.publicationRevision ?? identity.offeringRevision,
+    ...(maintenance === undefined ? {} : { maintenance }),
     observedAt: publication?.readinessObservedAt ?? draft?.updatedAt ?? identity.updatedAt,
     ...(publication?.readinessValidUntil === undefined ? {} : { validUntil: publication.readinessValidUntil }),
     draftPresent: true,

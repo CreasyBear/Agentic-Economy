@@ -56,9 +56,7 @@ export const balance = actionGeneric({
       updatedAt: balance.observedAt,
       funding: {
         kind: 'agent_funding_handoff' as const,
-        configAction: 'funding.handoff.config' as const,
-        createAction: 'funding.handoff.create' as const,
-        statusAction: 'funding.handoff.status' as const,
+        next: { action: 'funding.handoff.config' as const, args: {}, authority: 'agent_key' as const },
       },
     }
   },

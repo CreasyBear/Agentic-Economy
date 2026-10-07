@@ -32,6 +32,15 @@ asynchronous Provider completion remains a separate workstream. PR #362 and the
 current release records supply newer implementation evidence, without by themselves
 closing this register’s full client, supply and parity acceptance.
 
+## Source reconciliation — 7 October 2026
+
+The [MM-055 implementation record](#7-october-implementation-and-evidence-boundary)
+reconciles current source at `3da6013d` plus its working candidate with the dated
+baseline. Plan, public CLI and HTTP 202 statements below now reflect inspected
+implementation and recorded release evidence. Every full acceptance condition
+remains open; this update neither replaces historical receipts nor asserts a
+new hosted release.
+
 ## How items close
 
 IDs `MM-001`–`MM-060` are permanent. Keep an ID when wording, owner or status
@@ -91,7 +100,7 @@ contract/release/evidence expiry invalidates its proof; retain earlier receipts.
 | --- | --- |
 | F1 | Actors, contracts and usable docs; retain existing authority and protocol work. Initial factual guide already prepared. |
 | F2 | Qualify maintained Provider/protocol SDK fit, then connect one conventional async Tool to existing durable Calls/Workpool. Separately qualify Events/Tasks only for their actual supported clients. |
-| F3 | Bounded immutable procurement graph, mapping, atomic authority/price ceilings and useful parallel execution; requires commercial direction. |
+| F3 | Accepted bounded Plan direction is implemented; qualify mapping, authority/price ceilings and useful parallel execution against each open criterion. |
 | F4 | Partial/selected/artifact results, history/rerun and separate charge/refund readback. |
 | F5 | Entitled heterogeneous supply, actual clients, operational proof and four-persona/whole-task acceptance. |
 | Literal | Supported MPP/Tempo/SPT, MACH/Coinflow, incentives, direct wallet and embedded surfaces. Plan separately after owner decisions; retain every gap. |
@@ -103,11 +112,11 @@ Datadog stays with [#284][DD] / ADR 0005; invitations [#288][I288] and paid chat
 [#279][I279] retain their own gates. Historical #196/#185/#187 and ADR 0004 retain
 relevant intent; retired #202/#204 do not become current graph implementation.
 
-Open decisions before consequential work: caller-composed graph versus Provider
-package responsibility; aggregate purchase/obligation/refund allocation; dynamic
-price ceilings and result retention; actual supplier distribution entitlement;
-literal rails/incentive/client implementation; pinned docs-framework build.
-This register records criteria and recommendations, not approval of those choices.
+The accepted Plan RFC settles caller composition, frozen per-Node Ceilings and
+existing Call ownership. Remaining decisions concern qualified conventional
+Provider SDKs/entitlement, retention and full commercial/remedy requirements,
+literal rails/incentives/clients and renderer adoption. Follow the existing
+item owners; do not reopen the accepted Plan direction as an unmade decision.
 
 ## Numbered index
 
@@ -118,9 +127,9 @@ the exact remaining acceptance.
 | Item | Behaviour | Current coverage | Wave | Priority |
 | --- | --- | --- | --- | --- |
 | [MM-001](#mm-001) | Actor and Account ownership | Supported in source; scoped runtime recorded | F1 | P1 |
-| [MM-002](#mm-002) | Organisation membership and administrator controls | Supported in source; full admin journey unproved | F1/F5 | P2 |
+| [MM-002](#mm-002) | Organisation membership and administrator controls | Roster/invitation source supported; role change/removal and full journey remain open | F1/F5 | P2 |
 | [MM-003](#mm-003) | Stable Agent identity and credential replacement | Supported in source; rotation tests passed | F1/F5 | P1 |
-| [MM-004](#mm-004) | Delegated scope, budget, expiry and current authority | Supported single Calls; aggregate graph authority missing | F1/F3 | P1 |
+| [MM-004](#mm-004) | Delegated scope, budget, expiry and current authority | Call and bounded Plan authority implemented; full aggregate qualification open | F1/F3 | P1 |
 | [MM-005](#mm-005) | Per-client OAuth and bearer authentication | Supported in source and public metadata; client matrix partial | F1/F5 | P1 |
 | [MM-006](#mm-006) | Connection and payment readiness | Supported diagnostics; sustained live capacity unproved | F1/F5 | P1 |
 | [MM-007](#mm-007) | Revocation, isolation and offboarding lifecycle | Supported in source; combined persona recovery partial | F1/F5 | P1 |
@@ -132,20 +141,20 @@ the exact remaining acceptance.
 | [MM-013](#mm-013) | Exact service and endpoint schemas | Supported in source; live Mercator input schema reproduced | F1/F5 | P1 |
 | [MM-014](#mm-014) | Provider admission, publication and withdrawal | Supported source funnel; broad hosted activation partial | F5 | P1 |
 | [MM-015](#mm-015) | Authoritative Quote and price disclosure | Supported single Tool; free Mercator quotes reproduced | F1/F3 | P1 |
-| [MM-016](#mm-016) | Bounded immutable procurement plan | Missing caller-composed plan; ADR 0004 packages proposed | F3 | P1 |
-| [MM-017](#mm-017) | Dependency output references and bounded mapping | Missing public graph reference contract | F3 | P1 |
-| [MM-018](#mm-018) | Quote-to-plan binding and dependent price ceilings | Partial single-Tool binding; aggregate contract missing | F3 | P1 |
-| [MM-019](#mm-019) | Exact Provider choice and fallback boundaries | Partial discovery routing; graph release absent | F3/F5 | P1 |
-| [MM-020](#mm-020) | Ready-node scheduling and aggregate concurrency | Partial: native components present; public DAG missing | F3 | P1 |
-| [MM-021](#mm-021) | Durable asynchronous admission and recovery | Supported single Calls; aggregate job missing | F2/F3 | P1 |
-| [MM-022](#mm-022) | Conventional provider start/status/result completion | Partial; queued HTTP 202 success fixture reproduced | F2 | P1 |
-| [MM-023](#mm-023) | Idempotent submission and conflicting replay | Supported single Call; plan/node keys absent | F2/F3 | P1 |
+| [MM-016](#mm-016) | Bounded immutable procurement plan | Frozen 1–10 Node Plan implemented; recorded two-Node acceptance, wider proof open | F3 | P1 |
+| [MM-017](#mm-017) | Dependency output references and bounded mapping | Plan references/pointers/bounded mapping implemented; hosted mapped proof open | F3 | P1 |
+| [MM-018](#mm-018) | Quote-to-plan binding and dependent price ceilings | Plan digest/exact total/per-Node Ceilings implemented; wider qualification open | F3 | P1 |
+| [MM-019](#mm-019) | Exact Provider choice and fallback boundaries | Exact frozen Tool release implemented; actual-client fallback proof open | F3/F5 | P1 |
+| [MM-020](#mm-020) | Ready-node scheduling and aggregate concurrency | Bounded Plan Workflow scheduling implemented; hosted ten-Node proof open | F3 | P1 |
+| [MM-021](#mm-021) | Durable asynchronous admission and recovery | Durable Calls and Plans implemented; conventional async qualification open | F2/F3 | P1 |
+| [MM-022](#mm-022) | Conventional provider start/status/result completion | 202 false delivery corrected in source; conventional async completion open | F2 | P1 |
+| [MM-023](#mm-023) | Idempotent submission and conflicting replay | Call and Plan run/Node identity implemented; hosted loss/rotation proof open | F2/F3 | P1 |
 | [MM-024](#mm-024) | Safe retries, uncertain effects and reconciliation | Supported single Call model; adapter/graph proof partial | F2/F3 | P1 |
-| [MM-025](#mm-025) | Status, errors and one useful next action | Supported single-Call actions; graph status absent | F1/F2/F3 | P1 |
-| [MM-026](#mm-026) | Cancellation and irreversible-effect truth | Supported where existing adapter allows; graph stop absent | F2/F3 | P1 |
-| [MM-027](#mm-027) | History, cached recovery and retention | Supported single Call history; graph retention missing | F4 | P1 |
+| [MM-025](#mm-025) | Status, errors and one useful next action | Call/Plan status implemented; explicit next actions locally qualified | F1/F2/F3 | P1 |
+| [MM-026](#mm-026) | Cancellation and irreversible-effect truth | Call cancellation and future-Node Plan stop implemented; hosted races open | F2/F3 | P1 |
+| [MM-027](#mm-027) | History, cached recovery and retention | Call history and Plan readback implemented; retention/expiry parity open | F4 | P1 |
 | [MM-028](#mm-028) | Explicit rerun and failed-node resubmission | Partial single new Call; graph replay plan missing | F4 | P1 |
-| [MM-029](#mm-029) | Partial success and dependent skips | Missing aggregate node result contract | F3/F4 | P1 |
+| [MM-029](#mm-029) | Partial success and dependent skips | Plan partial outputs/skips implemented; hosted partial-failure proof open | F3/F4 | P1 |
 | [MM-030](#mm-030) | Summary, node and JSON Pointer result reads | Partial single result; missing selected aggregate reads | F4 | P1 |
 | [MM-031](#mm-031) | Binary outputs and large artifacts | Partial/unknown; equivalent artifact contract not located | F4 | P1 |
 | [MM-032](#mm-032) | Funding handoff and authority separation | Supported economic foundation; customer funding journey limited | F1/F5 | P1 |
@@ -168,10 +177,10 @@ the exact remaining acceptance.
 | [MM-049](#mm-049) | Bounded CLI setup telemetry and coarse defaults | Partial/unknown equivalent public telemetry contract | F1/F5 | P2 |
 | [MM-050](#mm-050) | HTTP contract and complete machine discovery | Supported generated API; literal metadata paths differ | F1/F5 | P1 |
 | [MM-051](#mm-051) | MCP transport, tool envelopes and actual clients | Official MCP source supported; broad installed proof partial | F1/F5 | P1 |
-| [MM-052](#mm-052) | Public CLI distribution and integration lifecycle | CLI source/local/mainnet supported; public npm publication pending | F1/F5 | P1 |
+| [MM-052](#mm-052) | Public CLI distribution and integration lifecycle | Recorded public CLI 0.3.1 acceptance; 0.3.2 source/prepared, clean-client proof open | F1/F5 | P1 |
 | [MM-053](#mm-053) | Separate local-wallet/direct REST mode | Unknown/missing Mercator-compatible direct payer mode | Literal | P1 |
 | [MM-054](#mm-054) | Embedded MCP App and WebMCP discovery | Missing/unknown equivalent embedded surfaces | Literal | P1 |
-| [MM-055](#mm-055) | Four-persona docs and generated API reference | Partial existing guides; coherent generated docs tree missing | F1/F5 | P2 |
+| [MM-055](#mm-055) | Four-persona docs and generated API reference | Four persona guides and contract repairs in source; renderer/client acceptance open | F1/F5 | P2 |
 | [MM-056](#mm-056) | Complete task and repeat-use parity acceptance | Unknown beyond scoped existing payments; full parity not proved | F5 | P1 |
 | [MM-057](#mm-057) | Reuse qualification for remote tools and contracted Agents | Partial: maintained SDK candidates identified; exact Provider/client fit unproved | F2/F5 | P1 |
 | [MM-058](#mm-058) | ChatGPT MCP Events subscription and signed callback delivery | Missing application surface; official client subset documented | F2/F5 | P1 |
@@ -196,7 +205,7 @@ the exact remaining acceptance.
 
 ### MM-002 — Organisation membership and administrator controls
 
-- **State:** open · Supported in source; full admin journey unproved. **Priority/wave:** P2 · F1/F5.
+- **State:** open · Roster/invitation source supported; role change/removal and full journey remain open. **Priority/wave:** P2 · F1/F5.
 - **Owner / dependencies:** Authority / owner experience; [MM-001](#mm-001).
 - **Required behaviour:** An organisation admin can manage membership and Agent access without confusing organisation ownership with private access to another Account.
 - **Success criteria:** Invite/join or the actually supported membership flow, role change, removal and offboarding behave consistently; removed members cannot create new effects.
@@ -220,12 +229,12 @@ the exact remaining acceptance.
 
 ### MM-004 — Delegated scope, budget, expiry and current authority
 
-- **State:** open · Supported single Calls; aggregate graph authority missing. **Priority/wave:** P1 · F1/F3.
+- **State:** open · Call and bounded Plan authority implemented; full aggregate qualification open. **Priority/wave:** P1 · F1/F3.
 - **Owner / dependencies:** Authority / finance; [MM-001](#mm-001), [MM-003](#mm-003).
 - **Required behaviour:** A credential identifies an actor; a current grant authorises bounded work. Account funding never expands scope or budget.
 - **Success criteria:** Wrong resource/scope/environment, expired or revoked grant and concurrent spending beyond a ceiling refuse; each unreleased node rechecks current authority.
 - **End condition:** Grant negatives, atomic concurrent-budget proof and revoked-after-quote graph proof pass. Accepted work and historical access follow an explicit current policy.
-- **Supported implementation:** Extend existing DelegationGrant and Call admission for aggregate reservation; retain per-node effect authority.
+- **Supported implementation:** Retain implemented Plan reservation and current per-Node effect authority in the existing DelegationGrant/Call owners; qualify the remaining negatives.
 - **References:** [Spending limits][M-P]; [delegation contracts][AE-D]; [Call authority][AE-C].
 
 <a id="mm-005"></a>
@@ -364,7 +373,7 @@ the exact remaining acceptance.
 
 ### MM-016 — Bounded immutable procurement plan
 
-- **State:** open · Missing caller-composed plan; ADR 0004 packages proposed. **Priority/wave:** P1 · F3.
+- **State:** open · Frozen 1–10 Node Plan implemented; recorded two-Node acceptance, wider proof open. **Priority/wave:** P1 · F3.
 - **Owner / dependencies:** Contracts / execution / product; [MM-013](#mm-013), [MM-015](#mm-015).
 - **Required behaviour:** An Agent can inspect and submit a frozen 1–10 node procurement DAG over exact published Tools, without moving its larger planning/runtime into Aecon.
 - **Success criteria:** Empty/11-node plans, cycles, duplicate IDs and invalid dependencies refuse; valid independent and dependent nodes survive serialization and restart unchanged.
@@ -376,7 +385,7 @@ the exact remaining acceptance.
 
 ### MM-017 — Dependency output references and bounded mapping
 
-- **State:** open · Missing public graph reference contract. **Priority/wave:** P1 · F3.
+- **State:** open · Plan references/pointers/bounded mapping implemented; hosted mapped proof open. **Priority/wave:** P1 · F3.
 - **Owner / dependencies:** Contracts / execution; [MM-016](#mm-016).
 - **Required behaviour:** A node can use a declared dependency’s actual output, JSON Pointer field or bounded array projection as schema-valid input.
 - **Success criteria:** Real first-node output reaches the second node; forward/undeclared references, missing paths, invalid maps, incompatible resolved input and depth/size overflow refuse predictably.
@@ -388,7 +397,7 @@ the exact remaining acceptance.
 
 ### MM-018 — Quote-to-plan binding and dependent price ceilings
 
-- **State:** open · Partial single-Tool binding; aggregate contract missing. **Priority/wave:** P1 · F3.
+- **State:** open · Plan digest/exact total/per-Node Ceilings implemented; wider qualification open. **Priority/wave:** P1 · F3.
 - **Owner / dependencies:** Contracts / authority / finance; [MM-004](#mm-004), [MM-015](#mm-015), [MM-016](#mm-016), [MM-017](#mm-017).
 - **Required behaviour:** The plan, Tool versions, recipients, effects and ceilings approved at Quote are the work released; dynamic dependent pricing cannot expand authority.
 - **Success criteria:** Plan/input/terms drift conflicts; expired quotes reprice; unbounded or above-ceiling dependent cost refuses/requotes before release; material expansion requires a new approval.
@@ -400,7 +409,7 @@ the exact remaining acceptance.
 
 ### MM-019 — Exact Provider choice and fallback boundaries
 
-- **State:** open · Partial discovery routing; graph release absent. **Priority/wave:** P1 · F3/F5.
+- **State:** open · Exact frozen Tool release implemented; actual-client fallback proof open. **Priority/wave:** P1 · F3/F5.
 - **Owner / dependencies:** Market / execution / product; [MM-010](#mm-010), [MM-013](#mm-013), [MM-018](#mm-018).
 - **Required behaviour:** The selected Provider/Tool is the one executed. Alternatives can be offered without silently changing recipients, costs or irreversible effects.
 - **Success criteria:** Required/preferred choices survive quote and execution; stale/unavailable exact supply yields a clear new comparison/quote step; fallback cannot bypass ceilings or approval.
@@ -412,7 +421,7 @@ the exact remaining acceptance.
 
 ### MM-020 — Ready-node scheduling and aggregate concurrency
 
-- **State:** open · Partial: native components present; public DAG missing. **Priority/wave:** P1 · F3.
+- **State:** open · Bounded Plan Workflow scheduling implemented; hosted ten-Node proof open. **Priority/wave:** P1 · F3.
 - **Owner / dependencies:** Execution / authority; [MM-004](#mm-004), [MM-016](#mm-016), [MM-017](#mm-017), [MM-018](#mm-018), [MM-021](#mm-021).
 - **Required behaviour:** Independent ready nodes can run concurrently; dependencies wait; service/account budgets and fairness bound work.
 - **Success criteria:** Fan-out obeys the evidenced Mercator limit of at most three per service or an explicitly disclosed AE compatible cap; no overspend under concurrent release; failed dependencies do not start.
@@ -424,7 +433,7 @@ the exact remaining acceptance.
 
 ### MM-021 — Durable asynchronous admission and recovery
 
-- **State:** open · Supported single Calls; aggregate job missing. **Priority/wave:** P1 · F2/F3.
+- **State:** open · Durable Calls and Plans implemented; conventional async qualification open. **Priority/wave:** P1 · F2/F3.
 - **Owner / dependencies:** Execution; [MM-004](#mm-004), [MM-015](#mm-015).
 - **Required behaviour:** Accepted work has a durable reference; client disconnect or worker restart does not lose it or create another purchase.
 - **Success criteria:** Pending/running/terminal state survives restart; status resumes the same accepted work; disconnect has no implicit cancellation; uncertain effects remain reconcilable.
@@ -436,7 +445,7 @@ the exact remaining acceptance.
 
 ### MM-022 — Conventional provider start/status/result completion
 
-- **State:** open · Partial; queued HTTP 202 success fixture reproduced. **Priority/wave:** P1 · F2.
+- **State:** open · 202 false delivery corrected in source; conventional async completion open. **Priority/wave:** P1 · F2.
 - **Owner / dependencies:** Supply adapters / execution; [MM-014](#mm-014), [MM-021](#mm-021).
 - **Required behaviour:** A conventional provider job handle means accepted work, and Aecon observes it until a validated final result or truthful failure.
 - **Success criteria:** Persist original handle; queued 202 is not final output; use the Provider SDK’s supported read/result or verified webhook path. Bounded observation handles success/failure/expiry, bad schema, auth expiry, unsafe URLs, lost response and restart without a second start. Do not copy an hour-long polling example into one Convex action.
@@ -448,7 +457,7 @@ the exact remaining acceptance.
 
 ### MM-023 — Idempotent submission and conflicting replay
 
-- **State:** open · Supported single Call; plan/node keys absent. **Priority/wave:** P1 · F2/F3.
+- **State:** open · Call and Plan run/Node identity implemented; hosted loss/rotation proof open. **Priority/wave:** P1 · F2/F3.
 - **Owner / dependencies:** Execution / authority; [MM-021](#mm-021).
 - **Required behaviour:** One retained key identifies one logical authorised purchase; identical replay resumes it, while changed material conflicts.
 - **Success criteria:** Response loss and credential rotation replay without another charge/effect; another Account/Principal cannot collide with the key; graph and node namespaces are stable.
@@ -472,19 +481,19 @@ the exact remaining acceptance.
 
 ### MM-025 — Status, errors and one useful next action
 
-- **State:** open · Supported single-Call actions; graph status absent. **Priority/wave:** P1 · F1/F2/F3.
+- **State:** open · Call/Plan status implemented; explicit next actions locally qualified. **Priority/wave:** P1 · F1/F2/F3.
 - **Owner / dependencies:** Execution / protocol / DX; [MM-021](#mm-021), [MM-022](#mm-022).
 - **Required behaviour:** Clients can distinguish active, succeeded, partially successful, failed and uncertain work, with sanitised reasons and clear next action.
 - **Success criteria:** REST/MCP/CLI represent the same facts; active work uses bounded backoff, terminal execution stops polling, pending settlement continues separately; errors do not leak secrets or raw payloads.
 - **End condition:** Generated schema/envelope tests and actual clients correctly resume, surface successful outputs first, explain failure and stop at the right terminal states.
-- **Supported implementation:** Derive response/error docs from current actions; add graph/node envelopes at their owning contracts, retaining AE state truth.
+- **Supported implementation:** Derive response/error docs and permitted Plan continuation from current action/lifecycle owners, retaining AE state truth and coordinated pre-stability compatibility.
 - **References:** [Job statuses][M-J]; [AE public actions][AE-E]; [generated OpenAPI][AE-O].
 
 <a id="mm-026"></a>
 
 ### MM-026 — Cancellation and irreversible-effect truth
 
-- **State:** open · Supported where existing adapter allows; graph stop absent. **Priority/wave:** P1 · F2/F3.
+- **State:** open · Call cancellation and future-Node Plan stop implemented; hosted races open. **Priority/wave:** P1 · F2/F3.
 - **Owner / dependencies:** Execution / supply; [MM-007](#mm-007), [MM-022](#mm-022), [MM-024](#mm-024).
 - **Required behaviour:** Explicit cancellation can stop unreleased work and request supported upstream cancellation without promising rollback or refund.
 - **Success criteria:** Cancellation races with dispatch/completion safely; unsupported/unknown cancellation is truthful; credential revocation or disconnect cannot masquerade as a cancelled job.
@@ -496,7 +505,7 @@ the exact remaining acceptance.
 
 ### MM-027 — History, cached recovery and retention
 
-- **State:** open · Supported single Call history; graph retention missing. **Priority/wave:** P1 · F4.
+- **State:** open · Call history and Plan readback implemented; retention/expiry parity open. **Priority/wave:** P1 · F4.
 - **Owner / dependencies:** Execution / data / owner experience; [MM-007](#mm-007), [MM-021](#mm-021).
 - **Required behaviour:** Original authorised users can list retained work, recover its successful outputs for free and distinguish expiry from failed delivery.
 - **Success criteria:** Cursor/status filtering and expired cursor recovery work; read never executes suppliers; history excludes raw payloads; published content retention covers Mercator’s documented 30-day recovery behaviour.
@@ -520,7 +529,7 @@ the exact remaining acceptance.
 
 ### MM-029 — Partial success and dependent skips
 
-- **State:** open · Missing aggregate node result contract. **Priority/wave:** P1 · F3/F4.
+- **State:** open · Plan partial outputs/skips implemented; hosted partial-failure proof open. **Priority/wave:** P1 · F3/F4.
 - **Owner / dependencies:** Execution / finance; [MM-020](#mm-020), [MM-025](#mm-025).
 - **Required behaviour:** One failed node does not discard useful completed siblings; blocked dependents skip and completed supplier purchases remain billable.
 - **Success criteria:** Completed/failed/skipped counts and reasons agree with actual effects; independent siblings complete; only eligible unused capacity enters refund handling.
@@ -796,7 +805,7 @@ the exact remaining acceptance.
 
 ### MM-052 — Public CLI distribution and integration lifecycle
 
-- **State:** open · CLI source/local/mainnet supported; public npm publication pending. **Priority/wave:** P1 · F1/F5.
+- **State:** open · Recorded public CLI 0.3.1 acceptance; 0.3.2 source/prepared, clean-client proof open. **Priority/wave:** P1 · F1/F5.
 - **Owner / dependencies:** DX / release; [MM-005](#mm-005), [MM-051](#mm-051).
 - **Required behaviour:** An ordinary integrator can install a supported released client, authorise, list/call tools, inspect status, update/refresh, diagnose and uninstall managed integrations.
 - **Success criteria:** Supported OS/architecture artifact download, clean install, saved setup choices, no detected client/manual fallback, login/logout, tools/call, status/doctor, refresh/update/uninstall behave truthfully.
@@ -832,13 +841,244 @@ the exact remaining acceptance.
 
 ### MM-055 — Four-persona docs and generated API reference
 
-- **State:** open · Partial existing guides; coherent generated docs tree missing. **Priority/wave:** P2 · F1/F5.
+- **State:** open · Four persona guides and contract repairs in source; renderer/client acceptance open. **Priority/wave:** P2 · F1/F5.
 - **Owner / dependencies:** Docs / DX / product; [MM-005](#mm-005), [MM-050](#mm-050), [MM-052](#mm-052).
 - **Required behaviour:** Ordinary users, organisation admins, Agent integrators and Providers can learn and finish their own supported journeys using truthful customer/developer docs.
 - **Success criteria:** Persona entry points explain actors, setup, use, results/recovery, spending/receipts, data/support and lifecycle; API/MCP/CLI references derive from real schemas/releases; proposed work is labelled.
 - **End condition:** Four guide-led journeys pass; schema-valid examples, links, generation drift and pinned docs SSR/build checks pass. A new docs deployment is not part of this register-building request.
 - **Supported implementation:** Use current Markdown/foundations and action schemas; trial supported Fumadocs/TanStack/OpenAPI generation before adoption.
 - **References:** [Mercator docs][M-D]; [AE guide][G]; [docs architecture][B]; [Fumadocs TanStack][S-DOC]; [OpenAPI generation][S-OAPI].
+
+
+#### 7 October implementation and evidence boundary
+
+**Disposition: in-progress; MM-055 remains open.** Source baseline
+`3da6013d2865b20c5dc629b8cd59930678a19790` plus the uncommitted candidate in the
+canonical checkout. Root coordinated Sol evidence/patch/review assignments and
+applied bounded changes as the sole canonical writer; unrelated whitepaper and
+strategy edits were preserved. No new branch, operation registry, lifecycle,
+docs app, repository, public push or deployment was created.
+
+The public-contract inventory is derived from [registered actions](../../src/modules/actions/index.ts),
+[HTTP generation](../../src/modules/discovery/internal/openapi-agent-routes.ts),
+[MCP admission](../../src/lib/server/mcp-api.ts) and [CLI contracts](../../tools/ae/lib).
+At this source there are **51 registered actions** (10 public, 41 protected),
+**68 generated OpenAPI operations on 62 paths**, **44 role-admitted MCP Tools**
+(3 anonymous, 29 buyer, 20 Provider with overlap), and **25 CLI command roots**.
+These counts are a dated coverage check, not a second operation registry.
+
+| Existing owner group | Inventory coverage and contract boundary |
+| --- | --- |
+| Registry (6 business/portfolio, 4 Tool actions) | Public listing/search/describe/compare and external discovery; exact Tool refs, callable/readiness distinction, source-bound cursors and hard filters. Private saved needs are not purchases. |
+| Agent access (3), funding (3), feedback (1) | Server-resolved Principal/Account; scope, environment, current grant and funding remain separate. Feedback acceptance is ingestion and has no safe automatic retry. |
+| Market requests (4), saved Tools (3) | Authenticated owner-bound lifecycle; saved selections do not bypass fresh Quote/current authority. |
+| Execution (3 Quote/procure/Call), Plans (4), Call history/recovery (4), journey status (1) | Owner schemas define input/defaults/limits and tagged outcomes. Quote may disclose input before purchase; same purchase identity survives interruption. Plan/procure persistence is manual, Call CLI journal automatic. Cancellation, delivery, settlement and purchase resolution remain distinct. |
+| Supply (15) | Provider scope, Business entitlement, Connection and publication revision/source identity. Three connect variants are represented; programmatic preview/publication remains x402-only. Agent earnings is unavailable. |
+| HTTP beyond registered actions | Two funding preflight, six utility, one payer-funding, three chat and five HEAD operations complete generated coverage. Route owners separately cover OAuth registration/authorize/device/token/revoke, protected-resource/auth metadata, MCP protocol, directory and chat boundaries. |
+| Browser/operations and machine publication | Owner session/member/invitation/Agent/Plan controls, personal export, admin metrics, signed webhooks/internal service routes and health/readiness are not public Agent operations. Sandbox reference routes remain development-only. Manifests/OpenAPI/SKILL/glossary/llms/sitemap/robots and negotiated Markdown retain their actual public projections; `/for-providers` and arbitrary docs do not acquire Markdown routes. |
+
+For identity/authority, input/effects, outcome/continuation, recovery and
+compatibility, the [cross-transport policy](../designs/agent-operating-contract.md#cross-transport-contract-policy)
+is the review contract; owner schemas and handlers remain implementation truth.
+Generated JSON Schema expresses structural constraints; custom semantic predicates
+and cross-field relationships still require owner validation.
+Unknown runtime, retention, installed-client and unsupported membership/Provider
+capabilities retain their existing MM acceptance gates. Inventory completeness
+is not qualification of every operation on every transport.
+
+| Significant finding / owner | Classification and severity; consequence | Current mitigation / smallest correction in this candidate | Compatibility cost and evidence boundary |
+| --- | --- | --- | --- |
+| [OpenAPI request projection](../../src/modules/discovery/internal/openapi-operations.ts), [MCP outputs](../../src/lib/server/mcp-api.ts) · Protocol/DX | Contract defect, P1: omitted root constraints and generic outputs let clients form or accept invalid values. | Preserve owner root schemas; represent identity branding without losing string constraints; derive exact outputs and fail on unsupported schema conversion. | Wire values unchanged; exact metadata grows. Cached descriptors and 40 KB pages bound each response, not total context (~347 KB for all 44 Tools). Named installed clients remain unqualified. |
+| [Search continuation](../../src/modules/registry/tool-choice-contracts.ts), [CLI](../../tools/ae/commands/search.ts) · Registry/DX | Contract defect, P2: retry/page/broaden could lose filters, source, limit or original cursor. | Preserve returned scope and same cursor for retry; broaden retains hard filters and clears cursor; legacy CLI fallback uses original arguments. | Coordinated pre-stability canonical output; no external consumers require a legacy profile. Opaque cursor unchanged. Local owner/route/CLI assertions cover it. |
+| [Hard search constraints](../../src/modules/registry/tool-choice-contracts.ts), [price ceiling](../../src/modules/capability-supply/internal/tool-search.ts) · Registry/supply | Contract/implementation defect, P1: unknown directory facts or a price range's minimum could satisfy an asserted hard constraint and reach ranking. | Filter before ranking and projection; require evidence, use range maximum, and explain scoped insufficiency. Owner metadata spells out any-match effects/data-use facets rather than implying a permission allowlist. | Intentionally excludes previously overbroad results. No purchase/authority changes; unsupported geography remains explicit. |
+| [Search disclosure](../../src/modules/registry/tool-action-contracts.ts) · Registry/protocol | Contract metadata defect, P1: semantic ranking sends query/candidate summaries while the descriptor claimed no recipient. | Declare disclosure and the configured Jev recipient with the existing concrete recipient projection. | More truthful metadata; scope, approval and spending authority do not expand. |
+| [Provider next action and pagination](../../src/modules/capability-supply/provider-tool-status.ts), [CLI](../../tools/ae/commands/supply.ts) · Supply/DX | Contract/DX defect, P2: action-only continuations required guessed identity; CLI could not traverse the Provider inventory. | Return validated args plus missing caller input; surface absent identity and allow limit/cursor continuation. | Coordinated pre-stability output correction; caller still creates and retains write keys, historical refs unchanged. |
+| [Provider Connection schema](../../src/modules/capability-supply/supply-action-schemas.ts) · Supply | Contract defect, P1: intersected shapes could not describe supported variants. | Strict discriminated variants match the existing validators; no new adapter is implied. | Corrects published schema without broadening authority or preview/publish support. |
+| [Maintenance projection](../../src/modules/capability-supply/provider-tool-status.ts), [republish](../../convex/lib/capabilitySupply/ownerFunnel/republish.ts) · Supply | Contract plus implementation defect, P1: callers lacked complete maintenance identity; republish left status attached to the old Tool. | Return coherent authenticated maintenance tuple and update the Provider Tool identity in the existing republish transaction. Wrong-tenant/stale identity remains withheld. | Canonical authenticated metadata; historical refs preserved. Existing publish/withdraw/republish fixture uses returned identity and verifies new status. Legacy stale records may still need owner repair. |
+| [Quote](../../src/modules/capability-execution/quote.actions.ts), [Plan Quote](../../src/modules/capability-execution/plan/quote.actions.ts) · Execution | Disclosure/design defect, P1: read-only metadata obscured permitted live inspection and input release. | Mark disclosure/communication consequences truthfully; guides explain no purchase is not no outbound request. | More cautious MCP annotations; actual scope, pricing and authorization unchanged. |
+| [HTTP normalization](../../src/modules/capability-supply/internal/route-transport-http-json.ts), [import](../../src/modules/capability-supply/internal/openapi-import/operation.ts) · Supply/execution | Implementation defect, P1: HTTP 202 could look delivered while only accepted. | Preserve existing continuation; without one classify unknown/no output. Sole-202 synchronous imports refuse. | Intentionally removes false success; payment truth remains independent. Local fixtures pass; full async completion stays MM-057 → MM-022. |
+| [Earnings](../../src/modules/capability-supply/supply-management-service.ts) · Money/supply | Contract defect, P2: permanent absence looked like transient source failure. | Explicit nonretryable unsupported capability and owner earnings handoff. | HTTP, MCP and CLI receive the same owner discriminator. No new earnings facility or balance claim. |
+| [Plan projection](../../src/modules/capability-execution/plan/runtime.schemas.ts) · Execution/DX | Design/docs gap, P2: attention states lacked a permitted next action and manual recovery limits were hidden. | Derive status/owner handoff/cancellation scope from existing lifecycle; preserve accepted per-Node Calls. Document retained Plan/procure identity. | Canonical continuation metadata; no second journal/engine, automatic retry or new authority. Local lifecycle evidence does not replace hosted restart proof. |
+| [Canonical HTTP outputs](../../src/lib/server/plan-api.ts), [contract revision](../../src/modules/discovery/internal/openapi-document-builder.ts) · Protocol/release | Pre-stability design correction, P2: an unshipped profile split imposed two contracts without external consumers. | Removed profile helper, headers, cache variation and CLI injection; return validated owner outputs. OpenAPI contract revision is independent of app version. | Coordinated internal-client rebuild; no historical-data migration. Preserve accepted request/purchase identity. [Compatibility policy](deployments.md#public-contract-compatibility) governs external adoption. |
+| [Guides](../foundations.md), [renderer trial](../designs/agent-operating-contract.md#documentation-architecture-and-publication-boundary) · Docs/DX | Docs gap plus unverified runtime, P2: stale Plan/release claims and presumed renderer support misled users. | Correct four persona handoffs, supported limits and release provenance; one canonical human/Markdown source and explicit public allowlist. | Earlier Fumadocs OpenAPI limits are retained below; the later Scalar Markdown pipeline qualifies the complete Call reference. Public sandbox and hosted four-persona journeys remain open. |
+
+**Earlier local validation — 7 October 2026, before the pre-stability execution below.** `npm run check` passed lint, dependency,
+web/Convex types, 75 import/boundary checks and the standards check. The final
+26 affected existing suites passed **372 tests**; the separately selected rebuilt
+workspace CLI journey passed **1 test** (25 other cases were not selected).
+`git diff --check` and 443 local inline links across the eight changed guides and
+records passed; the canonical skill remains 7,895 bytes. Independent Sol source
+review found no additional evidence-backed blocker. This is source/fixture proof.
+
+The owner OpenAPI generator at `https://ae.test/` produced 68 operations on 62
+paths, 493,754 bytes of compact JSON, SHA-256
+`31cd23a0d6326149f4ae168164a0808724a12110a9fe6ec3d9b9641f8a334d39`.
+The digest identifies this local candidate artifact, not a hosted release.
+
+**Next gates.** The installed workspace CLI fixture now starts at
+anonymous search and uses the returned Tool through describe/compare, Call,
+receipt and same-key replay. It still seeds supply/authority and mocks the
+Provider: it is not a fresh public customer or newly downloaded released-client
+acceptance. Existing local Plan lifecycle, isolation and Provider connection
+fixtures are reused. Native Formance cases were not run because the local
+Docker daemon/Formance service is unavailable; no daemon or production purchase
+was started. The full merge/release gate and hosted tuple are still required.
+
+The isolated pinned Fumadocs trial built and served one allowlisted guide plus a
+constrained request reference, full machine-schema closure and private-page 404.
+Default recursive response rendering and runnable generated examples failed
+qualification. That earlier renderer was not adopted; the subsequent Scalar alternative below
+provides the complete bounded human reference. References and exact versions are in the operating contract.
+
+| Responsible area / remaining dependency | Next acceptance evidence |
+| --- | --- |
+| Docs/DX + authority/execution | Qualified safe discovery-to-useful-output environment without founder-only grants; then fresh-reader tutorial and all four persona journeys. Record guessed fields, manual handoffs, corrective attempts, unnecessary requests and elapsed time. No competitor execution is claimed. |
+| Protocol/DX + release | Rebuilt/installed client and actual MCP harness qualification across complete paginated metadata, the canonical contract, schema digest and release tuple; retain previously accepted purchase recovery. |
+| Execution/authority/money | Native sandbox response-loss/restart, approval/partial/reconciliation and authority-change consequences; reuse recorded two-Node Plan proof without implying fresh hosted acceptance. |
+| Supply/protocol | MM-057 maintained SDK qualification before MM-022 real async acceptance-to-final-output; entitlement, publication, restart, maintenance and cleanup evidence. |
+| Docs/release | Extend the qualified Call reference only after schema/example fidelity review. Keep the same-repository independent docs build allowlisted and qualify its release tuple before public deployment. |
+
+### 7 October pre-stability execution
+
+**Ownership and baseline.** The orchestrator is the only canonical writer on
+`codex/chat-runtime-repair-2026-10-06`, HEAD `3da6013d`. Existing dirty work was
+preserved; Sol implementers supplied isolated patches and independent readers
+reviewed them. No branch, worktree, repository, deployment or new planning system
+was created. This is a dirty source candidate, not that commit's released tree.
+Wayfinder reused #256; pstack grounded sequencing, iceinvein challenged scope,
+and technical-writing/unslop guided prose. Independent Sol reviews did not supply
+formal `/plan-eng-review` clearance: its installed skill lacked the referenced
+`sections/review-sections.md` resource. Source, fixture, browser and reader proof
+remain separate evidence levels.
+
+**Initial implementation milestone; superseded by the bounded closeout below where stated.**
+
+| Package / owner | Result and evidence | Remaining gate |
+| --- | --- | --- |
+| Registry / supply | Hard filters run before semantic ranking and at projection; unknown facts fail closed with explicit scoped evidence. Range price uses its maximum for a hard ceiling. Query/candidate disclosure is declared. Source-owned network/provider/price-band filtering remains. | More supply facts require owner evidence, not relaxed filters or inferred location. |
+| Supply / CLI | Typed continuation args preserve maintenance identity and name caller-required keys; unavailable identity/source preview is explicit in machine, UI and CLI output. Provider inventory accepts/prints limit and opaque cursor continuation. | Legacy records missing maintenance identity retain owner repair; no invented revision/key. |
+| Protocol / execution | Removed the unshipped response-profile split and rebuilt internal CLI. Canonical outputs retain Plan continuation, command material, authority and cursor assertions. Contract revision is `1.0.0-alpha.1`; no body/hash/signature/purchase migration. | Actual released client/protocol and hosted tuple qualification before external onboarding. |
+| Docs / DX | Official private Fumadocs app, isolated npm lock, Scalar linked Markdown, canonical skill and raw OpenAPI. Fifteen approved pages include four persona sections, CLI, glossary, compatibility and Call plus seven models. Publication code is limited to the three existing `tools/docs` files. | Only Call human reference is renderer-qualified; other operations remain available in the full owner OpenAPI. No public deployment performed. |
+| Independent reader | Guide-only Sol review confirmed readable Call outcomes, keyboard search and 390×844 mobile navigation. Fixed missing jq prerequisite, customer-to-CLI/reference links and searchable Customer title. | No qualified candidate install tuple or public safe sandbox. Outcome examples lack individual upstream anchors; all branches remain visible under the response heading. Broader exact-schema/recovery handoffs still need expanded reference coverage and direct links. |
+
+**Local verification.** `npm run check` passed after separating docs-tool types
+from the application's type graph; no heap increase or omitted typecheck. The
+focused API suites passed 213 tests; the subsequent owner/UI/CLI/MCP suites passed
+88. OpenAPI, authority/isolation and Provider maintenance fixtures passed 21;
+six native Plan cases were skipped, not qualified. These runs overlap and are not
+a cumulative unique-test count. Two selected existing Call lifecycle/installed-CLI
+fixtures passed, including discovery through returned references, receipt, same-key
+replay and revoked-grant consequences; 24 unselected/native cases were not run.
+The CLI fixture still seeds authority/supply and mocks Provider delivery.
+
+`npm run docs:build` qualifies source examples, publication inputs, actual HTML
+routes/anchors, assets and raw artifacts. All 24 rendered examples match valid
+owner annotations; eleven negative pipeline probes reject private links, images,
+MDX/imports, remote refs, an expanded schema closure, missing examples, untracked
+source drift, symlinks, extra pages and changed guides. The local browser verified
+visible authentication/errors and pending/expired/uncertain outcomes, Markdown
+copy, theme change, search, LLM routes, unchanged OpenAPI/SKILL and private-route
+404s, with no hydration errors or external resource requests. These are local
+readbacks, not production proof or a complete competitor benchmark.
+
+The raw spec still derives 68 operations on 62 paths. Observed pre-editorial-fix
+sizes were 15,298 bytes for the Call Markdown, 68,817 for `llms-full.txt`, and
+2,312,859 bytes of browser JavaScript before compression; later text changes may
+adjust bytes. The source-snapshot/contract/lock digests in generated provenance
+identify each exact build. The per-page route avoids requiring the full agent
+index or OpenAPI for every question.
+
+#### 7 October docs and contract closeout
+
+**Source result.** The same private Fumadocs app now builds 224 approved pages:
+eleven maintained guide/concept selections, one API index, 59 Scalar operation
+pages, nine explicit raw-OpenAPI fallbacks and 144 reachable schema pages. All 68
+advertised HTTP operations are accounted for; the owner document retains 170
+schema components. Eight fallback operations contain positional tuples Scalar
+1.5.2 omits; Plan Quote also needs its material `propertyNames` constraint. These
+are honest reference limits, not missing operations or qualified human renderings.
+The original Call/seven-schema/24-example proof remains; the expanded publication
+contains 81 rendered owner examples, including reuse. No invented examples are
+published. The narrow generated-example sanitation and bounded fidelity checks
+are recorded in the [design owner](../designs/agent-operating-contract.md#current-implementation-fumadocs-with-scalar-markdown).
+
+Start here now leads through the four personas, authority, purchase entry choices
+and same-Call recovery. Existing authored sections remain their sole owners.
+Official Fumadocs page-tree metadata, search, layouts, Markdown routes and components
+supply the presentation. The build allowlist covers metadata, JSON, search,
+Markdown, browser assets and emitted HTML; no internal document follows a public
+link into publication. Fallback pages derive method/path/authentication from the
+same owner document and explain JSON Pointer and `$ref` navigation. Their links
+use the upstream native-link option for the same build's JSON artifact.
+
+| Finding / owner | Consequence and severity | Correction, mitigation and compatibility |
+| --- | --- | --- |
+| Schema projection / Protocol | P1 contract defect: OpenAPI 3.1 included 17 draft-07 array-valued `items`; native Zod conversion also omitted runtime-enforced tuple lengths. Clients could generate invalid requests or misread outcomes. | Native 2020-12 OpenAPI plus shared tuple-arity correction for OpenAPI, MCP and draft-07 Agent/CLI descriptors; retain `$ref` siblings. Runtime Zod remains authoritative. Normalized comparisons preserve all 51 action descriptors apart from 16 corrected tuple bounds. Raw provider schemas retain their existing diagnostics path. Regenerate pre-stability clients; no accepted-payload, purchase, hash or historical-data migration. |
+| MCP list envelope / Protocol | P2 implementation defect: the SDK added 116 bytes absent from page admission, allowing a 40,062-byte result under a 40,000-byte promise. | Reserve the actual SDK result type and server metadata before adding descriptors. Keep the 40 KB limit and complete schemas; callers follow the existing opaque cursor. No protocol change. |
+| Exact-reference browser handoff / Docs | P1 docs defect: client routing intercepted the nine raw OpenAPI links and displayed 404, although native fetch returned JSON. | Fumadocs native-link option; ordinary browser clicks and fresh direct navigation verified. All 18 operation/index handoffs pass. No added route or renderer. |
+| Current Tool facts / Chat | P2 implementation defects: unavailable supply invited input review, earlier search facts displaced later detail, and external lookup hints disappeared on follow-up. | Existing owner projections suppress unavailable/external review narration, select later facts per returned reference and retain external lookup hints. Hints do not enter canonical callable references or confer authority; fresh detail/Quote guards remain. Preserve legacy saved-row interpretation. No stored transcript migration. |
+
+**Verification and arbitration.** `npm run docs:build` passed all 224 pages,
+81 rendered owner examples and emitted-output checks. Six focused negative probes
+reject mismatched constraint values, ambiguous examples, omitted tuple/property-name
+constraints and unapproved operation pointers. Repeated identical constraints on
+different nested fields are not independently tied to their source paths by the
+Markdown verifier; raw OpenAPI stays authoritative. No claim of complete semantic
+renderer equivalence or competitor runtime parity is made.
+
+A fresh Sol reader used only the built guides and browser. Keyboard search,
+390×844 mobile navigation, 31 distinct anchors, sampled Markdown copy parity,
+authentication/recovery handoffs and all nine fallback pages passed after fixing
+the findings above. Zero off-origin requests or normal-page console errors were
+observed. Cold home loaded 17 responses / 1,662,063 decoded bytes in the initial
+sample; these are local browser measurements, not compressed transfer or task
+completion times. Reference-document comparison remains distinct from executing
+Supermemory or another competitor.
+
+The first full gate passed environment preflight, isolated anonymous backend
+codegen and the public application build, then stopped on 15 unit failures
+(9,266 passed). Review identified three candidate regressions, six stale contract
+assertions, four unchanged chat behavior defects and two asynchronous assertion
+races. The owning mechanics were corrected; assertions now follow all MCP pages,
+retain truthful quote-disclosure semantics and wait for the actual alert/callback.
+The 11 affected integrated suites pass 156 tests. Five chat suites pass 81 tests
+against the exact two-file scratch candidate; final integrated gate evidence is
+recorded below. Counts overlap earlier runs and must not be added together.
+
+**Final staged qualification.** `npm run check` passes. The second full gate
+passes the clean build/backend checks and all 9,281 unit tests (one skipped), then
+reports 3,070 integration passes, 77 skips and three TODOs, with one stale public-
+skill prose assertion failing. Only its two expected phrases were aligned with
+the maintained skill; the unchanged HTTP/MCP/CLI retry and outage semantics then
+pass in the focused integration rerun. The remaining exact gate stages pass:
+type assertions, import/security boundaries, standards, SEO, source browser
+(18 passed, 18 skipped), accessibility (18 passed), CLI package and final docs
+build. The CLI package proof reports a reproducible workspace tarball and help
+under its existing Node 20/22 compatibility checks; it does not qualify a published
+client or connected harness. No disabled native-service test is counted as proof.
+
+This is a staged result, **not a successful uninterrupted `npm run gate`**. Run
+that command against the final merge/release candidate before merging; the current
+work does not merge or release. No application source changed after the second
+full gate began; the sole later test edit corrected the skill-copy assertions.
+The source, fixture, local browser and hosted evidence levels remain separate.
+
+Final generated provenance identifies dirty HEAD `3da6013d`, contract revision
+`1.0.0-alpha.1`, source snapshot
+`42d67efedd7cdd7894569089e7ec4fb6c259866ed31ac285abc16541042d7e63`
+and contract digest
+`6fd6356091453f8b6059bfa67e969ab65c8d58f16e4098a67d76a420231ead84`.
+Both dependency locks remain unchanged in this closeout. The protected whitepaper,
+strategy and pre-existing financial/supply edits match the starting snapshot.
+The orchestrator integrated 33 changed paths; Sol patches/reviews used scratch
+space. The local docs preview was stopped after readback. No publishing,
+production write, paid Call, staging, commit or branch operation occurred.
+
+**Still open:** MM-055 public sandbox, real installed-client/harness and all four
+persona end conditions; native Formance approval/partial/restart evidence; uninterrupted final
+merge/release gate on the frozen candidate; MM-057 → MM-022 real asynchronous
+Provider completion. MM-056 broader parity is unchanged. The stable baseline is
+not declared, and no paid production call or production write was performed.
 
 <a id="mm-056"></a>
 
@@ -1100,3 +1340,105 @@ with the handoff; raw customer payloads are not committed.
 [S-CLIENTS]: https://modelcontextprotocol.io/extensions/client-matrix
 [AE-MCP]: ../../src/lib/server/mcp-api.ts
 [AE-NOTIFY]: ../../convex/notificationWorkpool.ts
+
+
+#### 7 October platform source-consistency uprev
+
+**Scope and ownership.** Joel requested the comprehensive source uprev after the
+docs closeout, explicitly prioritising source consistency. The orchestrator is
+the sole canonical writer. Sol agents supply bounded scratch patches and
+independent challenge; no branch/worktree, production write or release is part
+of this pass. Starting source is dirty `3da6013d`; protected financial, supply,
+whitepaper and strategy work remains owned by its existing authors. The earlier
+closeout evidence above is historical, not acceptance of these new changes.
+
+The source checklist is finite and separate from hosted maturity. Inventory is
+derived from descriptors/routes: 51 registered actions, 44 MCP exposures, 42 CLI
+exposures, 68 HTTP operations on 62 paths and 34 manifest endpoints. Exposure
+differences remain explicit; these counts do not claim each CLI command maps
+one-to-one to an HTTP operation. No parallel operation registry is added.
+
+| Source acceptance item | Owner / dependency | Status / decisive evidence |
+| --- | --- | --- |
+| Advertised operation coverage and exact authentication, methods, errors, bounds and filters | Protocol/Registry; existing descriptor and route owners | Done — 51 actions expose both schemas; 68 HTTP operations/62 paths and all 82 advertised paths resolve, with zero missing/extra methods. Existing owner admission and source checks pass. |
+| Canonical continuation grammar across Registry, Quote, Call, Plan, MCP, CLI and chat | Execution/Registry/DX; flat owner-specific action + args decision | Done — registered action + retained args, one primary operation, explicit human handoffs. Native Call refs are validated; historical malformed refs remain readable without invented runnable actions. Stored cursor and purchase identities remain intact. |
+| Durable CLI recovery for Call, Plan run and exact procurement | CLI/Execution; existing journal and principal authority | Done — pre-submission persistence, original origin/Account/Agent fences, response-loss/restart and concurrent-process demonstrations. Version-1 readers/indexes remain; version-2 records extend the same locked store. |
+| Truthful unresolved procurement and Call outcomes | Execution; existing effect and identity evidence | Done — no second inspection after an unresolved Quote checkpoint, no false financial completion, exact recorded money and explicit historical display limits. Same-Call observation and truthful MCP telemetry are qualified locally. |
+| Funding and owner/payer handoffs | Money/Supply/Auth; no new authority | Done — exact session/status arguments, actor-specific browser handoffs, authenticated maintenance identity and proxy-safe canonical destinations. Funding still grants no purchase authority. |
+| Purposeful response fields and measured representative budgets | Contract owners; independent Sol challenge | Done — input echoes removed from public Quote output only; owner-specific schemas preserve facts. Existing response and MCP descriptor budgets pass without relaxed caps; measurements below. |
+| Maintained guides, public contract revision and generated reference agree | Docs/DX; all source packages | Done — alpha.2 guides/plugin/reference regenerated from owner sources; 228 approved pages, 68 operations, 61 rendered operations, seven raw fallbacks, 148 rendered schemas and 84 validated owner examples. Local browser and Markdown readbacks pass. |
+| Focused mechanics, full source gate and independent final review | Orchestrator; integrated candidate | Done — npm run check and uninterrupted npm run gate both exit 0. Independent Sol review, exact schema-reference checks and final protected-file/hash checks pass. Runtime-dependent skips remain unqualified. |
+
+**Design arbitration.** Wayfinder reuses the existing frontier and register;
+pstack compared flat owner-specific continuations with a nested request union,
+then selected the smaller flat grammar. The journal extends the existing locked,
+durable store rather than creating a second purchase lifecycle. iceinvein runs
+in its non-interactive mode under Joel's instruction to continue; no interview
+or unavailable formal review is claimed. Supermemory v5 supplies the reference
+for explicit namespaces, consistent names, changed defaults and bounded
+representations; Stripe supplies same-key/material replay; HTTP/RFC 9457 keeps
+acceptance, refusal and unresolved effects distinct. Reference documentation is
+not evidence that Aecon executed a competitor or matches its runtime quality.
+
+**Findings and coordinated corrections.** Severity describes the demonstrated
+source defect, not a claim that it occurred in production. No external consumers
+depend on this candidate; the alpha.2 migration table records the wire changes.
+
+| Finding / classification / severity | Caller consequence and existing mitigation | Smallest owning correction / compatibility cost |
+| --- | --- | --- |
+| Discovery constraints could be ignored or admit unknown prices — implementation, high | A caller could mistake an unsuitable candidate for one within its hard ceiling. Quote and purchase spend admission still fence actual spending. | [Registry filter owner](../../src/lib/http/search-query.ts) refuses malformed supplied constraints; [price owner](../../src/modules/registry/internal/search-input.ts) and search projections retain exact meaning. Valid fixed/range upper bounds are compared in the same currency. Invalid/unknown cases now refuse or exclude: coordinated alpha change. |
+| Plan/exact procurement lacked ordinary Call's durable CLI recovery — design, high | A restart could lose request material and encourage a second purchase. Backend idempotency protected only callers retaining the original identity. | [Existing journal](../../tools/ae/lib/call-recovery-journal.ts) gains version-2 records and [shared recovery](../../tools/ae/lib/purchase-recovery.ts), with owner/origin fences, locking and pre-submission persistence. Version-1 Call readers/indexes remain; no server data migration. |
+| Procurement derived tax/net/refund facts from display amounts — implementation, high | Rounded display text could masquerade as accounting evidence. The original Quote and Call usage/receipt were the reliable mitigation. | [Procurement owner](../../src/modules/capability-execution/procure.ts) returns tagged exact evidence; [frozen storage reader](../../src/modules/capability-execution/procure-storage.ts) labels older caches `historical_display_only`. Alpha.2 output change; stored JSON, refs and hashes remain unchanged. |
+| Lost Quote preparation checkpoint could trigger another inspection — implementation, high | Retrying a retained purchase could repeat external disclosure without proof of the first outcome. The durable identity fenced purchase submission but could not prove inspection completion. | [Procure adapter](../../src/lib/server/procure-api.ts) preserves identity and reports unresolved preparation; no automatic re-Quote. Persistent uncertainty requires support investigation. This explicit recovery limit replaces unsafe retry, not a new lifecycle. |
+| Continuation aliases, dropped arguments and UI actions mixed with operations — contract/design, medium | Agents guessed transport routes, relaxed search scope or tried browser handoffs as API calls. Owner schemas and retained purchase IDs provided partial mitigation. | [Owner-composed continuation contract](../../src/modules/actions/contract.ts), Registry/Call/Plan/funding owners and maintained consumers use registered `action` plus `args`; missing caller input and human handoffs are explicit. Historical cursor/record readers are preserved; live alpha outputs and clients change together. |
+| Terminal work or delivered output could imply resolved payment — contract/implementation, high | A caller could stop recovery with missing output or an unknown charge. Call usage/receipt and same-Call status remained authoritative. | [Call recovery projection](../../src/modules/capability-execution/call-recovery.actions.ts), [Journey status](../../src/modules/actions/status.actions.ts) and CLI journal retain uncertainty and observation. New `outcome-unknown` presentation and canonical next actions are coordinated alpha changes; no new paid retry is offered. |
+| Schema/auth metadata disagreed with admission; OAuth bodies were not bounded at the frontdoor — contract/implementation, medium | Clients could request the wrong method/scope or accept inaccurate limits/errors; large authorization bodies consumed unbounded parsing work. Owner admission and signed raw material remained intact. | Discovery owners now derive exact method/scope/errors/defaults; [OAuth protocol](../../src/lib/server/agent-access-oauth/protocol.ts) bounds 16 KiB before store access and reuses the original body. Valid protocol vocabulary and signature material stay unchanged. |
+| Provider cleanup return validator omitted existing x402/health fields — implementation, medium | Cleanup stored state, then failed its registered return validation; callback degradation hid the fault from a database-only assertion. Existing generation/digest authority checks still fenced effects. | [Internal return contract](../../convex/lib/capabilitySupply/providerConnections/contracts.ts) admits the exact existing optional fields; the existing lifecycle test checks registered replay output. Additive internal validator repair, no storage or public-authority change. |
+| Redundant response material and repeated descriptor structure — design, medium | Quote input echoes and oversized MCP discovery consumed agent context without adding authority evidence. Pagination bounded individual pages, not total discovery cost. | Remove the public normalized-input echo while retaining its stored digest/material; compose per-action continuation schemas and compact only equivalent generated schema structure. Existing byte caps remain. Live output changes are in alpha.2; opaque identities stay fixed. |
+| Guide/reference claims lagged implementation — documentation, medium | Readers were told to retain Plan/procure state manually or follow obsolete continuation aliases. Canonical schemas remained available but required source knowledge. | Existing guides, plugin skill and Markdown owners are updated once; official Fumadocs/Scalar regeneration retains the original OpenAPI and explicit rendering fallbacks. No second authored reference or operation registry. |
+
+**Final source evidence.** The final uninterrupted source-gate run exited 0 on
+7 October 2026 after correcting a stale native Call-reference fixture and
+compressing the canonical agent guide within its unchanged 8 KiB budget while
+retaining the established catalogue-outage wording. It
+includes the public build, anonymous codegen check, lint/cycles, clean web/backend
+types, **9,339 unit checks**, **3,079 integration checks**, architecture/type/SEO proofs,
+browser journeys/accessibility, the built CLI package and the full docs build.
+The unit suite retains one skipped case; integration retains 77 skipped cases
+and three todos. Environment-dependent and paid checks were not enabled. Logs are
+`/tmp/aecon-api-uprev-integrated-check.log` and `/tmp/aecon-api-uprev-gate.log`;
+existing machine receipts remain under `output/release/`. No paid production
+calls, production writes, publish, deploy, branch, worktree or commit occurred.
+
+Final local descriptor measurements: buyer **253,814 / 260,000 bytes**, Provider
+**139,947 / 140,000**, feedback **3,420 / 3,500**, largest descriptor **18,156 /
+40,000**. Provider discovery has only 53 bytes of headroom; future descriptor
+changes must requalify the existing cap. All 44 output descriptors contain 487
+closed schema references, with zero dangling targets; literal examples/defaults
+remain data. Legacy and current official MCP clients compile the descriptors.
+Representative owner fixtures measure three search results with disclosure at
+2,763 bytes, committed Quote at 986, unchanged status with next at 363, uncertainty
+at 564, and refusals at 366–582. These are reproducible local fixture measurements,
+not universal response caps or a competitor execution benchmark.
+
+The final built docs browser readback verifies human/Markdown recovery commands,
+Call authentication and 413/415 errors, alpha.2 raw OpenAPI, upstream search and
+a 390-pixel mobile page without horizontal overflow or client errors. The original
+OpenAPI remains unchanged by rendering; fallback fragments resolve against this
+same build. Public provenance records dirty source `3da6013d` with source digest
+`0520fbee5431dd09a979bdd52cf8ecf3f37ffdba7f2054a8dab4c058335c2d25`. This is a local candidate,
+not an accepted hosted release. All five protected files match the starting dirty
+snapshot, including the separately owned supply and earnings work.
+
+The comparison remains specific: [Supermemory v5](https://supermemory.ai/docs/migration/api-v5.md)
+for namespaces, consistent filters and explicit outcome/migration meaning;
+[Stripe](https://docs.stripe.com/api/idempotent_requests) for retained request
+identity; [HTTP 202](https://www.rfc-editor.org/rfc/rfc9110.html#name-202-accepted)
+and [Problem Details](https://www.rfc-editor.org/rfc/rfc9457.html) for honest
+acceptance/errors. Aecon retains its separate authority, Hold, delivery, charge
+and purchase-resolution owners. Supermemory migration success remains
+author-reported; no comparative runtime equivalence is claimed.
+
+Completion of this checklist qualifies source only. MM-055 public sandbox,
+installed clients/harnesses and persona end conditions, MM-057 → MM-022 real
+Provider completion and MM-056 wider product parity remain independently open.

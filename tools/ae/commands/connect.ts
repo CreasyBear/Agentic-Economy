@@ -115,6 +115,7 @@ function connectPending(details: ConnectDetails, options: CliOptions): JsonRecor
     clientId: details.clientId,
     verificationUri: details.verificationUri,
     userCode: details.userCode,
+    ownerHandoff: { actor: 'account_owner', reason: 'device_authorization_required', destination: details.verificationUri },
     nextAction,
     nextCommand,
   }

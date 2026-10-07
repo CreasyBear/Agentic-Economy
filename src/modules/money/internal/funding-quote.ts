@@ -54,12 +54,9 @@ export const fundingQuoteSchema = z.strictObject({
   taxOnServiceFeeBps: z.number().int().min(0).max(10_000),
   nextActions: z.tuple([z.strictObject({
     action: z.literal('funding.handoff.create'),
-    kind: z.literal('human_handoff'),
-    method: z.literal('POST'),
-    href: z.literal('/api/v1/account/funding-sessions'),
-    requiresFreshHumanAuthority: z.literal(false),
-    consequence: z.literal('creates_stripe_hosted_checkout'),
-    retryClass: z.literal('same_idempotency_key'),
+    args: z.strictObject({ principalAmount: exactAmountSchema }),
+    authority: z.literal('agent_key'),
+    requiredInput: z.tuple([z.literal('idempotencyKey')]),
   })]),
 })
 
@@ -175,12 +172,9 @@ export function quoteFunding(input: Readonly<{
     taxOnServiceFeeBps: constraints.taxOnServiceFeeBps,
     nextActions: [{
       action: 'funding.handoff.create',
-      kind: 'human_handoff',
-      method: 'POST',
-      href: '/api/v1/account/funding-sessions',
-      requiresFreshHumanAuthority: false,
-      consequence: 'creates_stripe_hosted_checkout',
-      retryClass: 'same_idempotency_key',
+      args: { principalAmount: exactAudAmount(financials.principalUnits) },
+      authority: 'agent_key',
+      requiredInput: ['idempotencyKey'],
     }],
   }
 }

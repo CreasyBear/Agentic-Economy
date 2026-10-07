@@ -3,9 +3,11 @@ import { z } from 'zod'
 import { projectJourneyProblem, statusRefSchema, validateJourneyNext, type JourneyNext, type TurnRef, type WorkState } from '@/modules/actions/contract'
 import { CliFailure } from './output'
 
+type ChatWorkState = Exclude<WorkState, 'outcome-unknown'>
+
 const chunkSchema = z.object({ type: z.string() }).passthrough()
-const states: Record<WorkState, true> = { submitted: true, working: true, 'input-required': true, 'auth-required': true, completed: true, failed: true, canceled: true, rejected: true }
-const terminal: Partial<Record<WorkState, true>> = { completed: true, failed: true, canceled: true, rejected: true }
+const states: Record<Exclude<WorkState, 'outcome-unknown'>, true> = { submitted: true, working: true, 'input-required': true, 'auth-required': true, completed: true, failed: true, canceled: true, rejected: true }
+const terminal: Partial<Record<Exclude<WorkState, 'outcome-unknown'>, true>> = { completed: true, failed: true, canceled: true, rejected: true }
 const turnRefPattern = /^turn_[0-9a-f-]{36}$/u
 const toolNamePattern = /^[a-z][a-z0-9_.-]{0,80}$/u
 
@@ -20,7 +22,7 @@ function boundedPayload(value: unknown, origin: string): unknown {
 type ChatEvent = Readonly<Record<string, unknown> & { type: string }>
 type Emit = (event: ChatEvent) => void
 
-type StreamIdentity = { turnRef: string; threadId: string; state: WorkState }
+type StreamIdentity = { turnRef: string; threadId: string; state: ChatWorkState }
 
 /** Consume the SDK SSE parser; only validated AE parts become public CLI events. */
 export async function consumeChatStream(
@@ -33,7 +35,7 @@ export async function consumeChatStream(
     throw new CliFailure('Chat response was not an AI SDK UI message stream.', { kind: 'UNAVAILABLE', code: 'invalid_chat_stream' })
   }
   let identity: StreamIdentity | undefined
-  let previousState: WorkState | undefined
+  let previousState: ChatWorkState | undefined
   let finalProblem = false
   let previousSequence = -1
   let seenStart = false
@@ -49,7 +51,7 @@ export async function consumeChatStream(
       if (!data || typeof data !== 'object' || Array.isArray(data)) throw new CliFailure('Invalid turn state.', { kind: 'UNAVAILABLE', code: 'invalid_chat_state' })
       const event = data as Record<string, unknown>
       if (event.kind !== 'turn' || typeof event.turnRef !== 'string' || !turnRefPattern.test(event.turnRef) ||
-        typeof event.contextId !== 'string' || event.contextId.length === 0 || !states[event.state as WorkState] ||
+        typeof event.contextId !== 'string' || event.contextId.length === 0 || !states[event.state as ChatWorkState] ||
         typeof event.sequence !== 'number' || !Number.isSafeInteger(event.sequence) || event.sequence <= previousSequence) {
         throw new CliFailure('Invalid turn identity or sequence.', { kind: 'UNAVAILABLE', code: 'invalid_chat_state' })
       }
@@ -57,7 +59,7 @@ export async function consumeChatStream(
         throw new CliFailure('Chat stream changed turn identity.', { kind: 'UNAVAILABLE', code: 'invalid_chat_state' })
       }
       previousSequence = event.sequence
-      previousState = event.state as WorkState
+      previousState = event.state as ChatWorkState
       identity = { turnRef: event.turnRef, threadId: event.contextId, state: previousState }
       if (!seenStart) {
         onStart(identity)
@@ -104,7 +106,7 @@ export async function consumeChatStream(
   if (finalProblem) return 1
   if (!identity || !previousState || !terminal[previousState]) {
     const next: readonly JourneyNext[] = identity
-      ? [{ action: 'status', args: { ref: { kind: 'turn', ref: identity.turnRef as TurnRef } }, authority: 'same_principal' }]
+      ? [{ action: 'journey.status', args: { ref: { kind: 'turn', ref: identity.turnRef as TurnRef } }, authority: 'same_principal' }]
       : []
     throw new CliFailure('Chat stream ended before a terminal turn state; inspect the original turn status.', {
       kind: 'UNAVAILABLE', code: 'chat_stream_interrupted', next,

@@ -141,6 +141,7 @@ async function analyzeResponse(
   if (successful.length > 1) return refused('openapi_response_status_unsupported')
   const selected = successful[0]
   if (selected === undefined || !isRecord(selected[1])) return refused('schema_missing')
+  if (selected[0] === '202') return refused('openapi_response_status_unsupported')
   const response = await resolveOpenApiRecord(selected[1], root, derefSchema)
   if (response.kind === 'refused') return response
   const content = response.value === undefined ? undefined : jsonContentDocument(response.value.content)

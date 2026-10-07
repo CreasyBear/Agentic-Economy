@@ -80,7 +80,7 @@ describe('MCP host adapter supply', () => {
     // `isError: true`, per the MCP spec, not a bare success envelope.
     expect(result.result).toMatchObject({
       isError: true,
-      structuredContent: { code: 'boundary_probe' },
+      structuredContent: { result: { kind: 'refused', reason: 'boundary_probe' }, next: [] },
     })
   })
 

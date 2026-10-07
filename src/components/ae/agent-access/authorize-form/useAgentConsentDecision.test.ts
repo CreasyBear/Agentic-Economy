@@ -62,20 +62,20 @@ const callableRow = {
   title: 'Weather Tool', summary: 'Get weather.', provider: 'Provider',
   actionClass: 'retrieve' as const, objectClass: 'data' as const, readiness: 'ready' as const,
   price: { kind: 'unavailable' as const }, detailRef: callableRef,
-  next: [{ action: 'describe' as const, authority: 'public' as const, args: { toolRef: callableRef } }],
+  next: [{ action: 'registry.tools.describe' as const, authority: 'public' as const, args: { toolRef: callableRef } }],
 }
 const externalRow = {
   id: 'external:weather', source: 'coinbase' as const, access: 'external_listing' as const,
   title: 'External Weather', summary: 'Weather source.', provider: 'External',
   actionClass: 'retrieve' as const, objectClass: 'data' as const, readiness: 'unverified' as const,
   price: { kind: 'unavailable' as const }, detailRef: 'external:weather',
-  next: [{ action: 'describe-external' as const, authority: 'public' as const, args: { id: 'external:weather' } }],
+  next: [],
 }
 const searchMeta = {
   schemaVersion: 'registry-tools:v3' as const, query: 'weather', partialResults: false,
   assessed: { source: 'all' as const, scope: 'complete' as const, examined: 2, coverage: 'complete' as const },
   pagination: { limit: 8, hasMore: false },
-  next: [{ action: 'broaden' as const, authority: 'public' as const, args: { query: 'weather' } }],
+  next: [],
 }
 
 afterEach(() => {
@@ -496,7 +496,7 @@ describe('useAgentConsentDecision', () => {
     vi.mocked(searchMarketTools).mockResolvedValueOnce({
       ...searchMeta, kind: 'match', results: [callableRow],
       pagination: { limit: 8, hasMore: true, nextCursor: cursor },
-      next: [{ action: 'next-page', authority: 'public', args: { query: 'weather', cursor } }],
+      next: [{ action: 'registry.tools.search', authority: 'public', args: { query: 'weather', cursor } }],
     }).mockResolvedValueOnce({ ...searchMeta, kind: 'noMatch', results: [], reason: 'No matching Tools.' })
     const { result } = renderHook(() => useAgentConsentDecision({
       locator: { kind: 'user_code', value: 'CODE' }, details: baseDetails,
@@ -543,7 +543,7 @@ describe('useAgentConsentDecision', () => {
       ...searchMeta, kind: 'scoped', reason: 'More supply remains.', results: [externalRow],
       partialResults: true, assessed: { source: 'all', scope: 'page', examined: 2, coverage: 'partial' },
       pagination: { limit: 8, hasMore: true, nextCursor: cursor },
-      next: [{ action: 'next-page', authority: 'public', args: { query: 'weather', cursor } }],
+      next: [{ action: 'registry.tools.search', authority: 'public', args: { query: 'weather', cursor } }],
     }).mockResolvedValueOnce({ ...searchMeta, kind: 'match', results: [callableRow] })
     const { result } = renderHook(() => useAgentConsentDecision({
       locator: { kind: 'user_code', value: 'CODE' }, details: baseDetails,
@@ -560,7 +560,7 @@ describe('useAgentConsentDecision', () => {
   it('offers retry instead of a Tool when search is unavailable', async () => {
     vi.mocked(searchMarketTools).mockResolvedValue({
       ...searchMeta, kind: 'unavailable', results: [], reason: 'source_unavailable',
-      next: [{ action: 'retry', authority: 'public', args: { query: 'weather' } }],
+      next: [{ action: 'registry.tools.search', authority: 'public', args: { query: 'weather' } }],
     })
     const { result } = renderHook(() => useAgentConsentDecision({
       locator: { kind: 'user_code', value: 'CODE' }, details: baseDetails,

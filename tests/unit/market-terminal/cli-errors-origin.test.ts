@@ -302,7 +302,8 @@ describe('market-terminal CLI error contracts', () => {
         code: 'authentication_required',
         retryable: false,
         requestId: 'req_123',
-        next: expect.arrayContaining([{ action: 'connect', args: { via: 'oauth_device', url: '/oauth/device_authorization' }, authority: 'human_owner' }]),
+        next: [],
+        ownerHandoff: { actor: 'account_owner', reason: 'connect_required', destination: `${origin}/agent-access` },
         exitCode: 1,
       })
       expect(JSON.parse(result.stdout).next).not.toEqual(expect.arrayContaining([
@@ -528,6 +529,7 @@ describe('market-terminal CLI error contracts', () => {
     expect(fetchMock).toHaveBeenCalledOnce()
     expect(fetchMock.mock.calls[0]?.[1]?.redirect).toBe('manual')
     expect(new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get('Authorization')).toBe('Bearer ae-secret')
+    expect(fetchMock.mock.calls[0]?.[1]?.body).toBe('{}')
   })
 
   it('keeps non-structured JSON failures generic', () => {
@@ -562,9 +564,7 @@ describe('market-terminal CLI error contracts', () => {
       detail: {
         continuation: {
           action: 'funding.handoff.create',
-          method: 'POST',
-          path: '/api/v1/funding/handoffs',
-          input: { idempotencyKey: 'funding:one' },
+          args: { idempotencyKey: 'funding:one' },
         },
         headers: { authorization: 'Bearer FAKE_SENTINEL_TOKEN_dd47' },
         apiKey: 'FAKE_SENTINEL_TOKEN_dd47',
@@ -574,9 +574,7 @@ describe('market-terminal CLI error contracts', () => {
     expect(failure.detail).toEqual({
       continuation: {
         action: 'funding.handoff.create',
-        method: 'POST',
-        path: '/api/v1/funding/handoffs',
-        input: { idempotencyKey: 'funding:one' },
+        args: { idempotencyKey: 'funding:one' },
       },
     })
     expect(JSON.stringify(failure.detail)).not.toContain('FAKE_SENTINEL_TOKEN_dd47')

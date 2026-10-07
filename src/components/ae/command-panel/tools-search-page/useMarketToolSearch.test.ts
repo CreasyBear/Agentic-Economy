@@ -51,9 +51,9 @@ const okPayload = (): ToolChoiceSearchResult => ({
     readiness: 'ready',
     price: { kind: 'indicative', label: 'A$1.00', validUntil: 2_000_000_000_000 },
     detailRef: alphaRef,
-    next: [{ action: 'describe', args: { toolRef: alphaRef }, authority: 'public' }],
+    next: [{ action: 'registry.tools.describe', args: { toolRef: alphaRef }, authority: 'public' }],
   }],
-  next: [{ action: 'broaden', authority: 'public', args: { query: 'alpha' } }],
+  next: [],
   pagination: { limit: 8, hasMore: false },
 })
 
@@ -168,7 +168,7 @@ describe('useMarketToolSearch', () => {
     const searchTools = vi.fn(async (): Promise<ToolChoiceSearchResult> => ({
       kind: 'unavailable', schemaVersion: 'registry-tools:v3', query: 'alpha', reason: 'source_unavailable',
       results: [], partialResults: false, assessed: { source: 'all', scope: 'page', examined: 0, coverage: 'partial' },
-      pagination: { limit: 8, hasMore: false }, next: [{ action: 'retry', authority: 'public', args: { query: 'alpha' } }],
+      pagination: { limit: 8, hasMore: false }, next: [{ action: 'registry.tools.search', authority: 'public', args: { query: 'alpha' } }],
     }))
     const { result } = renderHook(() =>
       useMarketToolSearch({ query: 'alpha', searchAttempt: 0, searchTools }),
@@ -286,7 +286,7 @@ describe('useMarketToolSearch', () => {
           title: 'External Tool', summary: 'External lookup', provider: 'Outside',
           actionClass: 'retrieve', objectClass: 'data', readiness: 'unverified',
           price: { kind: 'indicative', label: 'USDC 0.000001' }, detailRef: '/api/v1/registry/detail?id=opaque-1',
-          next: [{ action: 'describe-external', authority: 'public', args: { id: 'opaque-1' } }],
+          next: [],
         },
       ],
     }))

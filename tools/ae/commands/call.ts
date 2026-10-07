@@ -23,15 +23,15 @@ import type { CallStatusResult } from '@/modules/capability-execution/call-recov
 import { AGENT_ACCOUNT_SELF_ROUTE_CONTRACT, agentAccountSelfResultSchema } from '@/modules/agent-access/account.actions'
 import type { CliOptions } from '../lib/args'
 import { resolveAgentAccessCredential } from '../lib/config'
-import { acknowledgeCallRecovery, findCallRecovery, readCallRecovery, retainCallRecovery, type CallRecoveryRecord } from '../lib/call-recovery-journal'
+import { acknowledgePurchaseRecovery, findPurchaseRecovery, readPurchaseRecovery, retainPurchaseRecovery, type ProcureRecoveryRecord, acknowledgeCallRecovery, findCallRecovery, readCallRecovery, retainCallRecovery, type CallRecoveryRecord } from '../lib/call-recovery-journal'
+import { attachPurchaseRecovery, purchaseRecoveryRequired, purchaseResumeCommand, readPurchasePrincipal, requirePurchasePrincipal } from '../lib/purchase-recovery'
 import { CliFailure, callJson, heading, line, printJson, requireOk, table } from '../lib/output'
 import { usageFailure } from '../lib/help'
 import { toolCallCommand } from '../lib/tool-format'
-import { cliContinuation, continuationCommand } from '../lib/continuation-command'
+import { journeyNextCommand } from '../lib/journey-next-command'
+import { continuationCommand } from '../lib/continuation-command'
 import {
   connectionContinuationForCli,
-  creditContinuationForCli,
-  callNextActionForCli,
 } from '../lib/suggested-continuation-adapter'
 import {
   MAX_STATUS_WAIT_MS,
@@ -129,25 +129,8 @@ function callOutput(
   result: CallMachineResult | CallStatusResult,
   options: CliOptions,
 ): Record<string, unknown> {
-  const callRef = 'callRef' in result ? result.callRef : undefined
-  const continuation = result.kind === 'completed' && result.usage.chargeState === 'insufficient_credit'
-    ? creditContinuationForCli()
-    : result.kind === 'completed' || callRef === undefined
-      ? undefined
-      : result.kind === 'outcome_unknown'
-        ? callNextActionForCli({ kind: 'found', callRef, state: 'reconciliation_required' })
-        : callNextActionForCli({ kind: 'found', callRef, state: 'in_progress' })
-  const continuationSuffix = continuationCommand([
-    ...(options.baseUrlSource === undefined || options.baseUrlSource === 'hosted_default'
-      ? []
-      : ['--base-url', options.baseUrl]),
-    ...(options.json ? ['--json'] : []),
-  ])
-  const nextCommand = continuation?.command === undefined
-    ? undefined
-    : continuationSuffix.length === 0
-      ? continuation.command
-      : `${continuation.command} ${continuationSuffix}`
+  const nextCommand = 'next' in result && Array.isArray(result.next)
+    ? journeyNextCommand(result.next[0], options) : undefined
   return {
     ...result,
     ...(nextCommand === undefined ? {} : { nextCommand }),
@@ -261,7 +244,7 @@ async function submitOrReadCall(record: CallRecoveryRecord, options: CliOptions)
       // Status owns the known purchase. A missing/refused status never causes
       // another submission, even if the original Quote has expired.
       if (options.wait === true && result.kind === 'found' && result.state === 'in_progress') {
-        result = await waitForCallResult(options, record, { kind: 'pending', toolRef: record.toolRef, callRef: status.callRef, retryAfterMs: 100 })
+        result = await waitForCallResult(options, record, projectCallMachineResult({ kind: 'pending', toolRef: record.toolRef, callRef: status.callRef, retryAfterMs: 100 }))
       }
     } else {
       const apiKey = requireAgentAccessKey('call', options)
@@ -315,32 +298,6 @@ async function resumeRetainedCall(record: CallRecoveryRecord, options: CliOption
   } catch (error) { throw attachRecovery(error, record, options) }
 }
 
-type QuoteRefusalContinuation = Readonly<{ command: string; suggestion: string }>
-
-/**
- * A refused Quote already names the one continuation the market expects. This
- * maps that continuation onto the runnable CLI command for it, so the funding
- * gate points at the same `ae fund` handoff doctor reports.
- */
-function quoteRefusalContinuation(
-  action: string | undefined,
-  toolRef: string,
-  options: CliOptions,
-): QuoteRefusalContinuation | undefined {
-  if (action === 'registry.tools.describe') {
-    return {
-      command: continuationCommand(['ae', 'describe', toolRef, '--base-url', options.baseUrl, ...(options.json ? ['--json'] : [])]),
-      suggestion: 'Read the exact input contract for this Tool, then repeat the call.',
-    }
-  }
-  if (action === 'funding.handoff.create') {
-    return {
-      command: cliContinuation(options, ['ae', 'fund']),
-      suggestion: 'Add Account credit as the owner, then repeat this call.',
-    }
-  }
-  return undefined
-}
 
 /**
  * The one place that calls `tool.quote:v2`. `ae call` uses this to prepare a
@@ -374,15 +331,16 @@ async function resolveToolQuote(
     })
   }
   if (quote.data.kind === 'refused') {
-    const refusal = quoteRefusalContinuation(quote.data.continuation?.action, toolRef, options)
-    const suggestion = quote.data.reason ?? refusal?.suggestion
+    const nextCommand = quote.data.continuation === undefined ? undefined : journeyNextCommand(quote.data.continuation, options)
+    const suggestion = quote.data.reason ?? quote.data.ownerHandoff?.reason
     throw new CliFailure(`Tool quote refused: ${quote.data.code}.`, {
       kind: 'FAILED_PRECONDITION',
       code: quote.data.code,
       detail: quote.data,
       retryable: quote.data.retryable,
       ...(suggestion === undefined ? {} : { suggestion }),
-      ...(refusal === undefined ? {} : { nextCommand: refusal.command }),
+      ...(nextCommand === undefined ? {} : { nextCommand }),
+      ...(quote.data.continuation === undefined ? {} : { next: [quote.data.continuation] }),
     })
   }
   if (quote.data.toolRef !== toolRef) {
@@ -493,6 +451,7 @@ export async function runCallCommand(
 }
 /** Select without effects, or purchase only the caller's complete exact-input request. */
 export async function runProcureCommand(args: readonly string[], options: CliOptions, stdin: Readable = process.stdin): Promise<void> {
+  if (args[0] === 'resume') return resumeProcure(args, options)
   if (args.length !== 0 || options.input === undefined) throw usageFailure('procure', 'procure-usage')
   if (options.prefer !== undefined && !TOOL_SELECTION_PREFERENCES.includes(options.prefer as ToolSelectionPreference)) {
     throw new CliFailure('Preference must be balanced, cheapest or reliable.', { kind: 'INVALID_ARGUMENT', code: 'procure-prefer' })
@@ -514,22 +473,96 @@ export async function runProcureCommand(args: readonly string[], options: CliOpt
   const request = parsed.data.kind === 'need' && options.prefer !== undefined
     ? { ...parsed.data, prefer: options.prefer as ToolSelectionPreference }
     : parsed.data
+  // Match the actual procurement HTTP limit for literal and stdin requests.
+  if (Buffer.byteLength(JSON.stringify(request), 'utf8') > 64 * 1024) {
+    throw new CliFailure('Procurement input is too large.', { kind: 'PAYLOAD_TOO_LARGE', code: 'payload_too_large' })
+  }
+  if (request.kind === 'exact') {
+    const principal = await readPurchasePrincipal(options)
+    const recoveryRequest = { intent: 'procure_exact' as const, origin: options.baseUrl, ...principal, command: request }
+    const previous = findPurchaseRecovery(recoveryRequest, options)
+    if (previous !== undefined) {
+      if (previous.intent !== 'procure_exact') throw new Error('procure_recovery_intent_invalid')
+      if (previous.command.idempotencyKey !== request.idempotencyKey) throw purchaseRecoveryRequired(previous, options)
+      return resumeRetainedProcure(previous, options)
+    }
+    const retained = await retainPurchaseRecovery(recoveryRequest, options)
+    if (retained.record.intent !== 'procure_exact') throw new Error('procure_recovery_intent_invalid')
+    if (!retained.created) throw purchaseRecoveryRequired(retained.record, options)
+    return submitRetainedProcure(retained.record, options)
+  }
+  return presentProcureResult(await requestProcure(request, options), options)
+}
+
+async function requestProcure(request: unknown, options: CliOptions): Promise<Record<string, unknown>> {
   const apiKey = requireAgentAccessKey('procure', options)
   const outcome = await callJson(options.baseUrl, TOOL_PROCURE_PATH, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify(request),
-  })
+    method: 'POST', headers: { Authorization: `Bearer ${apiKey}` }, body: JSON.stringify(request),
+  }, PURCHASE_REQUEST_TIMEOUT_MS)
   const body = requireOk(outcome, TOOL_PROCURE_PATH)
-  if (!isRecord(body)) throw new CliFailure('The gateway returned an invalid procurement result.', {
-    kind: 'UNAVAILABLE', code: 'procure-result-invalid',
-  })
-  const { next, ...result } = body
+  if (!isRecord(body)) throw new CliFailure('The gateway returned an invalid procurement result.', { kind: 'UNAVAILABLE', code: 'procure-result-invalid' })
+  return body
+}
+
+function validatedProcure(body: Record<string, unknown>) {
+  const { next: _next, ...result } = body
   const validated = toolProcureResultSchema.safeParse(body.status === 'needs_input' ? body : result)
-  if (!validated.success) throw new CliFailure('The gateway returned an invalid procurement result.', {
-    kind: 'UNAVAILABLE', code: 'procure-result-invalid',
-  })
-  if (options.json) { printJson(body); return }
+  if (!validated.success) throw new CliFailure('The gateway returned an invalid procurement result.', { kind: 'UNAVAILABLE', code: 'procure-result-invalid' })
+  return validated.data
+}
+
+async function submitRetainedProcure(record: ProcureRecoveryRecord, options: CliOptions): Promise<void> {
+  try {
+    if (!options.json) process.stderr.write(`Procurement prepared. Recovery: ${purchaseResumeCommand(record, options)}\n`)
+    const body = await requestProcure(record.command, options)
+    const result = validatedProcure(body)
+    if (result.status === 'needs_input' || result.idempotencyKey !== record.command.idempotencyKey
+      || ('toolRef' in result && result.toolRef !== record.command.toolRef)) {
+      throw new CliFailure('The gateway changed the retained procurement identity.', { kind: 'UNAVAILABLE', code: 'purchase-recovery-identity-conflict' })
+    }
+    await acknowledgePurchaseRecovery(record, {
+      ...('quoteRef' in result && result.quoteRef !== undefined ? { quoteRef: result.quoteRef } : {}),
+      ...('callRef' in result ? { callRef: result.callRef } : {}),
+      // Delivery does not establish financial resolution. Even a delivered
+      // response stays open until the original Call status proves completion.
+      // A refusal without a CallRef can also conceal an accepted Call.
+      terminal: false,
+    })
+    presentProcureResult(body, options, record.recoveryRef)
+  } catch (error) { throw attachPurchaseRecovery(error, record, options) }
+}
+
+async function resumeRetainedProcure(record: ProcureRecoveryRecord, options: CliOptions): Promise<void> {
+  try {
+    await requirePurchasePrincipal(record, options)
+    if (record.callRef === undefined) return submitRetainedProcure(record, options)
+    const status = await readCallStatus(options, record.callRef)
+    if (status.callRef !== record.callRef || (status.kind === 'found' && status.toolRef !== undefined && status.toolRef !== record.command.toolRef)) {
+      throw new CliFailure('The gateway changed the retained Call identity.', { kind: 'UNAVAILABLE', code: 'purchase-recovery-identity-conflict' })
+    }
+    await acknowledgePurchaseRecovery(record, { terminal: status.kind === 'found' && (status.state === 'cancelled'
+      || (status.state === 'terminal' && status.result !== undefined && (status.result.kind === 'refused'
+        || (status.result.kind === 'completed' && status.result.usage.chargeState !== 'outcome_unknown')))) })
+    const result = { ...status, recoveryRef: record.recoveryRef }
+    if (options.json) printJson(result)
+    else { heading('Procurement Call status'); line(JSON.stringify(result, undefined, 2)) }
+  } catch (error) { throw attachPurchaseRecovery(error, record, options) }
+}
+
+async function resumeProcure(args: readonly string[], options: CliOptions): Promise<void> {
+  if (args.length !== 2 || options.input !== undefined || options.idempotencyKey !== undefined || options.prefer !== undefined) {
+    throw new CliFailure('Use ae procure resume <recoveryRef> without input, preference or a new purchase key.', { kind: 'INVALID_ARGUMENT', code: 'procure-resume-usage' })
+  }
+  const record = readPurchaseRecovery(args[1]!, options.baseUrl, 'procure_exact')
+  if (record.intent !== 'procure_exact') throw new Error('procure_recovery_intent_invalid')
+  return resumeRetainedProcure(record, options)
+}
+
+function presentProcureResult(body: Record<string, unknown>, options: CliOptions, recoveryRef?: string): void {
+  const { next, ...result } = body
+  const validated = { data: validatedProcure(body) }
+  if (options.json) { printJson({ ...body, ...(recoveryRef === undefined ? {} : { recoveryRef }) }); return }
+  if (recoveryRef !== undefined) line(`Recovery reference: ${recoveryRef}`)
   if (validated.data.status === 'needs_input') {
     heading(`Selected ${validated.data.toolName}${validated.data.reasons.length === 0 ? '' : ` · ${validated.data.reasons.join(' · ')}`}`)
     line('Alternates:')

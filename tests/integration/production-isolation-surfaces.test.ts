@@ -127,7 +127,7 @@ describe('production surface isolation', () => {
       title: 'Sandbox weather base', provider: 'provider.test',
       host: 'provider.test', resourcePath: '/base', networkLabel: 'Base',
       sourcePrice: '0.001 USDC', access: 'external_listing', readiness: 'unverified',
-      next: [{ action: 'describe-external', authority: 'public' }],
+      next: [],
     }] })
     if (immediate?.kind === 'scoped') expect(immediate.results[0]).not.toHaveProperty('toolRef')
     const search = await backend.action(async ctx => {

@@ -257,11 +257,10 @@ export function ChatTranscript({
               const previousPrompt = turns.slice(0, index).findLast(message => message.role === 'user')?.text
               const bundle = turn.role === 'assistant' ? readOpenUiBundle(turn.text, turn.tools) : null
               const continuationIndex = turn.tools.findLastIndex((card) =>
-                card.toolId === 'registry.tools.search' && card.kind === 'choices' && card.next?.action === 'next-page')
+                card.toolId === 'registry.tools.search' && card.kind === 'choices' && card.next?.action === 'registry.tools.search' && card.next.args.cursor !== undefined)
               const continuation = turn.tools[continuationIndex]
-              const broadenStatus = turn.tools.findLast(card => card.kind === 'status' && card.next?.action === 'broaden')
               const rawProse = bundle === null ? turn.text : bundle.prose
-              const prose = continuation?.kind === 'choices' && continuation.next?.action === 'next-page'
+              const prose = continuation?.kind === 'choices' && continuation.next?.action === 'registry.tools.search' && continuation.next.args.cursor !== undefined
                 ? rawProse.replaceAll(continuation.next.args.cursor, '[cursor hidden]')
                 : rawProse
               const view = turn.role === 'assistant' ? projectGenerativeTurn({ ...turn, text: prose }) : null
@@ -304,12 +303,6 @@ export function ChatTranscript({
                         <div className="grid w-full min-w-0 gap-3">
                           {writing ? <AnswerBlock view={{ markdown: prose, streaming: true }} /> : null}
                           {writing ? null : <AnswerBlock view={{ markdown: prose }} />}
-                          {view.options.options.length === 0 && broadenStatus?.kind === 'status'
-                            && broadenStatus.next?.action === 'broaden' ? (
-                              <div className="flex flex-wrap items-center gap-2">
-                                <SearchNext next={broadenStatus.next} signedThread={ownerChatThreadId !== undefined} />
-                              </div>
-                            ) : null}
                           {readOnly || failure === undefined ? null : (
                             <RecoveryNotice reason={failure.reason} className="w-full max-w-prose"
                               {...(failure.callRefs === undefined ? {} : { callRefs: failure.callRefs })}
@@ -323,7 +316,7 @@ export function ChatTranscript({
                             {...(onContinueSearch === undefined ? {} : { onContinueSearch })}
                             {...(onRepeatSearch === undefined ? {} : { onRepeatSearch })}
                             signedThread={ownerChatThreadId !== undefined}
-                            {...(continuation?.kind === 'choices' && continuation.next?.action === 'next-page'
+                            {...(continuation?.kind === 'choices' && continuation.next?.action === 'registry.tools.search' && continuation.next.args.cursor !== undefined
                               ? { cursorToRedact: continuation.next.args.cursor } : {})} /> : null}
                           {view.options.options.length > 0 || view.comparison !== null ? null : <SourcesInline view={view.sources} />}
                           {view.options.options.length === 0 ? null : (
@@ -374,9 +367,9 @@ export function ChatTranscript({
                             </>
                           )}
                           {view.comparison ? <ComparisonTable view={view.comparison} /> : null}
-                          {continuation?.kind === 'choices' && continuation.next?.action === 'next-page'
+                          {continuation?.kind === 'choices' && continuation.next?.action === 'registry.tools.search' && continuation.next.args.cursor !== undefined
                             && !(bundle?.root && bundle.consumed.has(continuationIndex))
-                            ? <SearchNext next={continuation.next}
+                            ? <SearchNext next={{ ...continuation.next, args: { ...continuation.next.args, cursor: continuation.next.args.cursor } }}
                               {...(onContinueSearch === undefined ? {} : { onContinueSearch })}
                               {...(onRepeatSearch === undefined ? {} : { onRepeatSearch })}
                               signedThread={ownerChatThreadId !== undefined} /> : null}

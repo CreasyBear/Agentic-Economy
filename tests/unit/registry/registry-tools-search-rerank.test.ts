@@ -46,8 +46,10 @@ async function collectSearchPages(first: SearchEnvelope, options: Record<string,
   const rows = [...first.results]
   let page = first
   for (let count = 0; page.pagination.hasMore && count < 12; count++) {
-    expect(page.next[0]).toMatchObject({ action: 'next-page', args: { query: 'timezone conversion', cursor: page.pagination.nextCursor } })
-    page = await runSearch('timezone conversion', { ...options, cursor: page.pagination.nextCursor })
+    const next = page.next[0]
+    expect(next).toEqual({ action: 'registry.tools.search', args: { ...options, query: 'timezone conversion', limit: options.limit ?? 8, cursor: page.pagination.nextCursor }, authority: 'public' })
+    if (next?.action !== 'registry.tools.search') throw new Error('Expected executable page continuation')
+    page = await runSearch(next.args.query, next.args)
     expect(new TextEncoder().encode(JSON.stringify(page)).length).toBeLessThanOrEqual(16 * 1024)
     rows.push(...page.results)
   }
@@ -116,7 +118,7 @@ describe('registry.tools.search mixed assessment', () => {
     expect(result.kind).toBe('match')
     if (result.kind !== 'match') return
     expect(result.results[0]).toMatchObject({ id: TOOL_CRYPTO_TX.toolRef, toolRef: TOOL_CRYPTO_TX.toolRef, access: 'ae_callable' })
-    expect(result.results[0]?.next).toEqual([{ action: 'describe', args: { toolRef: TOOL_CRYPTO_TX.toolRef }, authority: 'public' }])
+    expect(result.results[0]?.next).toEqual([{ action: 'registry.tools.describe', args: { toolRef: TOOL_CRYPTO_TX.toolRef }, authority: 'public' }])
     expect(result).not.toHaveProperty('groups')
     expect(new TextEncoder().encode(JSON.stringify(result)).length).toBeLessThanOrEqual(16 * 1024)
   })
@@ -135,8 +137,52 @@ describe('registry.tools.search mixed assessment', () => {
       results: [{ id: 'directory-1', access: 'external_listing', sourcePrice: '0.002000 USDC',
         host: 'weather.example', resourcePath: '/v2/current', networkLabel: 'Base',
         price: { kind: 'indicative', label: 'US$0.002' },
-        next: [{ action: 'describe-external', args: { id: 'directory-1' } }] }] })
-    expect(result.next).toEqual([{ action: 'broaden', args: { query: 'timezone conversion' }, authority: 'public' }])
+        next: [] }] })
+    expect(result.next).toEqual([])
+  })
+
+  it.each([
+    { location: 'Sydney' }, { effects: ['data_release'] }, { dataUse: ['public'] },
+    { healthStatus: ['operational'] }, { currency: 'AUD' },
+    { maximumPrice: { currency: 'AUD', units: '1000000', exponent: 6 } },
+  ])('excludes directory rows without the required facts before ranking: %j', async filters => {
+    directoryRows = [{ ...directoryRow('unknown-facts'), minimumUsdPrice: '0.001000' }]
+    const gateway = vi.spyOn(decisionEngine, 'executeDecisionGateway')
+    const result = await runSearch('timezone conversion', { source: 'coinbase', filters })
+    expect(result).toMatchObject({ kind: 'scoped', results: [], partialResults: true,
+      assessed: { examined: 1, coverage: 'partial' }, pagination: { hasMore: false } })
+    expect(result.kind === 'scoped' && result.reason).toContain(Object.keys(filters)[0])
+    expect(result.next).toEqual([])
+    expect(result.assessed).toMatchObject({ coverage: 'partial' })
+    expect(gateway).not.toHaveBeenCalled()
+  })
+
+  it('applies explicit admitted health before releasing candidate summaries for ranking', async () => {
+    vi.mocked(readCapabilityToolSearch).mockResolvedValue({ ...misorderedSearchResult(''),
+      items: [TOOL_TIMEZONE], pagination: { limit: 20, hasMore: false } })
+    const gateway = vi.spyOn(decisionEngine, 'executeDecisionGateway')
+    expect(await runSearch('timezone conversion', { source: 'current', filters: { healthStatus: ['degraded'] } }))
+      .toMatchObject({ kind: 'noMatch', results: [], assessed: { examined: 1, coverage: 'complete' } })
+    expect(gateway).not.toHaveBeenCalled()
+  })
+
+  it('retains an explicitly unverified external listing without interpreting a minimum price as a ceiling', async () => {
+    directoryRows = [directoryRow('unverified-listing')]
+    mockDirectoryAssessment()
+    expect(await runSearch('timezone conversion', { source: 'coinbase', filters: { healthStatus: ['unverified'] } }))
+      .toMatchObject({ kind: 'match', results: [{ id: 'unverified-listing', readiness: 'unverified' }] })
+  })
+
+  it('keeps a directory cursor after rejecting unknown facets so the next qualified row remains reachable', async () => {
+    directoryRows = [{ ...directoryRow('unknown-class'), actionClass: 'unclassified' }, directoryRow('known-class')]
+    mockDirectoryAssessment()
+    const first = await runSearch('timezone conversion', { source: 'coinbase', limit: 1, filters: { actionClass: 'transform' } })
+    expect(first).toMatchObject({ kind: 'scoped', results: [], assessed: { examined: 1 }, pagination: { hasMore: true } })
+    const next = first.next[0]
+    expect(next?.args).toMatchObject({ filters: { actionClass: 'transform' } })
+    if (next?.action !== 'registry.tools.search') throw new Error('Expected executable page continuation')
+    expect(await runSearch(next.args.query, next.args))
+      .toMatchObject({ kind: 'match', results: [{ id: 'known-class' }], pagination: { hasMore: false } })
   })
 
   it('never displays an unrelated Bazaar lexical hit for an impossible need', async () => {
@@ -263,16 +309,22 @@ describe('registry.tools.search mixed assessment', () => {
       usage: { inputTokens: 160, outputTokens: 0, estimatedCostAud: null },
       durationMs: 40, attemptedTiers: ['jev_system_one'],
     })
-    const options = { source: 'current', filters: { provider: 'Provider Corp' } }
+    const options = { source: 'current', filters: { provider: 'Provider Corp' }, limit: 3 }
     const first = await runSearch('timezone conversion', options)
     expect(first).toMatchObject({ kind: 'scoped', results: [], assessed: { examined: 1 },
       pagination: { hasMore: true } })
-    const second = await runSearch('timezone conversion', { ...options, cursor: first.pagination.nextCursor })
+    const next = first.next[0]
+    expect(next).toEqual({ action: 'registry.tools.search', args: { query: 'timezone conversion', ...options, cursor: first.pagination.nextCursor }, authority: 'public' })
+    if (next?.action !== 'registry.tools.search') throw new Error('Expected executable page continuation')
+    const second = await runSearch(next.args.query, next.args)
     expect(second).toMatchObject({ kind: 'match', results: [{ toolRef: TOOL_CRYPTO_TX.toolRef }],
       pagination: { hasMore: false } })
     expect(readCapabilityToolSearch).toHaveBeenCalledWith({
-      query: 'timezone conversion', source: 'current', limit: 8, cursor: 'second', filters: {},
+      query: 'timezone conversion', source: 'current', limit: 3, cursor: 'second', filters: {},
     })
+    vi.mocked(readCapabilityToolSearch).mockResolvedValueOnce({ kind: 'unavailable', schemaVersion: 'registry-tools:v3', reason: 'source_unavailable', navigation: [] })
+    const failed = await runSearch(next.args.query, next.args)
+    expect(failed.next).toEqual([{ action: 'registry.tools.search', args: next.args, authority: 'public' }])
   })
 
   it('shrinks an oversized external page and resumes at its first omitted index row', async () => {
@@ -391,7 +443,7 @@ describe('registry.tools.search mixed assessment', () => {
     expect(result).toMatchObject({
       kind: 'unavailable', reason: 'capacity_exceeded', results: [], partialResults: true,
       pagination: { limit: 1, hasMore: false },
-      next: [{ action: 'retry', args: { query: 'timezone conversion' } }],
+      next: [{ action: 'registry.tools.search', args: { query: 'timezone conversion', source: 'current', limit: 1 } }],
     })
     expect(result.pagination).not.toHaveProperty('nextCursor')
     expect(new TextEncoder().encode(JSON.stringify(result)).length).toBeLessThanOrEqual(16 * 1024)

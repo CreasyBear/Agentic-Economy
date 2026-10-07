@@ -29,6 +29,10 @@ function toolMarketActionSurfaces() {
 const readOnlyEffect = {
   class: 'observation', reversible: true, recipientKind: 'none', dataClasses: [], spendExposure: 'none', approval: 'none',
 } as const
+const searchEffect = {
+  class: 'disclosure', reversible: false, recipientKind: 'provider_system',
+  dataClasses: ['search_query', 'candidate_summaries'], spendExposure: 'none', approval: 'none',
+} as const
 const boundaries = [
   'Public discovery may query the selected directory and refresh admitted Tool metadata. Does not create spending authority, a Quote, a Call or payment.',
   'Returns compact current Tool facts and public health only; caller authority and balance are decided by tool.quote.',
@@ -84,9 +88,10 @@ export const registryToolsListContract = {
 export const registryToolsSearchContract = {
   id: 'registry.tools.search', schema: toolCatalogSearchInputSchema, surfaces: toolMarketActionSurfaces(),
   name: 'Search Tools', summary: 'Search admitted and Coinbase Bazaar Tools in one compact, paginated list.',
-  boundaries, outputSchema: toolChoiceSearchOutputSchema, parameters: searchParameters, readOnly: true, effect: readOnlyEffect,
+  boundaries: [...boundaries, 'When semantic ranking runs, the search query and candidate summaries are sent to the configured Jev decision service. Hard filters exclude supply whose required facts are unknown.'],
+  outputSchema: toolChoiceSearchOutputSchema, parameters: searchParameters, readOnly: true, effect: searchEffect,
   invocationContract: {
-    version: 'registry.tools.search:v5', consequenceClass: 'read_only', materialInputPaths: ['source', 'query', 'limit', 'cursor', 'filters'],
+    version: 'registry.tools.search:v6', consequenceClass: 'read_only', materialInputPaths: ['source', 'query', 'limit', 'cursor', 'filters'],
     authorityRequirement: 'none', retryClass: 'replayable', expectedEvidence: ['public_tool_search_result'],
     safeContinuations: ['registry.tools.describe'],
     invalidationConditions: ['action_contract_version_changed', 'query_changed', 'filters_changed', 'cursor_changed'],

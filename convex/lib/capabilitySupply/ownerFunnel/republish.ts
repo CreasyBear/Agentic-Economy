@@ -2,6 +2,7 @@ import type { MutationCtx } from '../../../_generated/server'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { republishPreparedCapabilityCommand } from '@/modules/capability-supply/public'
 import { publicationPorts, rebuildCapabilityOriginSupplyProjection } from '../../../capabilitySupply'
+import { upsertProviderToolIdentity } from '../../../capabilityProviderToolProjection'
 import { scheduleProviderDirectoryProjection } from '../publish/prepared'
 import { verifySupplyAgentPrincipal } from '../../../agentAccessPrincipals'
 import { requireSourceWrite } from '../../security/sourceWrite/admission'
@@ -125,6 +126,20 @@ export async function republishOwnerCapabilityHandler(
       publicationPorts(ctx),
     )
     if (result.kind === 'refused') return result
+    await upsertProviderToolIdentity(ctx, {
+      businessId: args.businessId,
+      providerRef: reconstructed.prepared.binding.authority.kind === 'provider_connection'
+        ? reconstructed.prepared.binding.authority.providerRef
+        : String(args.businessId),
+      toolRef: result.toolRef,
+      offeringRef: args.offeringRef,
+      offeringRevision: args.offeringRevision,
+      publicationRef: result.publicationRef,
+      publicationRevision: result.publicationRevision,
+      offeringId: result.offeringId,
+      bindingId: result.bindingId,
+      updatedAt: now,
+    })
     await rebuildCapabilityOriginSupplyProjection(ctx, args.businessId, now)
     await scheduleProviderDirectoryProjection(ctx, result.publicationRef, result.publicationRevision)
     return {

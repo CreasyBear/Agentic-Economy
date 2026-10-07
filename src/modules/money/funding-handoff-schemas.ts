@@ -42,6 +42,30 @@ export const createFundingHandoffInputSchema = z.strictObject({
   idempotencyKey: idempotencyKeySchema,
 })
 
+export const fundingCreateReplayNextSchema = z.strictObject({
+  action: z.literal(FUNDING_HANDOFF_CREATE_ACTION_ID),
+  args: createFundingHandoffInputSchema,
+  authority: z.literal('agent_key'),
+})
+
+export const fundingStatusNextSchema = z.strictObject({
+  action: z.literal(FUNDING_HANDOFF_STATUS_ACTION_ID),
+  args: z.strictObject({ fundingSessionId: z.string().regex(/^cs_[A-Za-z0-9_]+$/u) }),
+  authority: z.literal('same_principal'),
+  retryAfterMs: z.literal(5000),
+})
+export const fundingCreateNextSchema = z.strictObject({
+  action: z.literal(FUNDING_HANDOFF_CREATE_ACTION_ID),
+  args: z.strictObject({ principalAmount: exactAmountSchema }),
+  authority: z.literal('agent_key'),
+  requiredInput: z.tuple([z.literal('idempotencyKey')]).describe('A new funding intent requires a new key; never reuse the expired or failed session key.'),
+})
+const payerHandoffSchema = z.strictObject({
+  actor: z.literal('payer'),
+  reason: z.literal('funding_payment_required'),
+  url: z.string().url(),
+})
+
 export const createFundingHandoffResultSchema = z.discriminatedUnion('kind', [
   z.strictObject({
     kind: z.literal('funding_session'),
@@ -51,8 +75,8 @@ export const createFundingHandoffResultSchema = z.discriminatedUnion('kind', [
     statusUrl: z.string().url(),
     expiresAt: z.number().int().positive(),
     quote: quoteSchema,
-    humanHandoff: z.strictObject({ message: z.string().min(1), instruction: z.string().min(1) }),
-    pollAfterMs: z.literal(5000),
+    humanHandoff: payerHandoffSchema,
+    next: fundingStatusNextSchema,
     idempotentReplay: z.boolean(),
   }),
   z.strictObject({
@@ -77,34 +101,33 @@ export const fundingHandoffStatusResultSchema = z.discriminatedUnion('kind', [
   z.strictObject({
     kind: z.literal('awaiting_payment'), ...statusBase,
     state: z.literal('awaiting_payment'), paymentStatus: z.literal('unpaid'),
-    nextAction: z.strictObject({ kind: z.literal('share_checkout'), checkoutUrl: z.string().url() }),
-    pollAfterMs: z.literal(5000),
+    humanHandoff: payerHandoffSchema,
+    next: fundingStatusNextSchema,
   }),
   z.strictObject({
     kind: z.literal('processing'), ...statusBase,
     state: z.literal('processing'), paymentStatus: z.enum(['unpaid', 'paid']),
-    nextAction: z.strictObject({ kind: z.literal('poll') }), pollAfterMs: z.literal(5000),
+    next: fundingStatusNextSchema,
   }),
   z.strictObject({
     kind: z.literal('ready'), ...statusBase,
     state: z.literal('ready'), paymentStatus: z.literal('paid'),
     balance: z.strictObject({ usableAmount: exactAmountSchema }),
-    nextAction: z.strictObject({ kind: z.literal('continue') }),
   }),
   z.strictObject({
     kind: z.literal('expired'), ...statusBase,
     state: z.literal('expired'), paymentStatus: z.literal('unpaid'),
-    nextAction: z.strictObject({ kind: z.literal('create_new') }),
+    next: fundingCreateNextSchema,
   }),
   z.strictObject({
     kind: z.literal('failed'), ...statusBase,
     state: z.literal('failed'), paymentStatus: z.literal('failed'),
-    nextAction: z.strictObject({ kind: z.literal('create_new') }),
+    next: fundingCreateNextSchema,
   }),
   z.strictObject({ kind: z.literal('not_found') }),
   z.strictObject({
     kind: z.literal('error'), code: z.string().min(1), retryable: z.boolean(),
-    correlationRef: z.string().min(1), nextAction: z.strictObject({ kind: z.literal('poll') }),
+    correlationRef: z.string().min(1), next: fundingStatusNextSchema.optional(),
   }),
 ])
 

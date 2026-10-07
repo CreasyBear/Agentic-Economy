@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { exactAmountSchema } from '@/modules/money/public'
+
 import type { ProblemKind } from '@/lib/errors'
 import { marketWindowSchema } from '@/modules/market/contracts'
 
@@ -45,17 +47,17 @@ const cursorParam: OpenApiRouteParam = {
   schema: z.string().min(1).max(512),
 }
 const limitParam: OpenApiRouteParam = {
-  name: 'limit', description: 'Maximum rows to return (1-50).', required: false,
-  schema: z.coerce.number().int().min(1).max(50),
+  name: 'limit', description: 'Maximum rows to return (1-50, default 20).', required: false,
+  schema: z.coerce.number().int().min(1).max(50).default(20),
 }
 const searchQueryParams: readonly OpenApiRouteParam[] = [
   { name: 'q', description: 'Search phrase.', required: false, schema: z.string().max(200) },
-  { name: 'mode', description: 'Search scope.', required: false, schema: z.enum(['near_me', 'whole_catalogue']) },
+  { name: 'mode', description: 'Search scope.', required: false, schema: z.enum(['near_me', 'whole_catalogue', 'near', 'catalogue', 'catalog']) },
   { name: 'location', description: 'Place to search around when mode is near_me.', required: false, schema: z.string().max(80) },
-  { name: 'max_price_currency', description: 'Budget ceiling currency (ISO 4217).', required: false, schema: z.string().length(3) },
-  { name: 'max_price_units', description: 'Budget ceiling integer units.', required: false, schema: z.string() },
-  { name: 'max_price_exponent', description: 'Budget ceiling decimal exponent.', required: false, schema: z.coerce.number().int() },
-  { name: 'has_price', description: 'When true, return only businesses publishing at least one comparable price.', required: false, schema: z.enum(['true', 'false']) },
+  { name: 'max_price_currency', description: 'Exact amount currency code, including supported token symbols.', required: false, schema: exactAmountSchema.shape.currency },
+  { name: 'max_price_units', description: 'Budget ceiling integer units.', required: false, schema: exactAmountSchema.shape.units },
+  { name: 'max_price_exponent', description: 'Budget ceiling decimal exponent.', required: false, schema: exactAmountSchema.shape.exponent },
+  { name: 'has_price', description: 'When true, return only businesses publishing at least one comparable price.', required: false, schema: z.enum(['true', 'false', '1', '0']) },
   cursorParam,
   limitParam,
 ]
@@ -146,7 +148,7 @@ export const OPENAPI_SUPPLEMENTAL_ROUTES: readonly OpenApiSupplementalRoute[] = 
   },
   {
     operationId: 'registry.detail', summary: 'Read one published business', method: 'GET', path: '/api/businesses/{slug}',
-    tags: ['Businesses'], pathParams: [{ name: 'slug', description: 'Published business slug.', required: true, schema: z.string().min(1) }],
+    tags: ['Businesses'], pathParams: [{ name: 'slug', description: 'Published business slug.', required: true, schema: z.string().min(1).max(200) }],
     actionIdForOutput: 'registry.detail',
     problemKinds: ['INVALID_ARGUMENT', 'NOT_FOUND', 'RESOURCE_EXHAUSTED'],
   },
@@ -162,7 +164,7 @@ export const OPENAPI_SUPPLEMENTAL_ROUTES: readonly OpenApiSupplementalRoute[] = 
   },
   {
     operationId: 'registry.services_detail', summary: 'Read one published business portfolio', method: 'GET', path: '/api/v1/businesses/{businessId}',
-    tags: ['Businesses'], pathParams: [{ name: 'businessId', description: 'Published business id (slug).', required: true, schema: z.string().min(1) }],
+    tags: ['Businesses'], pathParams: [{ name: 'businessId', description: 'Published business id (slug).', required: true, schema: z.string().min(1).max(200) }],
     actionIdForOutput: 'registry.services_detail',
     problemKinds: ['INVALID_ARGUMENT', 'NOT_FOUND', 'RESOURCE_EXHAUSTED'],
   },
@@ -181,9 +183,9 @@ export const OPENAPI_SUPPLEMENTAL_ROUTES: readonly OpenApiSupplementalRoute[] = 
     outputSchema: marketMetricsSchema, problemKinds: ['INVALID_ARGUMENT', 'UNAVAILABLE', 'RESOURCE_EXHAUSTED'],
   },
   {
-    operationId: 'platform.sandboxReference', summary: 'Call AEcon’s own sandbox reference counterparty', method: 'POST', path: '/api/v1/sandbox-reference',
+    operationId: 'platform.sandboxReference', summary: 'Call AEcon’s development-only sandbox reference counterparty', method: 'POST', path: '/api/v1/sandbox-reference',
     tags: ['Platform'], requestBodySchema: sandboxReferenceRequestSchema, outputSchema: sandboxReferenceResponseSchema,
-    problemKinds: ['UNSUPPORTED_MEDIA_TYPE', 'INVALID_ARGUMENT', 'PAYLOAD_TOO_LARGE', 'RESOURCE_EXHAUSTED'],
+    problemKinds: ['NOT_FOUND', 'UNSUPPORTED_MEDIA_TYPE', 'INVALID_ARGUMENT', 'PAYLOAD_TOO_LARGE', 'RESOURCE_EXHAUSTED'],
   },
   {
     operationId: 'platform.registryBrowse', summary: 'Search the compact x402 directory index', method: 'GET', path: '/api/v1/registry',
@@ -191,7 +193,7 @@ export const OPENAPI_SUPPLEMENTAL_ROUTES: readonly OpenApiSupplementalRoute[] = 
     queryParams: [
       { name: 'query', description: 'Free-text query; empty browses without a search term.', required: false, schema: z.string().max(200) },
       { name: 'limit', description: 'Maximum page size (1-12, default 8); each response stays under 16 KiB UTF-8.', required: false, schema: z.coerce.number().int().min(1).max(12) },
-      cursorParam,
+      { ...cursorParam, schema: z.string().min(1).max(16384) },
     ],
     outputSchema: registryBrowseSchema, problemKinds: ['INVALID_ARGUMENT', 'UNAVAILABLE', 'RESOURCE_EXHAUSTED'],
   },

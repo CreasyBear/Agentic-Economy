@@ -1,8 +1,8 @@
 import type { QueryCtx, DatabaseReader } from '../../../_generated/server'
 import type { Doc } from '../../../_generated/dataModel'
 import { type Infer } from 'convex/values'
-import { compareExactAmounts, type ExactAmount } from '../../../../src/modules/money/public'
-import { registrySearchTokens } from '../../../../src/modules/registry/public'
+import type { ExactAmount } from '../../../../src/modules/money/public'
+import { matchesPublishedBusinessPrice, registrySearchTokens } from '../../../../src/modules/registry/public'
 import { normalizeSearchText } from '../../../../src/modules/common/normalize-search-text'
 import { searchPublicBusinessOfferingSupplyResult } from './contracts'
 import { createOfferingSupplyReadPort, readOfferingSupplyForBusiness } from './reads'
@@ -45,31 +45,6 @@ async function readMatchingSearchDocuments(
 
 function queryInput(args: { cursor?: string; limit?: number }): QueryInput { return { ...(args.cursor === undefined ? {} : { cursor: args.cursor }), ...(args.limit === undefined ? {} : { limit: args.limit }) } }
 
-function offeringPriceCeiling(price: OfferingSupplyDto['offerings'][number]['price']): ExactAmount | undefined {
-  if (price === undefined || price.kind === 'quote_only') return undefined
-  return price.kind === 'range' ? price.maximum : price.amount
-}
-
-function filterOfferingSupplyByPrice(items: readonly OfferingSupplyDto[], args: { maxPrice?: ExactAmount; hasPrice?: boolean }): readonly OfferingSupplyDto[] {
-  if (args.maxPrice === undefined && args.hasPrice !== true) return items
-  return items.filter((item) => {
-    if (args.hasPrice === true && !item.offerings.some((offering) => offering.price !== undefined)) return false
-    const maxPrice = args.maxPrice
-    if (maxPrice === undefined) return true
-    let hasUnpricedOffering = false
-    for (const offering of item.offerings) {
-      const ceiling = offeringPriceCeiling(offering.price)
-      if (ceiling === undefined) {
-        hasUnpricedOffering = true
-        continue
-      }
-      if (ceiling.currency !== maxPrice.currency) continue
-      const comparison = compareExactAmounts(ceiling, maxPrice)
-      if (comparison !== undefined && comparison <= 0) return true
-    }
-    return hasUnpricedOffering
-  })
-}
 function paginateOfferingSupply(items: readonly OfferingSupplyDto[], input: QueryInput, query?: string) {
   const limit = normalizeLimit(input.limit)
   const startIndex = input.cursor === undefined
@@ -95,7 +70,7 @@ export async function searchPublicBusinessOfferingSupplyHandler(ctx: QueryCtx, a
   const businesses = (await Promise.all(candidateSlugs.map((slug) => ctx.db.query('businesses').withIndex('by_slug', (query) => query.eq('slug', slug)).unique()))).filter((business): business is Doc<'businesses'> => business !== null)
   const offeringSupplyReadPort = createOfferingSupplyReadPort(ctx.db)
   const supply = (await Promise.all(businesses.map((business) => readOfferingSupplyForBusiness(offeringSupplyReadPort, business)))).filter((item): item is OfferingSupplyDto => item !== undefined && matchesOfferingSupply(item, tokens, locationKey))
-  const items = filterOfferingSupplyByPrice(supply, args).slice().sort((left, right) => left.slug.localeCompare(right.slug))
+  const items = supply.filter(item => matchesPublishedBusinessPrice(item, args)).slice().sort((left, right) => left.slug.localeCompare(right.slug))
   return paginateOfferingSupply(items, input, needle)
 }
 
