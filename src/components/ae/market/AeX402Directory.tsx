@@ -183,8 +183,8 @@ function useCanonicalMarketSearch(search: MarketReturnSearch, enabled: boolean) 
   async function nextPage(cursor: string, query: string) {
     const previous = snapshot.current
     if (!enabled || previous.query !== key || previous.request.kind === 'loading' || query !== input.query) return
-    const continuation = previous.pages[previous.index]?.next.find(action => action.action === 'next-page')
-    if (continuation === undefined || continuation.args.cursor !== cursor || continuation.args.query !== query) return
+    const continuation = previous.pages[previous.index]?.next.find(action => action.action === 'registry.tools.search' && action.args.cursor !== undefined)
+    if (continuation?.action !== 'registry.tools.search' || continuation.args.cursor !== cursor || continuation.args.query !== query) return
     if (previous.index + 1 < previous.pages.length) {
       publish({ ...previous, index: previous.index + 1, request: { kind: 'idle' } })
       return
@@ -445,9 +445,10 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
       <div aria-hidden="true" className="mt-4"><Skeleton lines={6} /></div>
     </div>
     if (result === undefined) return <AeEmptyState icon={<SearchIcon />} title="Search is unavailable" description="This search could not complete. Your query is unchanged." action={<Button type="button" variant="secondary" onClick={() => void canonicalSearch.retry()}>Retry search</Button>} />
-    const continuation = result.next.find(action => action.action === 'next-page')
-    const retry = result.next.find(action => action.action === 'retry')
-    const broaden = result.next.find(action => action.action === 'broaden')
+    const continuation = result.pagination.hasMore ? result.next.find(action => action.action === 'registry.tools.search' && action.args.cursor !== undefined) : undefined
+    const pageCursor = continuation?.action === 'registry.tools.search' ? continuation.args.cursor : undefined
+    const retry = result.kind === 'unavailable' ? result.next.find(action => action.action === 'registry.tools.search') : undefined
+    const broaden = result.kind === 'noMatch' || (result.kind === 'scoped' && !result.pagination.hasMore)
     return <div aria-label="Search verdict" className="flex flex-col gap-5" aria-busy={canonicalSearch.loading}>
       <p role="status" className="text-sm text-muted-foreground">
         {result.kind === 'match' ? 'Matching Tools' : result.kind === 'scoped' ? 'Search assessed a limited scope' : result.kind === 'noMatch' ? 'No matching Tool in the assessed catalogue' : 'Search unavailable'}
@@ -464,7 +465,7 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
       {result.kind === 'unavailable' ? <p className="text-sm text-muted-foreground">The search could not complete. No recommendation was made.</p> : null}
       {marketHasBrowseOnlyFilters(search) ? <p className="text-sm text-muted-foreground">Price caps, adoption, curation and published-detail filters apply in catalogue browse only; they are not applied to this search.</p> : null}
       {canonicalSearch.refreshing ? <p role="status" aria-label="Refreshing search results" className="text-sm text-muted-foreground">Refreshing search results…</p> : null}
-      {result.results.length === 0 ? null : <CanonicalSearchResults results={result.results} renderActions={item => {
+      {result.results.length === 0 ? null : <CanonicalSearchResults results={result.results} {...(result.freshness === undefined ? {} : { sourceFreshness: result.freshness })} renderActions={item => {
         const identity = item.toolRef !== undefined && item.access !== 'external_listing'
           ? { kind: 'ae_callable' as const, toolRef: item.toolRef }
           : { kind: 'external_listing' as const, id: item.id }
@@ -475,13 +476,13 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
       <nav aria-label="Search pages" className="flex items-center justify-between gap-3 border-t border-border pt-4">
         {canonicalSearch.hasPrevious ? <Button type="button" variant="secondary" onClick={canonicalSearch.previous} disabled={canonicalSearch.loading}><ArrowLeftIcon />Previous page</Button> : <span />}
         <span className="text-sm text-muted-foreground">Page {canonicalSearch.pageNumber}</span>
-        {continuation === undefined ? <span /> : <Button type="button" variant="secondary" onClick={() => void canonicalSearch.nextPage(continuation.args.cursor, continuation.args.query)} disabled={canonicalSearch.loading} aria-label={canonicalSearch.failed ? 'Next page. Retry' : 'Next page'}>Next page<ArrowRightIcon /></Button>}
+        {continuation?.action !== 'registry.tools.search' || pageCursor === undefined ? <span /> : <Button type="button" variant="secondary" onClick={() => void canonicalSearch.nextPage(pageCursor, continuation.args.query)} disabled={canonicalSearch.loading} aria-label={canonicalSearch.failed ? 'Next page. Retry' : 'Next page'}>Next page<ArrowRightIcon /></Button>}
       </nav>
       {canonicalSearch.failed && result !== undefined ? <p role="alert" className="text-sm text-destructive">The next page could not load; this page is unchanged. Try Next page again.</p> : null}
       {canonicalSearch.refreshFailed ? <p role="alert" className="text-sm text-destructive">Search results could not refresh; known results are unchanged. Retry search to update them.</p> : null}
       {retry === undefined && !canonicalSearch.refreshFailed ? null : <Button type="button" variant="secondary" onClick={() => void canonicalSearch.retry()} disabled={canonicalSearch.loading}>Retry search</Button>}
-      {broaden === undefined ? null : <Button type="button" variant="secondary" onClick={() => go(search.directoryCategory !== undefined || search.provider !== undefined || search.network !== undefined || search.priceBand !== undefined || marketHasBrowseOnlyFilters(search)
-        ? { view: 'tools', query: broaden.args.query, sort: 'relevance' }
+      {!broaden ? null : <Button type="button" variant="secondary" onClick={() => go(search.directoryCategory !== undefined || search.provider !== undefined || search.network !== undefined || search.priceBand !== undefined || marketHasBrowseOnlyFilters(search)
+        ? { view: 'tools', query: result.query, sort: 'relevance' }
         : { view: 'tools' })}>{search.directoryCategory !== undefined || search.provider !== undefined || search.network !== undefined || search.priceBand !== undefined || marketHasBrowseOnlyFilters(search) ? 'Broaden search' : 'Browse all Tools'}</Button>}
     </div>
   }

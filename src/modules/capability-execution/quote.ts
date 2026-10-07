@@ -6,15 +6,6 @@ import {
   exactAmountSchema,
   type CommercialPolicyRefusalReason,
 } from '@/modules/money/public'
-import {
-  FUNDING_HANDOFF_CONFIG_PATH,
-  FUNDING_HANDOFF_CREATE_PATH,
-} from '@/modules/money/funding-handoff.actions'
-import {
-  TOOL_MARKET_DESCRIBE_PATH,
-  TOOL_MARKET_LIST_PATH,
-  TOOL_MARKET_SEARCH_PATH,
-} from '@/modules/common/market-tool-paths'
 import { idempotencyKeySchema } from '@/modules/common/action'
 
 export const TOOL_QUOTE_ACTION_ID = 'tool.quote' as const
@@ -31,9 +22,7 @@ export type ToolQuoteInput = Readonly<{
 
 const callContinuationSchema = z.strictObject({
   action: z.literal('tool.call'),
-  method: z.literal('POST'),
-  path: z.literal('/api/v1/tools/call'),
-  input: z.strictObject({
+  args: z.strictObject({
     quoteRef: z.string(),
     idempotencyKey: idempotencyKeySchema,
   }),
@@ -62,55 +51,38 @@ export type ToolQuoteRefusalCode = (typeof toolQuoteRefusalCodeValues)[number]
 const quoteContinuationSchema = z.discriminatedUnion('action', [
   z.strictObject({
     action: z.literal('registry.tools.list'),
-    method: z.literal('POST'),
-    path: z.literal(TOOL_MARKET_LIST_PATH),
-    input: z.strictObject({ limit: z.literal(10) }),
+    args: z.strictObject({ limit: z.literal(10) }),
   }),
   z.strictObject({
     action: z.literal('registry.tools.search'),
-    method: z.literal('POST'),
-    path: z.literal(TOOL_MARKET_SEARCH_PATH),
-    input: z.strictObject({ query: z.string().min(1), limit: z.literal(10) }),
+    args: z.strictObject({ query: z.string().min(1), limit: z.literal(10) }),
   }),
   z.strictObject({
     action: z.literal('registry.tools.describe'),
-    method: z.literal('POST'),
-    path: z.literal(TOOL_MARKET_DESCRIBE_PATH),
-    input: z.strictObject({ toolRef: z.string() }),
+    args: z.strictObject({ toolRef: z.string() }),
   }),
   z.strictObject({
     action: z.literal('tool.quote'),
-    method: z.literal('POST'),
-    path: z.literal(TOOL_QUOTE_PATH),
-    input: toolQuoteInputSchema,
+    args: toolQuoteInputSchema,
     retryAfterMs: z.union([z.literal(5000), z.literal(30000)]),
   }),
   z.strictObject({
     action: z.literal('funding.handoff.create'),
-    method: z.literal('POST'),
-    path: z.literal(FUNDING_HANDOFF_CREATE_PATH),
-    input: z.strictObject({
+    args: z.strictObject({
       principalAmount: exactAmountSchema,
       idempotencyKey: idempotencyKeySchema,
     }),
   }),
   z.strictObject({
     action: z.literal('funding.handoff.config'),
-    method: z.literal('GET'),
-    path: z.literal(FUNDING_HANDOFF_CONFIG_PATH),
-    input: z.strictObject({}),
+    args: z.strictObject({}),
   }),
 ])
 
-const requiredActionSchema = z.strictObject({
-  action: z.string().min(1),
-  blockedCapabilities: z.tuple([z.literal('tool.call')]),
-  cta: z.union([z.literal('/agent-access'), z.literal('/support'), z.null()]),
-  ctaLabel: z.string().min(1),
-  description: z.string().min(1),
-  iconUrl: z.null(),
-  status: z.enum(['required', 'pending']),
-  title: z.string().min(1),
+const ownerHandoffSchema = z.strictObject({
+  actor: z.enum(['account_owner', 'ae_support']),
+  reason: z.string().min(1),
+  destination: z.union([z.literal('/agent-access'), z.literal('/support')]).optional(),
 })
 
 export const toolQuoteResultSchema = z.union([
@@ -120,7 +92,6 @@ export const toolQuoteResultSchema = z.union([
     toolRef: z.string(),
     toolVersion: z.number().int().positive(),
     expiresAt: z.number().int().nonnegative(),
-    normalizedInput: z.record(z.string(), jsonValueSchema),
     price: exactAmountSchema,
     sourceRequirement: exactAmountSchema.optional(),
     account: z.strictObject({
@@ -150,7 +121,7 @@ export const toolQuoteResultSchema = z.union([
     retryable: z.boolean(),
     correlationRef: z.string().min(1),
     continuation: quoteContinuationSchema.optional(),
-    requiredActions: z.tuple([requiredActionSchema]).optional(),
+    ownerHandoff: ownerHandoffSchema.optional(),
   }),
 ])
 
@@ -179,64 +150,35 @@ export function projectToolQuoteRefusal(input: Readonly<{
   }
   const list = {
     action: 'registry.tools.list' as const,
-    method: 'POST' as const,
-    path: TOOL_MARKET_LIST_PATH,
-    input: { limit: 10 as const },
+    args: { limit: 10 as const },
   }
   const inspect = (retryAfterMs: 5000 | 30000) => ({
     action: 'tool.quote' as const,
-    method: 'POST' as const,
-    path: TOOL_QUOTE_PATH,
-    input: { toolRef: input.toolRef, input: input.input },
+    args: { toolRef: input.toolRef, input: input.input },
     retryAfterMs,
   })
   const requiredAction = (support: boolean) => ({
-    action: support ? 'contact_support' : 'review_agent_access',
-    blockedCapabilities: ['tool.call'] as ['tool.call'],
-    cta: support ? '/support' as const : '/agent-access' as const,
-    ctaLabel: support ? 'Contact support' : 'Review agent access',
-    description: support
+    actor: support ? 'ae_support' as const : 'account_owner' as const,
+    reason: support
       ? 'AE could not establish the commercial policy required to call this Tool.'
       : 'The owner must review this agent’s access or budget before it can call this Tool.',
-    iconUrl: null,
-    status: 'required' as const,
-    title: support ? 'Contact support' : 'Review agent access',
+    destination: support ? '/support' as const : '/agent-access' as const,
   })
-  const operatorAction = (
-    action: string,
-    title: string,
-    description: string,
-    cta: '/agent-access' | '/support',
-  ) => ({
-    action,
-    blockedCapabilities: ['tool.call'] as ['tool.call'],
-    cta,
-    ctaLabel: cta === '/support' ? 'Contact support' : 'Review agent access',
-    description,
-    iconUrl: null,
-    status: 'required' as const,
-    title,
+  const operatorAction = (reason: string, destination: '/agent-access' | '/support') => ({
+    actor: destination === '/support' ? 'ae_support' as const : 'account_owner' as const,
+    reason,
+    destination,
   })
   switch (input.code) {
     case 'tool_not_ready':
       return { ...base, continuation: inspect(5000) }
     case 'inspection_unavailable':
       if (input.reason === 'spending_period_legacy_history_requires_support') {
-        return { ...base, retryable: false, requiredActions: [operatorAction(
-          'review_spending_history',
-          'Verify earlier spending',
-          'AE support must verify this Agent’s earlier spending before it can authorize new purchases.',
-          '/support',
-        )] }
+        return { ...base, retryable: false, ownerHandoff: operatorAction('AE support must verify this Agent’s earlier spending before it can authorize new purchases.', '/support') }
       }
       return input.retryable
         ? { ...base, continuation: inspect(5000) }
-        : { ...base, requiredActions: [operatorAction(
-          'contact_support',
-          'Contact support',
-          'AE could not complete this Quote request. Contact support before trying again.',
-          '/support',
-        )] }
+        : { ...base, ownerHandoff: operatorAction('AE could not complete this Quote request. Contact support before trying again.', '/support') }
     case 'payments_not_ready':
       return { ...base, retryable: true, reason: 'Paid Tool purchases are temporarily unavailable. You can keep searching and comparing Tools.', continuation: inspect(30000) }
     case 'payments_paused':
@@ -249,8 +191,7 @@ export function projectToolQuoteRefusal(input: Readonly<{
       return {
         ...base,
         continuation: {
-          action: 'registry.tools.describe', method: 'POST', path: TOOL_MARKET_DESCRIBE_PATH,
-          input: { toolRef: input.toolRef },
+          action: 'registry.tools.describe', args: { toolRef: input.toolRef },
         },
       }
     case 'tool_not_current':
@@ -260,55 +201,38 @@ export function projectToolQuoteRefusal(input: Readonly<{
         : {
             ...base,
             continuation: {
-              action: 'registry.tools.search', method: 'POST', path: TOOL_MARKET_SEARCH_PATH,
-              input: { query: input.capabilityId, limit: 10 },
+              action: 'registry.tools.search', args: { query: input.capabilityId, limit: 10 },
             },
           }
     case 'grant_not_found':
-      return { ...base, requiredActions: [requiredAction(false)] }
+      return { ...base, ownerHandoff: requiredAction(false) }
     case 'budget_exceeded': {
-      if (input.reason === 'account_limit') return { ...base, requiredActions: [operatorAction(
-        'review_account_exposure',
-        'Account purchase capacity is in use',
-        'Wait for existing purchases to resolve or contact support to review the Account’s purchase capacity. Adding credit does not increase this limit.',
-        '/support',
-      )] }
+      if (input.reason === 'account_limit') return { ...base, ownerHandoff: operatorAction('Wait for existing purchases to resolve or contact support to review the Account’s purchase capacity. Adding credit does not increase this limit.', '/support') }
       const period = input.reason === 'daily_limit_exhausted' ? 'day'
         : input.reason === 'monthly_limit_exhausted' ? 'month' : undefined
       return period === undefined
-        ? { ...base, requiredActions: [requiredAction(false)] }
-        : { ...base, requiredActions: [operatorAction(
-            'review_agent_access',
-            `Spending allowance for this ${period} is in use`,
-            `Wait for spending capacity to become available or ask the owner to review this Agent’s limit. ${period === 'day' ? 'Daily limits reset at midnight UTC.' : 'Monthly limits reset on the first day of each month at midnight UTC.'}`,
-            '/agent-access',
-          )] }
+        ? { ...base, ownerHandoff: requiredAction(false) }
+        : { ...base, ownerHandoff: operatorAction(`Wait for spending capacity to become available or ask the owner to review this Agent’s limit. ${period === 'day' ? 'Daily limits reset at midnight UTC.' : 'Monthly limits reset on the first day of each month at midnight UTC.'}`, '/agent-access') }
     }
     case 'commercial_policy_unavailable': {
       const parsed = commercialPolicyRefusalReasonSchema.safeParse(input.reason)
-      if (!parsed.success) return { ...base, requiredActions: [requiredAction(true)] }
+      if (!parsed.success) return { ...base, ownerHandoff: requiredAction(true) }
       const reason: CommercialPolicyRefusalReason = parsed.data
       switch (reason) {
         case 'legal_customer_required':
           return {
             ...base,
             continuation: {
-              action: 'funding.handoff.config', method: 'GET',
-              path: FUNDING_HANDOFF_CONFIG_PATH, input: {},
+              action: 'funding.handoff.config',  args: {},
             },
-            requiredActions: [operatorAction(
-              'review_account_legal_customer',
-              'Review account ownership',
-              'The owner must confirm this Account’s legal customer on the AE Account page before this Agent can call Tools.',
-              '/agent-access',
-            )],
+            ownerHandoff: operatorAction('The owner must confirm this Account’s legal customer on the AE Account page before this Agent can call Tools.', '/agent-access'),
           }
         case 'commercial_policy_fixture_required':
         case 'commercial_policy_deployment_profile_invalid':
           return {
             ...base,
             continuation: inspect(30000),
-            requiredActions: [requiredAction(true)],
+            ownerHandoff: requiredAction(true),
           }
         case 'commercial_policy_missing':
         case 'commercial_policy_environment_mismatch':
@@ -320,7 +244,7 @@ export function projectToolQuoteRefusal(input: Readonly<{
           return {
             ...base,
             continuation: inspect(30000),
-            requiredActions: [requiredAction(true)],
+            ownerHandoff: requiredAction(true),
           }
         default: {
           const unreachable: never = reason
@@ -332,22 +256,15 @@ export function projectToolQuoteRefusal(input: Readonly<{
       return input.funding === undefined
         ? {
             ...base,
-            requiredActions: [{
-              action: 'review_funding',
-              blockedCapabilities: ['tool.call'],
-              cta: null,
-              ctaLabel: 'Review funding',
-              description: 'The owner must review funding because one hosted funding session cannot satisfy this shortfall.',
-              iconUrl: null,
-              status: 'required',
-              title: 'Review funding',
-            }],
+            ownerHandoff: {
+              actor: 'account_owner',
+              reason: 'The owner must review funding because one hosted funding session cannot satisfy this shortfall.',
+            },
           }
         : {
             ...base,
             continuation: {
-              action: 'funding.handoff.create', method: 'POST', path: FUNDING_HANDOFF_CREATE_PATH,
-              input: input.funding,
+              action: 'funding.handoff.create', args: input.funding,
             },
           }
     case 'tool_not_found':

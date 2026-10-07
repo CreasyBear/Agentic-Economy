@@ -260,7 +260,7 @@ export const supplyStatusAction = defineAction<SupplyStatusInput, SupplyStatusRe
     authorityRequirement: 'principal',
     retryClass: 'replayable',
     expectedEvidence: ['provider_tool_lifecycle'],
-    safeContinuations: ['supply.publish', 'supply.recheck', 'supply.withdraw', 'supply.republish'],
+    safeContinuations: ['supply.source.preview', 'supply.status', 'supply.publish', 'supply.recheck', 'supply.withdraw', 'supply.republish', 'supply.offboarding.status'],
     invalidationConditions: ['business_changed', 'tool_changed', 'publication_revision_changed'],
   },
   run: async ({ data, context }) => {
@@ -293,7 +293,7 @@ export const supplyToolsListAction = defineAction<SupplyToolsListInput, SupplyTo
     authorityRequirement: 'principal',
     retryClass: 'replayable',
     expectedEvidence: ['provider_tool_collection'],
-    safeContinuations: ['supply.status', 'supply.publish'],
+    safeContinuations: ['supply.tools.list', 'supply.source.preview', 'supply.status', 'supply.publish', 'supply.recheck', 'supply.republish', 'supply.offboarding.status'],
     invalidationConditions: ['business_changed', 'cursor_changed'],
   },
   run: async ({ data, context }) => {
@@ -390,8 +390,11 @@ export const supplyRepublishAction = defineAction<SupplyRepublishInput, SupplyRe
 export const supplyEarningsAction = defineAction<SupplyEarningsInput, SupplyEarningsResult>({
   id: SUPPLY_ACTION_IDS.earnings,
   name: 'Read Provider earnings',
-  summary: 'Read exact provider earnings and payout status for one currency.',
-  boundaries: supplyBoundaries,
+  summary: 'Report that Agent Provider earnings readback is unsupported; the Business owner can review recorded obligations in the owner earnings view.',
+  boundaries: [
+    ...supplyBoundaries,
+    'Agent earnings readback returns capability_unsupported with retryable=false; it does not return earnings or payout totals.',
+  ],
   schema: supplyEarningsInputSchema,
   outputSchema: supplyEarningsResultSchema,
   parameters: [{ name: 'currency', type: 'string', description: 'ISO-like uppercase ledger currency.', required: true }],
@@ -399,7 +402,7 @@ export const supplyEarningsAction = defineAction<SupplyEarningsInput, SupplyEarn
   effect: { class: 'observation', reversible: true, recipientKind: 'business', dataClasses: ['usage_evidence'], spendExposure: 'none', approval: 'none' },
   surfaces: supplySurfaces,
   credentialAdmission: supplyCredentialAdmission,
-  invocationContract: { version: SUPPLY_ACTION_ROUTE_CONTRACTS.earnings.contractVersion, consequenceClass: 'read_only', materialInputPaths: ['currency'], authorityRequirement: 'principal', retryClass: 'replayable', expectedEvidence: ['earnings_projection'], safeContinuations: ['supply.status'], invalidationConditions: ['currency_changed'] },
+  invocationContract: { version: SUPPLY_ACTION_ROUTE_CONTRACTS.earnings.contractVersion, consequenceClass: 'read_only', materialInputPaths: ['currency'], authorityRequirement: 'principal', retryClass: 'replayable', expectedEvidence: ['unsupported_capability'], safeContinuations: [], invalidationConditions: ['currency_changed'] },
   run: async ({ data, context }) => {
     if (context.agentAccessPrincipal === undefined) throw new Error('agent_access_context_missing')
     if (context.supplyManagementService === undefined) throw new Error('supply_management_service_unavailable')

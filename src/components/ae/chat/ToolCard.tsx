@@ -181,17 +181,12 @@ function ChoiceRemainder({ count, shown }: { count: number; shown: number }) {
 
 export function SearchNext({ next, onRepeatSearch }: SearchNextProps) {
   // Chat resolves a recommendation or a refinement; API cursors are not chat actions.
-  if (next === undefined || next.action === 'next-page') return null
-  if (next.action === 'broaden') return (
-    <a href={`/market?query=${encodeURIComponent(next.args.query)}`}
-      className={secondaryLink}>{chatBrowseMarket}</a>
-  )
-  if (next.action === 'retry') return onRepeatSearch === undefined
+  if (next?.action !== 'registry.tools.search' || next.args.cursor !== undefined) return null
+  return onRepeatSearch === undefined
     ? <a href={`/market?query=${encodeURIComponent(next.args.query)}`}
       className={secondaryLink}>{chatBrowseMarket}</a>
     : <Button type="button" variant="secondary" size="sm"
       onClick={() => onRepeatSearch(next.args.query)}>Try again</Button>
-  return null
 }
 
 function cardBody(projection: ToolCardProjection, onAddCredit?: ToolCardProps['onAddCredit'], reportOwner?: { onPosted: () => void } | null) {

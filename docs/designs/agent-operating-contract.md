@@ -1,7 +1,7 @@
 # Agent operating contract
 
 **Status:** active design contract  
-**Revised:** 2026-09-02  
+**Revised:** 2026-10-07 (source policy and local renderer trial; no new hosted acceptance)
 **Product authority:** [`PRODUCT.md`](../../PRODUCT.md)  
 **Benchmark inputs:** [Locus maturity map](../../research/LOCUS-AE-MATURITY.md), [Whop maturity map](../../research/WHOP-AE-MATURITY.md), and [platform priorities](../../research/AE-PLATFORM-MATURITY-PRIORITIES.md)
 
@@ -23,6 +23,56 @@ Principal. It may use replaceable credentials and a bounded spending policy, but
 credential does not own a balance, reset a budget, or become an economic
 principal. AE does not acquire the agent's project, plan, prompt history,
 memory, or orchestration.
+
+## Cross-transport contract policy
+
+This policy governs new work and review of HTTP, MCP, CLI, chat, UI and plugin
+projections. It is a design requirement, not evidence that every existing
+surface satisfies it. Current action schemas and dated release receipts
+establish implementation; [MM-055](../operations/mercator-maturity-register.md#mm-055)
+owns docs acceptance. The [accepted Plan Quotes RFC](2026-10-05-plan-quotes-rfc.md#13-accepted-decisions--2026-10-05)
+owns buyer-side Plans; its Call, authority and recovery boundaries apply here.
+
+| Concern | Required rule | Review evidence |
+| --- | --- | --- |
+| Naming | Use Tool, Quote, Call, Customer, Agent, Account and Spending policy consistently. Preserve opaque IDs, protocol fields and hashes exactly. Derive transport names from the action ID; do not invent business aliases in copy. | [Registry `mcpToolName`](../../src/modules/actions/index.ts), route contracts and published examples agree. |
+| Identity | Resolve the signed caller, Account and durable Agent identity server-side. A credential, wallet or endpoint is neither a Customer nor a commercial role; rotation preserves budgets and prior Calls. | Owner-bound reads and credential rotation retain the same durable references. |
+| Authority | Validate the current grant/scope, generation, budget and Quote binding before each consequential admission. Funds and successful authentication cannot expand permission. A refusal names the bounded remediation and required actor. | Missing/revoked authority and stale Quote cause no new effect; guides distinguish funding from approval. |
+| Outcomes | Distinguish accepted work, delivery, payment, Purchase resolution and buyer-reported usefulness. Retain provenance and unknowns; transport success cannot manufacture completion. | Tagged action results and status show each applicable axis without a universal empty envelope. |
+| Recovery | Keep the same material intent, idempotency key and durable refs across a timeout, process restart or transport switch. Changed intent conflicts. Possible effect leads to status/reconcile; cancel describes its actual scope. | Same-key cross-transport replay, changed-input conflict and uncertain-effect recovery; no duplicate paid start. |
+| Output | Return bounded decision facts and literal output when ready; otherwise return the authorized durable read/next action and freshness. Preserve partial results, independent refund status and access/expiry rules. | Schema-valid examples include pending, partial, denied and expired reads without reexecution. |
+| Version | Bind published instructions/examples to action contract versions and an identified release tuple. A breaking name/input/default/output change needs migration instructions and a stated supported-client range. | Generated drift checks and an installed-client receipt; a source build alone cannot prove compatibility. |
+
+The schema owner is [the action definition and descriptor](../../src/modules/common/action.ts)
+(`schema`, `outputSchema`, `describeActionForAgent`); [registered actions](../../src/modules/actions/index.ts)
+select supported operations. [OpenAPI action generation](../../src/modules/discovery/internal/openapi-agent-routes.ts)
+(`actionOperations`) and [Call examples](../../src/modules/discovery/internal/tool-contract.ts)
+(`callRouteExamples`) project those contracts. Provider Tool schemas remain owned
+by [capability contracts](../../src/modules/capability-contract/public.ts), not by
+editorial documentation. Do not add a parallel operation registry or state ledger.
+
+An HTTP `202` means accepted processing, not final delivery
+([RFC 9110 §15.3.3](https://www.rfc-editor.org/rfc/rfc9110.html#section-15.3.3)).
+Publish a durable observation path and never normalize an uncompleted Provider
+handle as output. HTTP refusals use [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457.html)
+through [the existing problem owner](../../src/lib/server/problem.ts); adapters
+retain its code, safe next action and available request/Call refs. CLI/MCP/chat
+may project that information but cannot silently change retry or authority rules.
+[Stripe idempotency](https://docs.stripe.com/api/idempotent_requests) is a useful
+same-key/changed-parameters benchmark; AE retains its own durable Call identity
+and cannot treat Stripe's key retention as AE's recovery lifetime.
+
+[Supermemory's API v5 author post](https://x.com/DhravyaShah/status/2107552558961275145)
+motivates explicit namespaces, consistent inputs/filter defaults, compact output,
+Markdown and versioned migration. Migration success is author-reported, not
+independently verified here. Its [primary v5 migration guide](https://supermemory.ai/docs/migration/api-v5.md)
+was subsequently retrieved and inspected locally: explicit namespaces, matched
+filter semantics/defaults and before/after migration examples are the relevant
+design evidence. Its prose contains inconsistent SDK-default advice, so the
+reference is a design comparison rather than proof of behavioural equivalence. [OpenRouter first use](https://openrouter.ai/docs/quickstart) and
+[server tools](https://openrouter.ai/tools) remain usability benchmarks: measure
+time, turns, bytes, cost and recovery to useful output through AE's supported
+purchase journey. Neither benchmark establishes AE acceptance.
 
 ## The driver's-seat test
 
@@ -150,12 +200,29 @@ A non-terminal response contains at most one executable machine continuation:
 
 ```json
 {
-  "action": "call.status|tool.quote|call.cancel|call.reconcile",
-  "arguments": {},
-  "notBefore": null,
-  "retry": "safe|never_resubmit"
+  "action": "call.status",
+  "args": { "callRef": "<returned Call reference>" },
+  "authority": "same_principal",
+  "retryAfterMs": 5000
 }
 ```
+
+The 7 October source uprev selects this flat grammar over a nested generic
+request/handoff union. Each domain owns an exact union of registered operation
+names and arguments; no generic runner or second action registry is introduced.
+`requiredInput`, when present, names missing caller material such as a new
+idempotency key. Never invent that material in a read response. Timing and
+authority appear only where meaningful. Per-candidate inspection controls and
+explicit cancellation controls are distinct from the single primary next step.
+HTTP-only inspection and browser setup remain links or human handoffs; they must
+not masquerade as callable MCP operations. Existing containers may differ by
+domain, but operation names and argument meaning do not.
+
+Stored Calls, procurement checkpoints, signed cursors and version-1 CLI journals
+retain their original material. Storage-only adapters may read historical shapes
+and project current guidance; live public validators accept the current contract.
+Quote input remains stored for execution and evidence even when its redundant
+echo is removed from public output. Payer handoffs confer no Account authority.
 
 An optional owner handoff is separate and identifies the required actor, bounded
 reason and durable status reference. The response does not repeat
@@ -178,17 +245,18 @@ facts material to the selected Call. The caller never supplies an `accountRef`.
 
 ### Progressive disclosure
 
-- `registry.tools.search` returns one to three compact candidate packets by
-  default. A candidate contains no full schema, repeated navigation or
-  caller-specific money state.
-- `registry.tools.describe` and comparison remain optional public reads for
-  browsing or explicit comparison; they are not part of the recommended
-  authenticated Call path.
-- `tool.quote` is the one caller-specific detail and viability action.
-  It combines the selected Tool's material contract with exact or maximum
-  all-in AUD price, effects, data use, authority fit, Agent Principal budget
-  impact, permitted shared-balance viability, current evidence and material
-  unknowns. It produces the expiring Quote used by `tool.call`.
+- `registry.tools.search` returns up to eight compact results by default;
+  callers can request at most twelve per page. A result identifies its source,
+  access and readiness without repeating the full Tool schema.
+- `registry.tools.describe` supplies the selected Tool's input contract and
+  material terms. Use it before constructing Quote input unless the caller
+  already holds the exact current Tool contract. Comparison is an optional
+  public read when choosing between candidates.
+- `tool.quote` checks the caller's current authority and spending capacity,
+  returns the exact price, available Account balance and per-Call limit, and
+  produces the expiring Quote used by `tool.call`. It does not replace Describe
+  or promise an exact remaining period budget. Refusals provide the supported
+  remediation or owner handoff.
 - Package 4 v1 has one bounded, decision-safe response shape per action. It has
   no selectable detail level or arbitrary field group. Larger evidence remains
   behind stable references.
@@ -200,12 +268,12 @@ facts material to the selected Call. The caller never supplies an `accountRef`.
 The recommended managed-Call path is:
 
 ```text
-registry.tools.search -> tool.quote -> tool.call -> result
+registry.tools.search -> registry.tools.describe -> tool.quote -> tool.call -> result
 ```
 
 `call.status`, `call.cancel` and `call.reconcile` appear only
-when the Call state permits them. Public detail, compare, whoami and
-balance remain lazy actions. Outcome reporting is deferred until a
+when the Call state permits them. Compare, whoami and balance are optional
+reads; Describe supplies the selected Tool contract before Quote input is built. Outcome reporting is deferred until a
 real repeat-selection consumer justifies the action and its aggregates.
 Provider and operator verbs live in separate namespaces. MCP, API and CLI
 project the same contracts without transport-specific business behavior.
@@ -229,11 +297,13 @@ response.
 
 ### Make cost a first-class control input
 
-`tool.quote` returns expected monetary cost, the Agent Principal's remaining
-budget, whether permitted shared Account funds can support the Call, latency
-class, expiry and whether a Provider/network/model call is required. The caller
-supplies literal input and only the bounded constraints supported by the action
-contract. It does not choose response verbosity or internal evidence groups.
+`tool.quote` returns exact monetary cost, available Account funds, the
+Agent Principal's per-Call limit and expiry after checking current spending
+capacity. Allowance refusals distinguish daily and monthly limits and provide
+reset guidance. Describe and action metadata disclose the permitted recipients
+and effects before input is sent. The caller supplies literal input and only
+constraints supported by the action contract. Additional budget or latency
+fields require a demonstrated caller need; they are not current guarantees.
 Deterministic validation, matching, policy, and state transitions never invoke a
 model. A model may normalize ambiguous natural language only behind a bounded,
 observable adapter with a deterministic fallback.
@@ -363,7 +433,7 @@ availability must be rechecked during each implementation phase.
 
 The system is agent-intuitive only when an external agent in a fresh process can:
 
-1. search and receive one to three compact candidates without full schemas or
+1. search and receive a bounded page of compact candidates without full schemas or
    repeated navigation;
 2. inspect one selected Tool and receive caller-specific material detail,
    authority, budget, shared-balance viability and an expiring Quote;
@@ -386,6 +456,177 @@ The platform is mature only when the same chain works with two independent paid
 Providers, two external harnesses, no founder/database intervention, Provider
 payout, managed outbound event recovery, and an operator who can diagnose every
 state from a correlation reference.
+
+## Documentation architecture and publication boundary
+
+This is the executable specification for the existing docs owner. The current
+[docs index](../README.md) includes internal material and is not a publication
+allowlist. Keep canonical content in this repository; prepare Markdown now.
+The isolated renderer trial below does not adopt a production docs app, create a
+public repository or establish deployment acceptance.
+
+| Audience / job | Canonical authored source and anchors | Public projection contract |
+| --- | --- | --- |
+| Ordinary user: choose, use, recover, find help | [Foundations: choose/use](../foundations.md#choose-and-use-a-tool), [recovery](../foundations.md#recover-without-making-another-purchase), [data/receipts/lifecycle](../foundations.md#data-receipts-and-lifecycle) | One supported journey with price, recipient and result facts at the decision. |
+| Organisation admin: connect, scope, fund, rotate/revoke | [Foundations: actors](../foundations.md#who-owns-what), [authority](../foundations.md#connect-an-agent-and-control-authority) | Distinguish Account funds, identity, grants and human handoffs; label unsupported lifecycle steps. |
+| Agent integrator: install, discover, Quote/Call, resume | [CLI installation](../../packages/cli/README.md#install-from-npm), [upgrade/disconnect](../../packages/cli/README.md#upgrade-disconnect-and-uninstall), [canonical skill](../../plugins/agentic-economy/skills/use-agentic-economy/SKILL.md#keep-the-task-in-its-harness) | Release-bound setup plus generated HTTP/MCP/CLI references and safe recovery examples. |
+| Provider: entitlement, setup, publish, deliver/recover, withdraw | [Foundations: Provider setup](../foundations.md#provider-setup), [skill: Provider setup](../../plugins/agentic-economy/skills/use-agentic-economy/SKILL.md#provider-and-client-lifecycle) | Current `supply.*` contracts and supported earnings/remedy boundaries; proposed adapters stay labelled. |
+
+Organize each persona's entry into tutorial, how-to, reference and explanation
+according to [Diátaxis](https://diataxis.fr/). Reuse these content owners and
+anchors; a renderer may split navigation without creating a second prose manual.
+Existing `/for-agents` and `/for-providers` remain entry points. Future page URLs
+must be mapped explicitly to canonical source paths and stable fragment IDs
+before publication; redirects preserve prior paths and anchors during migration.
+Do not advertise a `/docs` tree or `.md` counterpart before it exists.
+
+Authored prose owns workflow, consequences and supported limits. Generated
+reference owns action IDs, fields, defaults, required headers, schemas and
+versions. [Site manifest `buildSiteDiscoveryManifest`](../../src/modules/discovery/internal/site-manifest.ts)
+and action descriptors supply machine discovery; [plugin manifest](../../plugins/agentic-economy/.codex-plugin/plugin.json)
+owns packaged metadata, while [the skill source](../../plugins/agentic-economy/skills/use-agentic-economy/SKILL.md)
+is shared by the installed plugin and [`buildPublicAgentSkillMarkdown`](../../src/modules/discovery/internal/agent-skill.ts).
+Generate structural reference and validate illustrative requests/responses
+against the owner schemas; handwritten examples cannot override them. Existing
+examples require validation too; their presence is not proof of validity.
+
+Human HTML and Agent Markdown must project the same supported facts, source
+revision and stable anchors. The current owner is
+[`respondWithAgentPageMarkdown`](../../src/lib/server/agent-page-markdown.ts), using
+[`page-markdown.ts`](../../src/modules/discovery/internal/page-markdown.ts) builders
+and [content negotiation](../../src/lib/http/agent-content-negotiation.ts).
+It currently maps `/`, `/for-agents`, `/about` and published business slugs;
+unsupported page projections return `406`, missing businesses `404`.
+`/for-providers` is not a current Markdown guide projection. Preserve this
+truthful unsupported handling until an explicitly mapped projection exists;
+do not turn internal Markdown or arbitrary filesystem paths into public routes.
+
+Public publication must use an explicit entry allowlist: foundations, glossary,
+the CLI guide and canonical skill are candidates for review, not blanket approval
+to publish their dependencies. Resolve every local link, include/import, image,
+download and generated asset transitively. Each target must be approved public
+content or rewritten to a public summary; otherwise fail the build. Exclude
+operations, ADRs/designs, research, archives, deployment inventory, runtime
+receipts and secrets by default. Reading an internal source to generate selected
+contract fields does not authorize copying that source into public output.
+Never glob all `docs/`, follow symlinks out of approved roots, or bundle internal
+source maps/assets through an apparently safe guide.
+
+Unsupported capabilities carry a current/preview/proposed label, the missing
+requirement and a useful supported alternative. Help instructions request only
+the available `requestId`/correlation header and Quote/Call/Plan reference,
+timestamp, environment and client version; never keys, full prompts or private
+output. [Journey problems](../../src/modules/actions/contract.ts) distinguish
+remote request IDs from local failures, and [request correlation](../../src/lib/server/request-correlation.ts)
+owns the HTTP header. These are diagnostic references, not bearer authorization.
+
+**Renderer trial: conditional fit, 7 October 2026.** An isolated TanStack Start
+build used Fumadocs core/UI 16.16.2, MDX 15.4.6 and OpenAPI 12.3.0 with React
+19.2.7, Start 1.168.60 and Router 1.170.41. Build, types and actual built-server
+responses passed for one allowlisted guide and one generated Call reference.
+HTML and Markdown used the same guide source. The complete seven-schema closure
+was retained in machine reference; private paths and unapproved transitive links
+were absent, and an unlisted page returned 404. This used the inspected baseline
+schema, not a newly deployed contract.
+
+The full default reference renderer stalled on a recursive response contract;
+disabling TypeScript definitions alone did not resolve it. Supported options
+`showResponseSchema: false`, `generateTypeScriptDefinitions: false`, disabled
+playground and omission of response example tabs produced a completed request
+reference. That omits human response-schema UI and examples. Default generated
+Markdown contained only a heading/wrapper; the explicit LLM adapter needed the
+original allowlisted OpenAPI document. Fumadocs internally normalized OpenAPI
+3.1 to 3.2, so emitted machine content retained the original source document.
+The generated `quoteRef: "string"` violates Aecon's pattern and is not a runnable
+example. The approximately 12 MiB client output also needs deployment assessment.
+
+That earlier Fumadocs OpenAPI trial did not qualify adoption: recursive response
+rendering and source-owned valid examples remained unresolved in that renderer.
+Browser hydration/search, hosted packaging, full operation coverage and the four
+guide-led journeys remain unqualified. Reproduce the bounded trial using the
+[pinned TanStack integration](https://www.fumadocs.dev/docs/manual-installation/tanstack-start),
+[OpenAPI options](https://www.fumadocs.dev/docs/integrations/openapi/api-page) and
+[LLM output adapter](https://www.fumadocs.dev/docs/integrations/llms), selecting
+`POST /api/v1/tools/call` and its local schema-ref closure from the owner generator.
+Record adoption evidence in MM-055 and the existing release record; do not infer
+full renderer support from a constrained build.
+
+Prefer a separate docs build from this same repository if the adoption gates pass: it keeps prose/contracts/release provenance together and narrows
+published input, while adding a build and compatibility check. A separate public
+repository gives a clearer disclosure boundary and independent contributions,
+but adds export/version synchronization and a second release owner. Revisit that
+tradeoff only with demonstrated distribution needs; the bounded implementation below selects the same-repository option. [Deployment compatibility](../operations/deployments.md#compatibility-and-docs-release-policy)
+owns the release tuple, not this design document.
+
+### Current implementation: Fumadocs with Scalar Markdown
+
+The approved pre-stability implementation uses a private, independently installed
+`packages/docs` app in this repository. The official `create-fumadocs-app@16.2.16`
+TanStack Start/MDX template and `@fumadocs/cli@1.7.3` LLM feature supply the layouts,
+page tree, Orama search, theme, Markdown routes and components. Core is 16.16.2,
+MDX 15.4.6 and the official UI alias is `@fumadocs/base-ui@16.16.2`.
+Its separate exact npm lock preserves upstream Shiki 4 while the main application
+retains Shiki 3. Both use Node 22 and npm 11.5.1. This adds a separate install/build,
+not a second content owner, public repository or deployment.
+
+`@scalar/openapi-to-markdown@1.5.2` renders 61 operation pages and their
+148-model closure. The generated index accounts for all 68 owner operations.
+Seven operation pages link to the exact operation in the local, unchanged OpenAPI
+artifact because Scalar omits positional tuple constraints or the Plan Quote's
+`propertyNames` pattern. These pages are fallbacks, not qualified renderings.
+The original Call and seven-model qualification remains in place, including
+all five outcomes and its 26 ordered, validated examples.
+
+Only owner-supplied examples are published. Scalar's linked mode still invents
+examples for unannotated object models. A narrow, version-pinned AST check removes
+only its final Example paragraph and JSON block when the owner supplies no example.
+Any other shape fails export. This is the explicit sanitation exception to the
+earlier no-postprocessor trial: it neither generates examples nor renders schemas.
+Every remaining JSON example must match its owner value and validate. The official
+SSR alternative remains rejected because it hid response branches behind interaction
+and added 4.4 MB of JavaScript in the recorded trial.
+
+Publication checks unsupported schema keywords, paired constraint values, parameter
+requiredness, authentication, schema links and source examples. These are bounded
+checks; repeated constraints on different nested fields are not independently
+associated by the Markdown check. The full owner OpenAPI remains authoritative.
+Source and browser readbacks must qualify each expansion; page counts do not prove
+runtime behaviour or complete semantic equivalence.
+
+Reference expansion exposed defects in the owner projection. OpenAPI 3.1 now uses
+Zod's native 2020-12 conversion instead of TanStack's draft-07 conversion. A shared
+native override preserves the tuple lengths enforced by Zod's runtime parser,
+including optional tails and rest items. MCP and draft-07 CLI/Agent descriptors
+use the same correction. Reference hoisting and inlining preserve `$ref` siblings.
+This corrects advertised schemas without changing accepted payloads, authority,
+request identity, stored purchases or the domain's tuple definitions.
+
+The only Aecon tooling is [publication-manifest.ts](../../tools/docs/publication-manifest.ts),
+[export-docs.ts](../../tools/docs/export-docs.ts) and
+[verify-docs.ts](../../tools/docs/verify-docs.ts). The manifest allows the CLI guide,
+glossary, Start here, four persona sections, authority, purchase-choice and recovery
+guides, and only the public compatibility-policy section of the deployment record. It does not publish the operations document.
+The reference is generated through the discovery public facade; the original
+owner OpenAPI and canonical plugin skill are copied unchanged. New operations
+remain in their existing schema owners; this allowlist is not another registry.
+
+Publication rejects unknown pages/assets/links, executable MDX, includes,
+symlinks, remote schema references and browser source maps. Generated content is
+ignored and recreated; never edit it. Static HTML, actual anchors, source examples,
+raw artifacts and exact emitted files are checked. Browser hydration, visible
+contract branches, search and copy require their separate observed evidence.
+Public provenance contains the source revision, dirty-source digest, lock digests,
+contract digest and renderer normalization; a dirty tree is never labelled a
+released revision. Scalar normalizes a rendering clone to OpenAPI 3.2 internally;
+the independently served original remains OpenAPI 3.1.
+
+Run `npm ci --prefix packages/docs`, then `npm run docs:build`. `npm run check`
+typechecks tooling separately from the application; combining the renderer types
+with the application exceeded its 4 GB heap during qualification. No heap increase
+or skipped typecheck was used. The existing release gate also runs the docs build.
+Faithful human rendering of the seven fallback operations, a public safe sandbox
+and installed/hosted four-persona acceptance remain separate gates. This is a qualified local
+docs foundation, not a stable or deployed API declaration.
 
 ## Official implementation references
 

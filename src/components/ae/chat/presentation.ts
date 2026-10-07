@@ -16,7 +16,7 @@ import { projectChatChoiceActions } from '@/modules/chat/tool-card-actions'
 
 export type SearchNextProps = Readonly<{
   next?: RegistryNextAction
-  onContinueSearch?: (next: Extract<RegistryNextAction, { action: 'next-page' }>) => void
+  onContinueSearch?: (next: Extract<RegistryNextAction, { action: 'registry.tools.search' }> & { args: { cursor: string } }) => void
   signedThread?: boolean
   onRepeatSearch?: (query: string) => void
 }>

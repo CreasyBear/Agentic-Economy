@@ -40,7 +40,7 @@ function actionOperations(): readonly NormalizedOperation[] {
     const action = findAction(route.actionId)
     if (action === undefined) throw new Error(`openapi_action_missing:${route.actionId}`)
     const descriptor = describeActionForAgent(action)
-    const bodySchema = descriptor.inputJsonSchema
+    const bodySchema = jsonSchemaOf(action.schema)
     const hasBodyIdempotency = route.method === 'POST' && bodySchema?.properties?.idempotencyKey !== undefined
     return {
       operationId: route.actionId,
@@ -54,9 +54,9 @@ function actionOperations(): readonly NormalizedOperation[] {
       pathParams: [], queryParams: [],
       ...(route.method === 'POST' && bodySchema !== undefined ? { requestBodySchema: bodySchema } : {}),
       responses: [
-        { status: 200, schema: descriptor.outputJsonSchema ?? jsonSchemaOf(action.outputSchema), mediaType: 'application/json', description: 'Success.' },
+        { status: 200, schema: jsonSchemaOf(action.outputSchema), mediaType: 'application/json', description: 'Success.' },
         ...AUTH_ERRORS,
-        ...(route.actionId === FEEDBACK_ROUTE_CONTRACT.actionId ? problemResponses(['FAILED_PRECONDITION']) : []),
+        ...(route.actionId === FEEDBACK_ROUTE_CONTRACT.actionId ? problemResponses(['FAILED_PRECONDITION', 'UNSUPPORTED_MEDIA_TYPE']) : []),
       ],
     }
   })
@@ -84,7 +84,7 @@ function fundingOperations(): readonly NormalizedOperation[] {
     {
       operationId: FUNDING_HANDOFF_CONFIG_ACTION_ID, summary: config.name, tags: ['Funding'], method: 'GET',
       path: FUNDING_HANDOFF_CONFIG_PATH, security: authenticated, pathParams: [], queryParams: [],
-      responses: [{ status: 200, schema: config.outputJsonSchema ?? jsonSchemaOf(findFundingAction(FUNDING_HANDOFF_CONFIG_ACTION_ID).outputSchema), mediaType: 'application/json', description: 'Current funding limits.' }, ...AUTH_ERRORS],
+      responses: [{ status: 200, schema: jsonSchemaOf(findFundingAction(FUNDING_HANDOFF_CONFIG_ACTION_ID).outputSchema), mediaType: 'application/json', description: 'Current funding limits.' }, ...AUTH_ERRORS],
     },
     {
       operationId: FUNDING_HANDOFF_CREATE_ACTION_ID, summary: create.name, tags: ['Funding'], method: 'POST',
@@ -92,12 +92,12 @@ function fundingOperations(): readonly NormalizedOperation[] {
       description: 'Send Idempotency-Key as an HTTP header, not in the JSON body. Reuse the same key and amount to recover a funding session.',
       headerParams: [{ name: 'Idempotency-Key', description: 'Stable key for this funding attempt; changed amount conflicts.', required: true, schema: jsonSchemaOf(createFundingHandoffInputSchema.shape.idempotencyKey) }],
       requestBodySchema: jsonSchemaOf(createFundingHandoffInputSchema.pick({ principalAmount: true })),
-      responses: [{ status: 201, schema: create.outputJsonSchema ?? jsonSchemaOf(findFundingAction(FUNDING_HANDOFF_CREATE_ACTION_ID).outputSchema), mediaType: 'application/json', description: 'Funding session created or replayed.' }, ...AUTH_ERRORS],
+      responses: [{ status: 201, schema: jsonSchemaOf(findFundingAction(FUNDING_HANDOFF_CREATE_ACTION_ID).outputSchema), mediaType: 'application/json', description: 'Funding session created or replayed.' }, ...AUTH_ERRORS],
     },
     {
       operationId: FUNDING_HANDOFF_STATUS_ACTION_ID, summary: status.name, tags: ['Funding'], method: 'GET',
       path: FUNDING_HANDOFF_STATUS_PATH, security: authenticated, pathParams: [fundingSessionId], queryParams: [],
-      responses: [{ status: 200, schema: status.outputJsonSchema ?? jsonSchemaOf(findFundingAction(FUNDING_HANDOFF_STATUS_ACTION_ID).outputSchema), mediaType: 'application/json', description: 'Funding session state.' }, ...AUTH_ERRORS],
+      responses: [{ status: 200, schema: jsonSchemaOf(findFundingAction(FUNDING_HANDOFF_STATUS_ACTION_ID).outputSchema), mediaType: 'application/json', description: 'Funding session state.' }, ...AUTH_ERRORS],
     },
     {
       operationId: 'funding.handoff.publicStatus', summary: 'Read payer-safe funding session status', tags: ['Funding'], method: 'GET',

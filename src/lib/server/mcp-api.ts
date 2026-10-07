@@ -3,8 +3,10 @@
  * remain read-only; authenticated projections admit only explicitly surfaced
  * actions whose declared authority requirement fits the caller's mode.
  */
-import { createMcpHandler, isJsonContentType, isLegacyRequest, ProtocolError, ProtocolErrorCode, Server, specTypeSchemas, type StandardSchemaV1, type Tool } from '@modelcontextprotocol/server'
+import { createMcpHandler, isJsonContentType, isLegacyRequest, ProtocolError, ProtocolErrorCode, Server, SERVER_INFO_META_KEY, specTypeSchemas, type StandardSchemaV1, type Tool } from '@modelcontextprotocol/server'
 import { z } from 'zod'
+
+import { preserveJsonSchemaTupleArity } from '@/modules/common/action'
 
 import { degrade } from '@/lib/observability/degrade'
 import { base64Codec, tryDecodeBase64Url } from '@/modules/common/base64-codec'
@@ -28,7 +30,7 @@ import {
 import { runWithRequestCorrelation, withRequestCorrelationHeader } from '@/lib/server/request-correlation'
 import { recordGatewayTelemetry, type GatewayTelemetryEvent } from '@/lib/server/gateway-telemetry'
 import { isRecord } from '@/modules/common/is-record'
-import { describeActionMcpMetadata, isToolMarketReadAction, listMcpActions, mcpToolName, mcpToolsetAdmitted, projectMcpActionNext, projectMcpJourneyProblem, type AnyAction } from '@/modules/actions'
+import { describeActionMcpMetadata, journeyProblemSchema, mcpActionNextSchema, isToolMarketReadAction, listMcpActions, mcpToolName, mcpToolsetAdmitted, projectMcpActionNext, projectMcpJourneyProblem, type AnyAction } from '@/modules/actions'
 import { MARKET_TOOLS_CALL_SCOPE } from '@/modules/agent-access/contract'
 import { toolCatalogSearchInputSchema, toolChoiceSearchOutputSchema, withAuthorizedSaveNeed } from '@/modules/registry/tool-choice-contracts'
 import {
@@ -185,30 +187,18 @@ function mcpRefusalSentence(refusal: McpToolRefusal): string {
 }
 
 function mcpToolRefusalResult(action: AnyAction, result: unknown, refusal: McpToolRefusal, origin: string) {
-  const code = /^[a-z][a-z0-9_:-]{0,95}$/u.test(refusal.code) ? refusal.code : 'action_refused'
-  const kind = code === 'tool_not_found' || (isRecord(result) && result.kind === 'not_found') ? 'NOT_FOUND'
-    : code === 'capacity_exceeded' ? 'RESOURCE_EXHAUSTED'
-      : code === 'source_unavailable' || code === 'feedback_unavailable' || (isRecord(result) && result.kind === 'unavailable') ? 'UNAVAILABLE'
-        : 'FAILED_PRECONDITION'
-  const projected = projectMcpJourneyProblem(buildProblem({
-    kind,
-    code,
-    retryable: refusal.retryable ?? (code === 'source_unavailable' || code === 'capacity_exceeded'),
-    detail: mcpRefusalSentence(refusal),
-    extras: { next: projectMcpActionNext(action.id, result, origin) },
-  }), { origin, source: 'local' })
-  return { ...projected, content: [...projected.content] }
+  return {
+    isError: true,
+    content: [{ type: 'text' as const, text: mcpRefusalSentence(refusal) }],
+    structuredContent: { result, next: projectMcpActionNext(action.id, result, origin) },
+  }
 }
 /** The search's validated actions stay legible without requiring clients to parse structuredContent. */
-function mcpSearchActionLine(next: unknown, origin: string): string | undefined {
+function mcpSearchActionLine(next: unknown, _origin: string): string | undefined {
   if (!isRecord(next) || typeof next.action !== 'string' || !isRecord(next.args)) return undefined
   const args = JSON.stringify(next.args)
-  const call = next.action === 'describe' ? `ae_registry_tools_describe(${args})`
-    : next.action === 'describe-external' && typeof next.args.id === 'string'
-      ? `curl --fail ${JSON.stringify(`${origin}/api/v1/registry/detail?id=${encodeURIComponent(next.args.id)}`)}`
-      : next.action === 'next-page' || next.action === 'broaden' || next.action === 'retry'
-        ? `ae_registry_tools_search(${args})`
-        : undefined
+  const call = next.action === 'registry.tools.describe' ? `ae_registry_tools_describe(${args})`
+    : next.action === 'registry.tools.search' ? `ae_registry_tools_search(${args})` : undefined
   return `  ${JSON.stringify(next)}${call === undefined ? '' : ` · ${call}`}`
 }
 
@@ -253,6 +243,9 @@ function mcpSuccessSummary(action: AnyAction, result: unknown, origin: string): 
   const lines = [`${summary}${assessed}.${recipient}`]
   for (const tool of tools) {
     if (!isRecord(tool)) continue
+    if (tool.access === 'external_listing' && typeof tool.detailRef === 'string' && tool.detailRef.startsWith('/api/v1/registry/detail?')) {
+      lines.push(`  Inspect ${tool.title}: ${new URL(tool.detailRef, origin).href}`)
+    }
     const itemActions = Array.isArray(tool.next) ? tool.next : []
     for (const next of itemActions) {
       const text = mcpSearchActionLine(next, origin)
@@ -276,7 +269,7 @@ function mcpGatewayEvent(
   data: unknown,
   result: unknown,
 ): Omit<GatewayTelemetryEvent, 'correlationId' | 'durationMs'> | undefined {
-  if (!actionId.startsWith('tool.') && !actionId.startsWith('call.')) return undefined
+  if (!['tool.quote', 'tool.call', 'call.status', 'call.list', 'call.cancel', 'call.reconcile'].includes(actionId)) return undefined
   const input = isRecord(data) ? data : {}
   const output = isRecord(result) ? result : {}
   const callRef = typeof output.callRef === 'string'
@@ -285,6 +278,9 @@ function mcpGatewayEvent(
   const toolRef = typeof output.toolRef === 'string'
     ? output.toolRef
     : typeof input.toolRef === 'string' ? input.toolRef : undefined
+  if (output.kind === 'needs_authority' || (output.kind === 'refused' && output.code === 'authority_required')) {
+    return { ...(callRef === undefined ? {} : { invocationRef: callRef }), ...(toolRef === undefined ? {} : { operationRef: toolRef }), outcome: 'needs_authority', approval: 'required' }
+  }
   if (output.kind === 'refused') {
     return {
       ...(callRef === undefined ? {} : { invocationRef:callRef }),
@@ -294,7 +290,7 @@ function mcpGatewayEvent(
       ...(typeof output.retryable === 'boolean' ? { retryable: output.retryable } : {}),
     }
   }
-  if (output.kind === 'reconciliation_required') {
+  if (output.kind === 'reconciliation_required' || output.kind === 'outcome_unknown') {
     return {
       ...(callRef === undefined ? {} : { invocationRef:callRef }),
       ...(toolRef === undefined ? {} : { operationRef:toolRef }),
@@ -302,15 +298,7 @@ function mcpGatewayEvent(
       unknown: true,
     }
   }
-  if (output.kind === 'needs_authority') {
-    return {
-      ...(callRef === undefined ? {} : { invocationRef:callRef }),
-      ...(toolRef === undefined ? {} : { operationRef:toolRef }),
-      outcome: 'needs_authority',
-      approval: 'required',
-    }
-  }
-  if (output.kind === 'pending') {
+  if (output.kind === 'pending' || output.kind === 'unchanged') {
     return {
       ...(callRef === undefined ? {} : { invocationRef:callRef }),
       ...(toolRef === undefined ? {} : { operationRef:toolRef }),
@@ -318,24 +306,27 @@ function mcpGatewayEvent(
     }
   }
   if (output.kind === 'found') {
-    const state = output.state
+    const terminal = isRecord(output.result) ? output.result : undefined
+    const usage = terminal !== undefined && isRecord(terminal.usage) ? terminal.usage : undefined
+    const conclusive = terminal?.kind === 'refused' || (terminal?.kind === 'completed' && usage !== undefined && usage.chargeState !== 'outcome_unknown')
+    const unknown = output.state === 'reconciliation_required' || (output.state === 'terminal' && !conclusive)
+    const outcome = unknown ? 'unknown' : output.state === 'cancelled' ? 'cancelled' : output.state === 'invalidated' ? 'refused'
+      : output.state === 'terminal' && terminal?.kind === 'refused' ? 'refused'
+        : output.state === 'terminal' && terminal?.kind === 'completed' ? actionId === 'call.reconcile' ? 'reconciled' : 'completed' : 'pending'
     return {
-      ...(callRef === undefined ? {} : { invocationRef:callRef }),
-      ...(toolRef === undefined ? {} : { operationRef:toolRef }),
-      outcome: state === 'cancelled'
-        ? 'cancelled'
-        : state === 'reconciliation_required'
-          ? 'reconciliation_required'
-          : state === 'terminal'
-            ? actionId === 'call.reconcile' ? 'reconciled' : 'completed'
-            : 'pending',
+      ...(callRef === undefined ? {} : { invocationRef: callRef }),
+      ...(toolRef === undefined ? {} : { operationRef: toolRef }),
+      outcome,
+      ...(unknown ? { unknown: true } : {}),
+      ...(outcome === 'refused' && typeof terminal?.code === 'string' ? { refusalCode: terminal.code } : {}),
     }
   }
-  if (output.kind === 'completed' || output.kind === 'ok') {
+  if (output.kind === 'completed' || output.kind === 'committed' || output.kind === 'ok' || (actionId === 'call.list' && output.kind === 'available')) {
     return {
       ...(callRef === undefined ? {} : { invocationRef:callRef }),
       ...(toolRef === undefined ? {} : { operationRef:toolRef }),
-      outcome: 'completed',
+      outcome: isRecord(output.usage) && output.usage.chargeState === 'outcome_unknown' ? 'unknown' : 'completed',
+      ...(isRecord(output.usage) && output.usage.chargeState === 'outcome_unknown' ? { unknown: true } : {}),
     }
   }
   return {
@@ -362,28 +353,95 @@ function recordMcpGatewayTelemetry(
     applicationRef: access.principal.applicationRef,
     ...(access.correlationId === undefined ? {} : { correlationId: access.correlationId }),
     durationMs: Date.now() - startedAt,
-    transport:'mcp',operation:actionId==='tool.quote'?'quote':actionId==='tool.call'?'call':actionId==='call.cancel'?'cancel':actionId==='call.reconcile'?'reconcile':'status',stage:actionId.startsWith('call.')?'recovery':'execution',
+    transport:'mcp',operation:actionId==='tool.quote'?'quote':actionId==='tool.call'?'call':actionId==='call.cancel'?'cancel':actionId==='call.reconcile'?'reconcile':actionId==='call.list'?'list':'status',stage:actionId.startsWith('call.')?'recovery':'execution',
   })
 }
 
 
 /** The action registry owns Tool projection and pagination; the SDK owns wire encoding. */
+const AE_MCP_SERVER_INFO = { name: 'agentic-economy', version: '1.0.0' } as const
 const MCP_TOOLS_LIST_PAGE_SIZE = 50
-/** Success and Problem Details share `next`; both structured forms are valid MCP results. */
-const MCP_TOOL_OUTPUT_SCHEMA = z.looseObject({
-  next: z.array(z.unknown()),
-  result: z.looseObject({ kind: z.string() }).optional(),
-  type: z.string().optional(),
-  title: z.string().optional(),
-  status: z.number().optional(),
-  detail: z.string().optional(),
-  kind: z.string().optional(),
-  code: z.string().optional(),
-  retryable: z.boolean().optional(),
-})
-const MCP_TOOL_OUTPUT_JSON_SCHEMA = {
-  ...z.toJSONSchema(MCP_TOOL_OUTPUT_SCHEMA, { io: 'output', unrepresentable: 'any' }),
-  type: 'object' as const,
+const MCP_TOOLS_LIST_MAX_BYTES = 40_000
+const mcpToolDescriptors = new WeakMap<AnyAction, Tool>()
+const jsonBytes = (value: unknown): number => new TextEncoder().encode(JSON.stringify(value)).length
+
+/** Compact output-schema boilerplate while preserving every accepted value and keyword constraint. */
+function compactPrimitiveDefs(schema: Record<string, unknown>): Record<string, unknown> {
+  // Literal and string-enum values already exclude every non-string. An empty
+  // array cannot contain an item, so its item schema adds no constraint.
+  const simplify = (value: unknown, schemaMap = false): unknown => {
+    if (Array.isArray(value)) return value.map(item => simplify(item))
+    if (!isRecord(value)) return value
+    const record = Object.fromEntries(Object.entries(value).map(([key, item]) =>
+      [key, !schemaMap && ['const', 'enum', 'default', 'examples'].includes(key) ? item : simplify(item, !schemaMap && ['properties', 'patternProperties', '$defs', 'dependentSchemas'].includes(key))]))
+    if (!schemaMap && record.type === 'string' && (typeof record.const === 'string'
+      || (Array.isArray(record.enum) && record.enum.length > 0 && record.enum.every(item => typeof item === 'string')))) delete record.type
+    if (!schemaMap && record.type === 'array' && record.maxItems === 0) delete record.items
+    return record
+  }
+  let compact = simplify(schema) as Record<string, unknown>
+  if (!isRecord(compact.$defs)) return compact
+  for (const name of Object.keys(compact.$defs)) {
+    if (!isRecord(compact.$defs)) break
+    const definition = compact.$defs[name]
+    if (!isRecord(definition) || (!['string', 'number', 'integer', 'boolean', 'null'].includes(String(definition.type))
+      && typeof definition.const !== 'string'
+      && !(Array.isArray(definition.enum) && definition.enum.length > 0 && definition.enum.every(item => typeof item === 'string'))
+      && !(definition.type === 'array' && definition.maxItems === 0))) continue
+    const ref = `#/$defs/${name}`
+    let siblingRef = false
+    const replace = (value: unknown, schemaMap = false): unknown => {
+      if (Array.isArray(value)) return value.map(item => replace(item))
+      if (!isRecord(value)) return value
+      if (!schemaMap && value.$ref === ref) {
+        if (Object.keys(value).length !== 1) { siblingRef = true; return value }
+        return definition
+      }
+      return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, !schemaMap && ['const', 'enum', 'default', 'examples'].includes(key) ? item : replace(item, !schemaMap && ['properties', 'patternProperties', '$defs', 'dependentSchemas'].includes(key))]))
+    }
+    const candidate = replace(compact)
+    if (siblingRef || !isRecord(candidate) || !isRecord(candidate.$defs)) continue
+    delete candidate.$defs[name]
+    if (Object.keys(candidate.$defs).length === 0) delete candidate.$defs
+    if (JSON.stringify(candidate).includes(JSON.stringify(ref))) continue
+    if (jsonBytes(candidate) < jsonBytes(compact)) compact = candidate
+  }
+  if (!isRecord(compact.$defs)) return compact
+  const names = new Map(Object.keys(compact.$defs).map((name, index) => [name, `s${index}`]))
+  const shortenRefs = (value: unknown, schemaMap = false): unknown => {
+    if (Array.isArray(value)) return value.map(item => shortenRefs(item))
+    if (!isRecord(value)) return value
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => {
+      const name = !schemaMap && key === '$ref' && typeof item === 'string' && item.startsWith('#/$defs/') ? names.get(item.slice(8)) : undefined
+      return [key, name === undefined ? !schemaMap && ['const', 'enum', 'default', 'examples'].includes(key) ? item : shortenRefs(item, !schemaMap && ['properties', 'patternProperties', '$defs', 'dependentSchemas'].includes(key)) : `#/$defs/${name}`]
+    }))
+  }
+  const renamed = shortenRefs(compact) as Record<string, unknown>
+  const definitions = renamed.$defs as Record<string, unknown>
+  renamed.$defs = Object.fromEntries(Object.entries(definitions).map(([name, definition]) => [names.get(name) ?? name, definition]))
+  return jsonBytes(renamed) < jsonBytes(compact) ? renamed : compact
+}
+
+/** Advertise exact action results and factor the common Problem fields without changing either wire form. */
+function mcpOutputSchema(action: AnyAction) {
+  const nextSchema = mcpActionNextSchema(action.id)
+  const problemSchema = journeyProblemSchema.options[0].extend({
+    next: nextSchema, source: z.enum(['local', 'remote']),
+    requestId: journeyProblemSchema.options[1].shape.requestId.exactOptional(),
+  })
+  const schema = z.union([z.strictObject({ result: action.outputSchema, next: nextSchema }), problemSchema])
+  const jsonSchema = z.toJSONSchema(schema, {
+    io: 'output', reused: 'ref',
+    override: ({ zodSchema, jsonSchema: fragment }) => {
+      preserveJsonSchemaTupleArity(zodSchema, fragment, 'output')
+      if (zodSchema !== problemSchema) return
+      fragment.oneOf = [
+        { properties: { source: { const: 'local' } }, not: { required: ['requestId'] } },
+        { properties: { source: { const: 'remote' } }, required: ['requestId'] },
+      ]
+    },
+  })
+  return { ...compactPrimitiveDefs(jsonSchema), type: 'object' as const }
 }
 
 function encodeMcpToolsListCursor(offset: number): string {
@@ -409,7 +467,10 @@ function decodeMcpToolsListCursor(cursor: string, toolCount: number): number | u
 }
 
 function mcpInputSchema(action: AnyAction) {
-  const schema = z.toJSONSchema(action.schema, { io: 'input', unrepresentable: 'any' })
+  const schema = z.toJSONSchema(action.schema, {
+    io: 'input', unrepresentable: 'any',
+    override: ({ zodSchema, jsonSchema }) => preserveJsonSchemaTupleArity(zodSchema, jsonSchema, 'input'),
+  })
   if (schema.type === 'object') return { ...schema, type: 'object' as const }
   const variants = 'anyOf' in schema ? schema.anyOf : 'oneOf' in schema ? schema.oneOf : undefined
   if (!Array.isArray(variants)) throw new Error(`MCP input schema for ${action.id} is not an object union`)
@@ -441,6 +502,8 @@ function mcpInputSchema(action: AnyAction) {
 }
 
 function mcpToolListEntry(action: AnyAction): Tool {
+  const cached = mcpToolDescriptors.get(action)
+  if (cached !== undefined) return cached
   const metadata = describeActionMcpMetadata(action)
   const inputSchema = mcpInputSchema(action)
   const entry = specTypeSchemas.Tool['~standard'].validate({
@@ -448,7 +511,7 @@ function mcpToolListEntry(action: AnyAction): Tool {
     title: action.name,
     description: mcpToolDescription(action),
     inputSchema,
-    outputSchema: MCP_TOOL_OUTPUT_JSON_SCHEMA,
+    outputSchema: mcpOutputSchema(action),
     annotations: {
       readOnlyHint: action.readOnly,
       destructiveHint: action.readOnly ? false : metadata.destructive,
@@ -457,6 +520,7 @@ function mcpToolListEntry(action: AnyAction): Tool {
     },
   })
   if (entry.issues !== undefined) throw new Error(`Invalid MCP Tool contract: ${action.id}`)
+  mcpToolDescriptors.set(action, entry.value)
   return entry.value
 }
 
@@ -472,10 +536,26 @@ function registerPaginatedToolsList(
     if (offset === undefined) {
       throw new ProtocolError(ProtocolErrorCode.InvalidParams, `${INVALID_MCP_REQUEST_PARAMETERS_MESSAGE} cursor: does not decode to a valid tools/list page offset.`)
     }
-    const page = admittedActions.slice(offset, offset + pageSize)
+    const page: Tool[] = []
+    // Reserve the complete current-protocol envelope stamped by the SDK, including server metadata.
+    let pageBytes = jsonBytes({
+      tools: [], nextCursor: encodeMcpToolsListCursor(admittedActions.length),
+      resultType: 'complete', ttlMs: 0, cacheScope: 'private',
+      _meta: { [SERVER_INFO_META_KEY]: AE_MCP_SERVER_INFO },
+    })
+    for (const action of admittedActions.slice(offset, offset + pageSize)) {
+      const descriptor = mcpToolListEntry(action)
+      const descriptorBytes = jsonBytes(descriptor) + (page.length === 0 ? 0 : 1)
+      if (pageBytes + descriptorBytes > MCP_TOOLS_LIST_MAX_BYTES) {
+        if (page.length === 0) throw new ProtocolError(ProtocolErrorCode.InternalError, 'MCP Tool descriptor exceeds the tools/list page budget.')
+        break
+      }
+      page.push(descriptor)
+      pageBytes += descriptorBytes
+    }
     const nextOffset = offset + page.length
     return {
-      tools: page.map(mcpToolListEntry),
+      tools: page,
       ...(nextOffset < admittedActions.length ? { nextCursor: encodeMcpToolsListCursor(nextOffset) } : {}),
     }
   })
@@ -503,7 +583,7 @@ export function createAeMcpServer(
   // no instance or authority is shared between requests. Violations return
   // protocol or tool errors; disconnecting never buys again or cancels a Call.
   const server = new Server(
-    { name: 'agentic-economy', version: '1.0.0' },
+    AE_MCP_SERVER_INFO,
     { instructions: AE_MCP_INSTRUCTIONS, capabilities: { tools: { listChanged: false } } },
   )
   server.setRequestHandler('tools/call', async (callRequest, context) => {
@@ -576,7 +656,7 @@ export function createAeMcpServer(
       if (refusal !== undefined) return mcpToolRefusalResult(action, output, refusal, origin)
       return {
         content: [{ type: 'text' as const, text: mcpSuccessSummary(action, output, origin) }],
-        structuredContent: { result: output, next: action.id === 'tool.procure' && isRecord(outputValidation.data) && outputValidation.data.status === 'needs_input' ? [outputValidation.data.next] : projectMcpActionNext(action.id, output, origin) },
+        structuredContent: { result: output, next: projectMcpActionNext(action.id, output, origin) },
       }
     } catch (error) {
       recordMcpGatewayTelemetry(action.id, data, undefined, access, startedAt)

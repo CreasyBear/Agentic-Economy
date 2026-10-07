@@ -1,11 +1,13 @@
 # Current work
 
-**Reconciled:** 5 October 2026. This is the repository's current queue; reuse the
+**Reconciled:** 7 October 2026. This is the repository's current queue; reuse the
 linked issues instead of creating parallel backlogs. The [roadmap](IMPLEMENTATION_ROADMAP.md)
 owns capability requirements and [deployment map](docs/operations/deployments.md)
 owns shipped source and environments.
 
 ## Remaining work
+
+**Source uprev complete:** the [platform API consistency checklist](docs/operations/mercator-maturity-register.md#7-october-platform-source-consistency-uprev) is closed at source/local qualification: alpha.2, regenerated docs and the uninterrupted source gate pass. Hosted onboarding remains a separate gate.
 
 | Boundary | Next action / evidence |
 | --- | --- |
@@ -42,6 +44,28 @@ landed separately in #362 under the accepted RFC; F2 is not their prerequisite.
 Exact rails, incentives, direct wallet
 and embedded surfaces remain required/open for unqualified literal parity.
 
+MM-055 now has the coordinated pre-stability canonical contract, preserved
+purchase recovery, hard discovery constraints, actionable Provider continuations
+and pagination, and an official same-repository Fumadocs app with Scalar Markdown.
+The [register's execution record](docs/operations/mercator-maturity-register.md#7-october-pre-stability-execution)
+owns findings, local checks, browser/reader evidence and remaining owners. The docs
+build exports 228 approved pages from existing owners: all 68 operations are
+accounted for, with 61 rendered references and seven exact OpenAPI fallbacks.
+Guide-led browser review and source schema repairs are recorded in the
+[closeout](docs/operations/mercator-maturity-register.md#7-october-docs-and-contract-closeout);
+generated files are not another authored source.
+
+Next acceptance work: qualify a safe public discovery-to-delivery environment,
+then the actual installed client/harness and web/backend/contract/docs tuple.
+Native Plan and conventional async Provider completion retain their own gates.
+Docs/DX also owns qualifying the seven unsupported Scalar renderings with upstream
+changes; keep the exact raw OpenAPI fallbacks meanwhile. The coordinated alpha.2
+source uprev passed `npm run check` and an uninterrupted `npm run gate`; see its
+[acceptance record](docs/operations/mercator-maturity-register.md#7-october-platform-source-consistency-uprev).
+A later merge/release candidate must run the same gate. Install docs dependencies with
+`npm ci --prefix packages/docs` first. MM-055 and MM-056 remain open. No docs
+publishing or application deployment was performed.
+
 Next preparation slice: **MM-057** maintained SDK/counterparty qualification.
 Next runtime slice after bounded direction: **MM-022**, projecting the supported
 Provider SDK onto current Calls/Workpool with MM-021/MM-023–MM-026 recovery.
@@ -61,15 +85,16 @@ Sentry/secret-management responsibilities. The proposed Datadog amendment and
 [execution prompt / skill chain](docs/adr/0005-datadog-supported-operational-observability.md#prepared-execution-prompt)
 live in ADR 0005; no GitHub amendment has been published. No parallel backlog.
 
-State: **awaiting-direction; prepared**. ADR 0005's [engineering review](docs/adr/0005-datadog-supported-operational-observability.md#gstack-review-report)
+State: **prepared design integrated; source consolidation authorised 7 October 2026**. ADR 0005's [engineering review](docs/adr/0005-datadog-supported-operational-observability.md#gstack-review-report)
 is complete; ADR acceptance, direction and the #284 amendment remain pending.
 Later Wayfinder issues retain their own `/plan-eng-review`/direction gate. Account configuration, received
 data and acceptance are **not evidenced** by this preparation; the last supplied
 inspection is dated context, not current readback. `approved`, `configured`,
 `receiving-data` and `acceptance-verified` are separate evidence stages.
 
-Next: review the existing #284 amendment and ADR; record the selected revision
-and bounded direction approval, and authorise its issue update. The linked plan
+Next: resume the canonical ADR from this checkout, confirm current entitlements
+and target settings, and prepare the bounded pilot configuration and issue amendment
+for the required privacy, cost and activation decisions. The linked plan
 owns inventory/coverage, privacy/cost, credential/IAM, Convex, AWS monitors,
 Synthetics, optional Vercel, validation, rollback and handoff dependencies. No
 activation follows from the Startup Plan or earlier general setup discussion.

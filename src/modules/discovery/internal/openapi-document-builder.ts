@@ -1,6 +1,7 @@
 import type { JSONSchema } from '@tanstack/ai'
 
 import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
+import { annotateCallOpenApiExamples } from './openapi-call-examples'
 
 import {
   agentApiOperations,
@@ -19,15 +20,12 @@ import {
   PROBLEM_JSON_SCHEMA,
 } from './openapi-document-schema'
 import type { NormalizedOperation, OpenApiBuildResult, OpenApiDocument } from './openapi-document-types'
-// JSON import (same pattern as src/lib/cli-distribution.ts): no module alias covers the repo root.
-import packageJson from '../../../../package.json'
 
 const OPENAPI_VERSION = '3.1.0' as const
+// Public contract revision, independent of app and CLI package versions.
+// Before stability, update for changes to requests, defaults, responses or semantics.
+const API_CONTRACT_VERSION = '1.0.0-alpha.2' as const
 const BYTE_SIZE_INLINE_THRESHOLD = 300_000
-
-function documentVersion(): string {
-  return packageJson.version
-}
 
 function securitySchemeFor(canonicalBaseUrl: string): Readonly<{ type: 'http'; scheme: 'bearer'; description: string }> {
   return {
@@ -63,11 +61,12 @@ export function buildOpenApiDocumentWithMetrics(input: Readonly<{ canonicalBaseU
   const schemas = new Map<string, JSONSchema>()
   schemas.set('Problem', hoistLocalDefs(PROBLEM_JSON_SCHEMA, schemas, 'Problem'))
   const paths = buildPaths(operations, schemas)
+  annotateCallOpenApiExamples(paths, schemas)
   const origin = trimTrailingSlashes(input.canonicalBaseUrl)
   const securitySchemes = { [AGENT_ACCESS_SECURITY_SCHEME]: securitySchemeFor(origin) }
   const refDocument: OpenApiDocument = {
     openapi: OPENAPI_VERSION,
-    info: { title: 'Agentic Economy API', version: documentVersion() },
+    info: { title: 'Agentic Economy API', version: API_CONTRACT_VERSION },
     servers: [{ url: origin }],
     paths,
     components: { schemas: Object.fromEntries(schemas), securitySchemes },
@@ -76,7 +75,7 @@ export function buildOpenApiDocumentWithMetrics(input: Readonly<{ canonicalBaseU
   const inlined = inlineDocumentSchemas(paths, Object.fromEntries(schemas))
   const inlineDocument: OpenApiDocument = {
     openapi: OPENAPI_VERSION,
-    info: { title: 'Agentic Economy API', version: documentVersion() },
+    info: { title: 'Agentic Economy API', version: API_CONTRACT_VERSION },
     servers: [{ url: origin }],
     paths: inlined.paths,
     components: { schemas: inlined.schemas, securitySchemes },

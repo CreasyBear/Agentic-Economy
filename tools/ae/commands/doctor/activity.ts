@@ -8,6 +8,7 @@ import { TOOL_MARKET_DESCRIBE_PATH } from '@/modules/registry/tool-entry'
 import type { CliOptions } from '../../lib/args'
 import { isLoopbackCliBaseUrl } from '../../lib/args'
 import { callJson } from '../../lib/output'
+import { cliContinuation } from '../../lib/continuation-command'
 import { journeyNextCommand } from '../../lib/journey-next-command'
 import { doctorContinuation, stripeTestModeConfigured, type CallDoctorResult, type DoctorCheckDraft } from './shared'
 
@@ -51,7 +52,7 @@ export async function checkMarketRequests(
     const matched = statuses.filter((status) => status?.kind === 'matched')
     const firstTool = matched[0]?.tools[0]
     if (firstTool !== undefined) {
-      const nextCommand = journeyNextCommand({ action: 'describe', args: { toolRef: firstTool.toolRef }, authority: 'public' }, options)
+      const nextCommand = journeyNextCommand({ action: 'registry.tools.describe', args: { toolRef: firstTool.toolRef }, authority: 'public' }, options)
       const checked = list.data.items.length
       return {
         id: 'market_requests', state: 'pass',
@@ -105,7 +106,7 @@ export async function checkBalance(
       return { check: { id: 'balance', state: 'fail', summary: 'Buyer account is locked.' } }
     }
     if (parsed.data.balance.units === '0') {
-      const nextCommand = journeyNextCommand({ action: 'fund', args: {}, authority: 'agent_key' } satisfies JourneyNext, options)
+      const nextCommand = cliContinuation(options, ['ae', 'fund'])
       return { check: { id: 'balance', state: 'warn', summary: 'Buyer balance is empty.', ...(nextCommand === undefined ? {} : { nextCommand }) } }
     }
     return {
@@ -134,7 +135,7 @@ export function checkFunding(options: CliOptions, balance: BalanceDoctorResult):
   }
   if (balance.check.state === 'warn') {
     const origin = new URL(options.baseUrl).origin
-    const nextCommand = journeyNextCommand({ action: 'fund', args: {}, authority: 'agent_key' } satisfies JourneyNext, options)
+    const nextCommand = cliContinuation(options, ['ae', 'fund'])
     return {
       id: 'funding', state: 'warn',
       summary: loopback
@@ -178,8 +179,8 @@ export async function checkCall(
     const callRef = statusRefSchema.safeParse({ kind: 'call', ref: attention.callRef })
     const nextCommand = callRef.success && callRef.data.kind === 'call'
       ? attention.state === 'reconciliation_required'
-        ? journeyNextCommand({ action: 'status', args: { ref: callRef.data }, authority: 'same_principal' } satisfies JourneyNext, options)
-        : journeyNextCommand({ action: 'wait', args: { callRef: callRef.data.ref }, authority: 'same_principal' } satisfies JourneyNext, options)
+        ? journeyNextCommand({ action: 'call.status', args: { callRef: callRef.data.ref }, authority: 'same_principal' } satisfies JourneyNext, options)
+        : cliContinuation(options, ['ae', 'wait', callRef.data.ref])
       : undefined
     return {
       check: {
@@ -206,7 +207,7 @@ export async function checkRepeatUse(options: CliOptions, toolRef: string): Prom
     })
     const parsed = toolChoiceDescribeOutputSchema.safeParse(outcome.body)
     if (!outcome.ok || !parsed.success || parsed.data.kind !== 'found') return undefined
-    const nextCommand = journeyNextCommand({ action: 'describe', args: { toolRef: parsed.data.tool.toolRef }, authority: 'public' }, options)
+    const nextCommand = journeyNextCommand({ action: 'registry.tools.describe', args: { toolRef: parsed.data.tool.toolRef }, authority: 'public' }, options)
     return {
       id: 'repeat_use', state: 'pass',
       summary: 'A previously successful Tool is still in the current catalog.',

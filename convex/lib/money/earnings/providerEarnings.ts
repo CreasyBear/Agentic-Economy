@@ -55,7 +55,10 @@ export const agentProviderEarningsArgs = {
 }
 export const agentProviderEarningsResultValue = v.object({
   kind: v.literal('error'),
-  code: v.literal('source_unavailable'),
+  code: v.literal('capability_unsupported'),
+  capability: v.literal('supply.earnings'),
+  retryable: v.literal(false),
+  detail: v.literal('Agent Provider earnings readback is not supported. The Business owner can review recorded Provider obligations in the owner earnings view.'),
 })
 
 export async function readOwnerProviderEarningsHandler(ctx: QueryCtx) {
@@ -94,5 +97,11 @@ export async function readOwnerProviderEarningsHandler(ctx: QueryCtx) {
 }
 
 export async function readAgentProviderEarningsHandler() {
-  return { kind: 'error' as const, code: 'source_unavailable' as const }
+  return {
+    kind: 'error' as const,
+    code: 'capability_unsupported' as const,
+    capability: 'supply.earnings' as const,
+    retryable: false as const,
+    detail: 'Agent Provider earnings readback is not supported. The Business owner can review recorded Provider obligations in the owner earnings view.' as const,
+  }
 }

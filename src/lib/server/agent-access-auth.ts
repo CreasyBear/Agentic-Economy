@@ -1,7 +1,7 @@
 import { clerkClient } from '@clerk/tanstack-react-start/server'
 import { isClerkAPIResponseError } from '@clerk/shared/error'
 
-import { authContinuation } from '@/lib/http/auth-continuation'
+import { authOwnerHandoff } from '@/lib/http/auth-continuation'
 import { bearerChallenge, bearerModeChallenge } from '@/lib/http/oauth-challenge'
 import { gatewayFailureToProblem } from '@/lib/errors'
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
@@ -130,8 +130,8 @@ export function authRefusalProblem(request: Request, refusal: AgentAccessRefusal
   const detail = unavailable
     ? 'Agent credential verification is temporarily unavailable. Retry after 5 seconds.'
     : refusal.reason === 'scope_required'
-      ? `This agent key lacks the required scope. Run \`ae connect\` for an owner-approved credential or complete OAuth device authorization at ${base}/oauth/device_authorization.`
-      : `Connect an agent key: run \`ae connect\` or complete OAuth device authorization at ${base}/oauth/device_authorization.`
+      ? `This agent key lacks the required scope. Run \`ae connect\` for an owner-approved credential; owner access is at ${base}/agent-access.`
+      : `Connect an agent key: run \`ae connect\` or open owner access at ${base}/agent-access.`
   return withRequestCorrelationHeader(problem({
     ...failure,
     status: refusal.status,
@@ -139,7 +139,8 @@ export function authRefusalProblem(request: Request, refusal: AgentAccessRefusal
     retryable: unavailable,
     extras: {
       requestId,
-      next: unavailable ? [] : authContinuation(base),
+      next: [],
+      ...(unavailable ? {} : { ownerHandoff: authOwnerHandoff(base) }),
     },
   }, unavailable
     ? { 'Retry-After': '5', Vary: 'Authorization' }

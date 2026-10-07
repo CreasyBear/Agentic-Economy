@@ -1,3 +1,5 @@
+import { z } from 'zod'
+
 import { gatewayFailureToProblem } from '@/lib/errors'
 import { degrade } from '@/lib/observability/degrade'
 import {
@@ -9,7 +11,7 @@ import {
 } from '@/lib/server/agent-access-auth'
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { response } from '@/lib/server/no-store-response'
-import { problem } from '@/lib/server/problem'
+import { duplicateQueryParameterProblem, problem } from '@/lib/server/problem'
 import { withHttpRateLimit } from '@/lib/server/rate-limit'
 import {
   runWithRequestCorrelation,
@@ -24,6 +26,8 @@ import {
   createAccountManagementService,
   type AccountManagementService,
 } from '@/modules/agent-access/account.actions'
+
+const accountGetQuerySchema = z.strictObject({})
 
 const MAX_ACCOUNT_ACTION_BODY_BYTES = 64 * 1024
 
@@ -47,6 +51,12 @@ export async function handleAgentAccountGet(
 ): Promise<Response> {
   return await runWithRequestCorrelation(request, async ({ correlationId }) => {
     return withRequestCorrelationHeader(await withHttpRateLimit(request, 'public-read', async () => {
+    const url = new URL(request.url)
+    const duplicate = duplicateQueryParameterProblem(url)
+    if (duplicate !== undefined) return duplicate
+    if (!accountGetQuerySchema.safeParse(Object.fromEntries(url.searchParams)).success) {
+      return problem({ status: 400, kind: 'INVALID_ARGUMENT', code: 'invalid_query_parameter', detail: 'Current-account inspection does not accept query parameters.' })
+    }
     const resolvePrincipal = options.resolvePrincipal
       ?? (options.authenticate === undefined
         ? resolveAgentAccessPrincipal(request, '', correlationId)

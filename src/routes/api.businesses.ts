@@ -1,12 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router'
 
 import { withHttpRateLimit } from '@/lib/server/rate-limit'
-import { duplicateQueryParameterProblem, problem } from '@/lib/server/problem'
+import { duplicateQueryParameterProblem, problem, zodIssueDetail } from '@/lib/server/problem'
 import { methodNotAllowed } from '@/lib/server/method-guard'
 import { registryListAction } from '@/modules/registry/registry.actions'
 import { uniqueSorted } from '@/modules/common/unique-sorted'
 
-import { optionalHasPrice, optionalMaxPrice, optionalSearchLocation, optionalSearchMode } from '@/lib/http/search-query'
+import { businessListQuerySchema, businessSearchQuerySchema, optionalHasPrice, optionalMaxPrice, optionalSearchLocation, optionalSearchMode } from '@/lib/http/search-query'
 import type { Action, ActionResult } from '@/modules/common/action'
 export const Route = createFileRoute('/api/businesses')({
   server: {
@@ -24,18 +24,8 @@ export const Route = createFileRoute('/api/businesses')({
   },
 })
 
-const LIST_QUERY_PARAMS = new Set(['cursor', 'limit'])
-const SEARCH_QUERY_PARAMS = new Set([
-  'q',
-  'mode',
-  'location',
-  'max_price_currency',
-  'max_price_units',
-  'max_price_exponent',
-  'has_price',
-  'cursor',
-  'limit',
-])
+const LIST_QUERY_PARAMS = new Set(Object.keys(businessListQuerySchema.shape))
+const SEARCH_QUERY_PARAMS = new Set(Object.keys(businessSearchQuerySchema.shape))
 
 /**
  * Browse takes no query term. Silently dropping one returns an arbitrary page
@@ -67,6 +57,11 @@ export async function runRegistryListRequest<Input, Result extends ActionResult>
       detail: `This endpoint lists ${options.collection} and does not accept a search term. Use ${searchPath} to search.`,
       extras: { unsupported, supported: [...LIST_QUERY_PARAMS] },
     })
+  }
+
+  const query = businessListQuerySchema.safeParse(Object.fromEntries(url.searchParams))
+  if (!query.success || query.data.limit?.trim() === '') {
+    return problem({ status: 400, kind: 'INVALID_ARGUMENT', code: 'invalid_query_parameter', detail: query.success ? 'limit must be an integer from 1 through 50.' : zodIssueDetail(query.error) })
   }
 
   const parsed = options.action.schema.safeParse({
@@ -146,13 +141,18 @@ export async function runRegistrySearchRequest<Input, Result extends ActionResul
 
   const rawMode = url.searchParams.get('mode')
   const normalizedMode = optionalSearchMode(rawMode)
-  if (rawMode !== null && rawMode.trim().length > 0 && normalizedMode.mode === undefined) {
+  if (rawMode !== null && normalizedMode.mode === undefined) {
     return problem({
       status: 400,
       kind: 'INVALID_ARGUMENT',
       code: 'invalid_query_parameter',
       detail: 'Invalid search mode.',
     })
+  }
+
+  const query = businessSearchQuerySchema.safeParse(Object.fromEntries(url.searchParams))
+  if (!query.success) {
+    return problem({ status: 400, kind: 'INVALID_ARGUMENT', code: 'invalid_query_parameter', detail: zodIssueDetail(query.error) })
   }
 
   const parsed = action.schema.safeParse({

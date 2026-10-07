@@ -7,6 +7,7 @@ import type {
   CallReceipt,
   CallResult,
   CallUsageSummary,
+  CallNext,
   PublicReconciliationState,
 } from './call-contracts'
 import type { PurchaseResolutionRecord } from './purchase-resolution'
@@ -70,6 +71,7 @@ export type OwnerCallContext = Omit<z.infer<typeof ownerCallContextSchema>, 'ser
 export type CallStatusResult =
   | Readonly<{
       kind: 'found'
+      next?: readonly CallNext[]
       callRef: string
       version: number
       toolRef: string
@@ -85,12 +87,14 @@ export type CallStatusResult =
     }>
   | Readonly<{
       kind: 'unchanged'
+      next?: readonly CallNext[]
       callRef: string
       version: number
       retryAfterMs: number
     }>
   | Readonly<{
       kind: 'refused'
+      next?: readonly CallNext[]
       callRef: string
       code: Extract<CallRefusalCode, 'invocation_not_found' | 'grant_not_found' | 'grant_revoked' | 'grant_expired' | 'grant_generation_stale' | 'environment_mismatch' | 'invocation_runtime_unavailable'>
       retryable: boolean
@@ -101,6 +105,7 @@ export type CallRecoveryResult =
   | CallStatusResult
   | Readonly<{
       kind: 'reconciliation_required'
+      next?: readonly CallNext[]
       callRef: string
       toolRef: string
       evidence: PublicReconciliationState

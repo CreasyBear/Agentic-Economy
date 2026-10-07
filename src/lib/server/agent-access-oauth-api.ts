@@ -60,6 +60,8 @@ import {
 
 export type { OAuthApiOptions } from './agent-access-oauth/runtime'
 
+export { readOAuthRequestBody, oauthError } from './agent-access-oauth/protocol'
+
 export { oauthAuthorizationUnavailableResponse } from './agent-access-oauth/runtime'
 
 export type OAuthErrorCode = AgentAccessOAuthErrorCode

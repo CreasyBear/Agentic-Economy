@@ -34,6 +34,7 @@ export const securityTables = {
       v.literal('change_commercial_policy'),
       v.literal('set_payments_paused'),
       v.literal('grant_promotional_credit'),
+      v.literal('issue_trial'),
       v.literal('grant_admin_membership'),
       v.literal('revoke_admin_membership'),
     ),

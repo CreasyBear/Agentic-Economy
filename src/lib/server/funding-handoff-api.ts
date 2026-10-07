@@ -173,11 +173,8 @@ export function createFundingHandoffService(
         statusUrl: `${baseUrl}/api/v1/account/funding-sessions/${encodeURIComponent(fundingSessionId)}`,
         expiresAt: payment.expiresAt,
         quote: quote(bound.command),
-        humanHandoff: {
-          message: `Open this secure Stripe link to add AUD credit for ${bound.command.requesterDisplayName ?? 'the agent'}.`,
-          instruction: 'Send checkoutUrl to the payer, persist fundingSessionId, then poll status. The payer does not sign in to AE.',
-        },
-        pollAfterMs: 5000,
+        humanHandoff: { actor: 'payer', reason: 'funding_payment_required', url: payment.checkoutUrl },
+        next: fundingStatusNext(fundingSessionId),
         idempotentReplay,
       }
     },
@@ -189,42 +186,43 @@ export function createFundingHandoffService(
       if (isMoneyRefusal(found)) {
         return found.code === 'funding_pending'
           ? { kind: 'not_found' }
-          : { kind: 'error', code: found.code, retryable: found.retryable, correlationRef: correlationId, nextAction: { kind: 'poll' } }
+          : { kind: 'error', code: found.code, retryable: found.retryable, correlationRef: correlationId, ...(found.retryable ? { next: fundingStatusNext(input.fundingSessionId) } : {}) }
       }
       const command = found.command
       const common = { success: true as const, fundingSessionId: input.fundingSessionId, quote: quote(command) }
       if (command.state === 'succeeded') {
         const balance = await createAccountManagementService(request, bodyText).balance({ input: { currency: 'AUD' }, principal, correlationId })
-        if (balance.kind !== 'available') return unavailable(correlationId)
-        return { kind: 'ready', ...common, state: 'ready', paymentStatus: 'paid', balance: { usableAmount: balance.balance }, nextAction: { kind: 'continue' } }
+        if (balance.kind !== 'available') return unavailable(input.fundingSessionId, correlationId)
+        return { kind: 'ready', ...common, state: 'ready', paymentStatus: 'paid', balance: { usableAmount: balance.balance } }
       }
-      if (command.terminalReason === 'expired') return { kind: 'expired', ...common, state: 'expired', paymentStatus: 'unpaid', nextAction: { kind: 'create_new' } }
+      if (command.terminalReason === 'expired') return { kind: 'expired', ...common, state: 'expired', paymentStatus: 'unpaid', next: fundingCreateNext(command) }
       if (command.terminalReason === 'async_payment_failed' || command.state === 'failed') {
-        return { kind: 'failed', ...common, state: 'failed', paymentStatus: 'failed', nextAction: { kind: 'create_new' } }
+        return { kind: 'failed', ...common, state: 'failed', paymentStatus: 'failed', next: fundingCreateNext(command) }
       }
       const context = providerContext()
-      if (isMoneyRefusal(context)) return unavailable(correlationId, context.code)
-      if (command.environment !== context.environment) return unavailable(correlationId, 'stripe_setup_required')
+      if (isMoneyRefusal(context)) return unavailable(input.fundingSessionId, correlationId, context.code)
+      if (command.environment !== context.environment) return unavailable(input.fundingSessionId, correlationId, 'stripe_setup_required')
       const payment = await context.provider.readCreditPayment({
         ...fundingPaymentRequest(command), externalRef: input.fundingSessionId,
       })
-      if (isMoneyRefusal(payment)) return unavailable(correlationId, payment.code)
+      if (isMoneyRefusal(payment)) return unavailable(input.fundingSessionId, correlationId, payment.code)
       const bound = await bind(command.commandRef, fundingEvidence(payment.evidence), principal, correlationId)
-      if (isMoneyRefusal(bound)) return unavailable(correlationId, bound.code)
+      if (isMoneyRefusal(bound)) return unavailable(input.fundingSessionId, correlationId, bound.code)
       if (payment.evidence.checkoutStatus === 'expired') {
-        return { kind: 'expired', ...common, state: 'expired', paymentStatus: 'unpaid', nextAction: { kind: 'create_new' } }
+        return { kind: 'expired', ...common, state: 'expired', paymentStatus: 'unpaid', next: fundingCreateNext(command) }
       }
       if (payment.evidence.checkoutStatus === 'complete') {
         return {
           kind: 'processing', ...common, state: 'processing',
           paymentStatus: payment.evidence.paymentStatus === 'paid' ? 'paid' : 'unpaid',
-          nextAction: { kind: 'poll' }, pollAfterMs: 5000,
+          next: fundingStatusNext(input.fundingSessionId),
         }
       }
-      if (payment.kind !== 'hosted_redirect' || payment.checkoutUrl === undefined) return unavailable(correlationId)
+      if (payment.kind !== 'hosted_redirect' || payment.checkoutUrl === undefined) return unavailable(input.fundingSessionId, correlationId)
       return {
         kind: 'awaiting_payment', ...common, state: 'awaiting_payment', paymentStatus: 'unpaid',
-        nextAction: { kind: 'share_checkout', checkoutUrl: payment.checkoutUrl }, pollAfterMs: 5000,
+        humanHandoff: { actor: 'payer', reason: 'funding_payment_required', url: payment.checkoutUrl },
+        next: fundingStatusNext(input.fundingSessionId),
       }
     },
   }
@@ -238,8 +236,16 @@ function quote(command: AccountFundingCommandView) {
   }
 }
 
-function unavailable(correlationRef: string, code = 'source_unavailable'): FundingHandoffStatusResult {
-  return { kind: 'error', code, retryable: true, correlationRef, nextAction: { kind: 'poll' } }
+function fundingStatusNext(fundingSessionId: string) {
+  return { action: 'funding.handoff.status', args: { fundingSessionId }, authority: 'same_principal', retryAfterMs: 5000 } as const
+}
+
+function fundingCreateNext(command: AccountFundingCommandView) {
+  return { action: 'funding.handoff.create', args: { principalAmount: quote(command).principalAmount }, authority: 'agent_key', requiredInput: ['idempotencyKey'] as ['idempotencyKey'] } as const
+}
+
+function unavailable(fundingSessionId: string, correlationRef: string, code = 'source_unavailable'): FundingHandoffStatusResult {
+  return { kind: 'error', code, retryable: true, correlationRef, next: fundingStatusNext(fundingSessionId) }
 }
 
 export async function handleFundingHandoffAction(
@@ -304,11 +310,11 @@ export async function handleFundingHandoffAction(
         detail: 'Funding status is temporarily unavailable. Retry the same request or poll the same funding session.',
         extras: {
           correlationRef: correlationId,
-          nextAction: actionName === 'status'
-            ? { kind: 'poll' }
+          next: [actionName === 'status'
+            ? fundingStatusNext(fundingHandoffStatusInputSchema.parse(raw).fundingSessionId)
             : actionName === 'create'
-              ? { kind: 'retry_same_request' }
-              : { kind: 'retry' },
+              ? { action: 'funding.handoff.create', args: createFundingHandoffInputSchema.parse(raw), authority: 'agent_key' }
+              : { action: 'funding.handoff.config', args: {}, authority: 'agent_key' }],
         },
       }), correlationId), { site: 'handleFundingHandoffAction', reason: 'source_unavailable' })
     }
@@ -326,7 +332,7 @@ export async function handleFundingHandoffAction(
         detail: status === 409 ? 'This idempotency key was already used with a different amount.' : status === 400 ? 'The AUD principal amount is outside the current funding limits.' : 'Funding status is temporarily unavailable. Poll the same funding session.',
         extras: {
           correlationRef: result.kind === 'error' ? result.correlationRef : correlationId,
-          ...(result.kind === 'error' ? { nextAction: result.nextAction } : {}),
+          ...(result.kind === 'error' && result.next !== undefined ? { next: [result.next] } : {}),
         },
       }), correlationId)
     }

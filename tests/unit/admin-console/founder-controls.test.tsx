@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
   reads: vi.fn(),
 }))
 vi.mock('convex/react', () => ({
-  useQuery: () => mocks.access,
+  useQuery: (query: FunctionReference<'query'>) => getFunctionName(query) === 'trialAccess:readAdmin' ? { kind: 'refused' } : mocks.access,
   usePaginatedQuery: (query: FunctionReference<'query'>, args: unknown) => {
     mocks.reads(getFunctionName(query), args)
     return { results: getFunctionName(query).endsWith('listAccounts') ? mocks.accounts : mocks.purchases, status: mocks.status, loadMore: mocks.loadMore }

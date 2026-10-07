@@ -42,14 +42,11 @@ describe('owner browser CLI continuations', () => {
     }
 
     expect(JSON.parse(output.read())).toEqual({
-      kind: 'continuation',
+      kind: 'owner_handoff',
       command: 'fund',
       surface: 'owner_browser',
       authentication: 'owner_session',
-      method: 'open',
-      path: '/owner/credit',
-      anchor: '#fund',
-      url: 'https://market.example/owner/credit#fund',
+      ownerHandoff: { actor: 'account_owner', reason: 'funding_required', destination: 'https://market.example/owner/credit#fund' },
       agentCredential: 'not_used',
       instruction: 'Open this continuation as the owner to add assistant credit; the CLI does not fund an owner account.',
     })
@@ -70,14 +67,11 @@ describe('owner browser CLI continuations', () => {
     }
 
     expect(JSON.parse(output.read())).toMatchObject({
-      kind: 'continuation',
+      kind: 'owner_handoff',
       command: 'revoke',
       surface: 'owner_browser',
       authentication: 'owner_session',
-      method: 'open',
-      path: '/agent-access',
-      anchor: '#revoke',
-      url: 'https://market.example/agent-access#revoke',
+      ownerHandoff: { actor: 'account_owner', reason: 'access_revocation_required', destination: 'https://market.example/agent-access#revoke' },
       agentCredential: 'not_used',
     })
     expect(output.read()).not.toContain('agent-secret-sentinel')

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { Validator, type Schema } from '@cfworker/json-schema'
 
 import {
   describeActionForAgent,
@@ -270,9 +271,13 @@ describe('action registry', () => {
     }
   })
 
-  it('keeps read-only actions non-consequential', () => {
+  it('keeps read-only actions free of purchase effects and declares disclosures', () => {
     for (const action of listActions().filter(({ readOnly }) => readOnly)) {
-      expect(['observation', 'comparison_quote']).toContain(action.effect.class)
+      expect(['observation', 'comparison_quote', 'disclosure']).toContain(action.effect.class)
+      if (action.effect.class === 'disclosure') {
+        expect(action.effect.recipientKind).not.toBe('none')
+        expect(action.effect.dataClasses.length).toBeGreaterThan(0)
+      }
       expect(action.effect.approval).toBe('none')
       expect(action.effect.spendExposure).toBe('none')
     }
@@ -373,6 +378,18 @@ describe('action registry', () => {
     expect(call.outputJsonSchema).toBeDefined()
     expect(call.inputJsonSchema).toBeDefined()
   })
+  it('preserves strict Quote owner handoffs in draft-07 agent descriptors', () => {
+    const action = findAction('tool.quote')
+    if (action === undefined) throw new Error('Expected Quote action')
+    const descriptor = describeActionForAgent(action)
+    const validator = new Validator(descriptor.outputJsonSchema as Schema, '7')
+    const ownerHandoff = { actor: 'account_owner', reason: 'Connect to continue', destination: '/agent-access' }
+    const refused = { kind: 'refused', toolRef: 'tool:test', code: 'grant_not_found', retryable: false, correlationRef: 'correlation:test' }
+    for (const handoff of [undefined, ownerHandoff, { ...ownerHandoff, actor: 'ae_support' }, { ...ownerHandoff, actor: 'unknown' }, { ...ownerHandoff, destination: 'https://untrusted.example' }, { ...ownerHandoff, iconUrl: null }, [ownerHandoff]]) {
+      const result = { ...refused, ...(handoff === undefined ? {} : { ownerHandoff: handoff }) }
+      expect(validator.validate(result).valid).toBe(action.outputSchema.safeParse(result).success)
+    }
+  })
   it('marks canonical registry actions as read-only with honest boundaries', () => {
     const search = findAction('registry.search')
     expect(search).toBeDefined()
@@ -461,11 +478,11 @@ describe('action registry', () => {
   })
 
   /**
-   * The filter is only safe to use if the descriptor says what it does to
-   * supply that quotes on request. An agent that assumes a budget removes
-   * unpriced options would read the narrowed page as the whole market.
+   * The descriptor must disclose that a supplied budget narrows discovery
+   * to comparable published prices. An agent must not mistake that narrowed
+   * page for coverage of quote-only or unpriced supply.
    */
-  it('tells an agent that a budget never removes quoted-on-request supply', () => {
+  it('discloses that a supplied budget excludes unpriced and quote-only supply', () => {
     const descriptor = describeActionForAgent(findAction('registry.search')!)
     const parameters = descriptor.parameters.map((parameter) => parameter.name)
 
@@ -475,7 +492,9 @@ describe('action registry', () => {
     expect(boundaries).toMatch(/maxPrice/)
     expect(boundaries).toMatch(/exact currency units and exponent/i)
     expect(boundaries).not.toMatch(/minor units/i)
-    expect(boundaries).toMatch(/quoted on request/i)
+    expect(boundaries).toMatch(/excludes unknown, quote-only and starting prices/i)
+    expect(boundaries).toMatch(/same currency/i)
+    expect(boundaries).toMatch(/quotes on request/i)
     expect(boundaries).toMatch(/hasPrice/)
   })
 })

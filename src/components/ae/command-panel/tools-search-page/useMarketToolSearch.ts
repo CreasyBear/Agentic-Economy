@@ -136,8 +136,8 @@ export function useMarketToolSearch({
           const result = await searchTools(searchInput)
           if (!current) return
           recordProductJourney({ action: 'search_observed', phase: result.kind === 'unavailable' ? 'failed' : 'observed', surface: 'command_search', queryLength: trimmed.length, resultCount: result.kind === 'unavailable' || result.kind === 'noMatch' ? 0 : result.results.length })
-          const next = result.next.find((action) => action.action === 'next-page')
-          const nextPage = next?.action === 'next-page'
+          const next = result.pagination.hasMore ? result.next.find((action) => action.action === 'registry.tools.search' && action.args.cursor !== undefined) : undefined
+          const nextPage = next?.action === 'registry.tools.search' && next.args.cursor !== undefined
             ? { query: next.args.query, cursor: next.args.cursor }
             : undefined
           if (result.kind === 'unavailable') {

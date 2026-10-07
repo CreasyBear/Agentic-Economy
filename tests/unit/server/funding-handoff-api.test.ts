@@ -44,8 +44,8 @@ function service(overrides: Partial<FundingHandoffService> = {}): FundingHandoff
         taxAmount: { currency: 'AUD', exponent: 6, units: '25000' },
         totalPaymentAmount: { currency: 'AUD', exponent: 6, units: '5275000' },
       },
-      humanHandoff: { message: 'Open Stripe.', instruction: 'Persist fundingSessionId and poll status.' },
-      pollAfterMs: 5000, idempotentReplay: true,
+      humanHandoff: { actor: 'payer', reason: 'funding_payment_required', url: 'https://checkout.stripe.com/c/pay/cs_agent_one' },
+      next: { action: 'funding.handoff.status', args: { fundingSessionId: 'cs_agent_one' }, authority: 'same_principal', retryAfterMs: 5000 }, idempotentReplay: true,
     } as const)),
     status: vi.fn(async () => ({ kind: 'not_found' } as const)),
   }
@@ -144,7 +144,7 @@ describe('agent funding handoff HTTP boundary', () => {
     const funding = service({
       status: vi.fn(async () => ({
         kind: 'error', code: 'funding_source_unavailable', retryable: true,
-        correlationRef: 'correlation:funding', nextAction: { kind: 'poll' },
+        correlationRef: 'correlation:funding', next: { action: 'funding.handoff.status', args: { fundingSessionId: 'cs_agent_one' }, authority: 'same_principal', retryAfterMs: 5000 },
       } as const)),
     })
     const result = await handleFundingHandoffAction(
@@ -158,7 +158,7 @@ describe('agent funding handoff HTTP boundary', () => {
       code: 'funding_source_unavailable',
       retryable: true,
       correlationRef: 'correlation:funding',
-      nextAction: { kind: 'poll' },
+      next: [{ action: 'funding.handoff.status', args: { fundingSessionId: 'cs_agent_one' }, authority: 'same_principal', retryAfterMs: 5000 }],
     })
   })
 

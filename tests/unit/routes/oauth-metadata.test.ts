@@ -30,6 +30,7 @@ describe('OAuth metadata surfaces', () => {
         'customer_requests:approval_required',
         'customer_requests:spending_policy',
         'customer_requests:unrestricted_test_only',
+        'market_supply:manage',
       ],
     })
     const authorizationServer = await oauthAuthorizationServerResponse(request, canonicalBaseUrl).json()
@@ -49,6 +50,7 @@ describe('OAuth metadata surfaces', () => {
         'customer_requests:approval_required',
         'customer_requests:spending_policy',
         'customer_requests:unrestricted_test_only',
+        'market_supply:manage',
         'offline_access',
       ],
       revocation_endpoint: 'https://local.example/oauth/revoke',

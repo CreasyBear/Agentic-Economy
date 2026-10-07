@@ -34,6 +34,7 @@ const grantAdminMembership = sourceMutation<AdminWireArgs<'grant_admin_membershi
 const revokeAdminMembership = sourceMutation<AdminWireArgs<'revoke_admin_membership'>, AdminCommandReceipt<'revoke_admin_membership'>>('security:revokeAdminMembership')
 const verifySourceAuthority = sourceMutation<AdminWireArgs<'verify_capability_source_authority'>, AdminCommandReceipt<'verify_capability_source_authority'>>('capabilitySupply:verifyCapabilitySourceAuthority')
 const changeCommercialPolicy = sourceMutation<AdminWireArgs<'change_commercial_policy'>, AdminCommandReceipt<'change_commercial_policy'>>('moneyCommercialPolicy:change')
+const issueTrial = sourceMutation<AdminWireArgs<'issue_trial'>, AdminCommandReceipt<'issue_trial'>>('trialAccess:issue')
 const grantPromotionalCredit = sourceMutation<AdminWireArgs<'grant_promotional_credit'>, AdminCommandReceipt<'grant_promotional_credit'>>('moneyPromotionalCredit:grant')
 
 const setPaymentsPaused = sourceMutation<AdminWireArgs<'set_payments_paused'>, AdminCommandReceipt<'set_payments_paused'>>('adminTreasuryCommands:setPaymentsPaused')
@@ -91,6 +92,9 @@ export const submitAdminCommandServer = createServerFn({ method: 'POST' })
           break
         case 'change_commercial_policy':
           receipt = await callSourceMutation(changeCommercialPolicy, { ...data, ...evidence, sourceWrite, sourceWriteRequest })
+          break
+        case 'issue_trial':
+          receipt = await callSourceMutation(issueTrial, { ...data, ...evidence, sourceWrite, sourceWriteRequest })
           break
         case 'grant_promotional_credit':
           receipt = await callSourceMutation(grantPromotionalCredit, { ...data, ...evidence, sourceWrite, sourceWriteRequest })

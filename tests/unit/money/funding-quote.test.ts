@@ -55,9 +55,9 @@ describe('funding quote contract', () => {
       taxOnServiceFeeBps: 1000,
       nextActions: [{
         action: 'funding.handoff.create',
-        kind: 'human_handoff',
-        href: '/api/v1/account/funding-sessions',
-        requiresFreshHumanAuthority: false,
+        args: { principalAmount: { currency: 'AUD', units: '10000000', exponent: 6 } },
+        authority: 'agent_key',
+        requiredInput: ['idempotencyKey'],
       }],
     })
     expect(quote?.quoteRef).toMatch(/^sha256:/u)

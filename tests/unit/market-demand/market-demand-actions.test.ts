@@ -55,7 +55,7 @@ const externalSearch = {
   results: matchingSearch.results.slice(0, 1).map(({ toolRef: _toolRef, ...row }) => ({
     ...row, id: 'external:timezone', source: 'coinbase' as const, access: 'external_listing' as const,
     detailRef: 'external:timezone',
-    next: [{ action: 'describe-external' as const, authority: 'public' as const, args: { id: 'external:timezone' } }],
+    next: [],
   })),
 }
 afterEach(() => {
@@ -316,7 +316,7 @@ describe('market demand action contract', () => {
     vi.spyOn(registryToolsSearchAction, 'run').mockResolvedValue({
       ...emptySearch, kind: 'scoped', query: retained.query, reason: 'More supply remains.',
       assessed: { ...emptySearch.assessed, scope: 'page', coverage: 'partial' },
-      next: [{ action: 'next-page', authority: 'public', args: { query: retained.query, cursor: 'next-page' } }],
+      next: [{ action: 'registry.tools.search', authority: 'public', args: { query: retained.query, cursor: 'next-page' } }],
       pagination: { limit: 3, hasMore: true, nextCursor: 'next-page' },
     })
     expect(await status()).toEqual({ kind: 'error', code: 'source_unavailable' })

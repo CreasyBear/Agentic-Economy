@@ -55,6 +55,26 @@ describe('registered route transport runtime', () => {
     expect(fetch).toHaveBeenCalledTimes(1)
   })
 
+  it.each([undefined, 'pending:123'])('never treats HTTP 202 as delivered output (continuation %s)', async (continuation) => {
+    const observed = await invokeRouteTransport(invocation(), {
+      send: vi.fn<RouteTransportFetch>().mockResolvedValueOnce(Response.json(
+        { jobRef: 'provider-job:123' },
+        {
+          status: 202,
+          headers: continuation === undefined ? {} : { 'continuation-token': continuation },
+        },
+      )),
+      resolveCredential: resolveProviderCredential('provider-secret'),
+    })
+    expect(observed).toMatchObject({ responseStatus: 202, releaseStarted: true })
+    if (continuation === undefined) {
+      expect(observed).toMatchObject({ disposition: 'unknown', failureCode: 'response_accepted_without_completion' })
+      expect(observed).not.toHaveProperty('outputJson')
+    } else {
+      expect(observed).toMatchObject({ disposition: 'partial', continuationToken: continuation })
+    }
+  })
+
   it('enforces the registered HTTP response status and exact base media type', async () => {
     const config = {
       method: 'POST' as const,

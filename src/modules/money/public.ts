@@ -435,6 +435,7 @@ export type {
 } from './internal/spending-period-values'
 
 export { promotionalCreditReference, promotionalPurchasedAmounts, promotionalCreditAllocationValue, partitionPromotionalCreditAllocation, MAX_PROMOTIONAL_GRANTS_PER_CALL, type PromotionalCreditAllocation } from './promotional-credit-contracts'
+export { TRIAL_AMOUNT_UNITS, TRIAL_DURATION_MS, trialRecipientValue, trialActivationValue, trialDeliveryValue, trialClaimResultValue } from './trial-access-contracts'
 
 export { accountCreditBalanceValue, eligiblePromotionalGrantValue, type AccountCreditBalance, type EligiblePromotionalGrant } from './promotional-credit-contracts'
 

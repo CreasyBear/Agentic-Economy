@@ -6,6 +6,7 @@ import type {
   OwnerSupplyFunnelReadback,
 } from './supply-funnel/types'
 import type { PublishPreparedCapabilityCommandResult } from './publication'
+import type { ProviderToolMaintenanceIdentity } from '../provider-tool-status'
 import {
   prepareSupplyPublicationV2,
   type PublishSupplyToolV2Input,
@@ -18,6 +19,7 @@ export type SupplyPublishPipelineResult =
       publicationRevision: number
       toolRef: string
       state: 'Submitted'
+      maintenance: ProviderToolMaintenanceIdentity
     }>
   | Readonly<{ kind: 'refused'; reason: string }>
 
@@ -185,5 +187,13 @@ export async function executePublishCommitPipeline(options: {
     publicationRevision: published.publicationRevision,
     toolRef: published.toolRef,
     state: 'Submitted',
+    maintenance: {
+      businessId: input.businessRef,
+      offeringRef: offering.offeringRef,
+      offeringRevision: offering.revision,
+      offeringSourceHash: offering.sourceHash,
+      publicationRef: published.publicationRef,
+      publicationRevision: published.publicationRevision,
+    },
   }
 }

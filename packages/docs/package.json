@@ -1,0 +1,41 @@
+{
+  "name": "@aecon/docs",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "start": "node .output/server/index.mjs",
+    "preview": "vite preview",
+    "types:check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@tanstack/react-router": "1.170.41",
+    "@tanstack/react-router-devtools": "1.167.2",
+    "@tanstack/react-start": "1.168.60",
+    "cn": "0.4.0",
+    "fumadocs-core": "16.16.2",
+    "fumadocs-mdx": "15.4.6",
+    "fumadocs-ui": "npm:@fumadocs/base-ui@16.16.2",
+    "lucide-react": "1.50.0",
+    "react": "19.2.7",
+    "react-dom": "19.2.7"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.3.3",
+    "@types/mdx": "2.0.14",
+    "@types/node": "22.18.0",
+    "@types/react": "19.2.7",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.1.2",
+    "nitro": "3.0.260903-beta",
+    "tailwindcss": "4.3.3",
+    "typescript": "7.0.2",
+    "vite": "8.3.3"
+  },
+  "engines": {
+    "node": "22.x"
+  },
+  "packageManager": "npm@11.5.1"
+}

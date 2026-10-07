@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest'
 
-import { projectProviderToolStatus } from '@/modules/capability-supply/provider-tool-status'
+import { projectProviderToolStatus, providerToolStatusSchema } from '@/modules/capability-supply/provider-tool-status'
+
+const maintenance = {
+  businessId: 'business:one',
+  offeringRef: 'offering:one',
+  offeringRevision: 2,
+  offeringSourceHash: 'source:one',
+  publicationRef: 'publication:one',
+  publicationRevision: 3,
+}
 
 const base = {
   schemaVersion: 'provider_tools:v1' as const,
@@ -8,6 +17,7 @@ const base = {
   providerRef: 'provider:one',
   toolRef: 'operation:one',
   observedAt: 100,
+  maintenance,
   draftPresent: true,
   setupComplete: true,
   submitted: true,
@@ -39,7 +49,7 @@ describe('Provider Tool status', () => {
     })
     expect(status).toMatchObject({
       state: 'Draft',
-      continuation: { action: 'supply.source.preview' },
+      continuation: { action: 'supply.source.preview', args: { kind: 'x402' }, requiredInput: ['resourceUrl'] },
     })
   })
 
@@ -55,7 +65,7 @@ describe('Provider Tool status', () => {
     expect(status).toMatchObject({
       state: 'Action required',
       reasonCodes: ['outstanding_provider_obligation'],
-      continuation: { action: 'supply.offboarding.status' },
+      continuation: { action: 'supply.offboarding.status', args: { businessRef: base.businessRef } },
     })
   })
 
@@ -91,7 +101,7 @@ describe('Provider Tool status', () => {
     expect(status).toMatchObject({
       state: 'Under review',
       reasonCodes: ['provider_authority_unverified', 'health_unobserved'],
-      continuation: { action: 'supply.status' },
+      continuation: { action: 'supply.status', args: { businessRef: base.businessRef, toolRef: base.toolRef } },
     })
   })
 
@@ -105,7 +115,7 @@ describe('Provider Tool status', () => {
 
     expect(status).toMatchObject({
       state: 'Under review',
-      continuation: { action: 'supply.status' },
+      continuation: { action: 'supply.status', args: { businessRef: base.businessRef, toolRef: base.toolRef } },
     })
   })
 
@@ -130,8 +140,44 @@ describe('Provider Tool status', () => {
       reasonCodes: ['health_stale', 'provider_authority_unverified'],
       routeability: { available: false, reasonCodes: ['health_stale', 'provider_authority_unverified'] },
       health: { publication: 'published', freshness: 'stale' },
-      continuation: { action: 'supply.recheck' },
+      continuation: { action: 'supply.recheck', args: maintenance, requiredInput: ['idempotencyKey'] },
     })
+  })
+
+  it.each([
+    [{ paused: true }, 'supply.republish'],
+    [{ blockerCodes: ['source_drift'] }, 'supply.recheck'],
+  ] as const)('carries exact maintenance material and asks the caller to supply its retained key for %o', (override, action) => {
+    const status = projectProviderToolStatus({ ...base, routeable: false, ...override })
+    expect(status.continuation).toEqual({ action, args: maintenance, requiredInput: ['idempotencyKey'] })
+    expect(providerToolStatusSchema.safeParse(status).success).toBe(true)
+    expect(status.continuation?.args).not.toHaveProperty('idempotencyKey')
+  })
+
+  it.each([
+    { paused: true },
+    { blockerCodes: ['source_drift'] },
+  ])('reports unavailable maintenance identity without suggesting a status polling repair for %o', (override) => {
+    const status = projectProviderToolStatus({ ...base, routeable: false, ...override, maintenance: undefined })
+    expect(status.reasonCodes).toContain('maintenance_identity_unavailable')
+    expect(status.continuation).toBeUndefined()
+    expect(providerToolStatusSchema.safeParse(status).success).toBe(true)
+  })
+
+  it('does not offer x402 preview for a saved source the current action cannot preview', () => {
+    const status = projectProviderToolStatus({
+      ...base, submitted: false, routeable: false, source: { kind: 'mcp' },
+    })
+    expect(status.continuation).toBeUndefined()
+    expect(status.reasonCodes).toContain('source_preview_unavailable')
+  })
+
+  it('rejects action-only and wrong-action arguments in the owner readback schema', () => {
+    const status = projectProviderToolStatus({ ...base, routeable: false, reviewActive: true })
+    expect(providerToolStatusSchema.safeParse({ ...status, continuation: { action: 'supply.status' } }).success).toBe(false)
+    expect(providerToolStatusSchema.safeParse({
+      ...status, continuation: { action: 'supply.status', args: maintenance },
+    }).success).toBe(false)
   })
 
   it('never emits more than one machine next action or owner handoff', () => {
@@ -142,5 +188,8 @@ describe('Provider Tool status', () => {
     })
     expect(Array.isArray(status.continuation)).toBe(false)
     expect(Array.isArray(status.ownerHandoff)).toBe(false)
+    expect(status.ownerHandoff).toMatchObject({ actor: 'business_owner', reason: 'credential_lost', destination: '/owner/settings/integrations#provider-connections' })
+    expect(status.ownerHandoff).not.toHaveProperty('action')
+    expect(providerToolStatusSchema.safeParse(status).success).toBe(true)
   })
 })

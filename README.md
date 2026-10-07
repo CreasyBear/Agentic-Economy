@@ -262,6 +262,7 @@ that unchanged total and a stable idempotency key:
 ```sh
 npm run -s ae -- plan quote plan.json --base-url http://127.0.0.1:3024 --json
 npm run -s ae -- plan run <planRef> <approvedTotalAudUnits> --idempotency-key <key> --base-url http://127.0.0.1:3024 --json
+npm run -s ae -- plan resume <recoveryRef> --base-url http://127.0.0.1:3024 --json
 npm run -s ae -- plan watch <planRef> --base-url http://127.0.0.1:3024 --json
 npm run -s ae -- plan cancel <planRef> --base-url http://127.0.0.1:3024 --json
 ```

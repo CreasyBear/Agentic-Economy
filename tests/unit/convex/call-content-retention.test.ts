@@ -9,6 +9,7 @@ import { recordHandler } from '../../../convex/lib/capabilityExecution/callLifec
 import { callResultSchema } from '@/modules/capability-execution/call-contracts'
 import { expireContentBatch, LEARNING_RETENTION_MS } from '../../../convex/lib/capabilityExecution/contentRetention/cleanup'
 import { toolProcureResultSchema, procureQuoteSnapshotSchema } from '@/modules/capability-execution/procure'
+import { projectStoredProcureResult, storedToolProcureResultSchema } from '@/modules/capability-execution/convex'
 import { retentionAttempt, retentionBooking, retentionObservation, retentionObligation, retentionQuote, retentionResolution } from './content-retention-fixtures'
 
 const endedAt = 1_000
@@ -176,7 +177,9 @@ describe('Call content retention boundary', () => {
       amountUnits: retentionAttempt.amountUnits, quarantinedResponseDigest: retentionAttempt.quarantinedResponseDigest })
     expect(after.observation).toMatchObject({ observationDigest: retentionObservation.observationDigest })
     expect(after.cache).toMatchObject({ status: 'succeeded', resultHash: 'sha256:original-result', effectRefs: [retentionQuote.quoteRef, call.callRef] })
-    expect(toolProcureResultSchema.parse(JSON.parse(after.cache!.resultJson!))).toMatchObject({ kind: 'delivered', contentExpiredAt: now })
+    const stored = storedToolProcureResultSchema.parse(JSON.parse(after.cache!.resultJson!))
+    expect(stored).toMatchObject({ kind: 'delivered', contentExpiredAt: now, price: delivered.price })
+    expect(projectStoredProcureResult(stored)).toMatchObject({ kind: 'delivered', contentExpiredAt: now, money: { kind: 'historical_display_only' } })
   })
 
   it('expires an unused Quote and its procurement checkpoint after 24 hours without deleting the retry identity', async () => {
@@ -229,7 +232,9 @@ describe('Call content retention boundary', () => {
         contentExpiredAt: expiredAt, price: { currency: 'AUD', units: '10000', exponent: 6 }, routingLatencyMs: 1 }) }))
     const result = { schemaVersion: 'tool.procure:v1', kind: 'delivered', status: 'delivered', idempotencyKey: input.idempotencyKey,
       toolRef, quoteRef: 'quote:retention', callRef: 'call:retention', input: input.input, output: { private: 'output' },
-      endpoint: 'https://provider.test?private=input', price: { totalAud: 'A$0.01', netAud: 'A$0.01', gstAud: 'A$0.00' },
+      endpoint: 'https://provider.test?private=input', money: { kind: 'recorded', price: { currency: 'AUD', units: '10000', exponent: 6 },
+        usage: { usageRef: 'usage:retention', observedAt: 1, chargeState: 'paid',
+          amount: { currency: 'AUD', units: '10000', exponent: 6 }, priceDigest: 'sha256:price' } },
       audit: { routingLatencyMs: 1, executionLatencyMs: 2, totalLatencyMs: 3, jevDecisionsCostAud: '0' } }
     const complete = async () => backend.mutation(api.capabilityProcure.complete, await withSourceWrite('protected_action', {
       principal, idempotencyKey: input.idempotencyKey, inputJson: JSON.stringify(input), resultJson: JSON.stringify(result),

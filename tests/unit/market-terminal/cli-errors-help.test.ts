@@ -311,7 +311,7 @@ describe('market-terminal CLI error contracts', () => {
     expect(JSON.parse(supplyToolsHelp.stdout)).toMatchObject({
       kind: 'HELP',
       command: 'supply tools',
-      usage: 'ae supply tools <businessRef>',
+      usage: 'ae supply tools <businessRef> [--limit <n>] [--cursor <c>]',
       summary: expect.stringMatching(/inventory/iu),
     })
     const retiredSupply = await runCliInProcess(['supply', 'operations', 'business:one', '--json'])

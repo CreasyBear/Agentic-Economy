@@ -4,6 +4,7 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { PublicToolRegistrySchemaVersion } from '@/modules/capability-supply/tool-schemas'
 import { decodeOpaqueCursor, encodeOpaqueCursor, InvalidOpaqueCursorError } from '../opaque-cursor'
 import { toolChoiceSearchOutputSchema, type SearchEnvelope, type SupplyProjectionFreshness } from '../tool-choice-contracts'
+import type { RegistryRetryArgs } from '../next-action'
 import type { RegistryToolAssessment } from '../tool-reranker'
 
 // The list and search cursors share an opaque envelope; search additionally
@@ -107,12 +108,13 @@ export function searchPageBudget(
   return { kind: 'unavailable' }
 }
 
-export function capacityExceededSearch(query: string, limit: number, assessed: SearchEnvelope['assessed'], freshness: SupplyProjectionFreshness): SearchEnvelope {
+export function capacityExceededSearch(input: RegistryRetryArgs, assessed: SearchEnvelope['assessed'], freshness: SupplyProjectionFreshness): SearchEnvelope {
+  const { query, source, filters, cursor, limit = 8 } = input
   return toolChoiceSearchOutputSchema.parse({
     schemaVersion: PublicToolRegistrySchemaVersion, kind: 'unavailable', query,
     reason: 'capacity_exceeded', results: [], partialResults: true,
     assessed, pagination: { limit, hasMore: false },
-    next: [{ action: 'retry', args: { query }, authority: 'public' }],
+    next: [{ action: 'registry.tools.search', args: { query, limit, ...(source === undefined ? {} : { source }), ...(filters === undefined ? {} : { filters }), ...(cursor === undefined ? {} : { cursor }) }, authority: 'public' }],
     freshness,
   })
 }

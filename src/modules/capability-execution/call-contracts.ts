@@ -393,8 +393,18 @@ export type CallResult =
       receipt?: CallReceipt
     }>
 
+export const callNextSchema = z.strictObject({
+  action: z.literal('call.status'),
+  args: z.strictObject({ callRef: z.string().regex(callRefPattern), afterVersion: z.number().int().nonnegative().exactOptional() }),
+  authority: z.literal('same_principal'),
+  retryAfterMs: z.number().int().positive().exactOptional(),
+})
+export type CallNext = z.infer<typeof callNextSchema>
+
 const callOwnerHandoffSchema = z.strictObject({
-  kind: z.literal('authorize'),
+  actor: z.literal('account_owner'),
+  reason: z.literal('authority_required'),
+  destination: z.literal('/agent-access'),
   callRef: z.string(),
   toolRef: z.string(),
 })
@@ -406,12 +416,14 @@ export const callMachineResultSchema = z.union([
     callRef: z.string(),
     toolRef: z.string(),
     retryAfterMs: z.number().int().positive(),
+    next: z.array(callNextSchema).max(1),
   }),
   z.strictObject({
     kind: z.literal('outcome_unknown'),
     callRef: z.string(),
     toolRef: z.string(),
     evidence: reconciliationStateSchema,
+    next: z.array(callNextSchema).max(1),
     receipt: callReceiptSchema.exactOptional(),
   }),
   z.strictObject({
@@ -420,7 +432,8 @@ export const callMachineResultSchema = z.union([
     callRef: z.string().exactOptional(),
     code: callRefusalCodeSchema,
     retryable: z.boolean(),
-    nextAction: z.string().exactOptional(),
+    detail: z.string().exactOptional(),
+    next: z.array(callNextSchema).max(1).exactOptional(),
     ownerHandoff: callOwnerHandoffSchema.exactOptional(),
     receipt: callReceiptSchema.exactOptional(),
   }),
@@ -431,6 +444,7 @@ export type CallMachineResult = z.infer<typeof callMachineResultSchema>
 export function projectCallMachineResult(
   result: CallResult,
 ): CallMachineResult {
+  const call = 'callRef' in result ? parseCallRef(result.callRef) : undefined
   if (result.kind === 'needs_authority') {
     return callMachineResultSchema.parse({
       kind: 'refused',
@@ -438,9 +452,12 @@ export function projectCallMachineResult(
       toolRef: result.toolRef,
       code: 'authority_required',
       retryable: false,
-      nextAction: 'Ask the Account owner to approve this Call at /agent-access.',
+      detail: 'Ask the Account owner to approve this Call at /agent-access.',
+      next: call?.kind === 'valid' ? [{ action: 'call.status', args: { callRef: call.ref }, authority: 'same_principal' }] : [],
       ownerHandoff: {
-        kind: 'authorize',
+        actor: 'account_owner',
+        reason: 'authority_required',
+        destination: '/agent-access',
         callRef: result.callRef,
         toolRef: result.toolRef,
       },
@@ -450,7 +467,16 @@ export function projectCallMachineResult(
     return callMachineResultSchema.parse({
       ...result,
       kind: 'outcome_unknown',
+      next: call?.kind === 'valid' ? [{ action: 'call.status', args: { callRef: call.ref }, authority: 'same_principal' }] : [],
     })
+  }
+  if (result.kind === 'pending') return callMachineResultSchema.parse({
+    ...result,
+    next: call?.kind === 'valid' ? [{ action: 'call.status', args: { callRef: call.ref }, authority: 'same_principal', retryAfterMs: result.retryAfterMs }] : [],
+  })
+  if (result.kind === 'refused') {
+    const { nextAction, ...facts } = result
+    return callMachineResultSchema.parse({ ...facts, ...(nextAction === undefined ? {} : { detail: nextAction }) })
   }
   return callMachineResultSchema.parse(result)
 }

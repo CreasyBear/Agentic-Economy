@@ -938,7 +938,7 @@ const searchRows = [
     title: 'Weather Forecast', summary: 'Forecast for a city', provider: 'Weather Co',
     actionClass: 'retrieve', objectClass: 'data', readiness: 'ready',
     price: { kind: 'indicative', label: 'A$0.01' }, detailRef: admittedRef,
-    next: [{ action: 'describe', args: { toolRef: admittedRef }, authority: 'public' }],
+    next: [{ action: 'registry.tools.describe', args: { toolRef: admittedRef }, authority: 'public' }],
     freshness: { source: 'supply_projection', state: 'fresh', completedAt: Date.UTC(2026, 8, 27), staleAfterMs: 10800000 },
   },
   {
@@ -947,7 +947,7 @@ const searchRows = [
     actionClass: 'retrieve', objectClass: 'data', readiness: 'unverified',
     sourcePrice: '1 USDC',
     price: { kind: 'indicative', label: 'US$1' }, detailRef: `/api/v1/registry/detail?id=${directoryId}`,
-    next: [{ action: 'describe-external', args: { id: directoryId }, authority: 'public' }],
+    next: [],
     freshness: { source: 'x402_directory', state: 'stale', completedAt: Date.UTC(2026, 8, 26), staleAfterMs: 10800000 },
   },
 ] satisfies SearchResult[]
@@ -956,7 +956,7 @@ const searchMeta = {
   query: 'weather', partialResults: true,
   assessed: { source: 'all', scope: 'page', examined: 8, coverage: 'partial', generation: 'generation-1', completedAt: Date.UTC(2026, 8, 26) },
   pagination: { limit: 8, nextCursor: 'opaque-next', hasMore: true },
-  next: [{ action: 'next-page', args: { query: 'weather', cursor: 'opaque-next' }, authority: 'public' }],
+  next: [{ action: 'registry.tools.search', args: { query: 'weather', cursor: 'opaque-next' }, authority: 'public' }],
 } satisfies Pick<Extract<ToolChoiceSearchOutput, { kind: 'match' }>, 'schemaVersion' | 'query' | 'partialResults' | 'assessed' | 'pagination' | 'next'>
 
 function deferred<T>() {
@@ -1115,7 +1115,7 @@ describe('canonical Market search', () => {
     const first = { ...searchMeta, kind: 'match', results: [searchRows[0]!] } satisfies ToolChoiceSearchOutput
     const unavailable = {
       ...searchMeta, kind: 'unavailable', results: [], reason: 'source_unavailable',
-      pagination: { limit: 8, hasMore: false }, next: [{ action: 'retry', args: { query: 'weather' }, authority: 'public' }],
+      pagination: { limit: 8, hasMore: false }, next: [{ action: 'registry.tools.search', args: { query: 'weather' }, authority: 'public' }],
     } satisfies ToolChoiceSearchOutput
     const refreshed = { ...searchMeta, kind: 'match', results: [{ ...searchRows[0]!, title: 'Fresh Weather' }] } satisfies ToolChoiceSearchOutput
     const refreshFailure = new Error('refresh failed')
@@ -1183,7 +1183,7 @@ describe('canonical Market search', () => {
   })
   it('replaces directory results with one mixed page, uses exact detail links, row-source freshness and an executable filtered cursor', async () => {
     const first = { ...searchMeta, kind: 'match', results: searchRows } satisfies ToolChoiceSearchOutput
-    const second = { ...searchMeta, kind: 'scoped', results: [searchRows[1]!], reason: 'More catalogue entries remain.', pagination: { limit: 8, hasMore: false }, next: [{ action: 'broaden', args: { query: 'weather' }, authority: 'public' }] } satisfies ToolChoiceSearchOutput
+    const second = { ...searchMeta, kind: 'scoped', results: [searchRows[1]!], reason: 'More catalogue entries remain.', pagination: { limit: 8, hasMore: false }, next: [] } satisfies ToolChoiceSearchOutput
     searchMarketToolsServer.mockResolvedValueOnce(first).mockResolvedValueOnce(second)
     show({ view: 'tools', query: 'weather', directoryCategory: 'research', provider: 'example.com', network: 'eip155:8453', priceBand: 'lt_0_01', maxUsdPrice: 0.05 },
       entries.slice(0, 2), { page: indexedPage, catalogue: indexedCatalogue, overview })
@@ -1216,7 +1216,7 @@ describe('canonical Market search', () => {
     searchMarketToolsServer.mockResolvedValueOnce({
       ...searchMeta, kind: 'noMatch', results: [], reason: 'No eligible Tools matched.',
       assessed: { source: 'current', scope: 'complete', examined: 12, coverage: 'complete' },
-      pagination: { limit: 8, hasMore: false }, next: [{ action: 'broaden', args: { query: 'impossible' }, authority: 'public' }],
+      pagination: { limit: 8, hasMore: false }, next: [],
       query: 'impossible',
     })
     updateSearch({ view: 'tools', query: 'impossible' })
@@ -1226,7 +1226,7 @@ describe('canonical Market search', () => {
   })
 
   it('renders unavailable without stale recommendations and retries the same query', async () => {
-    searchMarketToolsServer.mockResolvedValueOnce({ ...searchMeta, kind: 'unavailable', results: [], reason: 'source_unavailable', pagination: { limit: 8, hasMore: false }, next: [{ action: 'retry', args: { query: 'weather' }, authority: 'public' }] })
+    searchMarketToolsServer.mockResolvedValueOnce({ ...searchMeta, kind: 'unavailable', results: [], reason: 'source_unavailable', pagination: { limit: 8, hasMore: false }, next: [{ action: 'registry.tools.search', args: { query: 'weather' }, authority: 'public' }] })
       .mockResolvedValueOnce({ ...searchMeta, kind: 'match', results: searchRows })
     show({ view: 'tools', query: 'weather' }, entries.slice(0, 2), { page: indexedPage, catalogue: indexedCatalogue, overview })
     expect(await screen.findByText('No recommendation was made.', { exact: false })).toBeTruthy()
@@ -1269,10 +1269,10 @@ describe('canonical Market search', () => {
   it('retains the current Market page when a continuation resolves unavailable and lets Next page retry', async () => {
     const first = { ...searchMeta, kind: 'match', results: searchRows } satisfies ToolChoiceSearchOutput
     const unavailable = { ...searchMeta, kind: 'unavailable', results: [], reason: 'source_unavailable',
-      pagination: { limit: 8, hasMore: false }, next: [{ action: 'retry', args: { query: 'weather' }, authority: 'public' }] } satisfies ToolChoiceSearchOutput
+      pagination: { limit: 8, hasMore: false }, next: [{ action: 'registry.tools.search', args: { query: 'weather' }, authority: 'public' }] } satisfies ToolChoiceSearchOutput
     searchMarketToolsServer.mockResolvedValueOnce(first).mockResolvedValueOnce(unavailable).mockResolvedValueOnce({
       ...searchMeta, kind: 'match', results: [searchRows[1]!], pagination: { limit: 8, hasMore: false },
-      next: [{ action: 'broaden', args: { query: 'weather' }, authority: 'public' }],
+      next: [],
     } satisfies ToolChoiceSearchOutput)
     show({ view: 'tools', query: 'weather' }, [], { page: indexedPage, catalogue: indexedCatalogue, overview })
     expect(await screen.findByRole('link', { name: 'Weather Forecast' })).toBeTruthy()
@@ -1338,7 +1338,7 @@ describe('canonical Market search', () => {
       .mockResolvedValueOnce({
         ...searchMeta, kind: 'noMatch', query: 'missing-need', results: [], reason: 'No matching Tool.',
         partialResults: false, assessed: { source: 'all', scope: 'complete', examined: 30, coverage: 'complete' },
-        pagination: { limit: 8, hasMore: false }, next: [{ action: 'broaden', args: { query: 'missing-need' }, authority: 'public' }],
+        pagination: { limit: 8, hasMore: false }, next: [],
       } satisfies ToolChoiceSearchOutput)
     recordOwnerMarketDemand.mockResolvedValue({ kind: 'recorded', requestRef: 'request-1', query: 'missing-need', createdAt: 1 })
     const { updateSearch } = show(filters, [], { page: indexedPage, catalogue: indexedCatalogue, overview })
@@ -1358,7 +1358,7 @@ describe('canonical Market search', () => {
     const verdict = {
       ...searchMeta, kind: 'noMatch', query: 'unserved', results: [], reason: 'No matching Tool.',
       partialResults: false, assessed: { source: 'all', scope: 'complete', examined: 30, coverage: 'complete' },
-      pagination: { limit: 8, hasMore: false }, next: [{ action: 'broaden', args: { query: 'unserved' }, authority: 'public' }],
+      pagination: { limit: 8, hasMore: false }, next: [],
     } satisfies ToolChoiceSearchOutput
     searchMarketToolsServer.mockResolvedValue(verdict)
     const failure = new Error('temporary failure')

@@ -342,7 +342,6 @@ export async function issueQuoteHandler(
     toolRef: args.toolRef,
     toolVersion: operation.identity.publicationRevision,
     expiresAt,
-    normalizedInput,
     price: pricing.price,
     ...(pricing.sourceRequirement === undefined ? {} : { sourceRequirement: pricing.sourceRequirement }),
     account: {
@@ -355,9 +354,7 @@ export async function issueQuoteHandler(
     parties: quotePartiesFromPublishedTool(operation),
     continuation: {
       action: 'tool.call',
-      method: 'POST',
-      path: '/api/v1/tools/call',
-      input: { quoteRef, idempotencyKey: `invoke:${quoteRef}` },
+      args: { quoteRef, idempotencyKey: `invoke:${quoteRef}` },
     },
   }
 }

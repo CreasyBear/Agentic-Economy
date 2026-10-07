@@ -138,7 +138,7 @@ function validateGatewayToolQuote(
       quoteRef: quote.quoteRef,
       idempotencyKey: "quote-contract-validation",
     }).success ||
-    quote.continuation.input.quoteRef !== quote.quoteRef ||
+    quote.continuation.args.quoteRef !== quote.quoteRef ||
     !digestSchema.safeParse(quote.evidenceDigest).success
   )
     throw new GatewaySmokeError("gateway_smoke_quote_result_malformed");

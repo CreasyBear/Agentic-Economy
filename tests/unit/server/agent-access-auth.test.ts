@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   authenticateAgentAccess,
+  authRefusalProblem,
   resolveAgentAccessPrincipal,
   type AgentAccessAuthenticationOptions,
   type AgentAccessPrincipalResolver,
@@ -62,6 +63,15 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllEnvs() })
 
 describe('agent access authentication', () => {
+  it('separates owner setup from executable actions and protocol endpoints', async () => {
+    const response = authRefusalProblem(new Request('https://ae.example/api/v1/market-tools/search'), { kind: 'refused', status: 401, reason: 'authentication_required' })
+    const body = await response.json()
+    expect(body).toMatchObject({ next: [], ownerHandoff: { actor: 'account_owner', reason: 'connect_required', destination: expect.stringMatching(/\/agent-access$/u) } })
+    expect(body.ownerHandoff.destination).not.toContain('device_authorization')
+    const outage = authRefusalProblem(new Request('https://ae.example/api/v1/market-tools/search'), { kind: 'refused', status: 503, reason: 'source_unavailable', retryable: true })
+    expect(await outage.json()).not.toHaveProperty('ownerHandoff')
+  })
+
   it('resolves the production binding mutation with locator fields and exact required scopes only', async () => {
     const projection = {
       credentialId: 'ak_source_resolver',

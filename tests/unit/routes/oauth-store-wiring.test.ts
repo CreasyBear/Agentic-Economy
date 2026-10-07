@@ -18,7 +18,8 @@ const mocks = vi.hoisted(() => ({
   }), { status: 503, headers: { 'Content-Type': 'application/problem+json', 'Cache-Control': 'no-store' } })),
 }))
 
-vi.mock('@/lib/server/agent-access-oauth-api', () => ({
+vi.mock('@/lib/server/agent-access-oauth-api', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/lib/server/agent-access-oauth-api')>(),
   handleOAuthAuthorizeGet: mocks.authorizeGet,
   handleOAuthConsentPost: mocks.authorizePost,
   oauthAuthorizationUnavailableResponse: mocks.authorizationUnavailable,
@@ -27,6 +28,9 @@ vi.mock('@/lib/server/agent-access-oauth-api', () => ({
   handleOAuthRevokePost: mocks.revoke,
   handleOAuthTokenPost: mocks.token,
 }))
+
+import * as oauthStore from '@/lib/server/agent-access-oauth-store'
+import { readForm, readJson, readOAuthRequestBody } from '@/lib/server/agent-access-oauth/protocol'
 
 import { Route as AuthorizeRoute } from '@/routes/oauth.authorize'
 import { Route as DeviceRoute } from '@/routes/oauth.device_authorization'
@@ -51,6 +55,47 @@ function routeHandlers(route: unknown): RouteHandlers {
 }
 
 describe('OAuth stateful route wiring', () => {
+  it.each([
+    ['authorize', AuthorizeRoute], ['device_authorization', DeviceRoute],
+    ['register', RegisterRoute], ['revoke', RevokeRoute], ['token', TokenRoute],
+  ])('rejects oversized %s bodies before constructing an OAuth store', async (name, route) => {
+    const createStore = vi.spyOn(oauthStore, 'createConvexAgentAccessOAuthStore')
+    const handler = routeHandlers(route).POST
+    if (handler === undefined) throw new Error('OAuth POST handler missing')
+    try {
+      const response = await handler({ request: new Request(`http://localhost/oauth/${name}`, {
+        method: 'POST', headers: { 'Content-Type': name === 'register' ? 'application/json' : 'application/x-www-form-urlencoded' },
+        body: 'x'.repeat(16 * 1024 + 1),
+      }) })
+      expect(response.status).toBe(413)
+      expect(await response.json()).toMatchObject({ error: 'invalid_request' })
+      expect(createStore).not.toHaveBeenCalled()
+    } finally {
+      createStore.mockRestore()
+    }
+  })
+  it('shares exact bounded form text between request hashing and protocol parsing', async () => {
+    const sourceBody = 'client_id=first%20client&scope=a+b&client_id=second'
+    const source = new Request('http://localhost/oauth/token', {
+      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: sourceBody,
+    })
+    expect(await readOAuthRequestBody(source)).toEqual({ kind: 'ok', text: sourceBody })
+    expect(source.bodyUsed).toBe(true)
+    const form = await readForm(source)
+    expect(form.kind).toBe('ok')
+    if (form.kind !== 'ok') throw new Error('OAuth form unexpectedly rejected')
+    expect(form.sourceBody).toBe(sourceBody)
+    expect(form.value.getAll('client_id')).toEqual(['first client', 'second'])
+  })
+  it('shares exact bounded registration text before JSON parsing', async () => {
+    const sourceBody = ' { "client_name": "Original text" } '
+    const source = new Request('http://localhost/oauth/register', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: sourceBody,
+    })
+    expect(await readOAuthRequestBody(source)).toEqual({ kind: 'ok', text: sourceBody })
+    expect(await readJson(source)).toEqual({ kind: 'ok', value: { client_name: 'Original text' } })
+  })
+
   it('passes a configured Convex store to every stateful handler', async () => {
     vi.stubEnv('CONVEX_URL', 'https://oauth-store.test.convex.cloud')
     const authorizeHandlers = routeHandlers(AuthorizeRoute)

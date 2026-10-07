@@ -32,14 +32,14 @@ function boundedToolOutput(value: unknown, origin: string): unknown {
       const item = choice as Record<string, unknown>
       return [
         ...(Array.isArray(item.next) ? item.next : []),
-        ...(typeof item.toolRef === 'string' ? [{ action: 'describe', args: { toolRef: item.toolRef }, authority: 'public' }] : []),
+        ...(typeof item.toolRef === 'string' ? [{ action: 'registry.tools.describe', args: { toolRef: item.toolRef }, authority: 'public' }] : []),
       ]
     }),
-    ...(typeof record.callRef === 'string' ? [{ action: 'status', args: { ref: { kind: 'call', ref: record.callRef } }, authority: 'same_principal' }] : []),
-    ...(typeof record.quoteRef === 'string' ? [{ action: 'status', args: { ref: { kind: 'quote', ref: record.quoteRef } }, authority: 'same_principal' }] : []),
-    ...(typeof record.toolRef === 'string' ? [{ action: 'describe', args: { toolRef: record.toolRef }, authority: 'public' }] : []),
+    ...(typeof record.callRef === 'string' ? [{ action: 'call.status', args: { callRef: record.callRef }, authority: 'same_principal' }] : []),
+    ...(typeof record.quoteRef === 'string' ? [{ action: 'journey.status', args: { ref: { kind: 'quote', ref: record.quoteRef } }, authority: 'same_principal' }] : []),
+    ...(typeof record.toolRef === 'string' ? [{ action: 'registry.tools.describe', args: { toolRef: record.toolRef }, authority: 'public' }] : []),
   ], { origin })
-  const boundedNext = next.slice(0, 10)
+  const boundedNext = next.slice(0, 1)
   return { truncated: true, ...(boundedNext.length ? { next: boundedNext } : {}) }
 }
 

@@ -1,4 +1,5 @@
 import type { JsonValue } from '@/modules/common/bounded-json'
+import type { CallRef } from '../call-contracts'
 import type { Brand } from '@/modules/common/ids'
 
 export type PlanRef = Brand<string, 'PlanRef'>
@@ -107,6 +108,9 @@ export type NodeRefusalCode =
   | 'price_exceeded_ceiling' | 'tool_not_ready' | 'reconciliation_required'
 export type PlanValidationRefusal = Readonly<{ kind: 'refused'; code: PlanValidationRefusalCode; nodeId?: PlanNodeId }>
 export type PlanQuoteResult = PlanQuote | PlanValidationRefusal
+export type PlanPrimaryNext =
+  | Readonly<{ action: 'tool.plan.get'; args: { planRef: PlanRef }; authority: 'same_principal' }>
+  | Readonly<{ action: 'call.status'; args: { callRef: CallRef }; authority: 'same_principal' }>
 export type PlanRunResult =
-  | Readonly<{ kind: 'running' | 'awaiting_approval' | 'replayed'; planRef: PlanRef; state: PlanState }>
+  | Readonly<{ kind: 'running' | 'awaiting_approval' | 'replayed'; planRef: PlanRef; state: PlanState; next?: readonly PlanPrimaryNext[] }>
   | Readonly<{ kind: 'refused'; code: PlanRunRefusalCode }>

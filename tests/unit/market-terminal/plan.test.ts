@@ -25,6 +25,12 @@ beforeEach(async () => {
   requests = []
   responses = [quote]
   const server = createServer(async (request, response) => {
+    if (request.url === '/api/v1/account') {
+      response.writeHead(200, { 'content-type': 'application/json' })
+      response.end(JSON.stringify({ kind: 'authenticated', accountRef: 'account:test', principalRef: 'principal:test',
+        credentialId: 'credential:test', applicationRef: 'application:test', environment: 'sandbox', scopes: ['market_tools:call'], authorityMode: 'spending_policy' }))
+      return
+    }
     let raw = ''
     for await (const chunk of request) raw += String(chunk)
     requests.push({ path: request.url, body: raw === '' ? undefined : JSON.parse(raw), authorization: request.headers.authorization })

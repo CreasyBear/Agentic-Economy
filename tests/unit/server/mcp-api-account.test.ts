@@ -11,8 +11,7 @@ describe('MCP host adapter account money', () => {
       balance: { currency: 'AUD', units: '25000000', exponent: 6 },
       accountState: 'active', version: 1, updatedAt: 10,
       funding: {
-        kind: 'agent_funding_handoff', configAction: 'funding.handoff.config',
-        createAction: 'funding.handoff.create', statusAction: 'funding.handoff.status',
+        kind: 'agent_funding_handoff', next: { action: 'funding.handoff.config', args: {}, authority: 'agent_key' },
       },
     })
     const response = await postMcp({
@@ -30,7 +29,7 @@ describe('MCP host adapter account money', () => {
       funding: { kind: 'agent_funding_handoff' },
     })
     expect(body.result?.structuredContent).toMatchObject({
-      next: [{ action: 'fund', args: {}, authority: 'agent_key' }],
+      next: [{ action: 'funding.handoff.config', args: {}, authority: 'agent_key' }],
     })
     expect(balance).toHaveBeenCalledWith(expect.objectContaining({
       input: { currency: 'AUD' },

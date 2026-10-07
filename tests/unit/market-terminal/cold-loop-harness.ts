@@ -1,3 +1,4 @@
+import { callResultSchema, projectCallMachineResult } from '@/modules/capability-execution/call-contracts'
 import { join } from 'node:path'
 import { expect, vi } from 'vitest'
 
@@ -12,7 +13,7 @@ export function commitmentRef(seed: string): string {
 }
 
 export function responseJson(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
+  return new Response(JSON.stringify(callResultSchema.safeParse(body).success ? projectCallMachineResult(callResultSchema.parse(body)) : body), {
     status,
     headers: { 'content-type': 'application/json' },
   })
@@ -88,7 +89,7 @@ export function stubFetchJsonResponse(
   contentType = 'application/json',
 ): ReturnType<typeof vi.fn<typeof fetch>> {
   const fetchMock = vi.fn<typeof fetch>().mockImplementation(async () => (
-    new Response(JSON.stringify(body), { status, headers: { 'content-type': contentType } })
+    new Response(JSON.stringify(callResultSchema.safeParse(body).success ? projectCallMachineResult(callResultSchema.parse(body)) : body), { status, headers: { 'content-type': contentType } })
   ))
   vi.stubGlobal('fetch', fetchMock)
   return fetchMock

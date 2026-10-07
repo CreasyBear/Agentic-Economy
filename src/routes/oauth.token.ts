@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 
 import { createHttpRateLimitAdmission } from '@/lib/server/rate-limit'
 import { createConvexAgentAccessOAuthStore } from '@/lib/server/agent-access-oauth-store'
-import { handleOAuthTokenPost } from '@/lib/server/agent-access-oauth-api'
+import { handleOAuthTokenPost, readOAuthRequestBody, oauthError } from '@/lib/server/agent-access-oauth-api'
 import { methodNotAllowed } from '@/lib/server/method-guard'
 const admitOAuth = createHttpRateLimitAdmission('oauth-issuance')
 const admitDevicePoll = createHttpRateLimitAdmission('oauth-device-poll')
@@ -11,7 +11,9 @@ export const Route = createFileRoute('/oauth/token')({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const body = await request.clone().text()
+        const bounded = await readOAuthRequestBody(request)
+        if (bounded.kind !== 'ok') return oauthError('invalid_request', bounded.kind === 'too_large' ? 413 : 400)
+        const body = bounded.text
         return await handleOAuthTokenPost(request, { store: createConvexAgentAccessOAuthStore(request, body), rateLimit: admitOAuth, devicePollRateLimit: admitDevicePoll })
       },
       GET: () => methodNotAllowed(['POST']),

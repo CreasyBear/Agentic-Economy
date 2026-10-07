@@ -297,7 +297,7 @@ describe('Account AUD funding HTTP boundary', () => {
         },
         correlationId: 'opposite-handoff',
       })
-      expect(result).toMatchObject({ kind: 'error', code: 'stripe_setup_required', nextAction: { kind: 'poll' } })
+      expect(result).toMatchObject({ kind: 'error', code: 'stripe_setup_required', next: { action: 'funding.handoff.status', args: { fundingSessionId: expect.any(String) }, authority: 'same_principal', retryAfterMs: 5000 } })
       expect(provider.readCreditPayment).not.toHaveBeenCalled()
       expect(sourceMocks.callPublicSourceMutation).not.toHaveBeenCalled()
     },
@@ -383,8 +383,9 @@ describe('Account AUD funding HTTP boundary', () => {
     })
     expect(result).toMatchObject({
       kind: 'funding_session', fundingSessionId: 'cs_agent_one',
-      checkoutUrl: 'https://checkout.stripe.com/c/pay/cs_agent_one', pollAfterMs: 5000,
-      humanHandoff: { instruction: expect.stringContaining('persist fundingSessionId') },
+      checkoutUrl: 'https://checkout.stripe.com/c/pay/cs_agent_one',
+      next: { action: 'funding.handoff.status', args: { fundingSessionId: 'cs_agent_one' }, retryAfterMs: 5000 },
+      humanHandoff: { actor: 'payer', reason: 'funding_payment_required', url: 'https://checkout.stripe.com/c/pay/cs_agent_one' },
     })
     expect(createOrRecoverCreditPayment).toHaveBeenCalledWith(expect.objectContaining({
       principalId: 'principal:agent-one', accountRef: 'account:one',

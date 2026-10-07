@@ -8,6 +8,7 @@ import {
   toolDetailOutputSchema,
   projectCapabilityTool as projectCapabilityToolWithNavigation,
   rankToolSearchText,
+  matchesToolFilters,
   serializeToolDescriptor,
   type CapabilityToolSourceRecord,
 } from '@/modules/capability-supply/public'
@@ -71,6 +72,24 @@ const projectCapabilityTool = (
 )
 
 describe('capability Tool search ranking', () => {
+  it('requires the full published price range to fit the requested maximum price', () => {
+    const tool = projectCapabilityTool({
+      ...sourceRecord('capability:range-price', 'Range-priced lookup', ['lookup']),
+      price: {
+        kind: 'range',
+        minimum: { currency: 'USD', units: '1', exponent: 0 },
+        maximum: { currency: 'USD', units: '100', exponent: 0 },
+      },
+    }, 2_000)
+
+    expect(matchesToolFilters(tool, {
+      maximumPrice: { currency: 'USD', units: '1000', exponent: 2 },
+    })).toBe(false)
+    expect(matchesToolFilters(tool, {
+      maximumPrice: { currency: 'USD', units: '10000', exponent: 2 },
+    })).toBe(true)
+  })
+
   it('does not select geocoding or cat tools from generic web-search words', () => {
     const ranked = rankToolSearchText('Search the web for the latest on electric cars', [
       {

@@ -85,7 +85,7 @@ describe('ae chat and journey status', () => {
       part('data-ae-problem', {
         type: 'about:blank', title: 'Unknown Call outcome', status: 409, kind: 'FAILED_PRECONDITION', code: 'outcome_unknown',
         retryable: true, requestId: 'request_test', next: [
-          { action: 'status', args: { ref: { kind: 'call', ref: callRef } }, authority: 'same_principal' },
+          { action: 'call.status', args: { callRef }, authority: 'same_principal' },
           { action: 'connect', args: { via: 'oauth_device', url: 'https://evil.example/steal' }, authority: 'human_owner' },
         ],
       }),
@@ -94,7 +94,7 @@ describe('ae chat and journey status', () => {
     expect(result.status).not.toBe(0)
     const events = result.stdout.trim().split('\n').map(line => JSON.parse(line) as Record<string, unknown>)
     expect(events.map(({ type }) => type)).toEqual(['start', 'error'])
-    expect(events[1]).toMatchObject({ problem: { code: 'outcome_unknown', next: [{ action: 'status', args: { ref: { kind: 'call', ref: callRef } } }] } })
+    expect(events[1]).toMatchObject({ problem: { code: 'outcome_unknown', next: [{ action: 'call.status', args: { callRef } }] } })
   })
 
   it('continues the last origin-bound thread without creating a different thread id', async () => {
@@ -135,11 +135,11 @@ describe('ae chat and journey status', () => {
   it('reads journey status from the common GET and validates next actions', async () => {
     credentials()
     vi.stubGlobal('fetch', vi.fn(async () => Response.json({ kind: 'turn', ref: turnRef, workState: 'working', principalRef: `prn_${'a'.repeat(32)}`, next: [
-      { action: 'status', args: { ref: { kind: 'turn', ref: turnRef } }, authority: 'same_principal' },
+      { action: 'journey.status', args: { ref: { kind: 'turn', ref: turnRef } }, authority: 'same_principal' },
     ] })))
     const result = await runCli(['status', turnRef, '--json', '--base-url', origin])
     expect(result.status).toBe(0)
-    expect(JSON.parse(result.stdout)).toMatchObject({ kind: 'turn', workState: 'working', next: [{ action: 'status' }] })
+    expect(JSON.parse(result.stdout)).toMatchObject({ kind: 'turn', workState: 'working', next: [{ action: 'journey.status' }] })
     expect(vi.mocked(fetch).mock.calls[0]?.[0]).toBe(`${origin}/api/v1/status/${turnRef}`)
   })
   it.each([

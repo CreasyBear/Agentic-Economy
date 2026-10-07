@@ -24,6 +24,7 @@ const PROPOSABLE_BY_ACTION = {
   verify_capability_source_authority: false,
   change_commercial_policy: true,
   grant_promotional_credit: true,
+  issue_trial: true,
   set_payments_paused: true,
   change_treasury_thresholds: false,
 } satisfies Record<AdminCommandAction, boolean>

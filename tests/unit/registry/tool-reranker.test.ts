@@ -33,10 +33,59 @@ describe('Jev x402 Tool Search Re-ranker (cookbooks/rerank_typesafe.md)', () => 
     if (output.kind !== 'match') return
     expect(output.results[0]).toMatchObject({
       readiness: 'unverified',
-      next: [{ action: 'describe', args: { toolRef: tool.toolRef } }],
+      next: [{ action: 'registry.tools.describe', args: { toolRef: tool.toolRef } }],
     })
     expect(output).not.toHaveProperty('recommendation')
   })
+  it.each([
+    { access: 'external_listing' }, { effects: ['data_release'] }, { dataUse: ['sensitive'] },
+    { currency: 'USD' }, { maximumPrice: { currency: 'AUD', units: '1', exponent: 6 } },
+    { healthStatus: ['degraded'] }, { actionClass: 'retrieve' },
+  ])('rechecks hard constraints on admitted descriptors at projection: %j', filters => {
+    const result = projectToolSearchChoices({ ...misorderedSearchResult('timezone conversion'), items: [TOOL_TIMEZONE] },
+      filters, { verdict: 'matched', nearMisses: [] })
+    expect(result.results).toEqual([])
+    expect(projectToolListChoices({ ...misorderedSearchResult(''), items: [TOOL_TIMEZONE] }, filters))
+      .toMatchObject({ kind: 'ok', items: [] })
+  })
+
+  it('keeps admitted candidates that have the required contract facts', () => {
+    const tool = { ...TOOL_TIMEZONE,
+      effects: [{ effectId: 'release', class: 'data_release' as const, authority: 'none' as const, reversibility: 'irreversible' as const }],
+      dataUse: [{ effectId: 'release', inputPointer: '/query', classification: 'public' as const,
+        phase: 'execution' as const, recipient: 'selected_binding' as const, purposes: ['lookup'] }],
+    }
+    const result = projectToolSearchChoices({ ...misorderedSearchResult('timezone conversion'), items: [tool] },
+      { access: 'ae_callable', effects: ['data_release'], dataUse: ['public'], healthStatus: ['operational'],
+        currency: 'AUD', maximumPrice: { currency: 'AUD', units: '1000', exponent: 6 } },
+      { verdict: 'matched', nearMisses: [] })
+    expect(result).toMatchObject({ kind: 'match', results: [{ toolRef: tool.toolRef }] })
+  })
+
+  it('reports missing geographic evidence even when a Provider name resembles the requested location', () => {
+    const tool = { ...TOOL_TIMEZONE, business: { ...TOOL_TIMEZONE.business, name: 'Sydney', slug: 'sydney' } }
+    const result = projectToolSearchChoices({ ...misorderedSearchResult('timezone conversion'), items: [tool] },
+      { location: 'Sydney' }, { verdict: 'matched', nearMisses: [] }, undefined, 8, { source: 'current', complete: true })
+    expect(result).toMatchObject({ kind: 'scoped', results: [], partialResults: true,
+      assessed: { coverage: 'partial' }, reason: 'Required location evidence is unavailable in the assessed supply.' })
+  })
+
+  it('rechecks explicit health on appended external rows while preserving their opaque identity when unconstrained', () => {
+    const row = {
+      id: 'opaque:directory:identity', source: 'coinbase' as const, access: 'external_listing' as const,
+      title: 'Timezone conversion', summary: 'Convert between timezones', provider: 'Provider',
+      actionClass: 'transform' as const, objectClass: 'location' as const, readiness: 'unverified' as const,
+      price: { kind: 'unavailable' as const }, detailRef: '/api/v1/registry/detail?id=opaque',
+      next: [],
+    }
+    const source = { ...misorderedSearchResult('timezone conversion'), items: [] }
+    const context = { source: 'coinbase' as const, external: [row], externalExamined: 1 }
+    expect(projectToolSearchChoices(source, { healthStatus: ['operational'] }, { verdict: 'matched', nearMisses: [] }, undefined, 8, context))
+      .toMatchObject({ kind: 'scoped', results: [], assessed: { examined: 1 } })
+    expect(projectToolSearchChoices(source, undefined, { verdict: 'matched', nearMisses: [] }, undefined, 8, context))
+      .toMatchObject({ kind: 'match', results: [{ id: row.id, next: row.next }] })
+  })
+
   it('uses a USD price label for USDC without AUD evidence', () => {
     const tool = {
       ...TOOL_CURRENCY,
@@ -70,7 +119,7 @@ describe('Jev x402 Tool Search Re-ranker (cookbooks/rerank_typesafe.md)', () => 
       query: 'weather', source: 'current',
       pagination: { limit: 2, hasMore: true, nextCursor: 'no-longer-usable' },
     })
-    expect(result).toMatchObject({ kind: 'unavailable', pagination: { limit: 2, hasMore: false }, next: [{ action: 'retry' }] })
+    expect(result).toMatchObject({ kind: 'unavailable', pagination: { limit: 2, hasMore: false }, next: [{ action: 'registry.tools.search' }] })
     expect(result.pagination).not.toHaveProperty('nextCursor')
   })
 

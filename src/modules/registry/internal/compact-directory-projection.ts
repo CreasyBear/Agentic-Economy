@@ -81,8 +81,8 @@ export function compactDirectoryRows(page: Extract<CompactDirectoryPage, { kind:
       price: displayPrice === undefined ? { kind: 'unavailable' as const } : { kind: 'indicative' as const, label: displayPrice },
       detailRef: toolRef ?? `/api/v1/registry/detail?id=${encodeURIComponent(item.id)}`,
       next: toolRef === undefined
-        ? [{ action: 'describe-external' as const, args: { id: item.id }, authority: 'public' as const }]
-        : [{ action: 'describe' as const, args: { toolRef }, authority: 'public' as const }],
+        ? []
+        : [{ action: 'registry.tools.describe' as const, args: { toolRef }, authority: 'public' as const }],
       freshness,
     }
   })

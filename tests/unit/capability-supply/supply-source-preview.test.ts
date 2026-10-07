@@ -106,7 +106,7 @@ describe('previewSupplySource', () => {
     expect(inspectX402.mock.calls.map((call) => call[0].method)).toEqual(['GET', 'POST'])
     expect(result).toMatchObject({
       kind: 'action_required',
-      requiredAction: { title: 'Choose the request method' },
+      ownerHandoff: { title: 'Choose the request method' },
     })
   })
 
@@ -140,7 +140,7 @@ describe('previewSupplySource', () => {
     }, { inspectX402: inspectX402 as NonNullable<SupplySourcePreviewDependencies['inspectX402']> })
     expect(result).toMatchObject({
       kind: 'action_required',
-      requiredAction: {
+      ownerHandoff: {
         title: 'x402 source needs attention',
         description: 'The unpaid endpoint must answer with HTTP 402 and an x402 v2 PaymentRequired challenge.',
       },

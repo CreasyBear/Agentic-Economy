@@ -174,7 +174,7 @@ describe('Jev search presentation stress', () => {
         title: `Lookup ${index}`, summary: 'Lookup current data', provider: 'Provider',
         actionClass: 'retrieve', objectClass: 'data', readiness: 'ready',
         price: { kind: 'indicative', label: 'A$0.01' },
-        detailRef: toolRef, next: [{ action: 'describe', args: { toolRef }, authority: 'public' }],
+        detailRef: toolRef, next: [{ action: 'registry.tools.describe', args: { toolRef }, authority: 'public' }],
       }
     })
     const card = projectToolCard({
@@ -182,7 +182,7 @@ describe('Jev search presentation stress', () => {
       state: 'output-available',
       output: { kind: 'match', query: 'lookup', results,
         assessed: { source: 'current', scope: 'complete', examined: 6, coverage: 'complete' },
-        next: [{ action: 'broaden', args: { query: 'lookup' }, authority: 'public' }] },
+        next: [] },
     })
 
     expect(card).toMatchObject({ kind: 'choices', count: 6 })

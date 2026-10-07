@@ -14,6 +14,7 @@ import {
   type PublicBusinessCatalogApiV2SearchPage,
   type PublicBusinessCatalogV2DetailResult,
 } from './offering-api-projection'
+import { matchesPublishedBusinessPrice } from './search-input'
 import { registrySearchTokens } from './search-documents'
 import type { PublicBusinessCatalogSearchInput } from './search-input'
 import { decodeOpaqueCursor, encodeOpaqueCursor } from '../opaque-cursor'
@@ -60,7 +61,7 @@ export function searchPublicBusinessOfferingSupply(
     }
   }
 
-  const searchableCatalogs = readPublicCatalogs(state)
+  const searchableCatalogs = readPublicCatalogs(state).filter(item => matchesPublishedBusinessPrice(item, input))
   const location = input.mode === 'near_me' ? input.location : undefined
   const scopedCatalogs = location === undefined
     ? searchableCatalogs

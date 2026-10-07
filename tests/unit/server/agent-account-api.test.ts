@@ -16,6 +16,15 @@ const authenticate = async (scopes: readonly string[] = ['market_tools:call']) =
 })
 
 describe('agent account HTTP adapter', () => {
+  it.each(['?currency=AUD', '?currency=AUD&currency=USD'])('rejects unsupported or repeated account query parameters: %s', async query => {
+    setHttpRateLimitAdmissionForTests(async () => ({ ok: true }))
+    const verify = vi.fn(async () => await authenticate())
+    const result = await handleAgentAccountGet(new Request(`https://ae.example/api/v1/account${query}`), { authenticate: verify })
+    expect(result.status).toBe(400)
+    await expect(result.json()).resolves.toMatchObject({ kind: 'INVALID_ARGUMENT', code: 'invalid_query_parameter' })
+    expect(verify).not.toHaveBeenCalled()
+  })
+
   it('returns a correlated unavailable response when service admission is not configured', async () => {
     setHttpRateLimitAdmissionForTests(undefined)
     vi.stubEnv('AE_CONVEX_SERVER_FUNCTION_TOKEN', undefined)
@@ -109,11 +118,8 @@ describe('agent account HTTP adapter', () => {
       kind: 'UNAUTHENTICATED',
       code: 'authentication_required',
       requestId: response.headers.get('x-ae-request-id'),
-      next: [
-        { action: 'connect', args: { via: 'cli', command: 'ae connect' }, authority: 'human_owner' },
-        { action: 'connect', args: { via: 'oauth_device', url: resourceMetadata }, authority: 'human_owner' },
-        { action: 'connect', args: { via: 'oauth_device', url: `${new URL(resourceMetadata!).origin}/oauth/device_authorization` }, authority: 'human_owner' },
-      ],
+      next: [],
+      ownerHandoff: { actor: 'account_owner', reason: 'connect_required', destination: `${new URL(resourceMetadata!).origin}/agent-access` },
     })
     expect(body.detail).toContain('ae connect')
   })
@@ -183,7 +189,7 @@ describe('agent account HTTP adapter', () => {
       accountState: 'active',
       version: 3,
       updatedAt: 1_700_000_000_000,
-      funding: { kind: 'agent_funding_handoff', configAction: 'funding.handoff.config', createAction: 'funding.handoff.create', statusAction: 'funding.handoff.status' },
+      funding: { kind: 'agent_funding_handoff', next: { action: 'funding.handoff.config', args: {}, authority: 'agent_key' }, },
     })
     const response = await handleAgentAccountActionPost(
       new Request('https://ae.example/api/v1/account/balance', {
@@ -207,7 +213,7 @@ describe('agent account HTTP adapter', () => {
     await expect(response.json()).resolves.toMatchObject({
       kind: 'available',
       balance: { currency: 'AUD', units: '25000000', exponent: 6 },
-      funding: { kind: 'agent_funding_handoff', configAction: 'funding.handoff.config', createAction: 'funding.handoff.create', statusAction: 'funding.handoff.status' },
+      funding: { kind: 'agent_funding_handoff', next: { action: 'funding.handoff.config', args: {}, authority: 'agent_key' }, },
     })
     expect(balance).toHaveBeenCalledWith(expect.objectContaining({ input: { currency: 'AUD' } }))
   })

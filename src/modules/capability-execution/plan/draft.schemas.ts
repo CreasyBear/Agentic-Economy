@@ -1,8 +1,9 @@
+import { brandedStringSchema } from '@/modules/common/branded-string-schema'
 import { z } from 'zod'
 import { brandNonEmpty } from '@/modules/common/ids'
 import { planJsonSchema } from './parse'
 
-const nodeId = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u).transform(value => brandNonEmpty(value, 'PlanNodeId'))
+const nodeId = brandedStringSchema(z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u), value => brandNonEmpty(value, 'PlanNodeId'))
 export const planSuggestInputSchema = z.strictObject({})
 export const mercatorImportInputSchema = z.strictObject({
   flowPlan: z.strictObject({ nodes: z.array(z.strictObject({

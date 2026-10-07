@@ -59,7 +59,7 @@ export function useChatNeedActions(): ChatNeedActions {
 const MAX_ANONYMOUS_MESSAGES = 12
 const MAX_ANONYMOUS_BYTES = 16 * 1024
 const PAGE_SIZE = 20
-type SearchContinuation = Extract<RegistryNextAction, { action: 'next-page' }>['args']
+type SearchContinuation = Extract<RegistryNextAction, { action: 'registry.tools.search' }>['args'] & { cursor: string }
 
 export function useChatSession({
   threadId,

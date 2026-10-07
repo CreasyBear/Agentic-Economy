@@ -71,8 +71,8 @@ describe('Tool read outage parity', () => {
 
     const skill = buildPublicAgentSkillMarkdown({ canonicalBaseUrl: 'https://ae.example' })
     expect(skill).toContain('`tool_read_unavailable` means no catalogue read completed')
-    expect(skill).toContain('It is retryable')
-    expect(skill).toContain('never proof that a Tool is absent')
+    expect(skill).toContain('retry as directed')
+    expect(skill).toContain('failed assessment is not absent supply')
   })
 })
 

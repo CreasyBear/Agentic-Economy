@@ -2,7 +2,7 @@ import { planSuggestInputSchema, mercatorImportInputSchema, planDraftResultSchem
 import { toolPlanQuoteAction } from '@/modules/capability-execution/plan/quote.actions'
 import { toolPlanRunAction, toolPlanGetAction } from '@/modules/capability-execution/plan/runtime.actions'
 import { z } from 'zod'
-import { callInputSchema, callResultSchema } from '@/modules/capability-execution/call-contracts'
+import { callInputSchema, callMachineResultSchema } from '@/modules/capability-execution/call-contracts'
 import { toolQuoteInputSchema, toolQuoteResultSchema } from '@/modules/capability-execution/quote'
 import { chatClarifyInputSchema, chatClarifyOutputSchema } from '@/modules/chat/agent-turn.contracts'
 import type { ChatToolId } from '@/modules/chat/tool-card'
@@ -49,7 +49,7 @@ const chatCallContract = {
   ],
   surfaces: ['http', 'mcp', 'cli', 'chat'],
   schema: callInputSchema,
-  outputSchema: callResultSchema,
+  outputSchema: callMachineResultSchema,
 } as const satisfies ChatContract
 
 const chatToolQuoteContract = {

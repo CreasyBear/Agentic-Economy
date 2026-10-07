@@ -153,7 +153,7 @@ describe('durable Provider offboarding', () => {
     await expect(backend.query(
       api.capabilityProviderOffboarding.readAgentStatus,
       await withSourceWrite('catalog_publish', { ...readCommand, agentPrincipal: principal }),
-    )).resolves.toMatchObject({ kind: 'available', status: { businessRef: String(fixture.businessId) } })
+    )).resolves.toMatchObject({ kind: 'available', status: { businessRef: String(fixture.businessId), continuation: { action: 'supply.offboarding.status', args: { businessRef: String(fixture.businessId) } } } })
     await expect(backend.query(
       api.capabilityProviderOffboarding.readAgentStatus,
       await withSourceWrite('catalog_publish', { ...readCommand, agentPrincipal: foreignPrincipal }),

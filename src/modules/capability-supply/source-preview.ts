@@ -69,14 +69,12 @@ export type SupplySourcePreview =
     }>
   | Readonly<{
       kind: 'action_required'
-      requiredAction: Readonly<{
-        action: 'supply.source.preview'
-        blockedCapabilities: readonly ['supply.publish']
-        cta: string | null
+      ownerHandoff: Readonly<{
+        actor: 'business_owner'
+        reason: 'source_attention_required' | 'payee_proof_required' | 'business_unavailable' | 'provider_connections_unavailable'
+        destination: string
         ctaLabel: string
         description: string
-        iconUrl: null
-        status: 'required'
         title: string
       }>
     }>
@@ -149,14 +147,12 @@ export const supplySourcePreviewSchema: z.ZodType<SupplySourcePreview> = z.union
   }),
   z.strictObject({
     kind: z.literal('action_required'),
-    requiredAction: z.strictObject({
-      action: z.literal('supply.source.preview'),
-      blockedCapabilities: z.tuple([z.literal('supply.publish')]),
-      cta: z.string().max(2_048).nullable(),
+    ownerHandoff: z.strictObject({
+      actor: z.literal('business_owner'),
+      reason: z.enum(['source_attention_required', 'payee_proof_required', 'business_unavailable', 'provider_connections_unavailable']),
+      destination: z.string().startsWith('/owner/').max(2_048),
       ctaLabel: z.string(),
       description: z.string(),
-      iconUrl: z.null(),
-      status: z.literal('required'),
       title: z.string(),
     }),
   }),
@@ -294,19 +290,17 @@ function environmentForNetwork(network: string): 'sandbox' | 'production' | unde
 function sourceCorrection(
   title: string,
   description: string,
-  cta: string | null = null,
+  destination = '/owner/operations/new',
   ctaLabel = 'Check source',
 ): SupplySourcePreview {
   return {
     kind: 'action_required',
-    requiredAction: {
-      action: 'supply.source.preview',
-      blockedCapabilities: ['supply.publish'],
-      cta,
+    ownerHandoff: {
+      actor: 'business_owner',
+      reason: 'source_attention_required',
+      destination,
       ctaLabel,
       description,
-      iconUrl: null,
-      status: 'required',
       title,
     },
   }

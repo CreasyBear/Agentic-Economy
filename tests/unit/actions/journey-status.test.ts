@@ -15,7 +15,7 @@ const callRef = `operation-invocation:v1:${'a'.repeat(64)}`
 const quoteRef = `operation-commitment:v1:${'b'.repeat(64)}`
 const toolRef = `operation:v1:${'c'.repeat(64)}`
 const turnRef = 'turn_00000000-0000-4000-8000-000000000001'
-const readCallStatus = vi.fn(async () => ({ kind: 'found' as const, callRef, version: 3, toolRef, state: 'in_progress' as const }))
+const readCallStatus = vi.fn<() => Promise<import('@/modules/capability-execution/call-recovery-contracts').CallStatusResult>>(async () => ({ kind: 'found' as const, callRef, version: 3, toolRef, state: 'in_progress' as const }))
 const context = { request: new Request('https://ae.test/status'), agentAccessPrincipal: principal,
   callService: { readCallStatus }, correlationId: 'corr-1' }
 
@@ -27,9 +27,24 @@ describe('journey.status read projection', () => {
   it('reads the same CallRef and offers only same-ref recovery, without executing a mutation', async () => {
     const result = await status('call', callRef)
     expect(result).toMatchObject({ kind: 'call', ref: callRef, recovery: { state: 'in_progress' }, workState: 'working',
-      next: [{ action: 'status', args: { ref: { kind: 'call', ref: callRef } } }, { action: 'wait', args: { callRef, afterVersion: 3 } }] })
+      next: [{ action: 'call.status', args: { callRef, afterVersion: 3 }, authority: 'same_principal' }] })
     expect(readCallStatus).toHaveBeenCalledOnce()
     expect(readJourneySourceStatus).not.toHaveBeenCalled()
+    expect(journeyStatusAction.outputSchema.parse(result)).toEqual(result)
+  })
+
+  it.each([['cancelled', 'canceled'], ['invalidated', 'rejected'], ['terminal', 'outcome-unknown']] as const)('projects %s without claiming a missing result completed', async (state, workState) => {
+    readCallStatus.mockResolvedValueOnce({ kind: 'found', callRef, toolRef, version: 4, state })
+    const result = await status('call', callRef)
+    expect(result).toMatchObject({ workState, next: state === 'terminal' ? [{ action: 'call.status', args: { callRef }, authority: 'same_principal', retryAfterMs: 5000 }] : [] })
+    expect(journeyStatusAction.outputSchema.parse(result)).toEqual(result)
+  })
+
+  it.each(['paid', 'outcome_unknown'] as const)('preserves delivered output and terminal evidence with %s charging', async chargeState => {
+    const completed = { kind: 'completed', callRef, toolRef, output: { delivered: true }, evidenceHash: 'evidence:test', usage: { usageRef: 'usage:test', observedAt: 1, chargeState, amount: { currency: 'AUD', units: '1', exponent: 6 }, priceDigest: 'price:test' } } as const
+    readCallStatus.mockResolvedValueOnce({ kind: 'found', callRef, toolRef, version: 4, state: 'terminal', result: completed })
+    const result = await status('call', callRef)
+    expect(result).toMatchObject({ workState: chargeState === 'paid' ? 'completed' : 'outcome-unknown', recovery: { state: 'terminal', result: completed }, next: chargeState === 'paid' ? [] : [{ action: 'call.status', args: { callRef }, authority: 'same_principal', retryAfterMs: 5000 }] })
     expect(journeyStatusAction.outputSchema.parse(result)).toEqual(result)
   })
 
@@ -39,10 +54,9 @@ describe('journey.status read projection', () => {
     vi.mocked(readJourneySourceStatus).mockResolvedValueOnce({ turnRef, threadId: 'thread-1', state: 'working', inFlightCallRefs: [callRef] })
     const quote = await status('quote', quoteRef)
     const turn = await status('turn', turnRef)
-    expect(quote).toMatchObject({ kind: 'quote', ref: quoteRef, commitment: 'committed', next: [{ action: 'describe', args: { toolRef } }] })
+    expect(quote).toMatchObject({ kind: 'quote', ref: quoteRef, commitment: 'committed', next: [{ action: 'registry.tools.describe', args: { toolRef } }] })
     expect(turn).toMatchObject({ kind: 'turn', ref: turnRef, workState: 'working', next: [
-      { action: 'status', args: { ref: { kind: 'turn', ref: turnRef } } },
-      { action: 'status', args: { ref: { kind: 'call', ref: callRef } } },
+      { action: 'journey.status', args: { ref: { kind: 'turn', ref: turnRef } } },
     ] })
     expect(vi.mocked(readJourneySourceStatus).mock.calls.map(([kind]) => kind)).toEqual(['quote', 'turn'])
     expect(journeyStatusAction.outputSchema.parse(quote)).toEqual(quote)

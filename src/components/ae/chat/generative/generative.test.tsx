@@ -220,7 +220,7 @@ describe('generative chat leaves', () => {
     const output = {
       kind: 'scoped', results: [{ id: 'external-7', source: 'coinbase', access: 'external_listing',
         title: 'External Timezone', provider: 'Another provider' }],
-      next: [{ action: 'next-page', args: { query: 'timezone', cursor: 'x402:next' }, authority: 'public' }],
+      next: [{ action: 'registry.tools.search', args: { query: 'timezone', cursor: 'x402:next' }, authority: 'public' }],
     }
     const card = projectToolCard({
       type: `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']}`,
@@ -276,7 +276,7 @@ describe('generative chat leaves', () => {
     expect(screen.queryByRole('button', { name: 'Review' })).not.toBeInTheDocument()
   })
   it('keeps opaque cursors and retired pagination prompts out of the transcript', () => {
-    const next = { action: 'next-page' as const, args: { query: 'timezone', cursor: 'x402:opaque-next' }, authority: 'public' as const }
+    const next = { action: 'registry.tools.search' as const, args: { query: 'timezone', cursor: 'x402:opaque-next' }, authority: 'public' as const }
     const card = projectToolCard({
       type: `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']}`,
       state: 'output-available', output: { kind: 'scoped', results: [], next: [next] },
@@ -298,7 +298,7 @@ describe('generative chat leaves', () => {
     const card = projectToolCard({
       type: `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']}`,
       state: 'output-available', output: { kind: 'scoped', results: [],
-        next: [{ action: 'next-page', authority: 'public', args: { query: 'timezone', cursor: 'x402:old-native' } }] },
+        next: [{ action: 'registry.tools.search', authority: 'public', args: { query: 'timezone', cursor: 'x402:old-native' } }] },
     })
     if (card === null) throw new Error('missing search card')
     const onContinueSearch = vi.fn(), onRepeatSearch = vi.fn()
@@ -312,7 +312,7 @@ describe('generative chat leaves', () => {
     expect(onContinueSearch).not.toHaveBeenCalled()
   })
   it('does not expose a current signed cursor as a chat action', () => {
-    const next = { action: 'next-page' as const, authority: 'public' as const,
+    const next = { action: 'registry.tools.search' as const, authority: 'public' as const,
       args: { query: 'timezone', cursor: 'sc1.turn_123.signature' } }
     const card = projectToolCard({
       type: `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']}`,

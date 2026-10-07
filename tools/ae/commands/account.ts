@@ -169,7 +169,7 @@ async function readAccountMoney(
       ['account', parsed.data.accountRef],
       ['balance', `${parsed.data.balance.units} × 10^-${parsed.data.balance.exponent} ${parsed.data.balance.currency}`],
       ['state', parsed.data.accountState],
-      ['funding', `${parsed.data.funding.createAction} → ${parsed.data.funding.statusAction}`],
+      ['funding', parsed.data.funding.next.action],
     ])
     return
   }
@@ -279,6 +279,7 @@ function disconnectCurrentAccount(options: CliOptions, profile: 'market' | 'prov
     origin: removed.origin,
     profile,
     removed: removed.removed,
+    ...(removed.removed ? { ownerHandoff: { actor: 'account_owner' as const, reason: 'connect_required' as const, destination: new URL('/agent-access', options.baseUrl).href } } : {}),
     nextAction: removed.removed
       ? profile === 'provider'
         ? 'Run ae connect --provider to authorize a new provider credential for this origin.'

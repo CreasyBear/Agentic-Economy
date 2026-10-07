@@ -153,6 +153,14 @@ export async function handleToolProcurePost(
           problem({
             ...known,
             detail: known.status === 500 ? 'Capability procurement failed unexpectedly.' : error instanceof Error ? error.message : 'Procurement refused.',
+            ...(error instanceof ProcureInProgressError && parsed.data.kind === 'exact' ? {
+              retryable: true,
+              extras: {
+                requestId: correlationId,
+                next: [],
+                refs: { idempotencyKey: parsed.data.idempotencyKey, toolRef: parsed.data.toolRef, identityPreserved: true },
+              },
+            } : {}),
           }),
           correlationId,
         )

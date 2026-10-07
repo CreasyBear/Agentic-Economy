@@ -206,7 +206,7 @@ describe('private market demand signals', () => {
       assessed: { source: 'current', scope: 'complete', examined: 0, coverage: 'complete' },
       results: [], reason: 'No suitable Tool found.',
       partialResults: false, pagination: { limit: 1, hasMore: false },
-      next: [{ action: 'broaden', authority: 'public', args: { query: input.query } }],
+      next: [],
     })
     const service = createMarketDemandService(new Request('https://ae.example/api/v1/market-requests', {
       method: 'POST', body: JSON.stringify(input),
@@ -239,7 +239,7 @@ describe('private market demand signals', () => {
       assessed: { source: 'current', scope: 'complete', examined: 0, coverage: 'complete' },
       results: [], reason: 'No suitable Tool found.',
       partialResults: false, pagination: { limit: 1, hasMore: false },
-      next: [{ action: 'broaden', authority: 'public', args: { query: input.query } }],
+      next: [],
     })
     const service = createMarketDemandService(new Request('https://ae.example/api/v1/market-requests', {
       method: 'POST', body: JSON.stringify(input),

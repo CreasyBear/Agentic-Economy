@@ -60,9 +60,7 @@ export const LOCAL_STRIPE_TEST_MODE_DOC = 'docs/operations/local-stripe-test-mod
 
 export const AGENT_FUNDING_HANDOFF = {
   kind: 'agent_funding_handoff',
-  configAction: 'funding.handoff.config',
-  createAction: 'funding.handoff.create',
-  statusAction: 'funding.handoff.status',
+  next: { action: 'funding.handoff.config', args: {}, authority: 'agent_key' },
 }
 
 const RELEASE_IDENTITY = 'a'.repeat(40)
@@ -510,14 +508,13 @@ export function sandboxListResult() {
 export function committedQuote() {
   return {
     kind: 'committed', quoteRef: 'quote:v1:sandbox', toolRef: SANDBOX_TOOL_REF, toolVersion: 1,
-    expiresAt: 1, normalizedInput: { from: 'EUR', to: 'USD' },
+    expiresAt: 1,
     price: { currency: 'AUD', units: '1000000', exponent: 6 },
     account: { accountRef: 'acc_owner', available: { currency: 'AUD', units: '25000000', exponent: 6 } },
     budget: { principalRef: 'prn_buyer', maximumPerCall: { currency: 'AUD', units: '5000000', exponent: 6 } },
     policyRefs: [], evidenceDigest: 'sha256:sandbox-quote',
     continuation: {
-      action: 'tool.call', method: 'POST', path: '/api/v1/tools/call',
-      input: { quoteRef: 'quote:v1:sandbox', idempotencyKey: 'idem-sandbox' },
+      action: 'tool.call', args: { quoteRef: 'quote:v1:sandbox', idempotencyKey: 'idem-sandbox' },
     },
   }
 }

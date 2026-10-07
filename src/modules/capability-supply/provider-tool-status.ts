@@ -1,5 +1,15 @@
 import { z } from 'zod'
 
+export const providerToolMaintenanceIdentitySchema = z.strictObject({
+  businessId: z.string().trim().min(1),
+  offeringRef: z.string().trim().min(1),
+  offeringRevision: z.number().int().positive(),
+  offeringSourceHash: z.string().trim().min(1),
+  publicationRef: z.string().trim().min(1),
+  publicationRevision: z.number().int().positive(),
+})
+export type ProviderToolMaintenanceIdentity = z.infer<typeof providerToolMaintenanceIdentitySchema>
+
 export type ProviderToolState =
   | 'Draft'
   | 'Needs setup'
@@ -10,23 +20,43 @@ export type ProviderToolState =
   | 'Action required'
   | 'Retired'
 
-export type ProviderToolContinuation = Readonly<{
-  action:
-    | 'supply.source.preview'
-    | 'supply.status'
-    | 'supply.recheck'
-    | 'supply.republish'
-    | 'supply.offboarding.status'
-}>
+export const providerToolStatusInputSchema = z.strictObject({
+  businessRef: z.string().trim().min(1),
+  toolRef: z.string().trim().min(1),
+})
+export const providerToolOffboardingStatusInputSchema = z.strictObject({
+  businessRef: z.string().trim().min(1),
+})
+
+// Maintenance keeps the exact durable identity. The caller must supply and retain
+// one idempotency key before invoking a write; status never invents a retry key.
+export const providerToolContinuationSchema = z.discriminatedUnion('action', [
+  z.strictObject({
+    action: z.literal('supply.source.preview'),
+    args: z.strictObject({ kind: z.literal('x402') }),
+    requiredInput: z.tuple([z.literal('resourceUrl')]),
+  }),
+  z.strictObject({ action: z.literal('supply.status'), args: providerToolStatusInputSchema }),
+  z.strictObject({
+    action: z.literal('supply.recheck'),
+    args: providerToolMaintenanceIdentitySchema,
+    requiredInput: z.tuple([z.literal('idempotencyKey')]),
+  }),
+  z.strictObject({
+    action: z.literal('supply.republish'),
+    args: providerToolMaintenanceIdentitySchema,
+    requiredInput: z.tuple([z.literal('idempotencyKey')]),
+  }),
+  z.strictObject({ action: z.literal('supply.offboarding.status'), args: providerToolOffboardingStatusInputSchema }),
+])
+export type ProviderToolContinuation = z.infer<typeof providerToolContinuationSchema>
 
 export type ProviderToolOwnerHandoff = Readonly<{
-  action: 'supply.connection.reconnect' | 'supply.connection.detail'
-  blockedCapabilities: readonly ['supply.publish']
-  cta: string
+  actor: 'business_owner'
+  reason: 'credential_lost' | 'credential_cleanup_pending'
+  destination: string
   ctaLabel: string
   description: string
-  iconUrl: null
-  status: 'required' | 'pending'
   title: string
 }>
 
@@ -36,6 +66,7 @@ export type ProviderToolStatusFacts = Readonly<{
   providerRef: string
   toolRef: string
   revision?: number | undefined
+  maintenance?: ProviderToolMaintenanceIdentity | undefined
   observedAt: number
   validUntil?: number | undefined
   draftPresent: boolean
@@ -59,6 +90,7 @@ export type ProviderToolStatus = Readonly<{
   providerRef: string
   toolRef: string
   revision?: number | undefined
+  maintenance?: ProviderToolMaintenanceIdentity | undefined
   state: ProviderToolState
   reasonCodes: readonly string[]
   observedAt: number
@@ -116,6 +148,14 @@ export type ProviderToolReasonPresentation = Readonly<{
 }>
 
 const reasonPresentations: Readonly<Record<string, ProviderToolReasonPresentation>> = {
+  maintenance_identity_unavailable: {
+    title: 'Publication identity unavailable',
+    description: 'AE cannot confirm the exact current publication identity for this action. Resolve the owner records before rechecking or republishing.',
+  },
+  source_preview_unavailable: {
+    title: 'Source preview unavailable',
+    description: 'The current preview action supports x402 sources. This saved source cannot be resumed through that action.',
+  },
   source_drift: {
     title: 'Source changed',
     description: 'The source no longer matches the submitted Tool. Recheck it before publication can continue.',
@@ -192,25 +232,47 @@ function stateFor(facts: ProviderToolStatusFacts): ProviderToolState {
   return 'Draft'
 }
 
+function maintenanceActionFor(
+  facts: ProviderToolStatusFacts,
+  state: ProviderToolState,
+): 'supply.recheck' | 'supply.republish' | undefined {
+  if (facts.retired || state === 'Submitted' || state === 'Under review') return undefined
+  if (state === 'Paused') return 'supply.republish'
+  if (facts.blockerCodes.some((code) => (
+    code === 'source_drift'
+    || code === 'health_unobserved'
+    || code === 'health_stale'
+    || code === 'health_unhealthy'
+  ))) return 'supply.recheck'
+  return undefined
+}
+
+function sourcePreviewSupported(facts: ProviderToolStatusFacts): boolean {
+  return facts.source === undefined || facts.source.kind === 'unavailable' || facts.source.kind === 'x402'
+}
+
 function continuationFor(
   facts: ProviderToolStatusFacts,
   state: ProviderToolState,
 ): ProviderToolContinuation | undefined {
   if (facts.retired && !facts.retirementProven) {
-    return { action: 'supply.offboarding.status' }
+    return { action: 'supply.offboarding.status', args: { businessRef: facts.businessRef } }
   }
-  if (state === 'Needs setup') return { action: 'supply.source.preview' }
-  if (state === 'Draft') return { action: 'supply.source.preview' }
-  if (state === 'Submitted' || state === 'Under review') return { action: 'supply.status' }
-  if (state === 'Paused') return { action: 'supply.republish' }
-  if (facts.blockerCodes.includes('source_drift')) return { action: 'supply.recheck' }
-  if (facts.blockerCodes.some((code) => (
-    code === 'health_unobserved'
-    || code === 'health_stale'
-    || code === 'health_unhealthy'
-  ))) return { action: 'supply.recheck' }
-  if (facts.blockerCodes.includes('provider_authority_unverified')) return { action: 'supply.status' }
-  if (facts.blockerCodes.length > 0) return { action: 'supply.status' }
+  if (state === 'Needs setup' || state === 'Draft') {
+    return sourcePreviewSupported(facts)
+      ? { action: 'supply.source.preview', args: { kind: 'x402' }, requiredInput: ['resourceUrl'] }
+      : undefined
+  }
+  const maintenanceAction = maintenanceActionFor(facts, state)
+  if (maintenanceAction !== undefined) {
+    const maintenance = providerToolMaintenanceIdentitySchema.safeParse(facts.maintenance)
+    return maintenance.success
+      ? { action: maintenanceAction, args: maintenance.data, requiredInput: ['idempotencyKey'] }
+      : undefined
+  }
+  if (state === 'Submitted' || state === 'Under review' || facts.blockerCodes.length > 0) {
+    return { action: 'supply.status', args: { businessRef: facts.businessRef, toolRef: facts.toolRef } }
+  }
   return undefined
 }
 
@@ -219,25 +281,21 @@ function ownerHandoffFor(
 ): ProviderToolOwnerHandoff | undefined {
   if (facts.blockerCodes.includes('credential_cleanup_pending')) {
     return {
-      action: 'supply.connection.detail',
-      blockedCapabilities: ['supply.publish'],
-      cta: '/owner/supply/connections',
+      actor: 'business_owner',
+      reason: 'credential_cleanup_pending',
+      destination: '/owner/settings/integrations#provider-connections',
       ctaLabel: 'Review connection',
       description: 'Provider cleanup is still in progress. Review the connection status; AE retries cleanup automatically.',
-      iconUrl: null,
-      status: 'pending',
       title: 'Connection cleanup pending',
     }
   }
   if (facts.blockerCodes.includes('credential_lost')) {
     return {
-      action: 'supply.connection.reconnect',
-      blockedCapabilities: ['supply.publish'],
-      cta: '/owner/supply/connections',
+      actor: 'business_owner',
+      reason: 'credential_lost',
+      destination: '/owner/settings/integrations#provider-connections',
       ctaLabel: 'Reconnect source',
       description: 'The source connection is unavailable. Reconnect it before continuing.',
-      iconUrl: null,
-      status: 'required',
       title: 'Reconnect source',
     }
   }
@@ -250,14 +308,22 @@ export function projectProviderToolStatus(
   const state = stateFor(facts)
   const continuation = continuationFor(facts, state)
   const ownerHandoff = ownerHandoffFor(facts)
+  const reasonCodes = [...facts.blockerCodes]
+  if (maintenanceActionFor(facts, state) !== undefined && continuation === undefined) {
+    reasonCodes.push('maintenance_identity_unavailable')
+  }
+  if ((state === 'Needs setup' || state === 'Draft') && !sourcePreviewSupported(facts)) {
+    reasonCodes.push('source_preview_unavailable')
+  }
   return {
     schemaVersion: 'provider_tools:v1',
     businessRef: facts.businessRef,
     providerRef: facts.providerRef,
     toolRef: facts.toolRef,
     ...(facts.revision === undefined ? {} : { revision: facts.revision }),
+    ...(facts.maintenance === undefined ? {} : { maintenance: facts.maintenance }),
     state,
-    reasonCodes: [...facts.blockerCodes],
+    reasonCodes: [...new Set(reasonCodes)],
     observedAt: facts.observedAt,
     ...(facts.validUntil === undefined ? {} : { validUntil: facts.validUntil }),
     source: facts.source ?? { kind: 'unavailable' },
@@ -283,6 +349,7 @@ export const providerToolStatusSchema: z.ZodType<ProviderToolStatus> = z.strictO
   providerRef: z.string(),
   toolRef: z.string(),
   revision: z.number().int().positive().optional(),
+  maintenance: providerToolMaintenanceIdentitySchema.optional(),
   state: z.enum(['Draft', 'Needs setup', 'Submitted', 'Under review', 'Published', 'Paused', 'Action required', 'Retired']),
   reasonCodes: z.array(z.string()),
   observedAt: z.number(),
@@ -332,17 +399,13 @@ export const providerToolStatusSchema: z.ZodType<ProviderToolStatus> = z.strictO
     ]),
     operationalConditions: z.array(z.string()),
   }),
-  continuation: z.strictObject({
-    action: z.enum(['supply.source.preview', 'supply.status', 'supply.recheck', 'supply.republish', 'supply.offboarding.status']),
-  }).optional(),
+  continuation: providerToolContinuationSchema.optional(),
   ownerHandoff: z.strictObject({
-    action: z.enum(['supply.connection.reconnect', 'supply.connection.detail']),
-    blockedCapabilities: z.tuple([z.literal('supply.publish')]),
-    cta: z.string(),
+    actor: z.literal('business_owner'),
+    reason: z.enum(['credential_lost', 'credential_cleanup_pending']),
+    destination: z.literal('/owner/settings/integrations#provider-connections'),
     ctaLabel: z.string(),
     description: z.string(),
-    iconUrl: z.null(),
-    status: z.enum(['required', 'pending']),
     title: z.string(),
   }).optional(),
 })

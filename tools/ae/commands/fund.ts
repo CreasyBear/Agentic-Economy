@@ -11,14 +11,15 @@ export async function runFundCommand(args: readonly string[], options: CliOption
   }
 
   printJson({
-    kind: 'continuation',
+    kind: 'owner_handoff',
     command: 'fund',
     surface: 'owner_browser',
     authentication: 'owner_session',
-    method: 'open',
-    path: OWNER_CREDIT_PATH,
-    anchor: '#fund',
-    url: new URL(`${OWNER_CREDIT_PATH}#fund`, options.baseUrl).toString(),
+    ownerHandoff: {
+      actor: 'account_owner',
+      reason: 'funding_required',
+      destination: new URL(`${OWNER_CREDIT_PATH}#fund`, options.baseUrl).href,
+    },
     agentCredential: 'not_used',
     instruction: 'Open this continuation as the owner to add assistant credit; the CLI does not fund an owner account.',
   })

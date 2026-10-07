@@ -60,7 +60,7 @@ async function connectOfficialClient(
 beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development'))
 
 describe('MCP host adapter with the official client', () => {
-  it.each(clientModes)('compiles every admitted tool contract in %s mode while removing repeated schema bytes', async (mode) => {
+  it.each(clientModes)('compiles every admitted tool contract in %s mode with exact output constraints and bounded metadata pages', async (mode) => {
     const service: CallService = {
       callTool: vi.fn(),
       readCallStatus: vi.fn(),
@@ -71,42 +71,43 @@ describe('MCP host adapter with the official client', () => {
       'market_tools:call',
       'market_supply:manage',
     ], mode)
-    const listed = await client.listTools()
+    const listed = await client.listTools({})
+    // The current SDK auto-collects pages; wire-page bounds are checked by the HTTP protocol suite.
+    const collectedTools = [...listed.tools]
+    let page = listed
+    while (page.nextCursor !== undefined) {
+      page = await client.listTools({ cursor: page.nextCursor })
+      collectedTools.push(...page.tools)
+    }
     await client.close()
 
     const expectedActions = listMcpActions()
-    expect(listed.tools.map(({ name }) => name)).toEqual(expectedActions.map(mcpToolName))
+    expect(collectedTools.map(({ name }) => name)).toEqual(expectedActions.map(mcpToolName))
 
-    for (const tool of listed.tools) {
+    for (const tool of collectedTools) {
       const action = expectedActions.find((candidate) => mcpToolName(candidate) === tool.name)
       if (action === undefined) throw new Error(`No action found for ${tool.name}.`)
       expect(tool.inputSchema).toMatchObject({ type: 'object', properties: expect.any(Object) })
-      expect(tool.outputSchema).toMatchObject({
-        type: 'object',
-        properties: { result: { type: 'object', properties: { kind: { type: 'string' } } }, kind: { type: 'string' }, next: { type: 'array' } },
-        required: ['next'],
-      })
+      expect(tool.outputSchema).toMatchObject({ type: 'object', anyOf: expect.any(Array) })
     }
 
     const byteLength = (value: unknown): number => new TextEncoder()
       .encode(JSON.stringify(value)).byteLength
-    const toolsBytes = byteLength(listed.tools)
-    const outputSchemaBytes = listed.tools.reduce(
+    const toolsBytes = byteLength(collectedTools)
+    const outputSchemaBytes = collectedTools.reduce(
       (total, tool) => total + byteLength(tool.outputSchema),
       0,
     )
-    const inputSchemaBytes = listed.tools.reduce(
+    const inputSchemaBytes = collectedTools.reduce(
       (total, tool) => total + byteLength(tool.inputSchema),
       0,
     )
 
-    const preCompactManifest = {
-      toolsBytes: 221_955,
-      outputSchemaBytes: 186_908,
-    }
-    expect(toolsBytes).toBeLessThan(preCompactManifest.toolsBytes)
+    // Exact contracts consume context across all pages; pagination bounds each wire response.
+    // Pure generation measures 346,632 bytes overall and 284,520 bytes of outputs.
+    expect(toolsBytes).toBeLessThan(360_000)
     expect(outputSchemaBytes).toBeGreaterThan(0)
-    expect(outputSchemaBytes).toBeLessThan(preCompactManifest.outputSchemaBytes / 4)
+    expect(outputSchemaBytes).toBeLessThan(300_000)
     expect(inputSchemaBytes).toBeLessThanOrEqual(expectedActions.length * 800)
     const publicClient = await connectOfficialClient(service, null, mode)
     const publicTools = await publicClient.listTools()
@@ -118,7 +119,7 @@ describe('MCP host adapter with the official client', () => {
     ])
     for (const tool of publicTools.tools) expect(tool.outputSchema).toMatchObject({
       type: 'object',
-      properties: { result: { type: 'object' } },
+      anyOf: expect.any(Array),
     })
   })
 
@@ -166,7 +167,7 @@ describe('MCP host adapter with the official client', () => {
         toolRef: currentToolRef,
         toolVersion: 1,
         expiresAt: Date.now() + 60_000,
-        normalizedInput: { company: 'Acme' },
+
         price: { currency: 'AUD' as const, units: '0', exponent: 6 as const },
         account: {
           accountRef: 'acc_00000000000040008000000000000044',
@@ -180,9 +181,7 @@ describe('MCP host adapter with the official client', () => {
         evidenceDigest: 'sha256:inspection',
         continuation: {
           action: 'tool.call' as const,
-          method: 'POST' as const,
-          path: '/api/v1/tools/call' as const,
-          input: {
+          args: {
             quoteRef,
             idempotencyKey: 'official-client-call-1',
           },
@@ -216,7 +215,7 @@ describe('MCP host adapter with the official client', () => {
     })
     expect(quoted.structuredContent).toMatchObject({
       result: { kind: 'committed', quoteRef },
-      next: [{ action: 'status', args: { ref: { kind: 'quote', ref: quoteRef } }, authority: 'same_principal' }],
+      next: [{ action: 'tool.call', args: { quoteRef, idempotencyKey: 'official-client-call-1' } }],
     })
     expect(quoted.content).toEqual([expect.objectContaining({ type: 'text', text: expect.any(String) })])
     expect(JSON.stringify(quoted.content)).not.toContain(quoteRef)
@@ -231,7 +230,7 @@ describe('MCP host adapter with the official client', () => {
 
     expect(called.structuredContent).toMatchObject({
       result: { kind: 'pending', callRef },
-      next: [{ action: 'status', args: { ref: { kind: 'call', ref: callRef } }, authority: 'same_principal' }],
+      next: [{ action: 'call.status', args: { callRef }, authority: 'same_principal' }],
     })
     expect(JSON.stringify(called.content)).not.toContain(callRef)
 

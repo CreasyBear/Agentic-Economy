@@ -57,8 +57,8 @@ describe('search origin continuations', () => {
             : { source: 'all', scope: 'complete', examined: 2, coverage: 'complete' },
           partialResults: input.cursor === undefined,
           next: input.cursor === undefined
-            ? [{ action: 'next-page', authority: 'public', args: { query: input.query, cursor: nextCursor } }]
-            : [{ action: 'broaden', authority: 'public', args: { query: input.query } }],
+            ? [{ action: 'registry.tools.search', authority: 'public', args: { query: input.query, cursor: nextCursor } }]
+            : [],
           pagination: input.cursor === undefined
             ? { limit: 1, hasMore: true, nextCursor }
             : { limit: 1, hasMore: false },
@@ -114,7 +114,7 @@ describe('search origin continuations', () => {
       results: [],
       assessed: { source: 'all', scope: 'complete', examined: 1, coverage: 'complete' },
       partialResults: false,
-      next: [{ action: 'broaden', authority: 'public', args: { query } }],
+      next: [],
       pagination: { limit: 8, hasMore: false },
     }), { status: 200, headers: { 'content-type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
@@ -142,17 +142,17 @@ describe('search origin continuations', () => {
     expect(fetchMock.mock.calls[0]?.[0]).toContain(origin)
   })
 
-  it('does not add JSON mode to continuations from a human invocation', async () => {
+  it.each([false, true])('preserves hard search scope from %s returned arguments without adding JSON mode', async returned => {
     const origin = 'http://[::1]:3024'
     vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
-      kind: 'noMatch',
-      reason: 'No suitable Tools found.',
+      kind: 'unavailable',
+      reason: 'source_unavailable',
       schemaVersion: 'registry-tools:v3',
       query: 'private lookup',
       results: [],
       assessed: { source: 'all', scope: 'complete', examined: 1, coverage: 'complete' },
       partialResults: false,
-      next: [{ action: 'broaden', authority: 'public', args: { query: 'private lookup' } }],
+      next: [{ action: 'registry.tools.search', authority: 'public', args: { query: 'private lookup', ...(returned ? { source: 'coinbase', filters: { provider: 'Returned Provider' }, limit: 3 } : {}) } }],
       pagination: { limit: 8, hasMore: false },
     }), { status: 200, headers: { 'content-type': 'application/json' } })))
     const output = captureStdout()
@@ -161,7 +161,7 @@ describe('search origin continuations', () => {
       await runSearchCommand(['private lookup'], {
         baseUrl: origin,
         baseUrlSource: 'flag',
-        json: false,
+        json: false, source: 'current', limit: 2, filters: { provider: 'Original Provider' },
         help: false,
         allowWrite: false,
         apply: false,
@@ -173,6 +173,9 @@ describe('search origin continuations', () => {
     expect(output.read()).not.toContain('request create')
     expect(output.read()).not.toContain('Browse all')
     expect(output.read()).not.toContain('--json')
+    expect(output.read()).toContain(`--source ${returned ? 'coinbase' : 'current'}`)
+    expect(output.read()).toContain(`--limit ${returned ? '3' : '2'}`)
+    expect(output.read()).toContain(returned ? 'Returned Provider' : 'Original Provider')
   })
 })
 

@@ -245,7 +245,7 @@ export async function runStatusCommand(args: readonly string[], options: CliOpti
     throw new CliFailure('Journey status requires buyer authentication.', {
       kind: 'UNAUTHENTICATED', code: 'agent_access_key_required',
       suggestion: `Anonymous Tool information is available via ${cliContinuation(options, ['ae', 'describe', ref])}.`,
-      next: [{ action: 'describe', args: { toolRef: parsedRef.data.ref }, authority: 'public' }],
+      next: [{ action: 'registry.tools.describe', args: { toolRef: parsedRef.data.ref }, authority: 'public' }],
     })
   }
   const outcome = await callJson(options.baseUrl, `/api/v1/status/${encodeURIComponent(ref)}`, {

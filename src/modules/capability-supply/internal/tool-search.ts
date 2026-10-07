@@ -378,7 +378,7 @@ function priceWithin(
   maximum: ExactAmount,
 ): boolean {
   if (price.kind === "on_request") return false;
-  const candidate = price.kind === "fixed" ? price.amount : price.minimum;
+  const candidate = price.kind === "fixed" ? price.amount : price.maximum;
   const comparison = compareExactAmounts(candidate, maximum);
   return comparison !== undefined && comparison <= 0;
 }

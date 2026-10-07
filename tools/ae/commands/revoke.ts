@@ -11,14 +11,15 @@ export async function runRevokeCommand(args: readonly string[], options: CliOpti
   }
 
   printJson({
-    kind: 'continuation',
+    kind: 'owner_handoff',
     command: 'revoke',
     surface: 'owner_browser',
     authentication: 'owner_session',
-    method: 'open',
-    path: OWNER_ACCESS_PATH,
-    anchor: '#revoke',
-    url: new URL(`${OWNER_ACCESS_PATH}#revoke`, options.baseUrl).toString(),
+    ownerHandoff: {
+      actor: 'account_owner',
+      reason: 'access_revocation_required',
+      destination: new URL(`${OWNER_ACCESS_PATH}#revoke`, options.baseUrl).href,
+    },
     agentCredential: 'not_used',
     instruction: 'Open this continuation as the owner to revoke assistant access; the CLI does not revoke owner authority.',
   })

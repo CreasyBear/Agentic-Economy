@@ -49,12 +49,12 @@ describe('quote input boundary', () => {
 })
 
 describe('search result state', () => {
-  it('preserves an exhausted no-match card with a broaden action in shared history', () => {
+  it('preserves exhausted no-match history without inventing an executable unchanged search', () => {
     const card = projectToolCard({ type: `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']}`,
       state: 'output-available', output: { kind: 'noMatch', results: [],
-        next: [{ action: 'broaden', args: { query: 'missing capability' }, authority: 'public' }] } })
-    expect(card).toMatchObject({ kind: 'status', state: 'attention',
-      next: { action: 'broaden', args: { query: 'missing capability' } } })
+        next: [] } })
+    expect(card).toMatchObject({ kind: 'status', state: 'attention' })
+    expect(card).not.toHaveProperty('next')
     if (card === null) throw new Error('missing_card')
     expect(projectToolCard(serializeToolCard(card))).toEqual(card)
   })
@@ -68,7 +68,7 @@ describe('search result state', () => {
       partialResults: false,
       assessed: { source: 'coinbase', scope: 'complete', coverage: 'complete', examined: 20 },
       pagination: { limit: 8, hasMore: false },
-      next: [{ action: 'broaden', args: { query: input.query }, authority: 'public' }],
+      next: [],
     }
     const part = { type: `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']}`,
       state: 'output-available', input, output }
@@ -283,8 +283,8 @@ describe('search result state', () => {
   it('keeps a source outage distinct from a completed no-match', () => {
     expect(projectToolCard({ type: `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']}`,
       state: 'output-available', output: { kind: 'unavailable', results: [],
-        next: [{ action: 'retry', args: { query: 'weather' }, authority: 'public' }] } }))
-      .toMatchObject({ kind: 'status', state: 'error', next: { action: 'retry', args: { query: 'weather' } } })
+        next: [{ action: 'registry.tools.search', args: { query: 'weather' }, authority: 'public' }] } }))
+      .toMatchObject({ kind: 'status', state: 'error', next: { action: 'registry.tools.search', args: { query: 'weather' } } })
   })
 })
 
@@ -326,7 +326,7 @@ function committedQuote(): Extract<ToolQuoteResult, { kind: 'committed' }> {
     toolRef: TOOL_REF,
     toolVersion: 1,
     expiresAt: EXPIRES_AT,
-    normalizedInput: { company: 'Acme' },
+
     price: PRICE,
     sourceRequirement: SOURCE_REQUIREMENT,
     account: {
@@ -341,9 +341,7 @@ function committedQuote(): Extract<ToolQuoteResult, { kind: 'committed' }> {
     evidenceDigest: `sha256:${'c'.repeat(64)}`,
     continuation: {
       action: 'tool.call',
-      method: 'POST',
-      path: '/api/v1/tools/call',
-      input: { quoteRef: QUOTE_REF, idempotencyKey: 'chat-inspect-one' },
+      args: { quoteRef: QUOTE_REF, idempotencyKey: 'chat-inspect-one' },
     },
   }
 }

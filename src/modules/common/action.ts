@@ -8,9 +8,9 @@ import { z } from 'zod'
  *
  * Each action carries a boundary-honest `summary` and an explicit `boundaries`
  * list so an external assistant knows both *when* to call it and *what it must
- * refuse to assume*. `readOnly` is the AE trust axis: read actions are safe to
- * call without approval and are cacheable; writes are admission-gated through
- * `SourceWriteAdmission` (the AE analogue of agent-native's approval gate).
+ * refuse to assume*. `readOnly` describes transport behavior; effect metadata
+ * separately declares disclosure, spending and approval. A read can release
+ * permitted query data. Writes are admission-gated through `SourceWriteAdmission`.
  *
  * The `run` body references the same `*ThroughSource` function the existing
  * TanStack server fns use, so UI, HTTP, and agent surfaces execute one
@@ -309,6 +309,21 @@ export function describeActionMcpMetadata(action: AnyAction): Readonly<{
   }
 }
 
+/** Restore tuple parser bounds omitted by Zod 4.4.3's native JSON Schema conversion. */
+export function preserveJsonSchemaTupleArity(
+  zodSchema: z.core.$ZodTypes,
+  jsonSchema: z.core.JSONSchema.BaseSchema,
+  io: 'input' | 'output',
+): void {
+  if (!(zodSchema instanceof z.ZodTuple)) return
+  const { items, rest } = zodSchema.def
+  const optionalKey = io === 'input' ? 'optin' : 'optout'
+  let minimum = items.length
+  while (minimum > 0 && items[minimum - 1]?._zod[optionalKey] === 'optional') minimum -= 1
+  jsonSchema.minItems = Math.max(jsonSchema.minItems ?? 0, minimum)
+  if (!rest) jsonSchema.maxItems = Math.min(jsonSchema.maxItems ?? items.length, items.length)
+}
+
 /** Machine-readable description of an action. */
 export type AgentToolDescriptor = {
   id: string
@@ -339,9 +354,25 @@ type ActionDescriptorSource = Readonly<{
 }>
 
 
+function actionJsonSchemaOf(schema: z.ZodType): JSONSchema | undefined {
+  // Preserve raw provider schema diagnostics; only native Zod schemas use the tuple override.
+  if (!(schema instanceof z.ZodType)) return convertSchemaToJsonSchema(schema)
+  const converted = z.toJSONSchema(schema, {
+    target: 'draft-07', io: 'input',
+    override: ({ zodSchema, jsonSchema }) => preserveJsonSchemaTupleArity(zodSchema, jsonSchema, 'input'),
+  })
+  delete converted.$schema
+  // Preserve the root object defaults used by the existing agent descriptor converter.
+  if (converted.type === 'object') {
+    converted.properties ??= {}
+    converted.required ??= []
+  }
+  return converted as JSONSchema
+}
+
 export function describeActionForAgent(action: ActionDescriptorSource): AgentToolDescriptor {
-  const inputJsonSchema = convertSchemaToJsonSchema(action.schema)
-  const outputJsonSchema = convertSchemaToJsonSchema(action.outputSchema)
+  const inputJsonSchema = actionJsonSchemaOf(action.schema)
+  const outputJsonSchema = actionJsonSchemaOf(action.outputSchema)
 
   return {
     ...(action.credentialAdmission === undefined ? {} : { credentialAdmission: action.credentialAdmission }),

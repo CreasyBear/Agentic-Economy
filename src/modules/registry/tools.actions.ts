@@ -20,6 +20,8 @@ import { type ToolSearchFilters, type ToolSearchResult } from '@/modules/capabil
 import { PublicToolRegistrySchemaVersion } from '@/modules/capability-supply/tool-schemas'
 import { InvalidOpaqueCursorError } from './opaque-cursor'
 import {
+  filterToolSearchCandidates,
+  filterExternalSearchRows,
   projectToolCompareChoices,
   projectToolDescription,
   projectToolListChoices,
@@ -132,19 +134,13 @@ export const registryToolsSearchAction = defineAction({
       appliedFilters: {}, matchedCount: 0, ranking: [], navigation: [],
     }
     const filters = sourceFilters(data.filters)
-    const provider = data.filters?.provider?.toLocaleLowerCase()
     // Admitted descriptors carry provider identity, but no Bazaar category, USD price band,
     // action class or object class. Only their explicit "unclassified"/"unknown" facets match.
-    const unclassifiedFacet = data.filters?.category !== undefined
+    const unclassifiedFacet = data.filters?.location !== undefined
+      || data.filters?.category !== undefined
       || (data.filters?.priceBand !== undefined && data.filters.priceBand !== 'unknown')
       || (data.filters?.actionClass !== undefined && data.filters.actionClass !== 'unclassified')
       || (data.filters?.objectClass !== undefined && data.filters.objectClass !== 'unclassified')
-    const visibleAdmitted = (result: ToolSearchResult): ToolSearchResult => result.kind === 'ok'
-      ? { ...result, items: result.items.filter(tool =>
-        !unclassifiedFacet && (provider === undefined
-          || tool.business.name.toLocaleLowerCase() === provider
-          || tool.business.slug.toLocaleLowerCase() === provider)) }
-      : result
     let searchResult: ToolSearchResult = empty
     let completePool = false
     let assessment: RegistryToolAssessment = { result: empty, verdict: 'noMatch', nearMisses: [] }
@@ -168,7 +164,7 @@ export const registryToolsSearchAction = defineAction({
         ...(filters === undefined ? {} : { filters }),
       })
       admittedExamined = searchResult.kind === 'ok' ? searchResult.items.length : 0
-      searchResult = visibleAdmitted(searchResult)
+      searchResult = filterToolSearchCandidates(searchResult, data.filters)
       if (searchResult.kind === 'ok' && searchResult.items.length > 0 && data.query.trim().length > 0
         && new Set(searchResult.items.map(item => item.toolRef)).size === searchResult.items.length) {
         const resolved = jevDiscoveryRecipient()
@@ -179,7 +175,7 @@ export const registryToolsSearchAction = defineAction({
     }
     if (searchResult.kind === 'unavailable') {
       return deliver(projectToolSearchChoices(searchResult, data.filters, assessment, freshness, data.limit,
-        { query: data.query, source, ...(recipient === undefined ? {} : { recipient }) }))
+        { query: data.query, source, ...(data.source === undefined ? {} : { searchSource: data.source }), ...(data.cursor === undefined ? {} : { searchCursor: data.cursor }), ...(recipient === undefined ? {} : { recipient }) }))
     }
     const directoryFilters = {
       ...(data.filters?.actionClass === undefined ? {} : { actionClass: data.filters.actionClass }),
@@ -216,7 +212,7 @@ export const registryToolsSearchAction = defineAction({
           if (page.kind === 'unavailable' && page.reason === 'cursor_invalid') throw new InvalidOpaqueCursorError()
           if (page.kind !== 'ok') {
             return deliver(projectToolSearchChoices(assessment.result, data.filters, assessment, freshness, data.limit,
-              { query: data.query, source, pagination: searchPagination(data.limit, scope, continuation),
+              { query: data.query, source, ...(data.source === undefined ? {} : { searchSource: data.source }), ...(data.cursor === undefined ? {} : { searchCursor: data.cursor }), pagination: searchPagination(data.limit, scope, continuation),
                 ...(recipient === undefined ? {} : { recipient }) }))
           }
           examined = page.page.length
@@ -226,7 +222,7 @@ export const registryToolsSearchAction = defineAction({
             rateAttempted = true
             directoryRate = await readPersistedReferenceRate()
           }
-          externalRows = compactDirectoryRows(page, directoryStatus, Date.now(), directoryRate)
+          externalRows = filterExternalSearchRows(compactDirectoryRows(page, directoryStatus, Date.now(), directoryRate), data.filters)
           if (externalRows.length > 0 && data.query.trim().length > 0) {
             const resolved = jevDiscoveryRecipient()
             if (resolved !== undefined) recipient = { ...resolved, data: 'query and candidate summaries' }
@@ -246,6 +242,7 @@ export const registryToolsSearchAction = defineAction({
       const output = projectToolSearchChoices(result, data.filters, assessment, freshness, data.limit, {
         query: data.query,
         source,
+        ...(data.source === undefined ? {} : { searchSource: data.source }), ...(data.cursor === undefined ? {} : { searchCursor: data.cursor }),
         complete: source === 'current' && completePool && !unclassifiedFacet,
         external: externalRows,
         pagination,
@@ -273,17 +270,17 @@ export const registryToolsSearchAction = defineAction({
           if (searchResult.kind === 'unavailable') {
             return deliver(projectToolSearchChoices(searchResult, data.filters,
               { verdict: 'noMatch', nearMisses: [] }, freshness, data.limit,
-              { query: data.query, source, ...(recipient === undefined ? {} : { recipient }) }))
+              { query: data.query, source, ...(data.source === undefined ? {} : { searchSource: data.source }), ...(data.cursor === undefined ? {} : { searchCursor: data.cursor }), ...(recipient === undefined ? {} : { recipient }) }))
           }
           admittedExamined = searchResult.kind === 'ok' ? searchResult.items.length : 0
-          searchResult = visibleAdmitted(searchResult)
+          searchResult = filterToolSearchCandidates(searchResult, data.filters)
           assessment = await rankToolSearchForRegistry(searchResult, data.query,
             context.request === undefined ? {} : { signal: context.request.signal })
           rankedPageSize = pageSize
         }
         continue
       }
-      return deliver({ ...capacityExceededSearch(data.query, data.limit, output.assessed, freshness), ...(recipient === undefined ? {} : { recipient }) })
+      return deliver({ ...capacityExceededSearch(data, output.assessed, freshness), ...(recipient === undefined ? {} : { recipient }) })
     }
   },
 })

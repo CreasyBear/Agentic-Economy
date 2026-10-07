@@ -44,7 +44,13 @@ describe('Provider offboarding completion', () => {
       blockerCodes: ['payout_resolution_required'],
       observedAt: 1_700_000_000_000,
       retentionPolicyVersion: 'retention-policy:2026-09',
-      continuation: { action: 'supply.offboarding.resume' },
+      ownerHandoff: { actor: 'business_owner', reason: 'offboarding_action_required', destination: '/owner/operations#offboarding', caseRef: 'provider-offboarding:one', businessRef: 'business:one' },
     })).toMatchObject({ state: 'Action required', revision: 2 })
+    const status = {
+      schemaVersion: 'provider_offboarding:v1', caseRef: 'provider-offboarding:one', businessRef: 'business:one', providerRef: 'provider:one', revision: 2, state: 'Draining', routeabilityFrozen: true, blockerCodes: [], observedAt: 1_700_000_000_000, retentionPolicyVersion: 'retention-policy:2026-09',
+    }
+    expect(providerOffboardingStatusSchema.safeParse({ ...status, continuation: { action: 'supply.offboarding.status', args: { businessRef: status.businessRef } } }).success).toBe(true)
+    expect(providerOffboardingStatusSchema.safeParse({ ...status, continuation: { action: 'supply.offboarding.status' } }).success).toBe(false)
+    expect(providerOffboardingStatusSchema.safeParse({ ...status, continuation: { action: 'supply.offboarding.resume' } }).success).toBe(false)
   })
 })

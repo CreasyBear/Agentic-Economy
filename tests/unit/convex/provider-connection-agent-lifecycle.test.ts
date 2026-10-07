@@ -388,5 +388,25 @@ describe('supplier-agent provider connection lifecycle', () => {
     await backend.mutation(internal.capabilityProviderConnectionCleanup.completeWork, callback)
     const cleaned = await backend.run(async (ctx) => await ctx.db.get(scheduled._id))
     expect(cleaned).toMatchObject({ lifecycle: 'revoked', credentialRef: null })
+
+    // Inspect the registered mutation's return too: the callback catches faults,
+    // so the stored lifecycle alone does not prove its return validator accepted.
+    const replay = await backend.mutation(internal.capabilityProviderConnections.recordCleanupResult, {
+      connectionRef: callback.context.connectionRef,
+      commandId: callback.context.commandId,
+      expectedAuthorityGeneration: callback.context.expectedAuthorityGeneration,
+      expectedAuthorityDigest: callback.context.expectedAuthorityDigest,
+      cleanupAttempt: callback.context.cleanupAttempt,
+      workId: callback.workId,
+      requestDigest: callback.context.requestDigest,
+      outcome: 'detached', reasonCode: 'local_detached',
+      evidenceRefs: ['provider_cleanup:local_detached'],
+      resourceAuthority: callback.context.resourceAuthority,
+      now: Date.now(),
+    })
+    expect(replay).toMatchObject({ kind: 'duplicate', connection: {
+      lifecycle: 'revoked', x402Method: 'POST', x402Payee: SELLER_ACCOUNT.address,
+      cleanupCallbackGraceUntil: expect.any(Number),
+    } })
   })
 })

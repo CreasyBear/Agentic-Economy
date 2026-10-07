@@ -4,7 +4,7 @@ import { RouterContextProvider, createMemoryHistory, createRootRoute, createRout
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 import { CanonicalSearchResults } from '@/components/ae/market/CanonicalSearchResults'
-import type { SearchResult } from '@/modules/registry/tool-choice-contracts'
+import type { SearchResult, SupplyProjectionFreshness } from '@/modules/registry/tool-choice-contracts'
 import { type PublicToolRef } from '@/modules/capability-supply/public'
 
 const admittedRef = `operation:v1:${'a'.repeat(64)}` as PublicToolRef
@@ -23,7 +23,7 @@ const currentResult = {
   readiness: 'ready',
   price: { kind: 'indicative', label: 'A$900719925474099.01' },
   detailRef: admittedRef,
-  next: [{ action: 'describe', args: { toolRef: admittedRef }, authority: 'public' }],
+  next: [{ action: 'registry.tools.describe', args: { toolRef: admittedRef }, authority: 'public' }],
   freshness: {
     source: 'supply_projection',
     state: 'fresh',
@@ -45,7 +45,7 @@ const externalResult = {
   sourcePrice: '1 USDC',
   price: { kind: 'indicative', label: 'US$1' },
   detailRef: `/api/v1/registry/detail?id=${externalId}`,
-  next: [{ action: 'describe-external', args: { id: externalId }, authority: 'public' }],
+  next: [],
   freshness: {
     source: 'x402_directory',
     state: 'stale',
@@ -76,14 +76,14 @@ function makeRouter() {
   })
 }
 
-function renderResults(results: readonly SearchResult[], saveAction = vi.fn<(item: SearchResult) => void>()) {
+function renderResults(results: readonly SearchResult[], saveAction = vi.fn<(item: SearchResult) => void>(), sourceFreshness?: SupplyProjectionFreshness) {
   const router = makeRouter()
   const renderActions = (item: SearchResult) => (
     <button type="button" onClick={() => saveAction(item)}>Save {item.title}</button>
   )
   const view = render(
     <RouterContextProvider router={router}>
-      <CanonicalSearchResults results={results} renderActions={renderActions} />
+      <CanonicalSearchResults results={results} renderActions={renderActions} {...(sourceFreshness === undefined ? {} : { sourceFreshness })} />
     </RouterContextProvider>,
   )
   return {
@@ -93,7 +93,7 @@ function renderResults(results: readonly SearchResult[], saveAction = vi.fn<(ite
     updateResults(nextResults: readonly SearchResult[]) {
       view.rerender(
         <RouterContextProvider router={router}>
-          <CanonicalSearchResults results={nextResults} renderActions={renderActions} />
+          <CanonicalSearchResults results={nextResults} renderActions={renderActions} {...(sourceFreshness === undefined ? {} : { sourceFreshness })} />
         </RouterContextProvider>,
       )
     },
@@ -130,6 +130,20 @@ describe('canonical search results', () => {
 
     expect(within(rows[0]!).getByRole('link').getAttribute('href')).toBe(`/tools/${encodeURIComponent(admittedRef)}`)
     expect(within(rows[1]!).getByRole('link').getAttribute('href')).toBe(`/api/v1/registry/detail?id=${externalId}`)
+  })
+
+  it('uses envelope freshness only for current rows without their own snapshot', async () => {
+    const { freshness: _currentFreshness, ...currentWithoutFreshness } = currentResult
+    const { freshness: _externalFreshness, ...externalWithoutFreshness } = externalResult
+    const archivedCurrent = { ...unavailablePriceResult, freshness: { ...currentResult.freshness, state: 'stale' as const, completedAt: Date.UTC(2026, 8, 26) } }
+    renderResults([currentWithoutFreshness, externalResult, archivedCurrent, { ...externalWithoutFreshness, id: 'registry:missing', title: 'Undated External' }], undefined, currentResult.freshness)
+    const rows = within(screen.getByRole('table', { name: 'Canonical search results' })).getAllByRole('row').slice(1)
+    expect(within(rows[0]!).getByText('AE supply projection · fresh · refreshed 27 Sept 2026')).toBeTruthy()
+    expect(within(rows[1]!).getByText('Coinbase Bazaar index · stale · refreshed 26 Sept 2026')).toBeTruthy()
+    expect(within(rows[2]!).getByText('AE supply projection · stale · refreshed 26 Sept 2026')).toBeTruthy()
+    expect(within(rows[3]!).getByText('Coinbase Bazaar index · freshness unavailable')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Inspect Weather Forecast' }))
+    expect(detailText(await screen.findByRole('dialog'), 'Freshness')).toBe('AE supply projection · fresh · refreshed 27 Sept 2026')
   })
 
   it('opens the real Inspect dialog with complete current facts and does not imply a save or call', async () => {

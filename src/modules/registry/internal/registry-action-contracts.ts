@@ -461,14 +461,14 @@ export const searchParameters: readonly ActionParameter[] = [
     type: 'object',
     description:
       'Budget ceiling as an exact amount. Keeps a business when at least one offering fits. '
-      + 'An offering quoted on request, or one with no published price, has no comparable ceiling and is never removed by this filter.',
+      + 'Unknown, quote-only and starting prices do not establish a ceiling; only a fixed amount or full range maximum in the same currency can satisfy it.',
     required: false,
   },
   {
     name: 'hasPrice',
     type: 'boolean',
     description:
-      'When true, return only businesses where at least one offering publishes a comparable price. '
+      'When true, return only businesses where at least one offering publishes a fixed amount or bounded range. '
       + 'Omit it, or pass false, to search all listings.',
     required: false,
   },

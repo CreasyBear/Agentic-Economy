@@ -1,3 +1,4 @@
+import { Validator, type Schema } from '@cfworker/json-schema'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
@@ -7,6 +8,7 @@ import {
   readMcpBody,
 } from './mcp-api-harness'
 import type { JsonRpcBody } from './mcp-api-harness'
+import { toolQuoteResultSchema } from '@/modules/capability-execution/quote'
 import { listMcpActions, mcpToolName, MCP_TOOLSETS } from '@/modules/actions'
 
 const listRequest = { jsonrpc: '2.0', id: 'list', method: 'tools/list', params: {} } as const
@@ -16,23 +18,31 @@ const names = (body: JsonRpcBody): string[] =>
 const bytes = (value: unknown): number => new TextEncoder().encode(JSON.stringify(value)).byteLength
 
 async function listWith(scopes: readonly string[], path = '/mcp') {
-  const request = new Request(`https://ae.example${path}`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: 'Bearer role-test' },
-    body: JSON.stringify(listRequest),
-  })
-  const response = await handleMcpRequest(request, {
-    authenticate: authenticateWithScopes(scopes),
-    resolvePrincipal: async (projection) => ({
-      ...projection,
-      principalId: 'prn_00000000000040008000000000000044',
-      ownerId: 'acc_00000000000040008000000000000044',
-    }),
-  })
-  expect(response.status).toBe(200)
-  const body = await readMcpBody(response)
-  expect(body.error).toBeUndefined()
-  return body
+  const tools: unknown[] = []
+  let cursor: string | undefined
+  let body: JsonRpcBody
+  do {
+    const request = new Request(`https://ae.example${path}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: 'Bearer role-test' },
+      body: JSON.stringify({ ...listRequest, params: cursor === undefined ? {} : { cursor } }),
+    })
+    const response = await handleMcpRequest(request, {
+      authenticate: authenticateWithScopes(scopes),
+      resolvePrincipal: async (projection) => ({
+        ...projection,
+        principalId: 'prn_00000000000040008000000000000044',
+        ownerId: 'acc_00000000000040008000000000000044',
+      }),
+    })
+    expect(response.status).toBe(200)
+    body = await readMcpBody(response)
+    expect(body.error).toBeUndefined()
+    expect(bytes(body.result)).toBeLessThanOrEqual(40_000)
+    tools.push(...(body.result?.tools as unknown[]))
+    cursor = body.result?.nextCursor as string | undefined
+  } while (cursor !== undefined)
+  return { ...body, result: { ...body.result, tools } }
 }
 
 beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development'))
@@ -46,19 +56,20 @@ describe('MCP role toolsets', () => {
     expect(names(body)).not.toContain('ae_registry_tools_list')
     expect(names(body)).not.toContain('ae_tool_call')
     expect(names(body).some((name) => name.startsWith('ae_operation_'))).toBe(false)
-    expect(bytes(body.result?.tools)).toBeLessThan(8192)
+    // Exact output constraints, including tuple arity, measure 36,035 bytes with shared Problem refs.
+    expect(bytes(body.result?.tools)).toBeLessThan(36_500)
     for (const tool of (body.result?.tools ?? []) as Array<Record<string, unknown>>) {
       expect(tool.inputSchema).toMatchObject({ type: 'object', properties: expect.any(Object) })
-      expect(tool.outputSchema).toMatchObject({
-        type: 'object',
-        properties: {
-          result: { type: 'object' },
-          kind: { type: 'string' },
-          code: { type: 'string' },
-          next: { type: 'array' },
-        },
-        required: ['next'],
-      })
+      expect(tool.outputSchema).toMatchObject({ type: 'object', anyOf: expect.any(Array) })
+      const validator = new Validator(tool.outputSchema as Schema, '2020-12')
+      expect(validator.validate({ next: [] }).valid).toBe(false)
+      expect(validator.validate({ result: { kind: 'made_up' }, next: [] }).valid).toBe(false)
+      const problem = { type: 'about:blank', title: 'Invalid input', status: 400, kind: 'INVALID_ARGUMENT', code: 'input_invalid', retryable: false, next: [], source: 'local' }
+      expect(validator.validate(problem).valid).toBe(true)
+      expect(validator.validate({ ...problem, refs: { callRef: 42 } }).valid).toBe(false)
+      expect(validator.validate({ ...problem, requestId: 'request-1' }).valid).toBe(false)
+      expect(validator.validate({ ...problem, source: 'remote' }).valid).toBe(false)
+      expect(validator.validate({ ...problem, source: 'remote', requestId: 'request-1' }).valid).toBe(true)
       expect(tool.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false })
     }
   })
@@ -72,9 +83,38 @@ describe('MCP role toolsets', () => {
     expect(listed).not.toContain('ae_registry_tools_list')
     expect(listed).not.toContain('ae_supply_publish')
     const tools = body.result?.tools as Array<Record<string, unknown>>
-    // Preserve the existing discovery budget and bound the added feedback tool separately.
-    expect(bytes(tools.filter(tool => tool.name !== 'ae_feedback_submit'))).toBeLessThan(50_000)
-    expect(bytes(tools.find(tool => tool.name === 'ae_feedback_submit'))).toBeLessThan(1_500)
+    // Exact outputs with local refs measure 250,130 bytes here; bound feedback separately.
+    expect(bytes(tools.filter(tool => tool.name !== 'ae_feedback_submit'))).toBeLessThan(260_000)
+    expect(bytes(tools.find(tool => tool.name === 'ae_feedback_submit'))).toBeLessThan(3_500)
+    const whoami = tools.find(tool => tool.name === 'ae_agentAccess_whoami')
+    if (whoami === undefined) throw new Error('Expected Account identity Tool')
+    const validator = new Validator(whoami.outputSchema as Schema, '2020-12')
+    const identity = { kind: 'authenticated', principalRef: 'principal', accountRef: 'account', credentialId: 'credential', applicationRef: 'application', environment: 'sandbox', scopes: ['market_tools:call'], authorityMode: 'spending_policy' }
+    expect(validator.validate({ result: identity, next: [] }).valid).toBe(true)
+    const incomplete = Object.fromEntries(Object.entries(identity).filter(([key]) => key !== 'credentialId'))
+    expect(validator.validate({ result: incomplete, next: [] }).valid).toBe(false)
+    expect(validator.validate({ result: { ...identity, unexpected: true }, next: [] }).valid).toBe(false)
+    const planRun = tools.find(tool => tool.name === 'ae_tool_plan_run')
+    if (planRun === undefined) throw new Error('Expected Plan run Tool')
+    const planValidator = new Validator(planRun.outputSchema as Schema, '2020-12')
+    expect(planValidator.validate({ result: { kind: 'running', planRef: 'plan-1', state: 'running' }, next: [] }).valid).toBe(true)
+    expect(planValidator.validate({ result: { kind: 'running', planRef: 42, state: 'running' }, next: [] }).valid).toBe(false)
+    const planGet = tools.find(tool => tool.name === 'ae_tool_plan_get')
+    if (planGet === undefined) throw new Error('Expected Plan status Tool')
+    const getValidator = new Validator(planGet.outputSchema as Schema, '2020-12')
+    const progress = { kind: 'available', planRef: 'plan-1', planDigest: 'digest', state: 'running', approvedTotalAudUnits: '1', currency: 'AUD', exponent: 6, expiresAt: 1, runDeadlineAt: 2, maximumConcurrentNodes: 1, stages: [], nodes: [], dataFlows: [], hold: { status: 'none', settledAudUnits: '0', releasedAudUnits: '0' } }
+    expect(getValidator.validate({ result: progress, next: [] }).valid).toBe(true)
+    expect(getValidator.validate({ result: { ...progress, approvedTotalAudUnits: 1 }, next: [] }).valid).toBe(false)
+    expect(getValidator.validate({ result: { ...progress, approvedTotalAudUnits: 'bad' }, next: [] }).valid).toBe(false)
+    const quote = tools.find(tool => tool.name === 'ae_tool_quote')
+    if (quote === undefined) throw new Error('Expected Quote Tool')
+    const quoteValidator = new Validator(quote.outputSchema as Schema, '2020-12')
+    const ownerHandoff = { actor: 'account_owner', reason: 'Connect to continue', destination: '/agent-access' }
+    const refused = { kind: 'refused', toolRef: 'tool:test', code: 'grant_not_found', retryable: false, correlationRef: 'correlation:test' }
+    for (const handoff of [undefined, ownerHandoff, { ...ownerHandoff, actor: 'ae_support' }, { ...ownerHandoff, actor: 'unknown' }, { ...ownerHandoff, destination: 'https://untrusted.example' }, { ...ownerHandoff, iconUrl: null }, [ownerHandoff]]) {
+      const result = { ...refused, ...(handoff === undefined ? {} : { ownerHandoff: handoff }) }
+      expect(quoteValidator.validate({ result, next: [] }).valid).toBe(toolQuoteResultSchema.safeParse(result).success)
+    }
     expect(tools.find((tool) => tool.name === 'ae_tool_quote')?.annotations).toMatchObject({
       readOnlyHint: false, destructiveHint: false, idempotentHint: false,
     })
@@ -153,7 +193,8 @@ describe('MCP role toolsets', () => {
     expect(listed).toContain('ae_agentAccess_whoami')
     expect(listed).not.toContain('ae_tool_call')
     expect(listed).not.toContain('ae_agentAccess_balance')
-    expect(bytes(body.result?.tools)).toBeLessThan(50_000)
+    // Exact Provider outputs with local refs measure 134,461 bytes.
+    expect(bytes(body.result?.tools)).toBeLessThan(140_000)
   })
 
   it('limits an authenticated read-only connection to discover and read-only account tools', async () => {

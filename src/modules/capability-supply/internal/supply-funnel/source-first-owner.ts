@@ -257,10 +257,10 @@ export async function startOwnerSupplySourceConnection({
   })) return unavailablePreview()
   return {
     kind: 'action_required',
-    requiredAction: {
-      action: 'supply.source.preview',
-      blockedCapabilities: ['supply.publish'],
-      cta: x402ConnectionCta({
+    ownerHandoff: {
+      actor: 'business_owner',
+      reason: 'payee_proof_required',
+      destination: x402ConnectionCta({
         candidateRef: data.candidateRef,
         resourceUrl: data.source.resourceUrl,
         method: candidate.sourceSelector.method,
@@ -268,8 +268,6 @@ export async function startOwnerSupplySourceConnection({
       }),
       ctaLabel: 'Prove payTo',
       description: 'Sign one wallet message for this endpoint payee. The signature proves control of payTo and does not reveal a private key.',
-      iconUrl: null,
-      status: 'required',
       title: 'Prove the payee',
     },
   }
@@ -536,14 +534,12 @@ function publicationOrigin(
 function unavailablePreview(): SupplySourcePreview {
   return {
     kind: 'action_required',
-    requiredAction: {
-      action: 'supply.source.preview',
-      blockedCapabilities: ['supply.publish'],
-      cta: '/owner/operations',
+    ownerHandoff: {
+      actor: 'business_owner',
+      reason: 'business_unavailable',
+      destination: '/owner/operations',
       ctaLabel: 'Return to Tools',
       description: 'The current Business could not be confirmed. Return to Tools and try again.',
-      iconUrl: null,
-      status: 'required',
       title: 'Business unavailable',
     },
   }

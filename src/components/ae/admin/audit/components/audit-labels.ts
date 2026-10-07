@@ -122,6 +122,7 @@ export const AUDIT_EVENT_LABELS = {
   'billing.usage_alert_policy_configured':'Usage alert policy configured',
   'billing.monthly_usage_close_requested':'Monthly usage close requested',
   'money.promotional_credit_requested': 'Promotional credit requested',
+  'money.trial_approved': 'Trial approved',
   'money.promotional_credit_granted': 'Promotional credit granted',
   'money.promotional_credit_expired': 'Promotional credit expired',
 } satisfies Record<AuditEventType, string>

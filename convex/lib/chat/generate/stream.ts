@@ -4,6 +4,7 @@ import type { ModelMessage } from 'ai'
 import type { JSONValue, LanguageModelV4 } from '@ai-sdk/provider'
 import type { Value } from 'convex/values'
 import type { ActionCtx } from '../../../_generated/server'
+import { projectCallMachineResult } from '@/modules/capability-execution/call-contracts'
 import { CHAT_TOOL_NAME_MAP } from '@/modules/chat/tool-card'
 import { CHAT_UNFINISHED_ANSWER, containsChatProtocolMarkup } from '@/modules/chat/search-presentation'
 import type { InteractiveBusinessAuthorityContext } from '@/modules/business/public'
@@ -248,7 +249,7 @@ export async function streamDurableChatResponse(
         if (args.trustedChatAuthority?.applicationRef === 'ae-owner-chat'
           && step.toolResults.some(result => typeof result.output === 'object' && result.output !== null
             && 'kind' in result.output && (
-              (result.toolName === CHAT_TOOL_NAME_MAP.canonicalToProvider['tool.call'] && result.output.kind === 'needs_authority')
+              (result.toolName === CHAT_TOOL_NAME_MAP.canonicalToProvider['tool.call'] && result.output.kind === 'refused' && 'code' in result.output && result.output.code === 'authority_required')
               || (result.toolName === CHAT_TOOL_NAME_MAP.canonicalToProvider['tool.plan.run'] && result.output.kind === 'awaiting_approval')
             ))) {
           ownerApprovalPending = true
@@ -305,7 +306,7 @@ export async function streamDurableChatResponse(
       }
       const toolResults = [
         { toolName: quoteName, output: purchased.quote },
-        ...(purchased.call === undefined ? [] : [{ toolName: callName, output: purchased.call }]),
+        ...(purchased.call === undefined ? [] : [{ toolName: callName, output: projectCallMachineResult(purchased.call) }]),
       ]
       completedSteps.push({ toolResults })
       await saveMessages(ctx, components.agent, {

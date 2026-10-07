@@ -381,11 +381,11 @@ describe('direct Quote handlers', () => {
     expect(result).toMatchObject({
       kind: 'refused', retryable: false,
       ...(admission === 'interactive_identity'
-        ? { code: 'grant_not_found', requiredActions: [{ cta: '/agent-access' }] }
+        ? { code: 'grant_not_found', ownerHandoff: { actor: 'account_owner', destination: '/agent-access' } }
         : {
             code: 'inspection_unavailable',
             reason: admission === 'missing' ? 'missing_source_write_admission' : 'source_write_command_mismatch',
-            requiredActions: [{ cta: '/support' }],
+            ownerHandoff: { actor: 'ae_support', destination: '/support' },
           }),
     })
     expect(result).not.toHaveProperty('continuation')
@@ -417,7 +417,7 @@ describe('direct Quote handlers', () => {
     const projected = projectToolQuoteRefusal({ toolRef: fixture.toolRef, input,
       code: 'budget_exceeded', retryable: false, reason: 'account_limit', correlationRef: suffix })
     expect(projected.continuation?.action).not.toBe('funding.handoff.config')
-    expect(projected.requiredActions).toMatchObject([{ action: 'review_account_exposure', cta: '/support' }])
+    expect(projected.ownerHandoff).toMatchObject({ actor: 'ae_support', destination: '/support', reason: expect.stringContaining('purchase capacity') })
   })
 
   it('refuses issueQuote when organization monthly spend ceiling would be exceeded', async () => {
@@ -617,6 +617,8 @@ describe('direct Quote handlers', () => {
     }).slice(7)}`
     expect(stored.evidenceDigest).toBe(expectedEvidenceDigest)
     expect(issued.evidenceDigest).toBe(expectedEvidenceDigest)
+    expect(issued).not.toHaveProperty("normalizedInput")
+    expect(JSON.parse(stored.normalizedInputJson!)).toEqual(input)
     expect(stored.quoteRef).toBe(expectedQuoteRef)
 
     const liveRead = await backend.query(internal.capabilityQuotes.readForCall, {
@@ -718,7 +720,7 @@ describe('direct Quote handlers', () => {
       currentBalanceUnits: '0',
       budgetGeneration: agent.grant.generation,
     }).slice(7)}`
-    expect(fundingRefusal.continuation.input.idempotencyKey).toBe(expectedFundingIdempotencyKey)
+    expect(fundingRefusal.continuation.args.idempotencyKey).toBe(expectedFundingIdempotencyKey)
 
     const lowBudgetAgent = await seedAgent(
       backend,

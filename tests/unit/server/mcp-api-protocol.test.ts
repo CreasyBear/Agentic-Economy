@@ -322,11 +322,8 @@ describe('MCP host adapter protocol', () => {
       status: 401,
       kind: 'UNAUTHENTICATED',
       code: 'authentication_required',
-      next: expect.arrayContaining([
-        { action: 'connect', args: { via: 'cli', command: 'ae connect' }, authority: 'human_owner' },
-        { action: 'connect', args: { via: 'oauth_device', url: 'https://canonical.example/.well-known/oauth-protected-resource' }, authority: 'human_owner' },
-        { action: 'connect', args: { via: 'oauth_device', url: 'https://canonical.example/oauth/device_authorization' }, authority: 'human_owner' },
-      ]),
+      next: [],
+      ownerHandoff: { actor: 'account_owner', reason: 'connect_required', destination: 'https://canonical.example/agent-access' },
     })
   })
 

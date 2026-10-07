@@ -64,37 +64,28 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
     ? []
     : ['--base-url', options.baseUrl]
   const outputContinuation = options.json ? ['--json'] : []
-  const filtersContinuation = parsedInput.data.filters === undefined
-    ? []
-    : ['--filters', JSON.stringify(parsedInput.data.filters)]
-  const sourceContinuation = parsedInput.data.source === undefined ? [] : ['--source', parsedInput.data.source]
-  const limitContinuation = options.limit === undefined ? [] : ['--limit', String(parsedInput.data.limit)]
   const commonFlags = [...originContinuation, ...outputContinuation]
+  const searchCommandFor = (next: Extract<RegistryNextAction, { action: 'registry.tools.search' }>): string => {
+    const source = next.args.source ?? parsedInput.data.source
+    const filters = next.args.filters ?? parsedInput.data.filters
+    const limit = next.args.limit ?? parsedInput.data.limit
+    const cursor = next.args.cursor
+    return continuationCommand([
+      'ae', 'search', next.args.query, '--limit', String(limit),
+      ...(source === undefined ? [] : ['--source', source]),
+      ...(filters === undefined ? [] : ['--filters', JSON.stringify(filters)]),
+      ...(cursor === undefined ? [] : ['--cursor', cursor]), ...commonFlags,
+    ])
+  }
   const commandFor = (next: RegistryNextAction): string => {
     switch (next.action) {
-      case 'describe':
+      case 'registry.tools.describe':
         return continuationCommand(['ae', 'describe', next.args.toolRef, ...originContinuation, ...outputContinuation])
-      case 'describe-external': {
-        const detail = new URL('/api/v1/registry/detail', options.baseUrl)
-        detail.searchParams.set('id', next.args.id)
-        return continuationCommand(['curl', '--fail', detail.toString()])
-      }
-      case 'next-page':
-        return continuationCommand([
-          'ae', 'search', next.args.query, ...limitContinuation, ...sourceContinuation,
-          ...filtersContinuation, '--cursor', next.args.cursor, ...commonFlags,
-        ])
-      case 'broaden':
-        return continuationCommand(['ae', 'search', next.args.query, ...limitContinuation, ...commonFlags])
-      case 'retry':
-        return continuationCommand([
-          'ae', 'search', next.args.query, ...limitContinuation, ...sourceContinuation,
-          ...filtersContinuation, ...(parsedInput.data.cursor === undefined ? [] : ['--cursor', parsedInput.data.cursor]),
-          ...commonFlags,
-        ])
+      case 'registry.tools.search':
+        return searchCommandFor(next)
     }
   }
-  const nextPage = result.next.find(action => action.action === 'next-page')
+  const nextPage = result.pagination.hasMore ? result.next.find(action => action.action === 'registry.tools.search' && action.args.cursor !== undefined) : undefined
   const nextPageCommand = nextPage === undefined ? undefined : commandFor(nextPage)
   const saveNeedCommand = result.kind === 'noMatch' && result.saveNeed !== undefined
     ? continuationCommand([

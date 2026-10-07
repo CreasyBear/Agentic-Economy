@@ -39,6 +39,7 @@ import {
   supplyConnectionCommandResultSchema,
   supplyConnectionDetailResultSchema,
   supplyConnectionListResultSchema,
+  supplyEarningsResultSchema,
   supplyRecheckResultSchema,
   supplyRepublishResultSchema,
   supplyStatusResultSchema,
@@ -137,7 +138,7 @@ const providerToolListQuery = sourceQuery<Record<string, unknown>, ProviderToolA
 const withdrawMutation = sourceMutation<Record<string, unknown>, OwnerSupplyCommandResult>('capabilitySupplyOwnerFunnel:withdrawOwnerCapability')
 const recheckMutation = sourceMutation<Record<string, unknown>, OwnerSupplyCommandResult>('capabilitySupplyOwnerFunnel:refreshOwnerCapability')
 const republishMutation = sourceMutation<Record<string, unknown>, OwnerSupplyCommandResult>('capabilitySupplyOwnerFunnel:republishOwnerCapability')
-const earningsReadMutation = sourceMutation<Record<string, unknown>, Readonly<{ kind: 'error'; code: 'source_unavailable' }>>('moneyLedger:readAgentProviderEarnings')
+const earningsReadMutation = sourceMutation<Record<string, unknown>, SupplyEarningsResult>('moneyLedger:readAgentProviderEarnings')
 type SupplyCallsCursor = Readonly<{ createdAt: number; callRef: string }>
 type SupplyCallsBackendResult =
   | Readonly<{
@@ -309,13 +310,13 @@ export function createSupplyManagementService(request: Request, bodyText: string
       correlationId,
       currency: input.currency,
     })
-    await mutate(earningsReadMutation, {
+    const result = await mutate(earningsReadMutation, {
       currency: input.currency,
       agentPrincipal: principal,
       operationKey,
       correlationId,
     }, operationKey, correlationId)
-    return { kind: 'error', code: 'source_unavailable' }
+    return supplyEarningsResultSchema.parse(result)
   }
   const connectionList = async ({ input, principal, correlationId }: { input: SupplyConnectionListInput; principal: AgentAccessPrincipal; correlationId: string }): Promise<SupplyConnectionListResult> => {
     const operationKey = canonicalDigest({
@@ -412,16 +413,14 @@ export function createSupplyManagementService(request: Request, bodyText: string
         kind: 'action_required',
         attemptRef: result.attemptRef,
         expiresAt: result.expiresAt,
-        requiredAction: {
-          action: SUPPLY_ACTION_IDS.connectionConnect,
-          blockedCapabilities: ['supply.publish'],
-          cta,
+        ownerHandoff: {
+          actor: 'business_owner',
+          reason: 'provider_connection_required',
+          destination: cta,
           ctaLabel: 'Connect service',
           description: input.kind === 'mcp_oauth'
             ? 'Sign in to the MCP service in your browser, then return to your agent.'
             : 'Enter the service credential securely in your browser, then return to your agent.',
-          iconUrl: null,
-          status: 'required',
           title: 'Connect service',
         },
       }

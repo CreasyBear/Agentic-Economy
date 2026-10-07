@@ -98,7 +98,7 @@ describe('authenticated chat Turn HTTP adapter', () => {
       { type: 'tool-output-available', toolCallId: 'search', output: { kind: 'matched', result: { title: 'Weather' } } },
       { type: 'tool-input-available', toolCallId: 'large', toolName: 'registry.tools.search', input: { query: 'market tools' } },
       { type: 'tool-output-available', toolCallId: 'large', output: {
-        truncated: true, next: [{ action: 'describe', args: { toolRef }, authority: 'public' }],
+        truncated: true, next: [{ action: 'registry.tools.describe', args: { toolRef }, authority: 'public' }],
       } },
     ])
     expect(JSON.stringify(events)).not.toMatch(/input-secret|nested-secret|output-secret|x{100}/u)
@@ -110,11 +110,11 @@ describe('authenticated chat Turn HTTP adapter', () => {
     const amount = { currency: 'AUD', units: '2500000', exponent: 6 }
     const quote = {
       kind: 'committed', quoteRef, toolRef: `operation:v1:${'c'.repeat(64)}`, toolVersion: 1,
-      expiresAt: 1800000000000, normalizedInput: {}, price: amount,
+      expiresAt: 1800000000000, price: amount,
       account: { accountRef: 'account', available: amount },
       budget: { principalRef: 'agent', maximumPerCall: amount },
       policyRefs: [], evidenceDigest: 'sha256:quote',
-      continuation: { action: 'tool.call', method: 'POST', path: '/api/v1/tools/call', input: { quoteRef, idempotencyKey: 'chat-test-quote' } },
+      continuation: { action: 'tool.call', args: { quoteRef, idempotencyKey: 'chat-test-quote' } },
     }
     const uncertain = {
       kind: 'reconciliation_required', callRef, toolRef: quote.toolRef,
@@ -136,7 +136,7 @@ describe('authenticated chat Turn HTTP adapter', () => {
     expect(events).toContainEqual(expect.objectContaining({ type: 'data-ae-receipt', data: expect.objectContaining({ callRef, payment: 'outcome_unknown', state: 'working' }) }))
     expect(events).toContainEqual(expect.objectContaining({ type: 'data-ae-problem', data: expect.objectContaining({
       code: 'outcome_unknown', refs: { callRef },
-      next: [{ action: 'status', args: { ref: { kind: 'call', ref: callRef } }, authority: 'same_principal' }],
+      next: [{ action: 'call.status', args: { callRef }, authority: 'same_principal' }],
     }) }))
   })
 
@@ -166,7 +166,7 @@ describe('authenticated chat Turn HTTP adapter', () => {
     expect(await inFlight.json()).toEqual({ kind: 'in_flight', turnRef, inFlightEffects })
   })
 
-  it('rejects unauthenticated calls with RFC 9457 connect continuation', async () => {
+  it('rejects unauthenticated calls with RFC 9457 owner authentication handoff', async () => {
     const response = await handleChatTurnPost(post(), {
       clerkAuth: async () => ({ isAuthenticated: false, userId: null }),
       source: () => { throw new Error('must not reach source') },
@@ -175,7 +175,7 @@ describe('authenticated chat Turn HTTP adapter', () => {
     expect(response.headers.get('content-type')).toBe('application/problem+json')
     expect(await response.json()).toMatchObject({
       kind: 'UNAUTHENTICATED', status: 401,
-      next: expect.arrayContaining([expect.objectContaining({ action: 'connect', authority: 'human_owner' })]),
+      next: [], ownerHandoff: { actor: 'account_owner', reason: 'connect_required', destination: expect.stringContaining('/agent-access') },
     })
   })
 
@@ -214,13 +214,13 @@ describe('authenticated chat Turn HTTP adapter', () => {
     expect(coded.headers.get('Retry-After')).toBe('3')
   })
 
-  it('preserves a Clerk source 401 as authentication with a connect continuation', async () => {
+  it('preserves a Clerk source 401 as authentication with an owner handoff', async () => {
     const store = source({ start: async () => { throw new ConvexSourceError('missing_auth', 'Clerk token expired', 401) } })
     const response = await handleChatTurnPost(post(), options(store))
     expect(response.status).toBe(401)
     expect(await response.json()).toMatchObject({
       kind: 'UNAUTHENTICATED',
-      next: expect.arrayContaining([expect.objectContaining({ action: 'connect', authority: 'human_owner' })]),
+      next: [], ownerHandoff: { actor: 'account_owner', reason: 'connect_required', destination: expect.stringContaining('/agent-access') },
     })
   })
 
@@ -236,11 +236,12 @@ describe('authenticated chat Turn HTTP adapter', () => {
     expect(await response.json()).toMatchObject({ code, kind })
   })
 
-  it('projects stream-time key revocation as 401 with connect, not a status-only or retryable source outage', async () => {
+  it('projects stream-time key revocation as a nonretryable 401 with an owner authentication handoff', async () => {
+    vi.stubEnv('AE_CANONICAL_BASE_URL', 'https://canonical.example')
     const store = source({ deltas: async () => { throw new ConvexError({ code: 'unauthenticated' }) } })
     const events = await parts(await handleChatTurnPost(post(), options(store)))
     expect(events[1]).toMatchObject({ type: 'data-ae-problem', data: {
-      kind: 'UNAUTHENTICATED', next: expect.arrayContaining([expect.objectContaining({ action: 'connect' })]),
+      kind: 'UNAUTHENTICATED', next: [], ownerHandoff: { actor: 'account_owner', reason: 'connect_required', destination: 'https://canonical.example/agent-access' },
     } })
   })
 
@@ -263,7 +264,7 @@ describe('authenticated chat Turn HTTP adapter', () => {
       type: 'data-ae-problem',
       data: {
         kind: 'UNAVAILABLE', retryable: true,
-        next: [{ action: 'status', args: { ref: { kind: 'turn', ref: turnRef } }, authority: 'same_principal' }],
+        next: [{ action: 'journey.status', args: { ref: { kind: 'turn', ref: turnRef } }, authority: 'same_principal' }],
       },
     })
     expect(JSON.stringify(events)).not.toContain('private key')

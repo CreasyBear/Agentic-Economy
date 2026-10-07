@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { setHttpRateLimitAdmissionForTests } from '@/lib/server/rate-limit'
 import { handleSupplyActionPost } from '@/lib/server/supply-action-api'
 import type { SupplyManagementService } from '@/modules/capability-supply/supply-actions'
+import { projectProviderToolStatus } from '@/modules/capability-supply/provider-tool-status'
 
 beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development'))
 afterEach(() => vi.unstubAllEnvs())
@@ -148,6 +149,43 @@ describe('Provider action HTTP adapter', () => {
     expect(toolsList).toHaveBeenCalledWith(expect.objectContaining({
       input: { businessRef: 'business:one', limit: 50 },
     }))
+  })
+
+  it.each(['status', 'toolsList'] as const)('returns Provider maintenance in %s without changing authority', async actionName => {
+    setHttpRateLimitAdmissionForTests(async () => ({ ok: true }))
+    const status = projectProviderToolStatus({
+      schemaVersion: 'provider_tools:v1', businessRef: 'business:one', providerRef: 'provider:one', toolRef: 'operation:one',
+      observedAt: 100, draftPresent: true, setupComplete: true, submitted: true, reviewActive: false,
+      routeable: true, paused: false, retired: false, retirementProven: false, blockerCodes: [],
+      maintenance: { businessId: 'business:one', offeringRef: 'offering:one', offeringRevision: 1,
+        offeringSourceHash: 'source:one', publicationRef: 'publication:one', publicationRevision: 2 },
+    })
+    const complete = actionName === 'status'
+      ? { kind: 'available', schemaVersion: 'provider_tools:v1', businessRef: 'business:one', status }
+      : { kind: 'available', schemaVersion: 'provider_tools:v1', businessRef: 'business:one', page: [status], isDone: true, continueCursor: null }
+    const input = actionName === 'status' ? { businessRef: 'business:one', toolRef: 'operation:one' } : { businessRef: 'business:one', limit: 50 }
+    const dispatch = vi.fn().mockResolvedValue(complete)
+    const response = await handleSupplyActionPost(new Request('https://ae.example/api/v1/supply/status', {
+      method: 'POST', headers: { Authorization: 'Bearer hidden' },
+      body: JSON.stringify(input),
+    }), actionName, { authenticate, resolvePrincipal, supplyManagementService: service({ [actionName]: dispatch }) })
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual(complete)
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({ input }))
+  })
+
+  it('returns unsupported earnings as a permanent capability limit', async () => {
+    setHttpRateLimitAdmissionForTests(async () => ({ ok: true }))
+    const unsupported = { kind: 'error', code: 'capability_unsupported', capability: 'supply.earnings', retryable: false,
+      detail: 'Agent Provider earnings readback is not supported. The Business owner can review recorded Provider obligations in the owner earnings view.' }
+    const earnings = vi.fn().mockResolvedValue(unsupported)
+    const response = await handleSupplyActionPost(new Request('https://ae.example/api/v1/supply/earnings', {
+      method: 'POST', headers: { Authorization: 'Bearer hidden-provider-secret' },
+      body: JSON.stringify({ currency: 'AUD' }),
+    }), 'earnings', { authenticate, resolvePrincipal, supplyManagementService: service({ earnings }) })
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual(unsupported)
+    expect(earnings).toHaveBeenCalledWith(expect.objectContaining({ input: { currency: 'AUD' } }))
   })
 
   it('refuses buyer-only credentials without invoking Provider lifecycle', async () => {

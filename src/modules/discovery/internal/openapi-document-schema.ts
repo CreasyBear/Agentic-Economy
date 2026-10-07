@@ -1,5 +1,7 @@
-import { convertSchemaToJsonSchema, type JSONSchema } from '@tanstack/ai'
+import type { JSONSchema } from '@tanstack/ai'
 import { z } from 'zod'
+
+import { preserveJsonSchemaTupleArity } from '@/modules/common/action'
 
 import { defaultTitle, DEFAULT_STATUS, PROBLEM_KINDS, type ProblemKind } from '@/lib/errors'
 
@@ -27,9 +29,14 @@ const problemDetailsSchema = z.looseObject({
 })
 
 export function jsonSchemaOf(schema: z.ZodType): JSONSchema {
-  const converted = convertSchemaToJsonSchema(schema)
-  if (converted === undefined) throw new Error('openapi_schema_conversion_failed')
-  return converted
+  // Preserve the existing input view (defaults remain optional) while matching OpenAPI 3.1.
+  const converted = z.toJSONSchema(schema, {
+    target: 'draft-2020-12', io: 'input',
+    override: ({ zodSchema, jsonSchema }) => preserveJsonSchemaTupleArity(zodSchema, jsonSchema, 'input'),
+  })
+  // The enclosing OpenAPI document supplies the dialect for these embedded fragments.
+  delete converted.$schema
+  return converted as JSONSchema
 }
 
 /**
@@ -60,7 +67,11 @@ export function hoistLocalDefs(schema: JSONSchema, schemas: Map<string, JSONSche
     if (typeof ref === 'string') {
       const match = /^#\/(?:\$defs|definitions)\/(.+)$/u.exec(ref)
       const uniqueName = match?.[1] === undefined ? undefined : nameFor.get(match[1])
-      if (uniqueName !== undefined) return { $ref: `#/components/schemas/${uniqueName}` }
+      if (uniqueName !== undefined) {
+        const siblings = { ...record }
+        delete siblings.$ref
+        return { ...rewrite(siblings) as Record<string, unknown>, $ref: `#/components/schemas/${uniqueName}` }
+      }
     }
     const out: Record<string, unknown> = {}
     for (const [key, value] of Object.entries(record)) {
@@ -176,7 +187,12 @@ function inlineRefs(node: unknown, schemas: Readonly<Record<string, JSONSchema>>
     const name = ref.slice('#/components/schemas/'.length)
     const target = schemas[name]
     if (target === undefined || path.has(name)) return node
-    return inlineRefs(target, schemas, new Set([...path, name]))
+    const expanded = inlineRefs(target, schemas, new Set([...path, name]))
+    const siblings = { ...record }
+    delete siblings.$ref
+    if (Object.keys(siblings).length === 0) return expanded
+    const retained = inlineRefs(siblings, schemas, path) as Record<string, unknown>
+    return { ...retained, allOf: [expanded, ...(Array.isArray(retained.allOf) ? retained.allOf : [])] }
   }
   const out: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(record)) out[key] = inlineRefs(value, schemas, path)

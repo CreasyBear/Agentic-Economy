@@ -59,6 +59,7 @@ describe('negotiateAgentPage', () => {
   })
 
   it('never intercepts an operator surface, an asset, or a write', () => {
+    expect(negotiateAgentPage(request('/trial', 'text/markdown')).kind).toBe('serve_html')
     expect(negotiateAgentPage(request('/owner/operations', 'text/markdown')).kind).toBe('serve_html')
     expect(negotiateAgentPage(request('/admin/audit-events', 'text/markdown')).kind).toBe('serve_html')
     expect(negotiateAgentPage(request('/assets/app.css', 'text/markdown')).kind).toBe('serve_html')

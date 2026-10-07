@@ -1,10 +1,8 @@
-import type { JourneyNext } from '@/modules/actions/contract'
 import { AGENT_ACCOUNT_SELF_ROUTE_CONTRACT, agentAccountSelfResultSchema } from '@/modules/agent-access/account.actions'
 import { MARKET_TOOLS_CALL_SCOPE } from '@/modules/agent-access/contract'
 import type { CliOptions } from '../../lib/args'
 import { isLoopbackCliBaseUrl } from '../../lib/args'
 import { continuationCommand } from '../../lib/continuation-command'
-import { journeyNextCommand } from '../../lib/journey-next-command'
 import { callJson } from '../../lib/output'
 import { checkBalance, checkCall, checkFunding, checkMarketRequests, checkRepeatUse } from './activity'
 import { checkQuote } from './quote'
@@ -118,7 +116,7 @@ export function credentialOriginFailure(
 
 export function connectCommand(options: CliOptions, profile: 'buyer' | 'provider'): string | undefined {
   if (profile === 'buyer') {
-    return journeyNextCommand({ action: 'connect', args: { via: 'cli', command: 'ae connect' }, authority: 'human_owner' } satisfies JourneyNext, options)
+    return doctorContinuation(options, ['ae', 'connect'])
   }
   // The generic journey connect action cannot express provider scope.
   return doctorContinuation(options, ['ae', 'connect', '--provider'])

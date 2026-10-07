@@ -12,6 +12,9 @@ import {
   Route as RegistryRoute,
 } from '@/routes/api.v1.registry'
 import { encodeOpaqueCursor } from '@/modules/registry/opaque-cursor'
+import { registryToolsSearchAction } from '@/modules/registry/tools.actions'
+import { toolChoiceSearchOutputSchema } from '@/modules/registry/tool-choice-contracts'
+import { handleMarketMetricsRequest } from '@/routes/api.v1.market-metrics'
 import { handleApiRegistryDetailRequest } from '@/routes/api.v1.registry.detail'
 
 const searchResult = {
@@ -44,9 +47,17 @@ vi.mock('@/modules/capability-supply/tool-source', () => ({
 }))
 
 describe('public market Tool routes', () => {
+  it.each(['?extra=1', '?window=24h&window=30d'])('rejects unsupported or repeated metrics parameters: %s', async query => {
+    setHttpRateLimitAdmissionForTests(async () => ({ ok: true }))
+    const result = await handleMarketMetricsRequest(new Request(`https://ae.test/api/v1/market-metrics${query}`))
+    expect(result.status).toBe(400)
+    await expect(result.json()).resolves.toMatchObject({ kind: 'INVALID_ARGUMENT', code: 'invalid_query_parameter' })
+  })
+
   afterEach(() => {
     setHttpRateLimitAdmissionForTests(undefined)
     setPublicSourceTransportForTests(undefined)
+    vi.restoreAllMocks()
     vi.clearAllMocks()
   })
 
@@ -68,9 +79,30 @@ describe('public market Tool routes', () => {
       results: [],
       partialResults: false,
       pagination: { limit: 1, hasMore: false },
-      next: [{ action: 'broaden', args: { query: 'reference lookup' }, authority: 'public' }],
+      next: [],
       freshness: { source: 'supply_projection', state: 'absent', staleAfterMs: 3 * 60 * 60 * 1000 },
     })
+  })
+
+  it('preserves the opaque search cursor and complete source/filter scope', async () => {
+    setHttpRateLimitAdmissionForTests(async () => ({ ok: true }))
+    const cursor = 'opaque:scope-bound:cursor'
+    const args = { query: 'reference lookup', cursor, source: 'current' as const, limit: 1, filters: { category: 'Research' } }
+    const complete = toolChoiceSearchOutputSchema.parse({
+      kind: 'scoped', reason: 'bounded page', schemaVersion: 'registry-tools:v3', query: args.query,
+      partialResults: true, assessed: { source: 'current', scope: 'page', examined: 1, coverage: 'partial' },
+      results: [], pagination: { limit: 1, hasMore: true, nextCursor: cursor },
+      next: [{ action: 'registry.tools.search', args, authority: 'public' }],
+    })
+    const run = vi.spyOn(registryToolsSearchAction, 'run').mockResolvedValue(complete)
+    const body = { query: args.query, source: args.source, limit: args.limit, filters: args.filters }
+    const response = await handleMarketToolSearchRequest(new Request('https://ae.test/api/v1/market-tools/search', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    }))
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual(complete)
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({ data: body }))
   })
 
   it('reports supply_projection freshness from the latest reconcile completion for list and search', async () => {

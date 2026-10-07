@@ -67,6 +67,22 @@ function collectAdvertisedUrls(value: unknown, into: Set<string>): void {
 const manifest = buildSiteDiscoveryManifest({ canonicalBaseUrl: `${origin}/`, now: 1_700_000_000_000 })
 
 describe('Site discovery manifest', () => {
+  it('advertises authorization scopes and revocation for the implemented OAuth lifecycle', () => {
+    expect(manifest.toolGateway.oauth.scopesSupported).toContain('offline_access')
+    expect(manifest.toolGateway.oauth.scopesSupported).toContain('market_supply:manage')
+    expect(manifest.toolGateway.oauth.revokeUrl).toBe(`${origin}/oauth/revoke`)
+    expect(manifest.unsupportedCapabilities.map(capability => capability.label)).not.toContain('Integration packages')
+    expect(manifest.unsupportedCapabilities.map(capability => capability.label)).not.toContain('Protocol projection exports')
+  })
+
+  it('projects feedback method and authority from its owner contract', () => {
+    expect(manifest.endpoints.find(endpoint => endpoint.path === '/api/v1/feedback')).toMatchObject({
+      method: 'POST', authentication: 'Authorization: Bearer <Agent access key>',
+      requiredScope: 'market_tools:call or market_supply:manage',
+      requiredHeaders: { Authorization: 'required', 'Content-Type': 'required' },
+    })
+  })
+
   it('keeps the cold handshake compact and links to schemas instead of embedding them', () => {
     const compact = projectCompactSiteDiscoveryManifest(manifest)
     const serialized = JSON.stringify(compact)

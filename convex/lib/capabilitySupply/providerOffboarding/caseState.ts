@@ -149,6 +149,14 @@ export function projectStatus(row: Doc<'capabilityProviderOffboardingCases'>, no
     retentionPolicyVersion: row.retentionPolicyVersion,
     ...(state === 'Retired' || state === 'Cancelled'
       ? {}
-      : { continuation: { action: state === 'Action required' ? 'supply.offboarding.resume' as const : 'supply.offboarding.status' as const } }),
+      : state === 'Action required'
+        ? { ownerHandoff: {
+            actor: 'business_owner' as const,
+            reason: 'offboarding_action_required' as const,
+            destination: '/owner/operations#offboarding' as const,
+            caseRef: row.caseRef,
+            businessRef: String(row.businessId),
+          } }
+        : { continuation: { action: 'supply.offboarding.status' as const, args: { businessRef: String(row.businessId) } } }),
   }
 }

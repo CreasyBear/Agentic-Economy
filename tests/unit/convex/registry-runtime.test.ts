@@ -20,6 +20,32 @@ const businessContext = {
 const placeKeys = ['perth', 'perth wa', 'wa']
 
 describe('Convex registry public read paths', () => {
+  it('requires known same-currency upper bounds for a supplied business price ceiling', async () => {
+    const backend = convexTest(schema, modules)
+    await seedRegistryFixture(backend)
+    await backend.run(async ctx => {
+      for (const [slug, price] of [
+        ['alpha-plumbing', { kind: 'fixed', amount: { currency: 'AUD', units: '100', exponent: 0 }, taxTreatment: 'inclusive' }],
+        ['beta-electric', { kind: 'range', minimum: { currency: 'AUD', units: '50', exponent: 0 }, maximum: { currency: 'AUD', units: '150', exponent: 0 }, taxTreatment: 'inclusive' }],
+        ['gamma-cleaning', { kind: 'from', amount: { currency: 'AUD', units: '50', exponent: 0 }, taxTreatment: 'inclusive' }],
+      ] as const) {
+        const row = await ctx.db.query('businessOfferingRevisions').withIndex('by_offeringRef_and_revision', query => query.eq('offeringRef', `catalog-offering:${slug}`).eq('revision', 1)).unique()
+        if (row === null) throw new Error('missing offering fixture')
+        await ctx.db.patch(row._id, { price })
+      }
+    })
+    const bounded = await backend.query(api.registry.searchPublicBusinessOfferingSupply, { query: 'perth', maxPrice: { currency: 'AUD', units: '10000', exponent: 2 } })
+    expect(bounded.items.map(item => item.slug)).toEqual(['alpha-plumbing'])
+    const known = await backend.query(api.registry.searchPublicBusinessOfferingSupply, { query: 'perth', hasPrice: true })
+    expect(known.items.map(item => item.slug)).toEqual(['alpha-plumbing', 'beta-electric'])
+    const otherCurrency = await backend.query(api.registry.searchPublicBusinessOfferingSupply, { query: 'perth', maxPrice: { currency: 'USD', units: '10000', exponent: 2 } })
+    expect(otherCurrency.items).toEqual([])
+    const unknownBackend = convexTest(schema, modules)
+    await seedRegistryFixture(unknownBackend)
+    const unknown = await unknownBackend.query(api.registry.searchPublicBusinessOfferingSupply, { query: 'perth', maxPrice: { currency: 'AUD', units: '10000', exponent: 2 } })
+    expect(unknown.items).toEqual([])
+  })
+
   it('returns every eligible public business exactly once across native cursors', async () => {
     const backend = convexTest(schema, modules)
     await seedRegistryFixture(backend)

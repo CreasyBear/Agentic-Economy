@@ -625,9 +625,10 @@ describe.sequential('durable Tool chat messaging and shares', () => {
     expect(firstCalls).toHaveLength(1)
     expect(firstResults).toHaveLength(1)
     const nextAction = firstCards[0]?.next
-    if (nextAction?.action !== 'next-page') throw new Error('signed_first_page_missing')
+    if (nextAction?.action !== 'registry.tools.search') throw new Error('signed_first_page_missing')
     const continuationQuery = nextAction.args.query
     const cursor = nextAction.args.cursor
+    if (cursor === undefined) throw new Error('signed_first_page_cursor_missing')
     expect(cursor).toMatch(/^sc1\./u)
     await backend.mutation(internal.chatMessages.clearActiveGeneration, {
       threadId: first.threadId, promptMessageId: first.promptMessageId,

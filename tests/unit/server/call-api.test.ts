@@ -210,7 +210,7 @@ describe('operation.invoke HTTP adapter', () => {
       toolRef: operationRef,
       toolVersion: 42,
       expiresAt: 1_900_000_000_000,
-      normalizedInput: { query: 'bounded current input' },
+
       price: { currency: 'AUD', units: '1234567', exponent: 6 },
       sourceRequirement: { currency: 'USDC', units: '765432', exponent: 6 },
       account: {
@@ -232,9 +232,7 @@ describe('operation.invoke HTTP adapter', () => {
       evidenceDigest: `sha256:${'c'.repeat(64)}`,
       continuation: {
         action: 'tool.call',
-        method: 'POST',
-        path: '/api/v1/tools/call',
-        input: { quoteRef: commitmentRef, idempotencyKey: 'replace-with-stable-command-id' },
+        args: { quoteRef: commitmentRef, idempotencyKey: 'replace-with-stable-command-id' },
       },
     })
     const response = await handleToolQuotePost(
@@ -372,8 +370,9 @@ describe('operation.invoke HTTP adapter', () => {
       expect(body).toMatchObject({
         code: 'authority_required',
         retryable: false,
-        nextAction: 'Ask the Account owner to approve this Call at /agent-access.',
-        ownerHandoff: { kind: 'authorize', callRef: 'invocation:test', toolRef: operationRef },
+        detail: 'Ask the Account owner to approve this Call at /agent-access.',
+        next: [],
+        ownerHandoff: { actor: 'account_owner', reason: 'authority_required', destination: '/agent-access', callRef: 'invocation:test', toolRef: operationRef },
       })
     }
   })
@@ -417,7 +416,7 @@ describe('operation.invoke HTTP adapter', () => {
       toolRef: operationRef,
       toolVersion: 42,
       expiresAt: 1_900_000_000_000,
-      normalizedInput: { query: 'bounded current input' },
+
       price: { currency: 'AUD', units: '1234567', exponent: 6 },
       sourceRequirement: { currency: 'USDC', units: '765432', exponent: 6 },
       account: {
@@ -439,14 +438,12 @@ describe('operation.invoke HTTP adapter', () => {
       evidenceDigest: `sha256:${'c'.repeat(64)}`,
       continuation: {
         action: 'tool.call',
-        method: 'POST',
-        path: '/api/v1/tools/call',
-        input: { quoteRef: commitmentRef, idempotencyKey: 'replace-with-stable-command-id' },
+        args: { quoteRef: commitmentRef, idempotencyKey: 'replace-with-stable-command-id' },
       },
     })
     const unchanged = callStatusResultSchema.parse({
       kind: 'unchanged',
-      callRef: 'invocation:machine-budget',
+      callRef: `operation-invocation:v1:${'b'.repeat(64)}`,
       version: 42,
       retryAfterMs: 1_000,
     })
@@ -455,12 +452,13 @@ describe('operation.invoke HTTP adapter', () => {
       toolRef: operationRef,
       code: 'commercial_policy_unavailable',
       retryable: false,
-      nextAction: 'Ask the Account owner to review current commercial approvals.',
+      detail: 'Ask the Account owner to review current commercial approvals.',
     })
     const outcomeUnknown = callMachineResultSchema.parse({
       kind: 'outcome_unknown',
-      callRef: 'invocation:machine-budget',
+      callRef: `operation-invocation:v1:${'b'.repeat(64)}`,
       toolRef: operationRef,
+      next: [{ action: 'call.status', args: { callRef: `operation-invocation:v1:${'b'.repeat(64)}` }, authority: 'same_principal' }],
       evidence: {
         attemptRef: 'attempt:machine-budget',
         effectGeneration: 1,

@@ -7,11 +7,9 @@ export function journeyNextCommand(candidate: unknown, options: ContinuationOpti
   const next = validateJourneyNext([candidate], { origin: options.baseUrl })[0]
   if (next === undefined) return undefined
   switch (next.action) {
-    case 'status': return cliContinuation(options, ['ae', 'status', next.args.ref.ref])
-    case 'wait': return cliContinuation(options, ['ae', 'wait', next.args.callRef])
-    case 'fund': return cliContinuation(options, ['ae', 'fund'])
-    case 'describe': return cliContinuation(options, ['ae', 'describe', next.args.toolRef])
-    case 'connect': return next.args.via === 'cli' ? cliContinuation(options, ['ae', 'connect']) : undefined
+    case 'journey.status': return cliContinuation(options, ['ae', 'status', next.args.ref.ref])
+    case 'call.status': return cliContinuation(options, ['ae', 'status', next.args.callRef])
+    case 'registry.tools.describe': return cliContinuation(options, ['ae', 'describe', next.args.toolRef])
     default: return undefined
   }
 }

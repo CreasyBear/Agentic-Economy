@@ -6,11 +6,12 @@ import { Button as ArcButton } from "@/components/arc/button/button";
 import { Drawer, DrawerContent, DrawerTrigger } from '@/components/ae/shared/base-ui/drawer/drawer';
 import { AeSortableDataTable } from "@/components/ae/shared/sortable-data-table/AeSortableDataTable";
 import type { AeDataColumn } from "@/components/ae/shared/sortable-data-table/sortable-data-table.contracts";
-import type { SearchResult } from "@/modules/registry/tool-choice-contracts";
+import type { SearchResult, SupplyProjectionFreshness } from "@/modules/registry/tool-choice-contracts";
 import { directoryDate } from "./directory-presentation";
 
 type CanonicalSearchResultsProps = {
   results: readonly SearchResult[];
+  sourceFreshness?: SupplyProjectionFreshness;
   renderActions: (item: SearchResult) => ReactNode;
 };
 
@@ -30,13 +31,14 @@ function priceProjection(item: SearchResult): string {
   return `${item.price.label.startsWith("A$") ? "Indicative AUD" : "Provider price"} · ${item.price.label}`;
 }
 
-function freshnessProjection(item: SearchResult): string {
+function freshnessProjection(item: SearchResult, sourceFreshness?: SupplyProjectionFreshness): string {
+  const freshness = item.freshness ?? (item.source === "current" ? sourceFreshness : undefined);
   const index = item.source === "coinbase" ? "Coinbase Bazaar index" : "AE supply projection";
-  if (item.freshness === undefined) return `${index} · freshness unavailable`;
-  const refreshed = item.freshness.completedAt === undefined
+  if (freshness === undefined) return `${index} · freshness unavailable`;
+  const refreshed = freshness.completedAt === undefined
     ? "completion unavailable"
-    : `refreshed ${directoryDate(new Date(item.freshness.completedAt).toISOString())}`;
-  return `${index} · ${item.freshness.state} · ${refreshed}`;
+    : `refreshed ${directoryDate(new Date(freshness.completedAt).toISOString())}`;
+  return `${index} · ${freshness.state} · ${refreshed}`;
 }
 
 function CellText({ children }: { children: string }) {
@@ -50,7 +52,7 @@ function ToolDestination({ item, children }: { item: SearchResult; children: Rea
   return <a href={item.detailRef}>{children}</a>;
 }
 
-export function CanonicalSearchResults({ results, renderActions }: CanonicalSearchResultsProps) {
+export function CanonicalSearchResults({ results, renderActions, sourceFreshness }: CanonicalSearchResultsProps) {
   const [selectedIdentity, setSelectedIdentity] = useState<string | null>(null);
   const selected = selectedIdentity === null
     ? undefined
@@ -95,7 +97,7 @@ export function CanonicalSearchResults({ results, renderActions }: CanonicalSear
       label: "Freshness",
       width: 160,
       sortable: false,
-      render: (_value, item) => <CellText>{freshnessProjection(item)}</CellText>,
+      render: (_value, item) => <CellText>{freshnessProjection(item, sourceFreshness)}</CellText>,
     },
     {
       key: "actions",
@@ -136,7 +138,7 @@ export function CanonicalSearchResults({ results, renderActions }: CanonicalSear
           <dt>Access</dt><dd>{accessProjection(selected)}</dd>
           <dt>Price</dt><dd>{priceProjection(selected)}</dd>
           {selected.sourcePrice === undefined ? null : <><dt>Provider-listed source</dt><dd>{selected.sourcePrice}</dd></>}
-          <dt>Freshness</dt><dd>{freshnessProjection(selected)}</dd>
+          <dt>Freshness</dt><dd>{freshnessProjection(selected, sourceFreshness)}</dd>
           <dt>Source</dt><dd>{selected.source}</dd>
           <dt>ID</dt><dd>{selected.id}</dd>
           {selected.toolRef === undefined ? null : <><dt>Tool reference</dt><dd>{selected.toolRef}</dd></>}

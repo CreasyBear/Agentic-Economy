@@ -58,14 +58,14 @@ export function AeSupplySourceNativeStart(props: SupplyNativeStartProps) {
       activeStep={stage}
       completedSteps={completedSteps}
       progressLabel="Add Tool progress"
-      feedback={<SupplyFlowFeedback error={vm.error} requiredAction={vm.requiredAction} success={vm.success} continuation={vm.continuation} publicationLocked={vm.publicationLocked} />}
+      feedback={<SupplyFlowFeedback error={vm.error} ownerHandoff={vm.ownerHandoff} success={vm.success} continuation={vm.continuation} publicationLocked={vm.publicationLocked} />}
     >
 
       {stage === 'source' ? (
         <SupplySourceTypeSection
           resourceUrl={vm.resourceUrl}
           x402Method={vm.x402Method}
-          askMethod={vm.requiredAction?.title === 'Choose the request method'}
+          askMethod={vm.ownerHandoff?.title === 'Choose the request method'}
           disabled={vm.pending !== undefined}
           discovering={vm.pending === 'preview'}
           onResourceUrlChange={(next) => {
@@ -170,9 +170,9 @@ const supplySteps = [
   { id: 'review', title: 'Review' },
 ] as const
 
-function SupplyFlowFeedback({ error, requiredAction, success, continuation, publicationLocked }: Readonly<{
+function SupplyFlowFeedback({ error, ownerHandoff, success, continuation, publicationLocked }: Readonly<{
   error: string | undefined
-  requiredAction: ReturnType<typeof useSupplyNativeStartState>['requiredAction']
+  ownerHandoff: ReturnType<typeof useSupplyNativeStartState>['ownerHandoff']
   success: string | undefined
   continuation: SupplyJourneyContinuation | undefined
   publicationLocked: boolean
@@ -180,17 +180,15 @@ function SupplyFlowFeedback({ error, requiredAction, success, continuation, publ
   return (
     <>
       {error === undefined ? null : <AeAlert tone="danger" title="Action required" id={SUPPLY_PUBLICATION_ERROR_ID} role="alert" className="arc-supply-feedback"><div className="arc-supply-feedback-description"><p>{error}</p>{publicationLocked ? <a href="/owner/operations" className={`${actionLinkClassName('secondary', 'md')} arc-supply-feedback-action`}>Open Tools</a> : null}</div></AeAlert>}
-      {requiredAction === undefined ? null : (
-        <AeAlert tone="info" title={requiredAction.title} role="status" className="arc-supply-feedback"><div className="arc-supply-feedback-description">
-            <p>{requiredAction.description}</p>
-            {requiredAction.cta === null ? null : (
-              <a
-                href={requiredAction.cta}
+      {ownerHandoff === undefined ? null : (
+        <AeAlert tone="info" title={ownerHandoff.title} role="status" className="arc-supply-feedback"><div className="arc-supply-feedback-description">
+            <p>{ownerHandoff.description}</p>
+            <a
+                href={ownerHandoff.destination}
                 className={`${actionLinkClassName('secondary', 'md')} arc-supply-feedback-action`}
               >
-                {requiredAction.ctaLabel}
+                {ownerHandoff.ctaLabel}
               </a>
-            )}
           </div></AeAlert>
       )}
       {success === undefined ? null : (

@@ -70,13 +70,11 @@ describe('canonical Provider Tool directory projection', () => {
       reasonCodes: ['credential_lost'],
       routeability: { available: false, reasonCodes: ['credential_lost'] },
       ownerHandoff: {
-        action: 'supply.connection.reconnect',
-        blockedCapabilities: ['supply.publish'],
-        cta: '/owner/supply/connections',
+        actor: 'business_owner',
+        reason: 'credential_lost',
+        destination: '/owner/settings/integrations#provider-connections',
         ctaLabel: 'Reconnect source',
         description: 'Reconnect the source.',
-        iconUrl: null,
-        status: 'required',
         title: 'Reconnect source',
       },
     })
@@ -86,7 +84,7 @@ describe('canonical Provider Tool directory projection', () => {
       expect(result.rows[0]).toMatchObject({
         lifecycleLabel: 'Action required',
         blocker: 'The source connection is no longer available. Reconnect it before publication can continue.',
-        continuation: { label: 'Reconnect source', href: '/owner/supply/connections' },
+        continuation: { label: 'Reconnect source', href: '/owner/settings/integrations#provider-connections' },
       })
     }
   })

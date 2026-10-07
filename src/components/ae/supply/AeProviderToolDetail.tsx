@@ -54,6 +54,10 @@ export function AeProviderToolDetail({
     ? undefined
     : providerToolReasonPresentation(status.reasonCodes[0])
 
+  const unavailableContinuations = status.reasonCodes.slice(1)
+    .filter(code => code === 'maintenance_identity_unavailable' || code === 'source_preview_unavailable')
+    .map(code => ({ code, ...providerToolReasonPresentation(code) }))
+
   async function run(action: ProviderToolAction | undefined) {
     if (action === undefined || pending) return
     setPending(true)
@@ -87,6 +91,9 @@ export function AeProviderToolDetail({
         {firstReason === undefined ? null : (
           <AeAlert tone="danger" title={firstReason.title}>{firstReason.description}</AeAlert>
         )}
+        {unavailableContinuations.map(reason => (
+          <AeAlert key={reason.code} tone="danger" title={reason.title}>{reason.description}</AeAlert>
+        ))}
         {feedback === undefined ? null : (
           <AeAlert role="alert" tone={feedback.kind === 'refused' ? 'danger' : 'info'} title={feedback.kind === 'applied' ? 'Tool updated' : 'Tool unchanged'} aria-live="polite">{feedback.message}</AeAlert>
         )}
@@ -201,7 +208,7 @@ function PrimaryAction({
   if (status.ownerHandoff !== undefined) {
     return (
       <a
-        href={status.ownerHandoff.cta}
+        href={status.ownerHandoff.destination}
         className={[actionLinkClassName('primary', 'md'), 'arc-provider-tool-action'].join(' ')}
       >
         {status.ownerHandoff.ctaLabel}

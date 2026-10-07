@@ -1,6 +1,6 @@
 # Glossary
 
-**Revised:** 2026-09-10
+**Revised:** 2026-10-07
 
 Plain-language definitions for the terms used most often across the product,
 source and tests. `CONTEXT.md` is the canonical source for product vocabulary;
@@ -104,11 +104,11 @@ current the external Bazaar crawl is (`src/modules/market/x402-directory-index.s
 
 ## Operations
 
-**tier 0 / tier 1 (doctor)**: The two proof levels `ae doctor` reports. Tier 0
-proves the discovery/quoting refusal shape with no credentials configured;
-tier 1 proves the full discovery-quoting-purchase loop once Stripe test mode
-and the x402 sandbox bundle are both configured. See
-`tools/ae/commands/doctor.ts` and `README.md` ("Run locally").
+**local Provider environment (doctor)**: An informational check of local
+configuration. Its tier does not prove a purchase or Provider delivery.
+`ae doctor` reports discovery, quoting and purchase readiness groups separately;
+skipped checks remain unproven. It reads readiness and does not connect, fund or
+buy. See `tools/ae/commands/doctor.ts`.
 
 **Credit funding**: Adding prepaid Credit is separate from a Quote or Call.
 The current funding Quote is authoritative for the amount and tax treatment;

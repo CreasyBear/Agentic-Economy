@@ -1,10 +1,11 @@
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import * as lockfile from 'proper-lockfile'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  acknowledgePurchaseRecovery, findPurchaseRecovery, readPurchaseRecovery, retainPurchaseRecovery,
   acknowledgeCallRecovery,
   findCallRecovery,
   readCallRecovery,
@@ -132,4 +133,52 @@ describe('write lock recovery', () => {
       release()
     }
   }, 10_000)
+})
+
+describe('versioned purchase journal in the existing store', () => {
+  it('keeps historical Call bytes, hashes, indexes and reader unchanged alongside v2 Plan work', async () => {
+    const { record } = await retainCallRecovery(request({ idempotencyKey: 'old-call-key' }), quote, 'old-call-key')
+    const path = join(callsDirectory(), `call-${record.recoveryRef}.json`)
+    const before = readFileSync(path, 'utf8')
+    const { record: plan } = await retainPurchaseRecovery({ intent: 'plan_run', origin, accountRef: quote.accountRef, principalRef: quote.principalRef,
+      command: { planRef: 'plan:test', approvedTotalAudUnits: '1000001', idempotencyKey: 'run:one' } })
+    expect(plan.version).toBe(2)
+    expect(plan.command.idempotencyKey).toBe('run:one')
+    expect(readCallRecovery(record.recoveryRef, origin)).toEqual(record)
+    expect(findCallRecovery(request({ idempotencyKey: 'old-call-key' }))?.recoveryRef).toBe(record.recoveryRef)
+    expect(readFileSync(path, 'utf8')).toBe(before)
+  })
+  it('keeps action namespaces separate while binding the exact same-key material permanently', async () => {
+    const planRequest = { intent: 'plan_run' as const, origin, accountRef: quote.accountRef, principalRef: quote.principalRef,
+      command: { planRef: 'plan:test', approvedTotalAudUnits: '1', idempotencyKey: 'shared-key-0001' } }
+    const procureRequest = { intent: 'procure_exact' as const, origin, accountRef: quote.accountRef, principalRef: quote.principalRef,
+      command: { kind: 'exact' as const, toolRef: 'operation:test', input: { nested: { array: [true, null, 1] } }, maxSpendAud: '0.50', idempotencyKey: 'shared-key-0001' } }
+    const { record: plan } = await retainPurchaseRecovery(planRequest)
+    const { record: procure } = await retainPurchaseRecovery(procureRequest)
+    expect(plan.recoveryRef).not.toBe(procure.recoveryRef)
+    await acknowledgePurchaseRecovery(plan, { terminal: true })
+    expect(findPurchaseRecovery(planRequest)?.recoveryRef).toBe(plan.recoveryRef)
+    expect(() => findPurchaseRecovery({ ...planRequest, command: { ...planRequest.command, approvedTotalAudUnits: '2' } })).toThrow(CliFailure)
+    expect(findPurchaseRecovery({ ...procureRequest, command: { ...procureRequest.command, idempotencyKey: 'new-purchase-key' } })?.recoveryRef).toBe(procure.recoveryRef)
+  })
+  it('rejects conflicting Quote/Call observations and preserves original command and monotonic terminal evidence', async () => {
+    const { record } = await retainPurchaseRecovery({ intent: 'procure_exact', origin, accountRef: quote.accountRef, principalRef: quote.principalRef,
+      command: { kind: 'exact', toolRef: 'operation:test', input: { private: 'original' }, maxSpendAud: '0.50', idempotencyKey: 'purchase-key' } })
+    const known = await acknowledgePurchaseRecovery(record, { quoteRef: 'quote:first', callRef: 'call:first', terminal: true })
+    await expect(acknowledgePurchaseRecovery(known, { quoteRef: 'quote:other', terminal: false })).rejects.toMatchObject({ code: 'purchase-recovery-identity-conflict' })
+    await expect(acknowledgePurchaseRecovery(known, { callRef: 'call:other', terminal: false })).rejects.toMatchObject({ code: 'purchase-recovery-identity-conflict' })
+    const reread = await acknowledgePurchaseRecovery(known, { terminal: false })
+    expect(reread.terminal).toBe(true)
+    expect(reread.command).toEqual(record.command)
+  })
+  it('rejects material tampering, future versions, origin changes and wrong resume intent', async () => {
+    const { record } = await retainPurchaseRecovery({ intent: 'plan_run', origin, accountRef: quote.accountRef, principalRef: quote.principalRef,
+      command: { planRef: 'plan:test', approvedTotalAudUnits: '1', idempotencyKey: 'plan-key' } })
+    expect(() => readPurchaseRecovery(record.recoveryRef, 'https://other.example', 'plan_run')).toThrow(CliFailure)
+    expect(() => readPurchaseRecovery(record.recoveryRef, origin, 'procure_exact')).toThrow(CliFailure)
+    writeFileSync(join(callsDirectory(), `call-${record.recoveryRef}.json`), JSON.stringify({ ...record, command: { ...record.command, approvedTotalAudUnits: '2' } }))
+    expect(() => readPurchaseRecovery(record.recoveryRef, origin, 'plan_run')).toThrow(CliFailure)
+    writeFileSync(join(callsDirectory(), `call-${record.recoveryRef}.json`), JSON.stringify({ ...record, version: 3 }))
+    expect(() => readPurchaseRecovery(record.recoveryRef, origin, 'plan_run')).toThrow(CliFailure)
+  })
 })
