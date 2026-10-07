@@ -79,7 +79,7 @@ export const publicationManifest = {
     'https://app.aecon.ai/.well-known/ucp',
     'https://app.aecon.ai/for-agents', 'https://app.aecon.ai/for-providers',
     'https://app.aecon.ai/llms.txt', 'https://app.aecon.ai/openapi.json',
-    'https://app.aecon.ai/market', 'https://app.aecon.ai/activity',
+    'https://app.aecon.ai/market', 'https://app.aecon.ai/activity', 'https://app.aecon.ai/trial',
     'https://app.aecon.ai/owner/settings/team', 'https://app.aecon.ai/owner/settings/agent-keys',
     'https://app.aecon.ai/owner/settings/spending', 'https://app.aecon.ai/owner/credit',
     'https://app.aecon.ai/owner/settings/receipts', 'https://app.aecon.ai/owner/settings/security-activity',

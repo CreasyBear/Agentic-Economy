@@ -33,6 +33,7 @@ const reservedPaths = [
   '/sitemap.xml',
   '/SKILL.md',
   '/mcp',
+  '/trial',
 ] as const
 
 /** `/{slug}/ucp` answers machines under a business slug. */

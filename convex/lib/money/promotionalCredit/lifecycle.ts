@@ -1,3 +1,4 @@
+import { trialGrantHasAuthority } from '../trials/authority'
 import { financialEnvironmentMatches } from '../formance/contracts'
 import { v, type Infer } from 'convex/values'
 import { env } from '../../../_generated/server'
@@ -25,7 +26,8 @@ import { isRecord } from '@/modules/common/is-record'
 async function readPendingGrantAuthority(
   ctx: Pick<MutationCtx, 'db'>,
   row: Doc<'moneyPromotionalGrants'>,
-): Promise<Doc<'operationKeys'> | null> {
+): Promise<{ kind: 'admin'; operation: Doc<'operationKeys'> } | { kind: 'trial' } | null> {
+  if (row.trialOfferRef !== undefined) return await trialGrantHasAuthority(ctx, row) ? { kind: 'trial' } : null
   if (row.auditEventRef === undefined || row.grantRef !== canonicalDigest({
     format: 'ae.promotional-credit-grant:v1', actorRef: row.actorRef, operationKey: row.operationKey,
     input: { accountRef: row.accountRef, environment: row.environment, amountUnits: row.amountUnits, expiresAt: row.expiresAt },
@@ -60,7 +62,7 @@ async function readPendingGrantAuthority(
   } catch {
     return null
   }
-  return operation
+  return { kind: 'admin', operation }
 }
 
 const workValue = v.object({
@@ -161,7 +163,7 @@ export const finishWorkHandler = async (ctx: MutationCtx, args: Infer<typeof fin
       code: 'promotional_credit_granted' as const, effectRefs: [row.grantRef, transactionRef],
       auditEventRef: eventId, correlationId: row.correlationId,
     }
-    await ctx.db.patch(operation._id, {
+    if (operation.kind === 'admin') await ctx.db.patch(operation.operation._id, {
       status: 'succeeded', resultJson: JSON.stringify(receipt), resultHash: canonicalDigest(receipt),
       effectRefs: [...receipt.effectRefs], updatedAt: now,
     })

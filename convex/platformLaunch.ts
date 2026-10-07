@@ -1,3 +1,5 @@
+import { accountHasTrialAccess } from './lib/money/trials/authority'
+import { readTrialAccount } from './lib/money/trials/activation'
 import { v } from 'convex/values'
 import { env, query } from './_generated/server'
 import { resolveBusinessActor, readCurrentActiveAdminMembership } from './authz'
@@ -22,6 +24,9 @@ export const readOwnerPaymentAccess = query({
       return { kind: 'refused' as const, code: 'payments_not_ready' as const }
     }
     if (audience === 'everyone' || await readCurrentActiveAdminMembership(ctx) !== undefined) return { kind: 'allowed' as const }
+    const account = await readTrialAccount(ctx, actor.canonicalAccountRef)
+    if (account !== null && await accountHasTrialAccess(ctx, { environment: args.environment,
+      accountRef: actor.canonicalAccountRef, ownerPrincipalRef: account.ownerPrincipalRef, now: Date.now() })) return { kind: 'allowed' as const }
     return { kind: 'refused' as const, code: 'payments_admins_only' as const }
   },
 })

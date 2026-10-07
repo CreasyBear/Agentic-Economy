@@ -545,6 +545,10 @@ describe('machine bearer routes', () => {
       expect(() => serve({
         request: activity, pathname: '/activity', context: undefined, handlerType: 'router', next: vi.fn(),
       })).toThrow(clerkSessionError)
+      const trial = new Request('https://ae.example/trial')
+      expect(() => serve({
+        request: trial, pathname: '/trial', context: undefined, handlerType: 'router', next: vi.fn(),
+      })).toThrow(clerkSessionError)
       const browser = new Request('https://ae.example/account')
       expect(() => serve({
         request: browser, pathname: '/account', context: undefined, handlerType: 'router',

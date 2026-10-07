@@ -122,6 +122,7 @@ export const ADMIN_APPROVAL_ACTION_LABELS = {
   change_commercial_policy: 'Change commercial policy',
   set_payments_paused: 'Pause or resume payments',
   grant_promotional_credit: 'Grant promotional credit',
+  issue_trial: 'Approve A$10 trial',
   grant_admin_membership: 'Grant Admin membership',
   revoke_admin_membership: 'Revoke Admin membership',
 } satisfies Record<AdminProposableAction, string>

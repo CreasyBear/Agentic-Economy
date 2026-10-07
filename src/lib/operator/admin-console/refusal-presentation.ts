@@ -155,6 +155,8 @@ export const ADMIN_REFUSAL_PRESENTATION = {
     nextStep: 'Restore a valid custody cap at least as high as the policy floor, then review and submit a new command.',
   },
   approval_required: approvalRequired,
+  trial_recipient_invalid: { certainty: 'not_applied', retry: 'new_key', copy: 'Enter a valid recipient email or active Account.', nextStep: 'Correct the recipient and review the trial again.' },
+  trial_already_approved: { certainty: 'not_applied', retry: 'no', copy: 'This recipient already has an approved trial.', nextStep: 'Inspect the existing trial. Another grant was not created.' },
   approval_not_found: noLongerActionable,
   approval_same_actor: noLongerActionable,
   approval_digest_mismatch: changedTarget,

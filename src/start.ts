@@ -151,7 +151,7 @@ const publicPagePaths: Record<string, true> = {
 const protectedTopLevelPaths: Record<string, true> = {
   '/account': true, '/admin': true, '/agent-access': true, '/api': true,
   '/activity': true, '/fund': true, '/mcp': true, '/owner': true,
-  '/sign-in': true, '/sign-up': true, '/t': true,
+  '/sign-in': true, '/sign-up': true, '/t': true, '/trial': true,
 }
 
 function isPublicDocumentRequest(request: Request, pathname: string): boolean {

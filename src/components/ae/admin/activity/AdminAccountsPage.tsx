@@ -14,6 +14,7 @@ import { Button } from '@/components/arc/button/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatPerthTimestamp } from '@/lib/ui/format-time'
 import { AdminSearchNotice } from '../AdminSearchNotice'
+import { AdminTrialAccess } from '../actions/AdminTrialAccess'
 
 type AccountSearchProps = Readonly<{ search: string; onSearchChange: (search: string) => void }>
 
@@ -31,6 +32,7 @@ export function AdminAccountsPage({ search, rejected, onSearchChange }: AccountS
         <div className="ae-arc"><Alert title="Accounts unavailable" tone="danger">The source could not provide a verified read. Reload this page to try again.</Alert></div>
       }>
         <AccountsList search={search} onSearchChange={onSearchChange} />
+        <AdminTrialAccess />
       </ErrorBoundary>
     </AeOperatorPage>
   )

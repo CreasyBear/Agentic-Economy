@@ -85,15 +85,16 @@ Sentry/secret-management responsibilities. The proposed Datadog amendment and
 [execution prompt / skill chain](docs/adr/0005-datadog-supported-operational-observability.md#prepared-execution-prompt)
 live in ADR 0005; no GitHub amendment has been published. No parallel backlog.
 
-State: **awaiting-direction; prepared**. ADR 0005's [engineering review](docs/adr/0005-datadog-supported-operational-observability.md#gstack-review-report)
+State: **prepared design integrated; source consolidation authorised 7 October 2026**. ADR 0005's [engineering review](docs/adr/0005-datadog-supported-operational-observability.md#gstack-review-report)
 is complete; ADR acceptance, direction and the #284 amendment remain pending.
 Later Wayfinder issues retain their own `/plan-eng-review`/direction gate. Account configuration, received
 data and acceptance are **not evidenced** by this preparation; the last supplied
 inspection is dated context, not current readback. `approved`, `configured`,
 `receiving-data` and `acceptance-verified` are separate evidence stages.
 
-Next: review the existing #284 amendment and ADR; record the selected revision
-and bounded direction approval, and authorise its issue update. The linked plan
+Next: resume the canonical ADR from this checkout, confirm current entitlements
+and target settings, and prepare the bounded pilot configuration and issue amendment
+for the required privacy, cost and activation decisions. The linked plan
 owns inventory/coverage, privacy/cost, credential/IAM, Convex, AWS monitors,
 Synthetics, optional Vercel, validation, rollback and handoff dependencies. No
 activation follows from the Startup Plan or earlier general setup discussion.

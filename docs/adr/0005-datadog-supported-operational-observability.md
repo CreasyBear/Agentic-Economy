@@ -9,6 +9,11 @@ decision_owner: "Joel Chan"
 
 ## Context and status
 
+**Source integration: 7 October 2026.** Joel authorised consolidating this prepared
+design with the API/docs, trial and Arc work. This canonical copy retains the
+reviewed scope with current repository links. Configuration, telemetry delivery
+and runtime acceptance remain unverified.
+
 Propose a capped, replaceable Datadog operations layer through supported
 integrations and vendor examples. Keep Sentry for exceptions and PostHog for product behaviour.
 This is a proposed decision, not acceptance of a deployed integration or

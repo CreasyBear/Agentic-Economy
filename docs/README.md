@@ -26,6 +26,7 @@ implemented behavior; a plan, proposal or dated review does not establish a rele
 - [Operating model](operating-model.md): current commercial/alpha boundaries and outstanding qualification.
 - [Agent operating contract](designs/agent-operating-contract.md): the machine-facing control loop.
 - [Platform data privacy](designs/platform-data-privacy.md): data recipients, release, access and retention requirements.
+- [Datadog operational integrations](adr/0005-datadog-supported-operational-observability.md): the consolidated pilot design, supported vendor paths and remaining configuration/acceptance work.
 - [Chat market entry](designs/chat-market-entry.md): discovery, comparison, recovery and purchase boundaries.
 - [Founder console](designs/founder-console.md) and [commercial surfaces](designs/commercial-surfaces.md): bounded UI/data contracts.
 - [Treasury](designs/treasury.md): operator facts, reconciliation and payment controls.

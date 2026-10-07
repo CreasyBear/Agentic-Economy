@@ -27,6 +27,7 @@ import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as StatusRouteImport } from './routes/status'
 import { Route as SupportRouteImport } from './routes/support'
 import { Route as TermsRouteImport } from './routes/terms'
+import { Route as TrialRouteImport } from './routes/trial'
 import { Route as TrustRouteImport } from './routes/trust'
 import { Route as SlugUcpRouteImport } from './routes/$slug.ucp'
 import { Route as DotwellKnownSplatRouteImport } from './routes/[.]well-known/$'
@@ -259,6 +260,11 @@ const SupportRoute = SupportRouteImport.update({
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
   path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TrialRoute = TrialRouteImport.update({
+  id: '/trial',
+  path: '/trial',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TrustRoute = TrustRouteImport.update({
@@ -1048,6 +1054,7 @@ export interface FileRoutesByFullPath {
   '/status': typeof StatusRoute
   '/support': typeof SupportRoute
   '/terms': typeof TermsRoute
+  '/trial': typeof TrialRoute
   '/trust': typeof TrustRoute
   '/$slug/ucp': typeof SlugUcpRoute
   '/.well-known/$': typeof DotwellKnownSplatRoute
@@ -1211,6 +1218,7 @@ export interface FileRoutesByTo {
   '/status': typeof StatusRoute
   '/support': typeof SupportRoute
   '/terms': typeof TermsRoute
+  '/trial': typeof TrialRoute
   '/trust': typeof TrustRoute
   '/$slug/ucp': typeof SlugUcpRoute
   '/.well-known/$': typeof DotwellKnownSplatRoute
@@ -1376,6 +1384,7 @@ export interface FileRoutesById {
   '/status': typeof StatusRoute
   '/support': typeof SupportRoute
   '/terms': typeof TermsRoute
+  '/trial': typeof TrialRoute
   '/trust': typeof TrustRoute
   '/$slug/ucp': typeof SlugUcpRoute
   '/.well-known/$': typeof DotwellKnownSplatRoute
@@ -1541,6 +1550,7 @@ export interface FileRouteTypes {
     | '/status'
     | '/support'
     | '/terms'
+    | '/trial'
     | '/trust'
     | '/$slug/ucp'
     | '/.well-known/$'
@@ -1704,6 +1714,7 @@ export interface FileRouteTypes {
     | '/status'
     | '/support'
     | '/terms'
+    | '/trial'
     | '/trust'
     | '/$slug/ucp'
     | '/.well-known/$'
@@ -1868,6 +1879,7 @@ export interface FileRouteTypes {
     | '/status'
     | '/support'
     | '/terms'
+    | '/trial'
     | '/trust'
     | '/$slug/ucp'
     | '/.well-known/$'
@@ -2033,6 +2045,7 @@ export interface RootRouteChildren {
   StatusRoute: typeof StatusRoute
   SupportRoute: typeof SupportRoute
   TermsRoute: typeof TermsRoute
+  TrialRoute: typeof TrialRoute
   TrustRoute: typeof TrustRoute
   DotwellKnownSplatRoute: typeof DotwellKnownSplatRoute
   DotwellKnownApiCatalogRoute: typeof DotwellKnownApiCatalogRoute
@@ -2243,6 +2256,13 @@ declare module '@tanstack/react-router' {
       path: '/terms'
       fullPath: '/terms'
       preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/trial': {
+      id: '/trial'
+      path: '/trial'
+      fullPath: '/trial'
+      preLoaderRoute: typeof TrialRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/trust': {
@@ -3558,6 +3578,7 @@ const rootRouteChildren: RootRouteChildren = {
   StatusRoute: StatusRoute,
   SupportRoute: SupportRoute,
   TermsRoute: TermsRoute,
+  TrialRoute: TrialRoute,
   TrustRoute: TrustRoute,
   DotwellKnownSplatRoute: DotwellKnownSplatRoute,
   DotwellKnownApiCatalogRoute: DotwellKnownApiCatalogRoute,

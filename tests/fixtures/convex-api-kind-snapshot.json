@@ -4099,6 +4099,60 @@
   },
   {
     "visibility": "internal",
+    "module": "trialAccess",
+    "method": "claimDelivery",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "trialAccess",
+    "method": "finishClaim",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "trialAccess",
+    "method": "finishDelivery",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "trialAccess",
+    "method": "issue",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "trialAccess",
+    "method": "prepareClaim",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "trialAccess",
+    "method": "readAdmin",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "trialAccess",
+    "method": "readCurrent",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "trialAccessActions",
+    "method": "claim",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "trialAccessActions",
+    "method": "deliverInvitation",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
     "module": "workloadCron",
     "method": "admit",
     "kind": "query"

@@ -27,11 +27,18 @@ The following acceptance evidence is dated 6 October 2026.
 
 | Surface | Verified source / identity |
 | --- | --- |
-| Production web | `/api/v1/release` reports `31a06382c0644dfd0c66a794edf221fcbe606596`; Vercel `dpl_74cZ5bj8Za5pHjK8UHZsfxYRhXy8` after PR #366 |
-| Production Convex | `cautious-zebra-473`; deployed PR #366 candidate `23d9dbb6c438eaf8cd67344d69919a1a06400c7b`, identical tree to merged source `31a06382c0644dfd0c66a794edf221fcbe606596`; release revision read back after deployment |
+| Production web | `/api/v1/release` reports `1cfe08489f3f3d3dfc36d2a37619c509e4924034` after PR #367 |
+| Production Convex | `cautious-zebra-473`; deployed PR #367 candidate `04f2d41901ec143a88b07f67925c657695a9af31`, identical tree to merged source `1cfe08489f3f3d3dfc36d2a37619c509e4924034`; release revision read back after deployment |
 | Chat/MCP acceptance baseline | PR #359 runtime tree `bf8e246d28121e3753ade6dad12421f6ab10d2b1`; web `81124766527c30f0cf3b6ee941a9ad7f2088e163` and Vercel `dpl_3xt4Wjed5sfTMg8gASAVTJE2xUS4` |
 | CLI distribution | Hosted and npm 0.3.1 archives verified byte-for-byte after PR #363, including installed CLI smoke. PR #364 prepares 0.3.2 with optional product feedback; its release PR records deployment and registry readback. |
 | Plan ledger | Additive v1.7.0 installed/read back at 03:55:24 UTC; digest `sha256:c47ed17051aecfc2b0ad86bbeabc385d841a04774667098528ed5ffb1ff740a4` |
+
+[PR #367](https://github.com/CreasyBear/Agentic-Economy/pull/367) retains price
+and purchase restrictions across chat follow-ups. Fresh production follow-ups
+confirmed unknown terms stay unknown and an external listing cannot be quoted.
+Its full gate passed before deployment. Rollback is PR #366 web
+`dpl_74cZ5bj8Za5pHjK8UHZsfxYRhXy8` and backend revision
+`31a06382c0644dfd0c66a794edf221fcbe606596`. No financial rollback is implied.
 
 [PR #366](https://github.com/CreasyBear/Agentic-Economy/pull/366) restores the
 native Convex Agent loop for guest and signed-in chat. The exact runtime tree
@@ -229,3 +236,26 @@ The [prior deployment map](../archive/2026-10-05/operations/deployments.md) reta
 earlier releases and observations. The [archive index](../archive/README.md)
 locates older inventories and local recovery context. Retained checkouts and
 retired projects are not additional approved deployments.
+
+## 7 October source consolidation
+
+Joel authorised integrating the alpha.2 API/docs candidate with the trial branch,
+prepared Datadog design and Arc work. The candidate retains current main’s native
+chat and purchase restrictions from PRs #366/#367. Trial source from PR #368 uses
+the existing Admin command, promotional-credit and payment-admission owners;
+its additive backend schema must precede a matching web deployment. Arc source
+`2fef56dab1c0d3e9de9f0690b9ec612b06012184` is already contained in current main.
+The Datadog ADR is the existing prepared design with repaired repository links,
+not evidence of configured monitors or received telemetry.
+
+Combined source qualification and merge identity will be recorded in the
+consolidation PR. No production invitation, grant, telemetry activation, paid
+Call or deployment is part of this source merge. Preserve the separate hosted
+acceptance gates and the whitepaper/strategy drafts.
+
+For this source-only consolidation, `vercel.json` disables automatic Git
+deployments from `main` and `codex/chat-runtime-repair-2026-10-06`. Other branches
+retain their existing behaviour. This prevents web from moving ahead of the
+additive trial backend. The coordinated release must verify backend compatibility
+and then remove these two entries before resuming automatic web releases. This
+uses [Vercel’s branch deployment setting](https://vercel.com/docs/project-configuration/git-configuration#git.deploymentenabled); it does not stop the current hosted release.

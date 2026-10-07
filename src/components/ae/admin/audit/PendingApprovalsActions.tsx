@@ -81,6 +81,12 @@ function approvalSheet(command: AdminCommandRequest, proposalRef: string, onOpen
       return <AdminActionSheet {...common} action={command.action} input={command.input} initialReasonCode={command.reasonCode} targetRefs={[{ label: ADMIN_AUDIT_ACTION_COPY.targetLabels.businessId, value: command.input.businessId }]} />
     case 'change_commercial_policy':
       return <AdminActionSheet {...common} action={command.action} input={command.input} initialReasonCode={command.reasonCode} targetRefs={[{ label: ADMIN_AUDIT_ACTION_COPY.targetLabels.policyRef, value: command.input.policyRef }]} />
+    case 'issue_trial':
+      return <AdminActionSheet {...common} action={command.action} input={command.input} initialReasonCode={command.reasonCode} targetRefs={[
+        { label: command.input.recipient.kind === 'email' ? 'Email' : 'Account', value: command.input.recipient.kind === 'email' ? command.input.recipient.email : command.input.recipient.accountRef },
+        { label: 'Trial', value: 'A$10 credit and purchase access for 30 days from activation' },
+        { label: 'Environment', value: command.input.environment },
+      ]} />
     case 'grant_promotional_credit':
       return <AdminActionSheet {...common} action={command.action} input={command.input} initialReasonCode={command.reasonCode} targetRefs={[
         { label: 'Workspace', value: command.input.accountRef },

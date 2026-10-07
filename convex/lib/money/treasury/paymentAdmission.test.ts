@@ -4,6 +4,10 @@ import { convexTestWithMarketComponents, ownerAdmin } from '../../../../tests/he
 import { seedAgent, testRef, validCustodyEnvironment } from '../../../../tests/helpers/quote-fixtures'
 import { seedPaymentReadiness, seedTreasuryReadinessFacts } from '../../../../tests/helpers/payment-readiness-fixture'
 import { readAgentPaymentAdmission, readPaymentsAudience, type PaymentAdmissionResult } from './paymentAdmission'
+import { api } from '../../../_generated/api'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { withSourceWrite } from '../../../../tests/helpers/source-write-admission'
+import { testMfaConsequenceProof } from '../../../../tests/helpers/convex-fixtures'
 
 const ownerAccess = makeFunctionReference<'query', { environment: 'production' | 'sandbox' }, PaymentAdmissionResult | { kind: 'refused'; code: 'authentication_required' | 'environment_mismatch' }>('platformLaunch:readOwnerPaymentAccess')
 
@@ -45,6 +49,27 @@ async function adminDelegationFixture(ready = true) {
   return { backend, admin, root, rootGrantRef, input }
 }
 
+async function approvedNonAdminTrial(ready = true) {
+  vi.stubEnv('AE_FORMANCE_ENVIRONMENT', 'production')
+  const fixture = await adminDelegationFixture(ready)
+  const command = { action: 'issue_trial' as const, input: { environment: 'production' as const,
+    recipient: { kind: 'account' as const, accountRef: fixture.root.accountRef } },
+    reasonCode: 'onboarding' as const, evidenceRefs: ['evidence:approved-trial'],
+    operationKey: 'trial:production-admission', correlationId: 'trial:production-admission', approval: { kind: 'execute' as const } }
+  const digest = canonicalDigest({ scope: 'admin_operator', action: command.action, input: command.input,
+    reasonCode: command.reasonCode, evidenceRefs: command.evidenceRefs })
+  expect(await fixture.admin.mutation(api.trialAccess.issue, await withSourceWrite('admin_operator', {
+    ...command, proof: testMfaConsequenceProof({ subject: 'user_payment-root' }, digest),
+  }))).toMatchObject({ kind: 'completed', code: 'trial_approved' })
+  await fixture.backend.run(async ctx => {
+    const membership = await ctx.db.query('adminMemberships').withIndex('by_tokenIdentifier_and_state', q => q
+      .eq('tokenIdentifier', 'token_payment-root').eq('state', 'active')).unique()
+    if (membership === null) throw new Error('membership_missing')
+    await ctx.db.delete(membership._id)
+  })
+  return fixture
+}
+
 beforeEach(() => {
   vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
   for (const [name, value] of Object.entries(validCustodyEnvironment)) vi.stubEnv(name, value)
@@ -54,6 +79,42 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks() })
 
 describe('live payment audience admission', () => {
+  it('admits the approved non-Admin Account and its delegated Agent without widening the production audience', async () => {
+    const fixture = await approvedNonAdminTrial()
+    expect(await fixture.backend.run(ctx => readPaymentsAudience(ctx, 'production'))).toBe('admins')
+    expect(await fixture.backend.run(ctx => readAgentPaymentAdmission(ctx, fixture.input, Date.now()))).toEqual({ kind: 'allowed' })
+    expect(await fixture.admin.query(ownerAccess, { environment: 'production' })).toEqual({ kind: 'allowed' })
+  })
+
+  it('trial access preserves global readiness and pause refusals', async () => {
+    const fixture = await approvedNonAdminTrial(false)
+    expect(await fixture.backend.run(ctx => readAgentPaymentAdmission(ctx, fixture.input, Date.now())))
+      .toEqual({ kind: 'refused', code: 'payments_not_ready' })
+    expect(await fixture.admin.query(ownerAccess, { environment: 'production' })).toEqual({ kind: 'refused', code: 'payments_not_ready' })
+    await fixture.backend.run(async ctx => {
+      const launch = await ctx.db.query('platformLaunch').withIndex('by_environment', q => q.eq('environment', 'production')).unique()
+      if (launch === null) throw new Error('launch_missing')
+      await ctx.db.patch(launch._id, { paymentsOpenTo: 'none' })
+    })
+    expect(await fixture.backend.run(ctx => readAgentPaymentAdmission(ctx, fixture.input, Date.now())))
+      .toEqual({ kind: 'refused', code: 'payments_paused' })
+    expect(await fixture.admin.query(ownerAccess, { environment: 'production' })).toEqual({ kind: 'refused', code: 'payments_paused' })
+  })
+
+  it.each(['revoked_binding', 'changed_owner', 'stale_delegation'] as const)('trial access does not override %s', async fault => {
+    const fixture = await approvedNonAdminTrial()
+    await fixture.backend.run(async ctx => {
+      if (fault === 'revoked_binding') await ctx.db.patch(fixture.root.bindingId, { lifecycle: 'revoked' })
+      if (fault === 'changed_owner') await ctx.db.patch(fixture.root.ownershipId, { ownerPrincipalRef: testRef('prn', 'trial-new-owner') })
+      if (fault === 'stale_delegation') {
+        const grant = await ctx.db.query('authorityDelegationGrants').withIndex('by_grantRef', q => q.eq('grantRef', fixture.rootGrantRef)).unique()
+        if (grant === null) throw new Error('root_missing')
+        await ctx.db.patch(grant._id, { generation: 4 })
+      }
+    })
+    expect(await fixture.backend.run(ctx => readAgentPaymentAdmission(ctx, fixture.input, Date.now())))
+      .toEqual({ kind: 'refused', code: 'payments_admins_only' })
+  })
   it('new drift supersedes cached and late green for both Agent and owner access; healthy source recovers', async () => {
     const fixture = await adminDelegationFixture()
     const now = Date.now()

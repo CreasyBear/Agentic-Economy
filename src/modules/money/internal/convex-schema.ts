@@ -1,3 +1,4 @@
+import { trialRecipientValue, trialActivationValue, trialDeliveryValue } from '../trial-access-contracts'
 import { spendingPeriodAdjustmentValue } from './spending-period-values'
 import { defineTable } from 'convex/server'
 import { v } from 'convex/values'
@@ -223,7 +224,23 @@ export const moneyTables = {
   }).index('by_draftRef', ['draftRef']).index('by_accountRef_and_month_and_revision', ['accountRef', 'month', 'revision']).index('by_usageReportRef',['usageReportRef']),
   moneyMonthlyUsageDocumentParts: defineTable({draftRef:v.string(),accountRef:v.string(),position:v.number(),recordsJson:v.string(),partDigest:v.string()}).index('by_draftRef_and_position',['draftRef','position']),
   moneyMonthlyUsageFinancialParts:defineTable({draftRef:v.string(),accountRef:v.string(),position:v.number(),recordsJson:v.string(),partDigest:v.string()}).index('by_draftRef_and_position',['draftRef','position']),
+  moneyTrialOffers: defineTable({
+    offerRef: v.string(),
+    environment: v.union(v.literal('sandbox'), v.literal('production')),
+    recipient: trialRecipientValue,
+    activation: trialActivationValue,
+    delivery: trialDeliveryValue,
+    createdAt: v.number(), updatedAt: v.number(),
+    actorRef: v.string(), operationKey: v.string(), correlationId: v.string(),
+    commandDigest: v.string(), auditEventRef: v.string(),
+    reasonCode: v.literal('onboarding'), evidenceRefs: v.array(v.string()),
+    expectedStateDigest: v.optional(v.string()),
+  })
+    .index('by_offerRef', ['offerRef'])
+    .index('by_environment_and_activation_accountRef', ['environment', 'activation.accountRef'])
+    .index('by_environment_and_createdAt', ['environment', 'createdAt']),
   moneyPromotionalGrants: defineTable({
+    trialOfferRef: v.optional(v.string()),
     grantRef: v.string(),
     accountRef: v.string(),
     environment: v.union(v.literal('sandbox'), v.literal('production')),

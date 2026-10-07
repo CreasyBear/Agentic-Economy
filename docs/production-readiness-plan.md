@@ -44,8 +44,18 @@ the listing. A later price follow-up nevertheless suggested requesting a Quote
 and claimed that the unknown price covered the listed output. Local regression
 tests reproduce dropped action context across explanatory turns. The follow-up
 repair retains the latest read's purchase restrictions, keeps unknown terms
-unknown, and reports refused Quotes as refusals. Its hosted verification is
-separate from this PR #366 observation.
+unknown, and reports refused Quotes as refusals.
+
+PR #367 deployed matching web/backend revision
+`1cfe08489f3f3d3dfc36d2a37619c509e4924034`. Two fresh signed-in follow-ups
+on 7 October AWST correctly reported that the external listing has no known
+price, cannot be quoted through Agentic Economy, and has unknown price coverage.
+The restriction survived another explanatory turn without a new catalogue read.
+The repair passed `npm run check` and `npm run gate` (9,252 unit tests,
+3,078 integration tests, 18 browser journeys and 18 accessibility cases).
+A fresh native readiness read and `/api/ready` were green, while catalogue
+freshness remained stale and quoting unavailable. No further Run or charge was
+attempted; this is follow-up-answer acceptance, not paid execution acceptance.
 
 Retrieval quality remains limited. A natural-language request for competitor
 keyword gaps returned no candidates; a follow-up using "keyword gap" returned
