@@ -269,6 +269,17 @@ describe('indexed directory route', () => {
     expect(reads.home).not.toHaveBeenCalled();
   });
 
+  it('loads the Host index without waiting for unused Tool facets', async () => {
+    reads.overview.mockImplementation(() => new Promise(() => {}));
+    const loader = Route.options.loader;
+    if (typeof loader !== 'function') throw new Error('loader_missing');
+    const data = await loader({ deps: { view: 'providers', query: 'example' } } as never);
+    expect(data).toMatchObject({ view: 'providers', overview: undefined });
+    expect(reads.providers).toHaveBeenCalledWith(expect.objectContaining({ data: { providerPrefix: 'example' } }));
+    expect(reads.overview).not.toHaveBeenCalled();
+    expect(reads.catalogue).not.toHaveBeenCalled();
+  });
+
   it('does not expose the unfiltered index total as a filtered page match count', async () => {
     const loader = Route.options.loader;
     if (typeof loader !== 'function') throw new Error('loader_missing');

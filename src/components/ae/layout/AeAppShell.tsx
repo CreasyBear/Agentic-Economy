@@ -5,7 +5,7 @@ import { WorkspaceTablePreferences } from './app-shell/WorkspaceTablePreferences
 import { WorkspaceFrameContext } from './app-shell/WorkspaceFrameContext'
 import { WorkspaceTransitionBoundary } from './WorkspaceTransitionBoundary'
 import { useRouterState } from '@tanstack/react-router'
-import { OperatorChromeProvider } from '@/components/ae/layout/AeOperatorPage'
+import { OperatorChromeProvider } from '@/components/ae/layout/OperatorChromeContext'
 import { KeyboardShortcutsDialog } from '@/components/ae/shortcuts/KeyboardShortcutsDialog'
 import { CommandPanelProvider } from '@/components/ae/command-panel'
 import { cn } from '@/lib/utils'

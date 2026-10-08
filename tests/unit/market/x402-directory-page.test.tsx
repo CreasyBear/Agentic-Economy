@@ -597,7 +597,7 @@ it('presents Provider keyword matches as Providers and explains the indexed sear
   expect(searchMarketToolsServer).not.toHaveBeenCalled()
 })
 
-it.each([false, true])('submits Provider search to the selected view, including a pending view: %s', async pending => {
+it.each([false, true])('submits Provider search only after its view and disclosures commit: pending %s', async pending => {
   const compare = entries[0]!.resource
   const { router } = show({ view: pending ? 'tools' : 'providers', network: 'eip155:8453', compare, layout: 'grid' }, [], {
     ...(pending ? { pendingView: 'providers' } : {}),
@@ -605,6 +605,13 @@ it.each([false, true])('submits Provider search to the selected view, including 
   })
   fireEvent.change(screen.getByRole('searchbox', { name: 'Search directory Hosts' }), { target: { value: '  research  ' } })
   fireEvent.submit(screen.getByRole('form', { name: 'Search the Tool market' }))
+  if (pending) {
+    expect(screen.getByRole('form', { name: 'Search the Tool market' }).closest('[inert]')).toBeTruthy()
+    expect(screen.queryByRole('link', { name: /Agent/ })).toBeNull()
+    expect(router.state.location.search.query).toBeUndefined()
+    expect(searchMarketToolsServer).not.toHaveBeenCalled()
+    return
+  }
   await waitFor(() => expect(router.state.location.search).toMatchObject({
     view: 'providers', query: 'research', sort: 'relevance', network: 'eip155:8453', compare, layout: 'grid',
   }))

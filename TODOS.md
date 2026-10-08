@@ -42,6 +42,16 @@ p95 improved from 310ms to 143.1ms; cold-browser p95 is 4.443s mobile and 1.207s
 desktop. The initial 6.607s server-start miss is retained. All 25 protected steps
 completed with fewer requests, but four journey medians still exceed 200ms.
 
+The 8 October follow-up, [PR #375](https://github.com/CreasyBear/Agentic-Economy/pull/375),
+is deployed at runtime source `e4d04a47e`. It removes unused Market reads, adds bounded native Nitro
+reuse for common public browse presets, and separates admin recovery from public
+startup. Independent review corrected pending disclosure and cache cardinality
+issues. The full source gate passes. Five interleaved SSR requests per deployment
+observed median response start of 1,182ms before and 748ms after; repeated
+Tools/Hosts transitions took 66–89ms. These are diagnostic samples, not p95 or
+signed-in acceptance. The [follow-up record](docs/operations/deployments.md#8-october-public-read-reuse-investigation)
+retains failures, current limits and the confirmed Sydney web/Virginia Convex placement.
+
 Next work stays with these owners:
 
 - **Web/DX:** protected-screen latency, hosted hydration, two-Account isolation
@@ -69,9 +79,9 @@ Five additional fresh anonymous desktop contexts measured 1.401–1.469s to the
 same usable marker (median 1.439s), with 178–193ms initial response times. This is
 diagnostic sampling, not a p95 or signed-in acceptance. The startup graph fetched
 153 JavaScript resources, about 2.16MB decoded excluding unreported cross-origin
-Clerk bytes. Web/DX's next bounded package is to remove the unused Discover/Host
-chat-recipient read, separate shared chrome contexts from admin recovery UI,
-and remove eager animation dependencies from static public surfaces. Then review
+Clerk bytes. The unused Discover/Host reads and shared chrome/admin recovery
+boundary are corrected by PR #375. Web/DX still owns evidence-led reduction of
+eager animation dependencies on static public surfaces, then review of
 off-route loader/contract imports using TanStack's maintained splitting. Compare
 emitted imports, bytes and repeated cold/warm timings; preserve disclosure,
 keyboard actions, admin recovery and Account isolation. Do not claim timing gains
@@ -122,6 +132,17 @@ public access expansion and paid Calls are outside this release.
 Payments remain unavailable: current Base RPC evidence fails and treasury requires
 reconciliation, as before this release. Money/infrastructure owners retain that
 readiness work; passing UI checks does not authorize paid testing.
+
+The 8 October independent hosted review leaves two public comparison defects
+open with UI/Registry under #256. Selecting Compare by keyboard drops focus to
+`BODY`; selecting the long AX1 title at 390px expands page width to 638px.
+Repair focus through the existing comparison navigation and contain the selected
+chip in `AeX402Directory.tsx` / `MarketComposition.css`, without changing
+comparison identities or introducing another state owner. Acceptance is repeated
+keyboard add/remove with retained focus and no whole-page overflow at 390px.
+Evidence: execution workspace `performance/read-reuse-release/journey-review/`.
+Table readability, comparison facts and Tools page traversal passed; Host
+next/back and hosted retained-browser recovery still need qualification.
 
 The public market recut is part of this UI candidate. UI/Registry own the branded
 opening, readable Tool results, explicit Agent handoff, and complete Host-index

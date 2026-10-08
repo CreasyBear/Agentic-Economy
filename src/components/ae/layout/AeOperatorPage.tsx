@@ -1,64 +1,24 @@
 'use client'
 
 import { WorkspaceFrameContext } from './app-shell/WorkspaceFrameContext'
-import { AdminCommandRecoveryPanel } from '@/components/ae/admin/actions/AdminCommandRecoveryPanel'
+import { AeRenderErrorBoundary } from '@/components/ae/feedback/AeObservabilityErrorBoundary'
+import { attemptViteStaleChunkReload } from '@/lib/observability/stale-chunk-reload'
+import { OperatorFrameChromeContext, OperatorShellChromeContext, type OperatorPageChrome, type OperatorShellChromeRegistration } from './OperatorChromeContext'
 
-import { createContext, use, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, use, useCallback, useLayoutEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Link } from '@tanstack/react-router'
 import { ADMIN_NAVIGATION, activeRoleNavigationHref } from './app-shell/app-shell.contracts'
 
-import type { OperatorBreadcrumbItem } from '@/components/ae/layout/AeOperatorBreadcrumbs'
-import type { OperatorRole } from '@/lib/operator/roles'
 import type { OperatorContext } from '@/lib/operator/operator-context'
 import './AppFrameComposition.css'
 
-type OperatorPageChrome = Omit<AeOperatorPageProps, 'children' | 'operatorContext'>
+// Loading recovery is a concern of an actual admin render, not shared chrome.
+const AdminCommandRecoveryPanel = lazy(() => import('@/components/ae/admin/actions/AdminCommandRecoveryPanel')
+  .then(module => ({ default: module.AdminCommandRecoveryPanel })))
 
-type OperatorShellChromeRegistration = {
-  setChrome: (chrome: OperatorPageChrome) => void
-  clearChrome: (chrome: OperatorPageChrome) => void
-}
-
-// Tier A: detects whether an ancestor AeOperatorPage already owns the shell
-// for this route (root vs. nested). Root creates this provider fresh and
-// renders the chrome; nested instances write their chrome into whichever
-// ancestor they find. AeRouteStates.tsx also reads this to decide whether a
-// pending/error/not-found state should wrap itself in its own AeOperatorPage
-// or defer to an existing one.
-const OperatorShellChromeContext = createContext<OperatorShellChromeRegistration | null>(null)
-
-export function useOperatorShellChrome(): OperatorShellChromeRegistration | null {
-  return use(OperatorShellChromeContext)
-}
-
-// Root-frame chrome bridge makes the current title available to the header
-// and moves focus only after the new route's content has committed.
-type OperatorFrameChromeState = OperatorShellChromeRegistration & { chrome: OperatorPageChrome | null }
-
-const OperatorFrameChromeContext = createContext<OperatorFrameChromeState | null>(null)
-
-export function useOperatorFrameChrome(): OperatorPageChrome | null {
-  return use(OperatorFrameChromeContext)?.chrome ?? null
-}
-
-
-export type AeOperatorPageProps = {
-  operatorRole: OperatorRole
+export type AeOperatorPageProps = OperatorPageChrome & {
   operatorContext?: OperatorContext
-  title: string
-  description: string
-  actions?: ReactNode
-  secondaryBar?: ReactNode
-  stickyHeader?: boolean
-  currentPath: string
-  mainContentId?: string
-  breadcrumbs?: readonly OperatorBreadcrumbItem[]
-  suppressSurfaceNavigation?: boolean
-  /** The page body owns the h1, so the frame title stays chrome. */
-  contentOwnsHeading?: boolean
-  /** A loading placeholder for the route; focus management waits for the real page. */
-  pending?: boolean
   children: ReactNode
 }
 
@@ -190,66 +150,22 @@ function RootOperatorPage(props: AeOperatorPageProps) {
             </div>
           ) : null}
           {secondaryBar === undefined ? null : secondaryBar}
-          {currentChrome.operatorRole === 'admin' ? <AdminCommandRecoveryPanel /> : null}
+          {currentChrome.operatorRole === 'admin' ? (
+            <AeRenderErrorBoundary
+              onError={attemptViteStaleChunkReload}
+              fallback={<section aria-label="Command recovery unavailable" className="grid gap-3 rounded-lg border border-border p-4">
+                <p role="status" className="text-sm text-muted-foreground">Command recovery could not be loaded. Saved recovery identities are retained.</p>
+                <button type="button" className="text-sm underline underline-offset-4" onClick={() => window.location.reload()}>Reload command recovery</button>
+              </section>}
+            >
+              <Suspense fallback={<p role="status" className="text-sm text-muted-foreground">Loading command recovery…</p>}>
+                <AdminCommandRecoveryPanel />
+              </Suspense>
+            </AeRenderErrorBoundary>
+          ) : null}
           {children}
         </div>
       </main>
     </OperatorShellChromeContext.Provider>
-  )
-}
-
-export type OperatorChromeProviderProps = {
-  children: ReactNode
-}
-
-/** Persistent frame bridge for header title and committed-route focus. */
-export function OperatorChromeProvider({ children }: OperatorChromeProviderProps) {
-  const [chrome, setRegisteredChrome] = useState<OperatorPageChrome | null>(null)
-  const setChrome = useCallback((nextChrome: OperatorPageChrome) => {
-    setRegisteredChrome(nextChrome)
-  }, [])
-  const clearChrome = useCallback((nextChrome: OperatorPageChrome) => {
-    setRegisteredChrome((currentChrome) => (currentChrome === nextChrome ? null : currentChrome))
-  }, [])
-  const registration = useMemo<OperatorFrameChromeState>(
-    () => ({ chrome, setChrome, clearChrome }),
-    [chrome, clearChrome, setChrome],
-  )
-
-  // Moves focus to the committed content region after client-side
-  // navigation between owner pages, so keyboard users land on the new
-  // page. Lives here (rather than on AeOperatorPage) because AeOperatorPage
-  // remounts on every route change; this provider is the persistent layer
-  // that can tell a real navigation apart from a first mount.
-  // The signal is the path the new page registers with its chrome, not the
-  // router location: the location changes before the new page has rendered
-  // its content region, and the old code (in the persistent shell) also
-  // watched the registered path.
-  const committedPath = chrome?.currentPath
-  const committedPending = chrome?.pending === true
-  const resolvedMainContentId = chrome?.mainContentId ?? 'main-content'
-  const previousCommittedPathRef = useRef<string | undefined>(undefined)
-
-  useEffect(() => {
-    // A pending placeholder registers the new path first; wait for the real
-    // page so focus lands on content that stays mounted.
-    if (committedPath === undefined || committedPending) return
-    if (previousCommittedPathRef.current === committedPath) return
-    if (previousCommittedPathRef.current === undefined) {
-      // First real page after mount: a baseline, not a navigation.
-      previousCommittedPathRef.current = committedPath
-      return
-    }
-    previousCommittedPathRef.current = committedPath
-    const frame = window.requestAnimationFrame(() => {
-      document.getElementById(resolvedMainContentId)?.focus()
-    })
-    return () => window.cancelAnimationFrame(frame)
-  }, [committedPath, committedPending, resolvedMainContentId])
-
-  return (
-    <OperatorFrameChromeContext.Provider value={registration}>
-      {children}
-    </OperatorFrameChromeContext.Provider>
   )
 }

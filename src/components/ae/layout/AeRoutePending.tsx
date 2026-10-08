@@ -1,6 +1,7 @@
 import { useLocation } from '@tanstack/react-router'
 
-import { AeOperatorPage, useOperatorShellChrome } from '@/components/ae/layout/AeOperatorPage'
+import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
+import { useOperatorShellChrome } from './OperatorChromeContext'
 import { AePageSkeleton } from '@/components/ae/layout/AePageState'
 import { Skeleton } from '@/components/arc/skeleton/skeleton'
 import { operatorRoleForPath } from '@/lib/operator/roles'

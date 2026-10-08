@@ -241,7 +241,7 @@ describe('operator command panel', () => {
     expect(screen.getByText(/1 matched · showing 1/)).toBeTruthy()
 
     fireEvent.keyDown(input, { key: 'Enter' })
-    expect(readDetail).toHaveBeenCalledWith(TEST_OPERATION_REF)
+    await waitFor(() => expect(readDetail).toHaveBeenCalledWith(TEST_OPERATION_REF))
 
     const fixture = detailFixture()
     // Exact USD source price remains visible without an AUD conversion.

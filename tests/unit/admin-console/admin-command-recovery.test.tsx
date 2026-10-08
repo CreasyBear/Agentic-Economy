@@ -14,11 +14,14 @@ vi.mock('convex/react', () => ({ useQuery: (query: unknown, args: unknown) => {
 vi.mock('@/components/ae/layout/AeRecordSheet', () => ({
   AeRecordSheet: ({ open, children, action }: { open: boolean; children: ReactNode; action: ReactNode }) => open ? <section>{children}{action}</section> : null,
 }))
+import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AdminCommandRecoveryPanel } from '@/components/ae/admin/actions/AdminCommandRecoveryPanel'
 import {
   adminCommandRecoveryScope, readAdminCommandRecovery, retainAdminCommandRecovery, forgetAdminCommandRecovery,
 } from '@/components/ae/admin/actions/admin-command-recovery'
 import { useAdminCommandRecovery, useAdminCommandObservation } from '@/components/ae/admin/actions/useAdminCommandRecovery'
+
+vi.mock('@tanstack/react-router', () => ({ Link: ({ children, to }: { children: ReactNode; to: string }) => <a href={to}>{children}</a> }))
 
 const identity = { action: 'set_payments_paused' as const, operationKey: 'admin:original', correlationId: 'admin:original:correlation' }
 afterEach(() => { cleanup(); window.localStorage.clear(); vi.clearAllMocks(); mocks.access = { kind: 'allowed', role: 'owner_admin', actorRef: 'actor:a' }; mocks.observation = { kind: 'unrecorded' }; mocks.accessError = null })
@@ -123,4 +126,21 @@ describe('admin command recovery identity', () => {
     expect(readAdminCommandRecovery(scope)).toEqual([])
   })
 
+})
+
+it('restores scoped recovery through the admin lazy page seam and hides a changed actor without discarding identity', async () => {
+  const scope = adminCommandRecoveryScope('actor:a')
+  retainAdminCommandRecovery(scope, identity)
+  mocks.observation = { kind: 'recorded', receipt: { kind: 'pending', action: identity.action, effectRefs: [], auditEventRef: 'audit:1', correlationId: identity.correlationId } }
+  const page = <AeOperatorPage operatorRole="admin" title="Activity" description="Recorded outcomes" currentPath="/admin/activity"><p>Recorded Call receipt remains available</p></AeOperatorPage>
+  const view = render(page)
+  fireEvent.click(await screen.findByRole('button', { name: 'Inspect command' }))
+  expect(screen.getAllByText('Pending').length).toBeGreaterThan(0)
+  expect(screen.queryByRole('button', { name: 'Acknowledge receipt' })).toBeNull()
+  expect(readAdminCommandRecovery(scope)).toEqual([identity])
+  mocks.access = { ...mocks.access, actorRef: 'actor:b' }
+  view.rerender(<AeOperatorPage operatorRole="admin" title="Activity" description="Changed actor" currentPath="/admin/activity"><p>Recorded Call receipt remains available</p></AeOperatorPage>)
+  expect(screen.queryByRole('button', { name: 'Inspect command' })).toBeNull()
+  expect(readAdminCommandRecovery(scope)).toEqual([identity])
+  expect(screen.getByText('Recorded Call receipt remains available')).toBeTruthy()
 })

@@ -49,10 +49,13 @@ vi.mock('@/components/ae/layout/AeOperatorPage', () => ({
   AeOperatorPage: ({ title, description, children }: { title: string; description: string; children: ReactNode }) => (
     <main><h1>{title}</h1><p>{description}</p>{children}</main>
   ),
-  useOperatorShellChrome: () => null,
 }))
 vi.mock('@/lib/server/require-operator-session', () => ({
   requireOperatorBeforeLoad: mocks.requireOperatorBeforeLoad,
+}))
+
+vi.mock('@/components/ae/layout/OperatorChromeContext', () => ({
+  useOperatorShellChrome: () => null,
 }))
 
 import { OperatorRouteForbidden } from '@/components/ae/layout/AeRouteError'

@@ -39,7 +39,7 @@ vi.mock('@/components/ae/website/AeSiteNav', () => ({
 import { AeAppHeader } from '@/components/ae/layout/app-shell/AeAppHeader'
 import { WorkspaceTransitionBoundary } from '@/components/ae/layout/WorkspaceTransitionBoundary'
 import { SidebarProvider } from '@/components/ui/sidebar'
-import { OperatorChromeProvider } from '@/components/ae/layout/AeOperatorPage'
+import { OperatorChromeProvider } from '@/components/ae/layout/OperatorChromeContext'
 import { AdminCallObjectPage } from '@/components/ae/admin/call-object/AdminCallObjectPage'
 import { ADMIN_CALL_OBJECT_COPY } from '@/components/ae/admin/call-object/call-object.contracts'
 import { parseCallRef } from '@/modules/capability-execution/call-contracts'
