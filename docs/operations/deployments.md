@@ -610,3 +610,42 @@ scan shortcut is absent from deployed source. Daily full import requires current
 cost/allowance evidence; no cadence increase or timestamp-only freshness repair
 was made. AWS session expiry and joint financial restoration remain separate
 Operations acceptance boundaries.
+
+## 8 October alpha readiness release
+
+[PR #373](https://github.com/CreasyBear/Agentic-Economy/pull/373) merged at
+11:23:47 UTC as `c5f9671e7248af34ccb5d5061d29775ef366d98c`. The deployed runtime
+source is `c608833bd9b015d1b89600377d7aeb83b6edd2e9`, including the performance
+lineage above. Native Convex `cautious-zebra-473` and the public web release
+endpoint both reported that runtime revision after deployment.
+
+Vercel deployment `dpl_6YhthsjQUGVZffbTB5Gu41TCLWkd`
+(`agentic-economy-6cqi1owo8-creasybears-projects.vercel.app`) was promoted to
+`https://app.aecon.ai`. The backend dry run and deploy added the three reviewed
+indexes and retained existing documents. No historical financial migration,
+credential, RPC allowance, quorum, billing or payment-audience change occurred.
+Payments remain Admin-only, revision 2. No test purchase budget was spent.
+
+The deployed exposure reader returned complete native coverage at 11:22 UTC:
+24 current-month sales, 182,595 AUD/6 units, high-water 195 and zero outstanding
+allocations for the observed Account. At 11:27 UTC installed CLI, official MCP
+and direct HTTPS again read the same historical Call with the unchanged
+projection digest recorded above. Private Call reads remained `no-store`.
+Release, health, OpenAPI, SKILL and llms endpoints returned 200. Readiness
+remained 503 with payments unavailable, stale catalogue and quoting unavailable.
+Fresh paid delivery and response-loss replay therefore remain unqualified.
+
+An anonymous tab opened before promotion navigated afterward without a reload
+failure. Fresh desktop and mobile-width page checks had no JavaScript errors or
+horizontal page overflow. The first desktop Market observation took 4,275ms to
+the hydrated-header/visible-heading marker and missed the desktop target. This
+was one sample, not p95; mobile widths were not a controlled mobile profile.
+These checks did not establish table readability, which Joel subsequently
+reported as defective. Signed-in transitions and paid journeys remain separate.
+Evidence is retained in the execution workspace under `performance/alpha-release/`.
+
+Rollback web target: `dpl_5ojMkJbKXCqwtHc9xzZt2xXhstHR`, source `6e1abd016`.
+The prior backend source is `ce7a0e57e1fbc13a0bf8f0ff8d1bb5ecc99bab7a`; retain the
+new optional Call field and additive indexes if rolling its code back. The
+financial guard and original-reference precautions in the candidate entry still
+apply. A code rollback never restores financial data or replaces accepted keys.
