@@ -61,7 +61,7 @@ export function ThemeToggle({ workspace = false }: { workspace?: boolean }) {
         </DropdownMenuRadioGroup>
         {workspace ? <DropdownMenuGroup className="hidden md:block">
           <DropdownMenuSeparator />
-          <DropdownMenuCheckboxItem checked={sidebarVisible} onCheckedChange={setSidebarVisible} className="arc-theme-menu-item">
+          <DropdownMenuCheckboxItem checked={sidebarVisible} onCheckedChange={setSidebarVisible} className="min-h-11">
             Show sidebar
           </DropdownMenuCheckboxItem>
         </DropdownMenuGroup> : null}
