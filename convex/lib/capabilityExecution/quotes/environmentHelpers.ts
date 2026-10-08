@@ -1,18 +1,10 @@
 import { type Infer } from 'convex/values'
 
-import { internal } from '../../../_generated/api'
 import type { ActionCtx } from '../../../_generated/server'
 import { env } from '../../../_generated/server'
 import type { StringEnvironment } from '@/lib/server/read-trimmed-env'
 import { formanceFinancialSnapshot, type PreparedFinancialSubjects } from './contracts'
-
-export function currentUtcMonthWindow(): { periodStartAt: number; periodEndAt: number } {
-  const now = new Date()
-  return {
-    periodStartAt: Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
-    periodEndAt: Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1),
-  }
-}
+import { readAccountMonthlySnapshot } from '../../money/monthlyBudget/snapshot'
 
 export function cdpX402CustodyEnvironment(): StringEnvironment {
   return {
@@ -36,23 +28,10 @@ export async function readOrganizationMonthlySpendSnapshotForQuote(
   subjects: PreparedFinancialSubjects,
 ): Promise<Infer<typeof formanceFinancialSnapshot>['organizationMonthlySpend']> {
   if (subjects.organizationMonthlySpendBudget === undefined) return undefined
-  const { periodStartAt, periodEndAt } = currentUtcMonthWindow()
-  const accountSpend = await ctx.runAction(internal.moneyFormance.readPeriodSpend, {
-    accountRef: subjects.accountRef,
-    periodStartAt,
-    periodEndAt,
-  })
-  const held = await ctx.runQuery(internal.capabilityPlans.readOutstandingPlanExposure, {
-    accountRef: subjects.accountRef, organizationMonth: new Date(periodStartAt).toISOString().slice(0, 7),
-  })
-  return {
-    enabled: true,
-    ceilingUnits: subjects.organizationMonthlySpendBudget.ceilingUnits,
-    heldPlanExposure: held.kind === 'available' ? { kind: 'known', units: held.units } : { kind: 'unavailable' },
-    ...(accountSpend.kind === 'available'
-      ? { monthSpendUnits: accountSpend.spendUnits }
-      : accountSpend.kind === 'empty'
-        ? { monthSpendUnits: '0' }
-        : {}),
+  const { snapshot, heldExposure } = await readAccountMonthlySnapshot(ctx, subjects.accountRef, subjects.expectedEnvironment)
+  return snapshot === undefined ? undefined : {
+    enabled: snapshot.enabled, heldExposure,
+    ...(snapshot.ceilingUnits === undefined ? {} : { ceilingUnits: snapshot.ceilingUnits }),
+    ...(snapshot.monthSpendUnits === undefined ? {} : { monthSpendUnits: snapshot.monthSpendUnits }),
   }
 }

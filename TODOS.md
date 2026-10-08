@@ -1,6 +1,6 @@
 # Current work
 
-**Reconciled:** 7 October 2026. This is the repository's current queue; reuse the
+**Reconciled:** 8 October 2026. This is the repository's current queue; reuse the
 linked issues instead of creating parallel backlogs. The [roadmap](IMPLEMENTATION_ROADMAP.md)
 owns capability requirements and [deployment map](docs/operations/deployments.md)
 owns shipped source and environments.
@@ -11,7 +11,8 @@ owns shipped source and environments.
 
 | Boundary | Next action / evidence |
 | --- | --- |
-| Production availability | Continue source/readiness observation across evidence expiry; preserve fail-closed RPC/receipt behavior and distinguish unavailable evidence from cash disagreement. |
+| Production availability | Alchemy's existing Base project reports exhausted monthly capacity; Infura responds. Joel chose to leave Alchemy unchanged on 8 October. Preserve two-provider agreement and closed payment readiness; the separate US$25/month proposal is not activated. |
+| Account monthly cap — High | Authority/finance: source correction, independent review and full release gate complete for [MM-004](docs/operations/mercator-maturity-register.md#mm-004); deployment and hosted purchase qualification remain open. Existing Calls and Plan Holds now share one bounded admission fence, preserving accepted identity and recovery. |
 | Alpha invitations | [#288](https://github.com/CreasyBear/Agentic-Economy/issues/288): Joel's go/no-go. Production remains Admin-only. |
 | Paid development chat | [#279](https://github.com/CreasyBear/Agentic-Economy/issues/279): real Base Sepolia journey, separate from completed mainnet CLI acceptance. |
 | Metering operations | Qualify hosted large-period exports, any historical backfill, automatic monthly schedule activation and financial-evidence archive operation in the actual environment. [Runbook](docs/operations/usage-metering.md). |
@@ -23,6 +24,45 @@ payments, exact reconciliation and scoped failure/recovery evidence. It does not
 prove external Customer traction, paid chat, a joint restore of those purchases
 or indefinite provider availability. Screening remains explicitly deferred under
 the approved alpha policy.
+
+## Performance and resilience — source closeout
+
+Owner: canonical integrator; continue [#256](https://github.com/CreasyBear/Agentic-Economy/issues/256).
+P1–P5 source work and independent review are complete: fewer discovery/settings
+requests, deferred startup work, stable Convex ownership, Router-owned Market
+state, Calls before optional reports, bounded read cancellation and existing REUI
+loading states. Account isolation corrections cover cached data, private headers,
+portals and delayed notifications while preserving accepted-operation recovery.
+`npm run check` and the complete `npm run gate` pass. Source closeout is complete;
+no deployment.
+
+The [deployment record](docs/operations/deployments.md#8-october-performance-and-resilience-candidate)
+owns measurements, evidence limits, compatibility and rollback. Local public warm
+p95 improved from 310ms to 143.1ms; cold-browser p95 is 4.443s mobile and 1.207s
+desktop. The initial 6.607s server-start miss is retained. All 25 protected steps
+completed with fewer requests, but four journey medians still exceed 200ms.
+
+Next work stays with these owners:
+
+- **Web/DX:** protected-screen latency, hosted hydration, two-Account isolation
+  and retained-browser/accepted-operation compatibility. The inherited
+  render-time Chat identity ref flagged by the advisory React Doctor hook is
+  corrected in the alpha candidate; its abandoned-render regression passes. Local fixtures and test
+  Clerk journeys do not replace Joel's deferred hosted acceptance.
+- **Authority/finance — MM-004:** repair the Account monthly-cap race confirmed by
+  independent source review and two local guard cases. The correction is now
+  implemented and independently reviewed; complete its release and hosted
+  qualification without waiving current payment readiness.
+- **Money/infrastructure — MM-041/MM-042:** qualify current RPC allowance and
+  payment readiness, then coherent Convex/storage/Formance restoration. Native
+  Vercel Sydney/Fluid/skew metadata and cookie emission are verified; expired AWS
+  login blocks resource readback. Configuration is not operational qualification.
+- **Existing Datadog owner — [#284](https://github.com/CreasyBear/Agentic-Economy/issues/284):**
+  current metrics, backup coverage, alert delivery and recovery evidence.
+
+Preserved unrelated whitepaper/strategy drafts and existing worktrees. No paid
+production Calls, cap/credential/failover changes, additional infrastructure,
+archived-worker activation or deployment promotion occurred.
 
 ## Platform UI upgrade — production journey qualification
 
@@ -43,10 +83,9 @@ Account popup and guarded switching during Joel's signed-in acceptance.
 Next: Joel's signed-in production testing of the coordinated 8 October release.
 Joel explicitly deferred authenticated production journey qualification until
 after release; keep that separate acceptance
-open for the Identity/Supply/Admin owners. Current local
-authenticated test configuration lacks `AE_E2E_OWNER_EMAIL` and `CONVEX_URL`;
-do not substitute a production Account or treat component fixtures as hosted
-proof. The deployment owner completed the staged inventory rollout: one projection
+open for the Identity/Supply/Admin owners. Local test configuration was supplied
+on 8 October for the performance work; local fixtures and test-identity journeys
+do not replace Joel's deferred hosted acceptance. The deployment owner completed the staged inventory rollout: one projection
 backfilled, none skipped, both indexes enabled and read back successfully.
 [Release evidence](docs/operations/deployments.md#8-october-platform-ui-production-release)
 records the matching web/backend tuple. The release preserves the Admin-only payment audience;

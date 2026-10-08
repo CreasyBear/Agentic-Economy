@@ -12,6 +12,7 @@ import { Button } from '@/components/arc/button/button'
 import { Drawer, DrawerContent } from '@/components/ae/shared/base-ui/drawer/drawer'
 import './MonthlySpendComposition.css'
 import { Switch } from '@/components/ui/switch'
+import { useWorkspacePresentationLifetime } from '@/lib/client/workspace-presentation'
 import { toast } from '@/lib/ui/toast'
 import { AUD_EXPONENT, canonicalAudUnits, formatDisplayAmount } from '@/modules/money/public'
 import { audInputTextFromUnits } from './credit-top-up-format'
@@ -78,6 +79,7 @@ export function AeMonthlySpendCeilingCard({
   monthSpend,
   onSave,
 }: AeMonthlySpendCeilingCardProps) {
+  const capturePresentation = useWorkspacePresentationLifetime()
   const resolvedSettings = settings ?? { enabled: false, ceilingUnits: '0', revision: 0 }
   const [dialogOpen, setDialogOpen] = useState(false)
   const [enabled, setEnabled] = useState(resolvedSettings.enabled)
@@ -192,12 +194,14 @@ export function AeMonthlySpendCeilingCard({
     setDiagnostic(null)
     setCeilingInvalid(false)
     setSaving(true)
+    const canPresent = capturePresentation()
     try {
       await onSave({
         enabled,
         ceilingUnits: nextUnits.toString(),
         expectedRevision: resolvedSettings.revision,
       })
+      if (!canPresent()) return
       toast.success(monthlySpendCeilingSavedNotice(
         enabled,
         resolvedSettings.enabled,
@@ -205,6 +209,7 @@ export function AeMonthlySpendCeilingCard({
       ))
       setDialogOpen(false)
     } catch (error: unknown) {
+      if (!canPresent()) return
       const diag = mapMonthlySpendCeilingDiagnostic(error)
       setDiagnostic(diag)
       toast.error(diag.whatHappened, { description: diag.nextStep })

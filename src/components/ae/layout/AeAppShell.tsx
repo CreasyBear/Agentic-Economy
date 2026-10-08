@@ -43,9 +43,10 @@ export function AeAppShell({ children }: { children: ReactNode }) {
     shell.hidePublicFooter ? '[&_.arc-site-footer]:hidden' : null,
   )
 
-  const header = () => (
+  const header = (ready: boolean) => (
     <AeAppHeader
       signedIn={shell.isSignedIn}
+      workspaceReady={ready}
       minimal={shell.isMinimalShell}
       mobileNavOpen={shell.mobileNavOpen}
       setMobileNavOpen={shell.setMobileNavOpen}
@@ -69,30 +70,23 @@ export function AeAppShell({ children }: { children: ReactNode }) {
       </a>
       <div id="ae-app-shell-sentinel" aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 h-2" />
       <CommandPanelProvider open={shell.commandOpen} onOpenChange={shell.handleCommandOpenChange}>
-        {shell.isMinimalShell ? (
-          <>
-            {header()}
-            <div className={contentClassName}>{children}</div>
-          </>
-        ) : (
-          // Keep this frame stable while Clerk resolves, so routed pages do not remount.
-          <OperatorChromeProvider>
+        {/* Keep the identity boundary mounted through auth routes and Clerk hydration. */}
+        <OperatorChromeProvider>
           <WorkspaceFrameContext.Provider value={shell.isSignedIn}>
             <div
-              data-shell="app-content"
-              data-owner-scroll={shell.isSignedIn && !chatFrame ? 'document' : undefined}
-              className={cn(
+              data-shell={shell.isMinimalShell ? undefined : 'app-content'}
+              data-owner-scroll={!shell.isMinimalShell && shell.isSignedIn && !chatFrame ? 'document' : undefined}
+              className={shell.isMinimalShell ? 'contents' : cn(
                 'flex min-h-0 w-full flex-1 flex-col',
                 chatFrame ? 'overflow-hidden' : 'min-h-svh',
-
               )}
             >
-              {header()}
-              <div className={contentClassName}><WorkspaceTransitionBoundary><WorkspaceTablePreferences>{children}</WorkspaceTablePreferences></WorkspaceTransitionBoundary></div>
+              <WorkspaceTransitionBoundary renderHeader={header}>
+                <div className={contentClassName}><WorkspaceTablePreferences>{children}</WorkspaceTablePreferences></div>
+              </WorkspaceTransitionBoundary>
             </div>
           </WorkspaceFrameContext.Provider>
-          </OperatorChromeProvider>
-        )}
+        </OperatorChromeProvider>
         <KeyboardShortcutsDialog open={shell.shortcutsOpen} onOpenChange={shell.setShortcutsOpen} />
       </CommandPanelProvider>
     </div></ChatHeaderSlotProvider></AeNavigationSafetyProvider>

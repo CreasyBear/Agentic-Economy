@@ -2,14 +2,21 @@
 
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { useCallback, useEffect, type ComponentType, type ReactNode } from 'react'
+import { StrictMode, Suspense, startTransition, useEffect, type ComponentType, type ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const runtime = vi.hoisted(() => ({
   pathname: '/t/new',
+  presentationVisible: true,
   isAuthenticated: true,
   isLoaded: true,
   sessionId: "session-1" as string | null,
+  userId: 'owner-1',
+  orgId: null as string | null,
+  orgRole: null as string | null,
+  closeClient: vi.fn(),
+  activeClient: null as object | null,
+  mountShell: vi.fn(),
   factorVerificationAge: [1, -1] as number[],
   constructClient: vi.fn(),
   setHttpAuth: vi.fn(),
@@ -29,38 +36,16 @@ vi.mock('@clerk/tanstack-react-start', () => ({
     isLoaded: runtime.isLoaded,
     isSignedIn: runtime.isAuthenticated,
     sessionId: runtime.sessionId,
-    userId: 'owner-1',
-    orgId: null,
+    userId: runtime.userId,
+    orgId: runtime.orgId,
+    orgRole: runtime.orgRole,
     sessionClaims: { fva: runtime.factorVerificationAge },
     getToken: runtime.getToken,
   }),
 }))
 
-vi.mock('convex/react-clerk', () => ({
-  ConvexProviderWithClerk: ({
-    children,
-    useAuth,
-  }: {
-    children: ReactNode
-    useAuth: () => {
-      isSignedIn: boolean
-      sessionId?: string | null
-      getToken: () => Promise<string | null>
-    }
-  }) => {
-    const { getToken, isSignedIn, sessionId } = useAuth()
-    // Match Convex's Clerk adapter: only a session change reinstalls auth.
-    // The getToken closure changing on its own does not restart authentication.
-    // oxlint-disable-next-line react-hooks/exhaustive-deps
-    const fetchAccessToken = useCallback(() => getToken(), [sessionId])
-    runtime.refresh = fetchAccessToken
-    useEffect(() => {
-      if (isSignedIn) void fetchAccessToken()
-    }, [fetchAccessToken, isSignedIn])
-    return children
-  },
-}))
-
+// Exercise the installed Convex Clerk adapter and its real auth-effect ordering.
+// Only transports are fake; session/org/user changes must use SDK mechanics.
 vi.mock('convex/browser', () => ({
   ConvexHttpClient: class ConvexHttpClient {
     setAuth(token: string) { runtime.setHttpAuth(token) }
@@ -70,9 +55,20 @@ vi.mock('convex/browser', () => ({
 
 vi.mock('convex/react', () => ({
   ConvexReactClient: class ConvexReactClient {
+    private authGeneration = 0
     constructor(readonly url: string) {
-      runtime.constructClient(url)
+      runtime.constructClient(url, this)
     }
+    setAuth(fetchToken: (options: { forceRefreshToken: boolean }) => Promise<string | null>, onChange: (authenticated: boolean) => void) {
+      runtime.activeClient = this
+      const generation = ++this.authGeneration
+      runtime.refresh = () => fetchToken({ forceRefreshToken: true })
+      void fetchToken({ forceRefreshToken: false }).then(token => {
+        if (generation === this.authGeneration) onChange(token !== null)
+      })
+    }
+    clearAuth() { this.authGeneration += 1 }
+    async close() { runtime.closeClient(this) }
   },
   useConvexAuth: () => ({ isAuthenticated: runtime.isAuthenticated }),
   useQuery: (...args: unknown[]) => runtime.useQuery(...args),
@@ -99,7 +95,12 @@ vi.mock('@tanstack/react-router', () => ({
     const fragment = hash === undefined ? '' : `#${hash}`
     return <a href={`${to}${query}${fragment}`} className={className}>{children}</a>
   },
-  Outlet: () => <div>Chat ready<input aria-label="Draft" defaultValue="" /></div>,
+  Outlet: () => <div>Chat ready<input aria-label="Draft" defaultValue="" />
+    <ChatHeader authenticated threadId="private-thread" threadTitle="Private account conversation" busy={false}
+      shareState="active" sharePath={null} copied={false} balanceLabel="A$123.45" mobileHistory={null} mobileOpen={false}
+      onMobileOpenChange={() => {}} onToggleHistory={() => {}} onNewChat={() => {}} onIssueShare={() => {}}
+      onRevokeShare={() => {}} onCopyShare={() => {}} />
+  </div>,
   Scripts: () => null,
   ScriptOnce: ({ children }: { children?: ReactNode }) => children ?? null,
   createRootRoute: (options: unknown) => ({ options }),
@@ -109,10 +110,12 @@ vi.mock('@tanstack/react-router', () => ({
   }),
 }))
 
-vi.mock('sonner', () => ({ Toaster: () => null }))
 vi.mock('@/components/ae/layout/AeRouteProgressBar', () => ({ RouteProgressBar: () => null }))
 vi.mock('@/components/ae/layout/AeAppShell', () => ({
-  AeAppShell: ({ children }: { children: ReactNode }) => children,
+  AeAppShell: ({ children }: { children: ReactNode }) => {
+    useEffect(() => { runtime.mountShell() }, [])
+    return <WorkspacePresentationVisibility value={runtime.presentationVisible}><ChatHeaderSlotProvider><main><ChatHeaderSlot />{children}</main></ChatHeaderSlotProvider></WorkspacePresentationVisibility>
+  },
 }))
 vi.mock('@/components/ae/feedback/AeObservabilityErrorBoundary', () => ({
   AeObservabilityErrorBoundary: ({ children }: { children: ReactNode }) => children,
@@ -140,15 +143,26 @@ vi.mock('@/lib/observability/boot-client-observability', () => ({
   bootClientObservability: vi.fn(),
 }))
 
-import { requiresChatProviders, SignedInConvexProvider } from '@/components/ae/layout/AeConvexProviders'
+import { toast as sonnerToast } from 'sonner'
+import { WorkspacePresentationVisibility } from '@/lib/client/workspace-presentation'
+import { ChatHeader } from '@/components/ae/chat/chat-session/components/ChatHeader'
+import { ChatHeaderSlotProvider, ChatHeaderSlot } from '@/components/ae/layout/app-shell/ChatHeaderSlot'
+import { AeConvexProvider, ChatAuthorityBoundary, requiresChatProviders, SignedInConvexProvider } from '@/components/ae/layout/AeConvexProviders'
 import { Route } from '@/routes/__root'
 
 
 beforeEach(() => {
   runtime.pathname = '/t/new'
+  runtime.presentationVisible = true
   runtime.isLoaded = true
   runtime.isAuthenticated = true
   runtime.sessionId = "session-1"
+  runtime.userId = 'owner-1'
+  runtime.orgId = null
+  runtime.orgRole = null
+  runtime.closeClient.mockReset()
+  runtime.activeClient = null
+  runtime.mountShell.mockReset()
   runtime.factorVerificationAge = [1, -1]
   runtime.getToken.mockReset().mockResolvedValue('verified-token')
   runtime.setHttpAuth.mockReset()
@@ -162,11 +176,30 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup()
+  vi.restoreAllMocks()
   vi.unstubAllEnvs()
   vi.useRealTimers()
 })
 
 describe('Tool chat provider boundary', () => {
+  it('hides the existing responsive notification presenter and dismisses its notifications during transition', async () => {
+    runtime.pathname = '/market'
+    const dismiss = vi.spyOn(sonnerToast, 'dismiss')
+    const Root = (Route as unknown as { options: { component: ComponentType } }).options.component
+    const view = render(<Root />, { container: document })
+    act(() => { sonnerToast.success('Private previous Account balance A$123.45') })
+    await screen.findByText('Private previous Account balance A$123.45')
+    runtime.presentationVisible = false
+    view.rerender(<Root />)
+    expect(screen.queryByText('Private previous Account balance A$123.45')).toBeNull()
+    expect(dismiss).toHaveBeenCalledOnce()
+    runtime.presentationVisible = true
+    view.rerender(<Root />)
+    expect(screen.queryByText('Private previous Account balance A$123.45')).toBeNull()
+    act(() => { sonnerToast.success('Current workspace notification') })
+    await screen.findByText('Current workspace notification')
+  })
+
   it('selects only thread and share routes', () => {
     expect(requiresChatProviders('/t/new')).toBe(true)
     expect(requiresChatProviders('/t/thread-1')).toBe(true)
@@ -289,6 +322,7 @@ describe('Tool chat provider boundary', () => {
     await act(async () => { renewal = runtime.refresh!() })
     expect(screen.getByText('Chat ready')).toBeTruthy()
     expect(runtime.setHttpAuth).toHaveBeenLastCalledWith('renewed-token')
+    expect(runtime.getToken).toHaveBeenLastCalledWith({ template: 'convex', skipCache: true })
     await act(async () => { finish(true); await renewal })
     expect(await renewal).toBe('renewed-token')
     expect(screen.getByText('Chat ready')).toBeTruthy()
@@ -364,6 +398,163 @@ describe('Tool chat provider boundary', () => {
     view.rerender(<Root />)
     await waitFor(() => expect(screen.getByRole('textbox', { name: 'Draft' })).not.toBe(draft))
     expect(screen.getByRole('textbox', { name: 'Draft' })).toHaveProperty('value', '')
+  })
+
+  it('preserves the committed draft when an identity render suspends and is abandoned', async () => {
+    const suspended = vi.fn()
+    const never = new Promise<never>(() => {})
+    function Draft({ suspend }: { suspend: boolean }) {
+      if (suspend) {
+        suspended()
+        throw never
+      }
+      return <input aria-label="Draft" defaultValue="" />
+    }
+    const tree = (suspend: boolean) => (
+      <Suspense fallback={<div>Suspended identity</div>}>
+        <AeConvexProvider chatRequired>
+          <ChatAuthorityBoundary><Draft suspend={suspend} /></ChatAuthorityBoundary>
+        </AeConvexProvider>
+      </Suspense>
+    )
+    const view = render(tree(false))
+    const draft = await screen.findByRole('textbox', { name: 'Draft' })
+    fireEvent.change(draft, { target: { value: 'Keep the committed identity draft' } })
+
+    // An anonymous identity can render immediately, but its suspended subtree
+    // never commits. Its render must not change the committed signed-in key.
+    runtime.isAuthenticated = false
+    runtime.userId = 'owner-2'
+    runtime.sessionId = 'session-2'
+    await act(async () => { startTransition(() => view.rerender(tree(true))) })
+    expect(suspended).toHaveBeenCalled()
+    expect(screen.queryByText('Suspended identity')).toBeNull()
+    expect(screen.getByRole('textbox', { name: 'Draft' })).toBe(draft)
+
+    // Abandon that render for a temporary handshake of the original identity.
+    runtime.isAuthenticated = true
+    runtime.isLoaded = false
+    runtime.userId = 'owner-1'
+    runtime.sessionId = null
+    view.rerender(tree(false))
+    expect(screen.queryByRole('textbox', { name: 'Draft' })).toBeNull()
+    expect(screen.getByDisplayValue('Keep the committed identity draft')).toBe(draft)
+
+    runtime.isLoaded = true
+    runtime.sessionId = 'session-1'
+    view.rerender(tree(false))
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Draft' })).toBe(draft))
+    expect(draft).toHaveProperty('value', 'Keep the committed identity draft')
+    expect(runtime.constructClient).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps one live client and mounted shell across market, workspace and chat transitions', async () => {
+    runtime.pathname = '/market'
+    const Root = (Route as unknown as { options: { component: ComponentType } }).options.component
+    const view = render(<Root />, { container: document })
+    await waitFor(() => expect(runtime.getToken).toHaveBeenCalledTimes(1))
+    expect(runtime.materialize).not.toHaveBeenCalled()
+    for (const pathname of ['/t/new', '/credit', '/t/thread-1', '/market']) {
+      runtime.pathname = pathname
+      view.rerender(<Root />)
+      await screen.findByText('Chat ready')
+    }
+    expect(runtime.materialize).toHaveBeenCalledTimes(2)
+    expect(runtime.constructClient).toHaveBeenCalledTimes(1)
+    expect(runtime.mountShell).toHaveBeenCalledTimes(1)
+    expect(runtime.closeClient).not.toHaveBeenCalled()
+    view.unmount()
+    await act(async () => { await Promise.resolve() })
+    expect(runtime.closeClient).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the active client open through StrictMode replay and closes only retired clients', async () => {
+    runtime.pathname = '/market'
+    const Root = (Route as unknown as { options: { component: ComponentType } }).options.component
+    const view = render(<StrictMode><Root /></StrictMode>, { container: document })
+    await screen.findByText('Chat ready')
+    await act(async () => { await Promise.resolve() })
+    expect(runtime.closeClient).not.toHaveBeenCalled()
+    // StrictMode may discard an inert render-created client. The committed
+    // client is the one observed by auth and must survive effect replay.
+    const activeClient = runtime.activeClient
+    vi.stubEnv('VITE_CONVEX_URL', 'https://replacement.convex.test')
+    view.rerender(<StrictMode><Root /></StrictMode>)
+    await act(async () => { await Promise.resolve() })
+    expect(runtime.closeClient).toHaveBeenCalledExactlyOnceWith(activeClient)
+    const replacementClient = runtime.activeClient
+    view.unmount()
+    await act(async () => { await Promise.resolve() })
+    expect(runtime.closeClient).toHaveBeenLastCalledWith(replacementClient)
+    expect(runtime.closeClient).toHaveBeenCalledTimes(2)
+  })
+
+  it.each(['userId', 'orgId'] as const)('fences %s changes without replacing the shared client or shell', async (field) => {
+    const Root = (Route as unknown as { options: { component: ComponentType } }).options.component
+    const view = render(<Root />, { container: document })
+    await screen.findByText('Chat ready')
+    const draft = screen.getByRole('textbox', { name: 'Draft' })
+    fireEvent.change(draft, { target: { value: 'Private request from previous scope' } })
+    let finish!: (ready: boolean) => void
+    runtime.materialize.mockImplementationOnce(() => new Promise<boolean>(resolve => { finish = resolve }))
+    runtime[field] = field === 'userId' ? 'owner-2' : 'org-2'
+    view.rerender(<Root />)
+    expect(screen.queryByRole('textbox', { name: 'Draft' })).toBeNull()
+    await waitFor(() => expect(runtime.materialize).toHaveBeenCalledTimes(2))
+    await act(async () => { finish(true) })
+    expect(screen.getByRole('textbox', { name: 'Draft' })).not.toBe(draft)
+    expect(screen.getByRole('textbox', { name: 'Draft' })).toHaveProperty('value', '')
+    expect(runtime.constructClient).toHaveBeenCalledTimes(1)
+    expect(runtime.mountShell).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([true, false])('fences a role downgrade until fresh authority resolves to %s', async (ready) => {
+    runtime.orgId = 'org-1'
+    runtime.orgRole = 'org:admin'
+    const Root = (Route as unknown as { options: { component: ComponentType } }).options.component
+    const view = render(<Root />, { container: document })
+    await screen.findByText('Chat ready')
+    const draft = screen.getByRole('textbox', { name: 'Draft' })
+    fireEvent.change(draft, { target: { value: 'Keep only after role verification' } })
+    let finish!: (ready: boolean) => void
+    runtime.materialize.mockImplementationOnce(() => new Promise<boolean>(resolve => { finish = resolve }))
+    expect(document.getElementById('ae-chat-actions')?.contains(screen.getByText('Private account conversation'))).toBe(true)
+    runtime.orgRole = 'org:member'
+    view.rerender(<Root />)
+    expect(screen.queryByRole('link', { name: 'Available credit A$123.45' })).toBeNull()
+    expect(screen.queryByText('Private account conversation')).toBeNull()
+    expect(screen.queryByRole('textbox', { name: 'Draft' })).toBeNull()
+    expect(screen.getByRole('heading', { name: 'Opening chat' })).toBeTruthy()
+    await waitFor(() => expect(runtime.materialize).toHaveBeenCalledTimes(2))
+    await act(async () => { finish(ready) })
+    if (ready) {
+      expect(screen.getByRole('textbox', { name: 'Draft' })).toBe(draft)
+      expect(draft).toHaveProperty('value', 'Keep only after role verification')
+      expect(screen.getByRole('link', { name: 'Available credit A$123.45' })).toBeTruthy()
+    } else {
+      expect(screen.queryByDisplayValue('Keep only after role verification')).toBeNull()
+      expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy()
+    }
+    expect(runtime.constructClient).toHaveBeenCalledTimes(1)
+    expect(runtime.mountShell).toHaveBeenCalledTimes(1)
+  })
+
+  it('requires fresh chat authority on re-entry and ignores a departed chat initialization', async () => {
+    const Root = (Route as unknown as { options: { component: ComponentType } }).options.component
+    let finish!: (ready: boolean) => void
+    runtime.materialize.mockImplementationOnce(() => new Promise<boolean>(resolve => { finish = resolve }))
+    const view = render(<Root />, { container: document })
+    await waitFor(() => expect(runtime.materialize).toHaveBeenCalledTimes(1))
+    runtime.pathname = '/market'
+    view.rerender(<Root />)
+    await act(async () => { finish(true) })
+    runtime.materialize.mockResolvedValueOnce(false)
+    runtime.pathname = '/t/new'
+    view.rerender(<Root />)
+    expect(screen.queryByText('Chat ready')).toBeNull()
+    await screen.findByRole('button', { name: 'Try again' })
+    expect(runtime.constructClient).toHaveBeenCalledTimes(1)
+    expect(runtime.mountShell).toHaveBeenCalledTimes(1)
   })
 
   it('keeps the signed-in Convex boundary mounted while refreshing authority', async () => {

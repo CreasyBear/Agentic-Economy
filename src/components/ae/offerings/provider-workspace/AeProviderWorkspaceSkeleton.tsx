@@ -1,5 +1,5 @@
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
-import { AeOwnerOfferingsList } from '@/components/ae/offerings/AeOwnerOfferings'
+import { OperatorRoutePending } from '@/components/ae/layout/AeRoutePending'
 
 export function AeProviderWorkspaceSkeleton() {
   return (
@@ -9,7 +9,7 @@ export function AeProviderWorkspaceSkeleton() {
       description="Manage the Tools buyers can find and call."
       currentPath="/owner/operations"
     >
-      <AeOwnerOfferingsList offerings={[]} loading />
+      <OperatorRoutePending preset="table" />
     </AeOperatorPage>
   )
 }

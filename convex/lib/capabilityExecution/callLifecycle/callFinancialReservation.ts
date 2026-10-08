@@ -6,46 +6,14 @@ import type {
   CallRuntime,
 } from '@/modules/capability-execution/call-authority'
 import type { ReserveArgs } from './admissionReservation'
-
-function currentUtcMonthWindow(): { periodStartAt: number; periodEndAt: number } {
-  const now = new Date()
-  return {
-    periodStartAt: Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
-    periodEndAt: Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1),
-  }
-}
+import { readAccountMonthlySnapshot } from '../../money/monthlyBudget/snapshot'
 
 export async function readOrganizationMonthlySpendForReserve(
   ctx: ActionCtx,
   ownerId: string,
+  environment: 'sandbox' | 'production',
 ): Promise<ReserveArgs['organizationMonthlySpend']> {
-  const budgetRow = await ctx.runQuery(
-    internal.moneyMonthlySpendBudget.readOrganizationMonthlySpendBudgetForAccount,
-    { accountRef: ownerId },
-  )
-  if (!budgetRow.enabled) return undefined
-  const { periodStartAt, periodEndAt } = currentUtcMonthWindow()
-  // Capture held exposure before the external read; admission compares it again.
-  const organizationMonth = new Date(periodStartAt).toISOString().slice(0, 7)
-  const held = await ctx.runQuery(internal.capabilityPlans.readOutstandingPlanExposure, {
-    accountRef: ownerId, organizationMonth,
-  })
-  const accountSpend = await ctx.runAction(internal.moneyFormance.readPeriodSpend, {
-    accountRef: ownerId,
-    periodStartAt,
-    periodEndAt,
-  })
-  return {
-    enabled: true,
-    ceilingUnits: budgetRow.ceilingUnits,
-    organizationMonth,
-    ...(held.kind === 'available' ? { planExposureDigest: held.digest } : {}),
-    ...(accountSpend.kind === 'available'
-      ? { monthSpendUnits: accountSpend.spendUnits }
-      : accountSpend.kind === 'empty'
-        ? { monthSpendUnits: '0' }
-        : {}),
-  }
+  return (await readAccountMonthlySnapshot(ctx, ownerId, environment)).snapshot
 }
 
 type ReservationResult = Awaited<ReturnType<CallRuntime['idempotency']['reserve']>>
@@ -108,7 +76,7 @@ export async function reserveFormanceBackedInvocation(
   input: Record<string, unknown>,
   turnRef?: string,
 ): Promise<ReservationResult> {
-  const organizationMonthlySpend = await readOrganizationMonthlySpendForReserve(ctx, principal.ownerId)
+  const organizationMonthlySpend = await readOrganizationMonthlySpendForReserve(ctx, principal.ownerId, principal.environment)
   const result = await ctx.runMutation(internal.capabilityCalls.reserve, {
     ...reservation,
     ownerId: principal.ownerId,

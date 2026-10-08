@@ -1,4 +1,4 @@
-import { callPublicSourceQuery, sourceQuery } from '@/lib/server/convex-source'
+import { callPublicSourceQuery, sourceQuery, type CreatePublicConvexClientOptions } from '@/lib/server/convex-source'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { recordSearchResult } from '@/lib/observability/journey'
 import { defineAction } from '@/modules/common/action'
@@ -58,9 +58,13 @@ const latestSupplyProjectionCompletionQuery = sourceQuery<Record<string, never>,
   'capabilitySupplyProjection:latestReconcileBusinessSupplyProjectionsCompletion',
 )
 
-async function readSupplyProjectionFreshness(now: number = Date.now()): Promise<SupplyProjectionFreshness> {
+async function readSupplyProjectionFreshness(now: number = Date.now(), options?: CreatePublicConvexClientOptions): Promise<SupplyProjectionFreshness> {
   try {
-    const completedAt = await callPublicSourceQuery(latestSupplyProjectionCompletionQuery, {})
+    options?.signal?.throwIfAborted()
+    const completedAt = options === undefined
+      ? await callPublicSourceQuery(latestSupplyProjectionCompletionQuery, {})
+      : await callPublicSourceQuery(latestSupplyProjectionCompletionQuery, {}, options)
+    options?.signal?.throwIfAborted()
     return {
       source: 'supply_projection',
       state: sourceFreshnessState(completedAt === null ? {} : { completedAt }, SUPPLY_PROJECTION_STALE_AFTER_MS, now),
@@ -68,6 +72,7 @@ async function readSupplyProjectionFreshness(now: number = Date.now()): Promise<
       staleAfterMs: SUPPLY_PROJECTION_STALE_AFTER_MS,
     }
   } catch (cause) {
+    if (options?.signal?.aborted) throw cause
     return degradeBackend(cause, { source: 'supply_projection', state: 'absent', staleAfterMs: SUPPLY_PROJECTION_STALE_AFTER_MS } as const, { site: 'readSupplyProjectionFreshness', reason: 'source_unavailable' })
   }
 }
@@ -117,14 +122,25 @@ export const registryToolsListAction = defineAction({
 export const registryToolsSearchAction = defineAction({
   ...registryToolsSearchContract,
   run: async ({ data, context }) => {
+    const signal = context.request?.signal
     const deliver = <T extends { kind: string }>(output: T): T => {
+      signal?.throwIfAborted()
       recordSearchResult(output.kind)
       return output
     }
-    const freshness = await readSupplyProjectionFreshness()
+    const sourceOptions = signal === undefined ? undefined : { signal }
+    const readCurrent = async (input: Parameters<typeof readCapabilityToolSearch>[0]) => {
+      signal?.throwIfAborted()
+      const result = sourceOptions === undefined ? await readCapabilityToolSearch(input) : await readCapabilityToolSearch(input, sourceOptions)
+      signal?.throwIfAborted()
+      return result
+    }
+    signal?.throwIfAborted()
+    const freshness = await readSupplyProjectionFreshness(Date.now(), sourceOptions)
     const admittedWanted = data.source !== 'coinbase' && data.filters?.access !== 'external_listing'
     const directoryWanted = data.source !== 'current'
-    const directoryStatus = directoryWanted ? await compactDirectoryStatus() : undefined
+    const directoryStatus = directoryWanted ? await compactDirectoryStatus(sourceOptions) : undefined
+    signal?.throwIfAborted()
     const generation = directoryStatus?.kind === 'ready' ? directoryStatus.coverage?.generation : undefined
     const scope = scopedSearchCursor({ query: data.query, source: data.source, filters: data.filters, limit: data.limit }, freshness, generation ?? 'current')
     const cursor = readSearchCursor(data.cursor, scope)
@@ -152,13 +168,13 @@ export const registryToolsSearchAction = defineAction({
     let rankedPageSize = data.limit
     let externalLimit: number | undefined
     if (admittedWanted && cursor.phase === 'current') {
-      const pool = await readCapabilityToolSearch({ query: '', limit: TOOL_SEARCH_ASSESSMENT_LIMIT,
+      const pool = await readCurrent({ query: '', limit: TOOL_SEARCH_ASSESSMENT_LIMIT,
         source: 'current', ...(filters === undefined ? {} : { filters }) })
       completePool = (pool.kind === 'ok' && !pool.pagination.hasMore && pool.partialResults !== true)
         || (pool.kind === 'no_candidates' && pool.partialResults !== true)
       if (completePool && pool.kind !== 'unavailable') searchResult = { ...pool, query: data.query }
       else if (pool.kind === 'unavailable') searchResult = pool
-      else searchResult = await readCapabilityToolSearch({
+      else searchResult = await readCurrent({
         query: data.query, limit: pageSize, source: 'current',
         ...(cursor.currentCursor === undefined ? {} : { cursor: cursor.currentCursor }),
         ...(filters === undefined ? {} : { filters }),
@@ -188,6 +204,7 @@ export const registryToolsSearchAction = defineAction({
     }
     const directoryStart = cursor.phase === 'coinbase' ? cursor.directoryCursor ?? null : null
     while (true) {
+      signal?.throwIfAborted()
       let admittedRows: SearchResult[] = []
       let continuation = currentSearchContinuation(assessment, completePool, cursor, pageSize)
       if (assessment.result.kind === 'ok' && assessment.verdict === 'matched') {
@@ -208,7 +225,8 @@ export const registryToolsSearchAction = defineAction({
         } else {
           const page = await readCompactDirectoryPage({
             query: data.query, cursor: directoryStart, limit: fetchSize, filters: directoryFilters,
-          })
+          }, sourceOptions)
+          signal?.throwIfAborted()
           if (page.kind === 'unavailable' && page.reason === 'cursor_invalid') throw new InvalidOpaqueCursorError()
           if (page.kind !== 'ok') {
             return deliver(projectToolSearchChoices(assessment.result, data.filters, assessment, freshness, data.limit,
@@ -220,7 +238,8 @@ export const registryToolsSearchAction = defineAction({
           if (directoryStatus === undefined) throw new Error('Directory status must precede directory page')
           if (!rateAttempted && page.page.some(item => item.minimumUsdPrice !== undefined)) {
             rateAttempted = true
-            directoryRate = await readPersistedReferenceRate()
+            directoryRate = await readPersistedReferenceRate(sourceOptions)
+            signal?.throwIfAborted()
           }
           externalRows = filterExternalSearchRows(compactDirectoryRows(page, directoryStatus, Date.now(), directoryRate), data.filters)
           if (externalRows.length > 0 && data.query.trim().length > 0) {
@@ -229,6 +248,7 @@ export const registryToolsSearchAction = defineAction({
           }
           const externalAssessment = await rankCompactDirectoryRows(externalRows, data.query,
             context.request === undefined ? {} : { signal: context.request.signal })
+          signal?.throwIfAborted()
           externalRows = externalAssessment.rows.filter(row => row.toolRef === undefined || !admittedRows.some(admitted => admitted.toolRef === row.toolRef))
           if (!page.isDone) continuation = { phase: 'coinbase', offset: 0, directoryCursor: page.continueCursor }
         }
@@ -262,7 +282,7 @@ export const registryToolsSearchAction = defineAction({
         pageSize = budget.pageSize
         externalLimit = undefined
         if (!completePool && rankedPageSize !== pageSize) {
-          searchResult = await readCapabilityToolSearch({
+          searchResult = await readCurrent({
             query: data.query, limit: pageSize, source: 'current',
             ...(cursor.currentCursor === undefined ? {} : { cursor: cursor.currentCursor }),
             ...(filters === undefined ? {} : { filters }),

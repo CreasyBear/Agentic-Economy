@@ -2,6 +2,7 @@ import { useRef, useState, type FormEvent, type RefObject } from 'react'
 import { useServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 
+import { useWorkspacePresentationLifetime } from '@/lib/client/workspace-presentation'
 import { toast } from '@/lib/ui/toast'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { useClientMounted } from '@/hooks/use-client-mounted'
@@ -18,6 +19,7 @@ export type UseRemoveBusinessPageResult = Readonly<{
 }>
 
 export function useRemoveBusinessPage(): UseRemoveBusinessPageResult {
+  const capturePresentation = useWorkspacePresentationLifetime()
   const openRemoval = useServerFn(openRemovalServer)
   const hydrated = useClientMounted()
   const [value, setValue] = useState<RemoveBusinessFormValue>({
@@ -74,13 +76,14 @@ export function useRemoveBusinessPage(): UseRemoveBusinessPageResult {
     requestBlockedRef.current = true
     let outcomeConfirmed = false
     setPending(true)
+    const canPresent = capturePresentation()
     try {
       const result = await openRemoval({ data: nextValue })
       outcomeConfirmed = result.kind === 'ok' || !result.retryable
       if (result.kind === 'ok') {
         const message = `Request ${result.receipt.status}. Reference ${result.receipt.disputeId}.`
         setReceipt(message)
-        toast.success('Request recorded', { description: message })
+        if (canPresent()) toast.success('Request recorded', { description: message })
         return
       }
 

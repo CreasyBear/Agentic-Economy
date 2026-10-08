@@ -1,6 +1,7 @@
 import { createClientOnlyFn } from '@tanstack/react-start'
 import type { AnyRouter } from '@tanstack/react-router'
 import { boundaryCauseKind, degradeBackend } from '@/lib/observability/degrade-backend'
+import { readObservabilityClientConfig } from '@/lib/observability/config'
 import {
   isTelemetryAllowedForCurrentRoute,
   securePrivateRecordLocation,
@@ -26,14 +27,13 @@ export const bootClientObservability = createClientOnlyFn((router: AnyRouter) =>
   }
 
   initialized = true
+  const config = readObservabilityClientConfig()
+  if (!config.enabled) return
 
   void Promise.all([
-    import('@/lib/observability/sentry.client'),
-    import('@/lib/observability/posthog.client'),
-  ]).then(([{ initSentryClient }, { initPostHogClient }]) => {
-    initSentryClient(router)
-    initPostHogClient(router)
-  }).catch((cause: unknown) => {
+    config.sentryDsn === undefined ? undefined : import('@/lib/observability/sentry.client').then(({ initSentryClient }) => initSentryClient(router)),
+    config.posthogKey === undefined ? undefined : import('@/lib/observability/posthog.client').then(({ initPostHogClient }) => initPostHogClient(router)),
+  ]).catch((cause: unknown) => {
     degradeBackend(boundaryCauseKind(cause), undefined, { site: 'bootClientObservability.init', reason: 'source_unavailable' })
   })
 })

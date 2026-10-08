@@ -11,20 +11,58 @@ import {
   readX402DirectoryCatalogueServer,
   readX402DirectoryProvidersServer,
 } from '@/modules/market/x402-directory-index.functions'
-import { x402DirectoryCatalogueInputSchema, type X402DirectoryCatalogue, type X402DirectoryCatalogueOverview } from '@/modules/market/x402-directory-catalogue'
+import { x402DirectoryCatalogueInputSchema, type X402DirectoryCatalogue } from '@/modules/market/x402-directory-catalogue'
 import { directoryBooleanSearchKeys, directoryCatalogueSearchKeys, directoryCatalogueSearchValues } from '@/modules/market/x402-directory-navigation'
-import { readX402MarketplaceHomeServer } from '@/modules/market/x402-marketplace-home.functions'
-import type { ToolChoiceSearchOutput } from '@/modules/registry/tool-choice-contracts'
+import { toolCatalogSearchInputSchema, type ToolChoiceSearchOutput } from '@/modules/registry/tool-choice-contracts'
+import { searchMarketToolsServer } from './market-tool-search.functions'
+import { degrade } from '@/lib/observability/degrade'
+import { awaitBoundedRead as awaitMarketRead, BROWSER_READ_TIMEOUT_MS as MARKET_READ_TIMEOUT_MS } from '@/lib/bounded-read'
+import { recordProductJourney } from '@/lib/observability/product-journey'
 
-export type MarketToolSearchState = Readonly<{
-  query: string
-  pages: readonly ToolChoiceSearchOutput[]
-  index: number
-  receivedAt: number | null
-  request: Readonly<{ kind: 'idle' }>
-    | Readonly<{ kind: 'loading'; purpose: 'search' | 'page'; generation: number }>
-    | Readonly<{ kind: 'failed'; purpose: 'search' | 'page' }>
+export type MarketCanonicalSearchPage = Readonly<{
+  input: ReturnType<typeof toolCatalogSearchInputSchema.parse>
+  result: ToolChoiceSearchOutput | undefined
+  refreshFailed?: true
 }>
+export type MarketRouteReadOptions = Readonly<{ signal?: AbortSignal | undefined; previousCanonicalSearch?: MarketCanonicalSearchPage | undefined }>
+
+/** Bound the browser read and SSR wait; cancellation never publishes a failed search. */
+export async function loadCanonicalMarketSearch(search: MarketSearch, options: MarketRouteReadOptions = {}): Promise<MarketCanonicalSearchPage> {
+  const input = toolCatalogSearchInputSchema.parse(marketToolSearchInput(search, search.indexCursor))
+  const failedPage = (): MarketCanonicalSearchPage => failedCanonicalMarketSearch(input, options.previousCanonicalSearch)
+  const controller = new AbortController()
+  const cancel = () => controller.abort(options.signal?.reason)
+  options.signal?.addEventListener('abort', cancel, { once: true })
+  if (options.signal?.aborted) cancel()
+  const timeout = setTimeout(() => controller.abort(new Error('market_search_timeout')), 15_000)
+  let stopWaiting: (() => void) | undefined
+  try {
+    controller.signal.throwIfAborted()
+    const canceled = new Promise<never>((_resolve, reject) => {
+      stopWaiting = () => reject(controller.signal.reason)
+      controller.signal.addEventListener('abort', stopWaiting, { once: true })
+    })
+    const result = await Promise.race([searchMarketToolsServer({ data: input, signal: controller.signal }), canceled])
+    controller.signal.throwIfAborted()
+    recordProductJourney({ action: 'search_observed', phase: result.kind === 'unavailable' ? 'failed' : 'observed', surface: 'market', queryLength: input.query.length, resultCount: result.kind === 'unavailable' || result.kind === 'noMatch' ? 0 : result.results.length })
+    return result.kind === 'unavailable' && failedPage().refreshFailed === true ? failedPage() : { input, result }
+  } catch (cause) {
+    if (options.signal?.aborted) throw cause
+    recordProductJourney({ action: 'search_observed', phase: 'failed', surface: 'market', queryLength: input.query.length })
+    degrade(cause, undefined, { site: 'marketCanonicalSearch', reason: 'source_unavailable' })
+    return failedPage()
+  } finally {
+    clearTimeout(timeout)
+    options.signal?.removeEventListener('abort', cancel)
+    if (stopWaiting !== undefined) controller.signal.removeEventListener('abort', stopWaiting)
+  }
+}
+
+function failedCanonicalMarketSearch(input: MarketCanonicalSearchPage['input'], previous: MarketCanonicalSearchPage | undefined): MarketCanonicalSearchPage {
+  const retained = previous?.result !== undefined && previous.result.kind !== 'unavailable'
+    && JSON.stringify(previous.input) === JSON.stringify(input) ? previous : undefined
+  return { input, result: retained?.result, ...(retained === undefined ? {} : { refreshFailed: true }) }
+}
 
 /** Only pass refinements that the canonical mixed search applies before pagination. */
 export function marketToolSearchInput(search: MarketSearch, cursor?: string) {
@@ -233,6 +271,8 @@ export function validateMarketSearch(search: Record<string, unknown>): MarketSea
     ...(page === undefined ? {} : { page }),
     ...(save === undefined ? {} : { save: JSON.stringify(save) }),
   }
+  // An ordinal alone cannot restore a canonical search continuation.
+  if (marketUsesCanonicalSearch(accepted as MarketSearch) && accepted.indexCursor === undefined) delete accepted.page
   // The router merges this object over the raw URL. An omitted key would keep the rejected value and the loader would throw.
   for (const key of MARKET_SEARCH_KEYS) {
     if (search[key] !== undefined && accepted[key] === undefined) accepted[key] = undefined
@@ -244,7 +284,7 @@ export function marketLoaderDeps(search: MarketSearch) {
   return {
     ...directoryCatalogueSearchValues(search),
     ...(search.providerCursor === undefined ? {} : { providerCursor: search.providerCursor }),
-    ...(search.view === 'providers' && search.page !== undefined ? { page: search.page } : {}),
+    ...((search.view === 'providers' || marketUsesCanonicalSearch(search)) && search.page !== undefined ? { page: search.page } : {}),
     ...(search.view === undefined ? {} : { view: search.view }),
     ...(search.compare === undefined ? {} : { compare: search.compare }),
   }
@@ -257,94 +297,110 @@ function resolveMarketView(search: MarketSearch): MarketView {
   return 'discover'
 }
 
-async function resolveMarketCompareEntry(resource: string): Promise<MarketCompareEntry> {
+async function resolveMarketCompareEntry(resource: string, signal: AbortSignal): Promise<MarketCompareEntry> {
   try {
+    signal.throwIfAborted()
     if (isPublicToolRef(resource)) {
-      const result = await readPublicToolDetailRouteServer({ data: { toolRef: resource } })
+      const result = await readPublicToolDetailRouteServer({ data: { toolRef: resource }, signal })
+      signal.throwIfAborted()
       return result.kind === 'found' ? { resource, tool: result.tool } : { resource, missing: true }
     }
     const result = /^registry:[a-f0-9]{64}$/u.test(resource)
-      ? await readMarketExternalListingServer({ data: { id: resource } })
-      : await readX402DirectoryCatalogueResourceServer({ data: { resource } })
+      ? await readMarketExternalListingServer({ data: { id: resource }, signal })
+      : await readX402DirectoryCatalogueResourceServer({ data: { resource }, signal })
+    signal.throwIfAborted()
     if (result.kind === 'found' || result.kind === 'found_upstream') {
       const admitted = result.item.entry.choice
       const toolRef = result.kind === 'found' && isPublicToolRef(result.item.toolRef) ? result.item.toolRef
         : admitted?.access !== 'external_listing' && isPublicToolRef(admitted?.toolRef) ? admitted.toolRef : undefined
       if (toolRef !== undefined) {
-        const detail = await readPublicToolDetailRouteServer({ data: { toolRef } })
+        const detail = await readPublicToolDetailRouteServer({ data: { toolRef }, signal })
+        signal.throwIfAborted()
         return detail.kind === 'found' ? { resource, tool: detail.tool } : { resource, missing: true }
       }
       return { resource, entry: result.item.entry }
     }
   } catch (cause) {
+    if (signal.aborted) throw cause
     console.error('[market] comparison Tool read failed, marking selection unavailable', { resource, cause })
   }
   return { resource, missing: true }
 }
 
 
-/** Discover paints collection cards, not facet shelves or unopened catalogue pages. */
-function paintedOverview(overview: X402DirectoryCatalogueOverview, view: MarketView): X402DirectoryCatalogueOverview {
-  if (overview.kind !== 'ok' || view !== 'discover') return overview
-  return { kind: 'ok', coverage: overview.coverage, categories: [], providers: [], networks: [], popular: [], recentlyUpdated: [] }
-}
-
 /** Hostname lookup uses the Host index. Existing Tool-constrained URLs retain their Tool semantics. */
 export function marketUsesHostDirectory(search: MarketSearch): boolean {
   return resolveMarketView(search) === 'providers' && search.page === undefined && Object.keys(directoryCatalogueSearchValues(search)).every(key => key === 'query')
 }
 
-export async function loadMarketRouteData(deps: MarketSearch) {
+export async function loadMarketRouteData(deps: MarketSearch, options: MarketRouteReadOptions = {}) {
+  const deadline = AbortSignal.timeout(MARKET_READ_TIMEOUT_MS)
+  const signal = options.signal === undefined ? deadline : AbortSignal.any([options.signal, deadline])
+  const read = <T>(fetch: () => Promise<T>) => awaitMarketRead(fetch, signal)
   const parsedCatalogue = x402DirectoryCatalogueInputSchema.safeParse(catalogueSearchFromUrl({ ...directoryCatalogueSearchValues(deps) }))
   const catalogueInput = parsedCatalogue.success ? parsedCatalogue.data : x402DirectoryCatalogueInputSchema.parse({})
   const view = resolveMarketView(deps)
   const showHome = view === 'discover'
   const showHosts = marketUsesHostDirectory(deps)
   const compareRefs = parseMarketCompareRefs(deps.compare) ?? []
-  const [loadedCatalogue, home, loadedOverview, compareEntries, providers] = await Promise.all([
+  const [loadedCatalogue, overview, compareEntries, providers, canonicalSearch] = await Promise.all([
     showHome || showHosts
       ? Promise.resolve(undefined)
       : view === 'providers' || !marketUsesCanonicalSearch(catalogueInput)
-      ? readX402DirectoryCatalogueServer({ data: { ...catalogueInput, ...(catalogueInput.sort || catalogueInput.query ? {} : { sort: 'adoption' as const }) } }).catch((cause: unknown) => {
+      ? read(() => readX402DirectoryCatalogueServer({ data: { ...catalogueInput, ...(catalogueInput.sort || catalogueInput.query ? {} : { sort: 'adoption' as const }) }, signal })).catch((cause: unknown) => {
+          if (options.signal?.aborted) throw cause
           console.error('[market] directory catalogue unavailable', { cause })
           return { kind: 'unavailable' as const, reason: 'source_unavailable' as const }
         })
-      : Promise.resolve({ kind: 'unavailable', reason: 'canonical_search' } as const satisfies X402DirectoryCatalogue),
-    showHome ? readX402MarketplaceHomeServer().catch(() => undefined) : Promise.resolve(undefined),
-    readX402DirectoryCatalogueOverviewServer().catch(cause => {
+      : Promise.resolve(undefined),
+    showHome ? Promise.resolve(undefined) : read(() => readX402DirectoryCatalogueOverviewServer({ signal })).catch(cause => {
+      if (options.signal?.aborted) throw cause
       console.error('[market] directory overview unavailable', { cause })
       return { kind: 'unavailable' as const, reason: 'source_unavailable' as const }
     }),
-    Promise.all(compareRefs.map(resolveMarketCompareEntry)),
-    showHosts ? readX402DirectoryProvidersServer({ data: {
+    Promise.all(compareRefs.map(resource => read(() => resolveMarketCompareEntry(resource, signal)).catch(cause => {
+      if (options.signal?.aborted) throw cause
+      return { resource, missing: true as const }
+    }))),
+    showHosts ? read(() => readX402DirectoryProvidersServer({ data: {
       ...(deps.query === undefined ? {} : { providerPrefix: deps.query }),
       ...(deps.providerCursor === undefined ? {} : { providerCursor: deps.providerCursor }),
-    } }).catch((cause: unknown) => {
+    }, signal })).catch((cause: unknown) => {
+      if (options.signal?.aborted) throw cause
       console.error('[market] directory Hosts unavailable', { cause })
       return { kind: 'unavailable' as const, reason: 'source_unavailable' as const }
     }) : Promise.resolve(undefined),
+    view === 'tools' && marketUsesCanonicalSearch(catalogueInput)
+      ? read(() => loadCanonicalMarketSearch(deps, { ...options, signal })).catch(cause => {
+          if (options.signal?.aborted) throw cause
+          return failedCanonicalMarketSearch(toolCatalogSearchInputSchema.parse(marketToolSearchInput(deps, deps.indexCursor)), options.previousCanonicalSearch)
+        })
+      : Promise.resolve(undefined),
   ])
-  const overview = paintedOverview(loadedOverview, view)
+  options.signal?.throwIfAborted()
   const catalogue = loadedCatalogue ?? {
     kind: 'ok' as const,
     source: 'index' as const,
     searchMethod: 'native_index' as const,
     isDone: true,
-    ...(overview.kind === 'ok' ? { coverage: overview.coverage } : {}),
+    ...(overview?.kind === 'ok' ? { coverage: overview.coverage } : {}),
     page: { kind: 'ok' as const, items: [], offset: 0, limit: 0, mode: 'browse' as const, appliedFilters: {} },
   }
   const page = catalogue?.kind === 'ok'
     ? catalogue.page
     : { kind: 'unavailable' as const, reason: catalogue?.reason === 'query_invalid' ? 'query_invalid' as const : 'source_unavailable' as const }
-  return { page, catalogue, overview, home, providers, compareEntries, view }
+  return { page, catalogue, overview, home: undefined, providers, compareEntries, view, canonicalSearch }
 }
 
 /** A failed catalogue read keeps the last loaded view. Keyword search is not a failure. */
-export function retainedMarketCatalogue<T extends Readonly<{ page: { kind: string }; catalogue: X402DirectoryCatalogue }>>(
+export function retainedMarketCatalogue<T extends Readonly<{ page: { kind: string }; catalogue: X402DirectoryCatalogue; canonicalSearch?: MarketCanonicalSearchPage | undefined }>>(
   previous: T | undefined,
   next: T,
 ): Readonly<{ shown: T; retainPrevious: boolean }> {
-  const failed = next.catalogue.kind === 'unavailable' && next.catalogue.reason === 'source_unavailable'
-  if (failed && previous !== undefined && previous.page.kind === 'ok') return { shown: previous, retainPrevious: true }
+  const catalogueFailed = next.catalogue.kind === 'unavailable' && next.catalogue.reason === 'source_unavailable'
+  const searchFailed = next.canonicalSearch !== undefined && (next.canonicalSearch.refreshFailed === true || next.canonicalSearch.result === undefined || next.canonicalSearch.result.kind === 'unavailable')
+  const sameSearch = previous?.canonicalSearch !== undefined && next.canonicalSearch !== undefined
+    && JSON.stringify({ ...previous.canonicalSearch.input, cursor: undefined }) === JSON.stringify({ ...next.canonicalSearch.input, cursor: undefined })
+  if ((catalogueFailed || (searchFailed && sameSearch)) && previous !== undefined && previous.page.kind === 'ok') return { shown: previous, retainPrevious: true }
   return { shown: next, retainPrevious: false }
 }

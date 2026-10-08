@@ -9,6 +9,8 @@ export function getRouter() {
     routeTree,
     defaultPreload: 'intent',
     defaultPendingMs: 150,
+    // Show feedback for genuinely slow loads without the upstream 500ms dwell.
+    defaultPendingMinMs: 100,
     defaultPendingComponent: RoutePending,
     defaultErrorComponent: RouteError,
     defaultViewTransition: true,

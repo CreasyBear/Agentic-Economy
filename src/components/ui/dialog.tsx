@@ -1,3 +1,4 @@
+import { useWorkspacePresentationVisible } from "@/lib/client/workspace-presentation"
 import * as React from "react"
 import { XIcon } from "lucide-react"
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
@@ -115,6 +116,8 @@ function DialogTrigger({
 function DialogPortal({
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Portal>) {
+  const visible = useWorkspacePresentationVisible()
+  if (!visible) return null
   return <DialogPrimitive.Portal data-slot="dialog-portal" {...props} />
 }
 

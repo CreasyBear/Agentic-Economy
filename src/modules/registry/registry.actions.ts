@@ -1,3 +1,4 @@
+import type { CreatePublicConvexClientOptions } from '@/lib/server/convex-source'
 import { z } from 'zod'
 
 import { degradeBackend } from '@/lib/observability/degrade-backend'
@@ -294,8 +295,10 @@ export const registryServicesDetailAction = defineAction({
     safeContinuations: ['inspect_result'],
     invalidationConditions: ['action_contract_version_changed', 'slug_changed'],
   },
-  run: async ({ data }) => {
-    const detail = await readPublicOfferingRegistryBusinessDetail({ slug: data.slug.trim() })
+  run: async ({ data, context }) => {
+    const options = context.request === undefined ? undefined : { signal: context.request.signal }
+    const input = { slug: data.slug.trim() }
+    const detail = options === undefined ? await readPublicOfferingRegistryBusinessDetail(input) : await readPublicOfferingRegistryBusinessDetail(input, options)
     if (detail.kind === 'not_found') {
       return {
         kind: 'not_found' as const,
@@ -312,7 +315,7 @@ export const registryServicesDetailAction = defineAction({
     }
     const service = projectPublicServicesPage(
       page,
-      await offeringToolMapFor([detail.business.businessId]),
+      await offeringToolMapFor([detail.business.businessId], options),
     ).services[0]
     if (service === undefined) {
       return {
@@ -381,10 +384,13 @@ function normalizeActionLimit(limit: number | undefined): number {
  */
 async function offeringToolMapFor(
   businessIds: readonly string[],
+  options?: CreatePublicConvexClientOptions,
 ): Promise<Readonly<Record<string, readonly CatalogOfferingToolMapEntry[]>>> {
+  options?.signal?.throwIfAborted()
   if (businessIds.length === 0) return {}
   try {
-    const entries = await readCatalogOfferingToolMap(businessIds)
+    const entries = options === undefined ? await readCatalogOfferingToolMap(businessIds) : await readCatalogOfferingToolMap(businessIds, options)
+    options?.signal?.throwIfAborted()
     const map: Record<string, CatalogOfferingToolMapEntry[]> = {}
     for (const entry of entries) {
       const current = map[entry.offeringRef]
@@ -393,6 +399,7 @@ async function offeringToolMapFor(
     }
     return map
   } catch (cause) {
+    options?.signal?.throwIfAborted()
     return degradeBackend(cause, {}, { site: 'offeringToolMapFor', reason: 'source_unavailable' })
   }
 }

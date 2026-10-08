@@ -4,8 +4,8 @@ import { PublicBusinessNotFound } from '@/components/ae/listing/PublicBusinessNo
 import {
   AePublicBusiness,
   ProviderListingError,
-  ProviderListingPending,
 } from '@/components/ae/listing/public-business/AePublicBusiness'
+import { ProviderListingPending } from '@/components/ae/listing/public-business/ProviderListingPending'
 import type { ProviderListingSearch } from '@/components/ae/listing/public-business/public-business.contracts'
 import { degrade } from '@/lib/observability/degrade'
 import { readPublicBusinessRouteServer, type PublicBusinessRouteDataResult } from '@/lib/server/public-business-route.functions'

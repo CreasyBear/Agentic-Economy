@@ -18,6 +18,7 @@ import { ActivityTriageOverview } from './components/ActivityTriageOverview'
 import { ActivityCallQueue } from './components/ActivityCallQueue'
 import { ActivityFilterBar } from './components/ActivityFilterBar'
 import { ActivityReconciliation } from './components/ActivityReconciliation'
+import { ActivityReportsSkeleton } from './components/ActivityReportsSkeleton'
 import { ActivityMonthlySummary } from './components/ActivityMonthlySummary'
 import { ActivityCompleteMonth } from './components/ActivityCompleteMonth'
 import { ActivityMonthlyDraft } from './components/ActivityMonthlyDraft'
@@ -25,6 +26,7 @@ import { ActivityUsageReports } from './components/ActivityUsageReports'
 import { ActivityPaginationControl } from './components/ActivityPaginationControl'
 import { ActivityUnavailableState } from './components/ActivityUnavailableState'
 import { useAeActivity } from './useAeActivity'
+import { useActivityReports } from './useActivityReports'
 import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 
 function activityStatus(vm: ReturnType<typeof useAeActivity>): string {
@@ -77,10 +79,11 @@ function AeActivityAvailable({
   statusFilter: ActivityStatusFilter
   setStatusFilter: (filter: ActivityStatusFilter) => void
 }>) {
+  const finance = useActivityReports(result)
   const vm = useAeActivity({
     initial: result.calls,
-    usage: result.usage,
-    spend: result.spend,
+    usage: finance.reports.usage,
+    spend: finance.reports.spend,
     periodStart: result.periodStart,
     periodStartAt: result.periodStartAt,
     periodEndAt: result.periodEndAt,
@@ -161,13 +164,15 @@ function AeActivityAvailable({
         <section aria-labelledby="activity-finance-title" className="grid min-w-0 gap-8 border-t border-border pt-8">
           <div className="grid gap-1"><h2 id="activity-finance-title" className="text-lg font-semibold">Finance and reporting</h2>
             <p className="text-sm text-muted-foreground">Recorded totals, reconciliation, and exports for the selected Account or Agent scope.</p></div>
+        {finance.pending ? <ActivityReportsSkeleton /> : <>
         <ActivityMonthlySummary
           periodStart={vm.periodStart}
           monthly={vm.monthly}
-          retryPending={vm.summaryRetryPending}
-          onRetry={vm.retrySummaries}
+          retryPending={finance.retryPending}
+          onRetry={finance.retry}
         />
-        {result.reconciliation === undefined ? null : <ActivityReconciliation returnScope={returnScope} result={result.reconciliation} retryPending={vm.summaryRetryPending} onRetry={vm.retrySummaries} />}
+        {finance.reports.reconciliation === undefined ? null : <ActivityReconciliation returnScope={returnScope} result={finance.reports.reconciliation} retryPending={finance.retryPending} onRetry={finance.retry} />}
+        </>}
         {result.filteredAgent === undefined ? <ActivityCompleteMonth returnScope={returnScope} {...(draftRef===undefined?{}:{draftRef})}/> : null}
         {result.filteredAgent===undefined&&draftRef?.startsWith('monthly-usage-draft:')?<ActivityMonthlyDraft returnScope={returnScope} draftRef={draftRef}/>:null}
         {vm.showFilterBar ? (

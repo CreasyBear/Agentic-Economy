@@ -5,7 +5,7 @@ import { SettingsPage } from '../settings-shell/components/SettingsSections'
 import type { TeamRolesPageProps } from './team-roles.contracts'
 import { TeamAccessManagement } from './TeamAccessManagement'
 import { useInviteTeamMember } from './useInviteTeamMember'
-import { Skeleton } from '@/components/ui/skeleton'
+export { TeamRolesPending } from './TeamRolesPending'
 
 const inviteReasons = {
   role_restricted: 'Only workspace owners and admins can invite members. Ask an owner or admin to send the invitation.',
@@ -15,12 +15,6 @@ const inviteReasons = {
 
 export function TeamRolesPage(props: TeamRolesPageProps) {
   return <TeamRolesWorkspace key={props.accountRef} {...props} />
-}
-
-export function TeamRolesPending() {
-  return <div role="status" aria-label="Loading team and roles" aria-busy="true" className="grid gap-5">
-    <Skeleton className="h-8 w-44" /><Skeleton className="h-64 w-full rounded-xl" />
-  </div>
 }
 
 function TeamRolesWorkspace({ accountRef, members, inviteAvailability, transferRequested = false }: TeamRolesPageProps) {

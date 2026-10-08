@@ -1,3 +1,5 @@
+import { getRequest } from '@tanstack/react-start/server'
+import { awaitBoundedRead, SOURCE_READ_TIMEOUT_MS } from '@/lib/bounded-read'
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { callPublicSourceQuery, sourceQuery } from '@/lib/server/convex-source'
@@ -9,4 +11,7 @@ const byId = sourceQuery<{ id: string }, X402DirectoryCatalogueResource>('x402Di
 /** Public identity lookup only. An indexed listing never gains authority from its address. */
 export const readMarketExternalListingServer = createServerFn({ method: 'GET' })
   .validator(data => idInput.parse(data))
-  .handler(async ({ data }): Promise<X402DirectoryCatalogueResource> => await callPublicSourceQuery(byId, data))
+  .handler(async ({ data }): Promise<X402DirectoryCatalogueResource> => {
+    const signal = AbortSignal.any([getRequest().signal, AbortSignal.timeout(SOURCE_READ_TIMEOUT_MS)])
+    return awaitBoundedRead(sourceSignal => callPublicSourceQuery(byId, data, { signal: sourceSignal }), signal)
+  })

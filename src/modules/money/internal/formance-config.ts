@@ -152,20 +152,33 @@ export type FormanceReferenceReadResult =
   | Readonly<{ kind: 'setup_required'; code: string }>
   | Readonly<{ kind: 'unavailable'; code: string }>
 
+export type FormancePeriodSpendSale = Readonly<{
+  reference: string
+  units: string
+  effectiveAt: number
+}>
+
+type FormancePeriodSpendSnapshot = Readonly<{
+  periodStartAt: number
+  periodEndAt: number
+  snapshotAt: number
+  highWaterTransactionId: string | null
+  coverage: 'complete'
+  sales: readonly FormancePeriodSpendSale[]
+}>
+
 export type FormancePeriodSpendResult =
-  | Readonly<{
+  | (FormancePeriodSpendSnapshot & Readonly<{
       kind: 'available'
       currency: 'AUD'
       exponent: 6
       spendUnits: string
       transactionCountUnits: string
-      periodStartAt: number
-      periodEndAt: number
       observedAt: number
       source: 'formance_transaction_cursor'
       authoritativeForConsequences: false
-    }>
-  | Readonly<{ kind: 'empty' }>
+    }>)
+  | (FormancePeriodSpendSnapshot & Readonly<{ kind: 'empty' }>)
   | Readonly<{ kind: 'setup_required'; code: string }>
   | Readonly<{ kind: 'unavailable'; code: string }>
 

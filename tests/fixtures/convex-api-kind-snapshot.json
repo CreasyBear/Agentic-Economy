@@ -1092,12 +1092,6 @@
     "kind": "query"
   },
   {
-    "visibility": "internal",
-    "module": "capabilityPlans",
-    "method": "readOutstandingPlanExposure",
-    "kind": "query"
-  },
-  {
     "visibility": "public",
     "module": "capabilityPlans",
     "method": "readOwner",
@@ -3334,6 +3328,12 @@
     "module": "moneyMonthlySpendBudget",
     "method": "configureMonthlySpendBudget",
     "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyMonthlySpendBudget",
+    "method": "readAccountExposure",
+    "kind": "query"
   },
   {
     "visibility": "public",

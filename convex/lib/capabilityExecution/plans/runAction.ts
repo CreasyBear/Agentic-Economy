@@ -41,7 +41,7 @@ async function prepareAndClaim(ctx: ActionCtx, planRef: string): Promise<Infer<t
     await ctx.runMutation(internal.capabilityPlans.failPreparation, { planRef, code: 'hold_unavailable' })
     return { kind: 'stopped' }
   }
-  const organizationMonthlySpend = await readOrganizationMonthlySpendForReserve(ctx, subjects.accountRef)
+  const organizationMonthlySpend = await readOrganizationMonthlySpendForReserve(ctx, subjects.accountRef, subjects.expectedEnvironment)
   return await ctx.runMutation(internal.capabilityPlans.claimHold, {
     planRef, subjects, accountAvailableUnits: account.units, observedAt: account.observedAt,
     ...(spendingPeriods === undefined ? {} : { spendingPeriods }),

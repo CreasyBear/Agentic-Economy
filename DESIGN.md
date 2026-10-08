@@ -436,6 +436,51 @@ colour as a substitute for provenance. Do not describe a successful HTTP
 response as useful, accepted or commercially closed without the evidence for
 that claim.
 
+## Loading and refresh
+
+The 8 October performance candidate reuses the installed Base Nova Skeleton and
+Spinner with REUI's [card](https://reui.io/preview/base/components/c-skeleton-8?ref=mcp),
+[list](https://reui.io/preview/base/components/c-skeleton-7?ref=mcp) and
+[inline status](https://reui.io/preview/base/components/c-spinner-9?ref=mcp)
+compositions. Activity's unresolved reports use the shape of its eight real
+summary cards; confirmed Calls and Plans remain above them. Deferred Tool search
+and inspection use decorative placeholders, never fake rows, prices or controls.
+Loading has an announced status and respects reduced motion. Errors retain their
+existing explicit recovery action; a skeleton must not conceal a failed read.
+
+Router owns route loading and Market result reuse. The shared Convex provider
+owns its client lifetime, and the workspace boundary hides invalid Account/access
+context before refreshing. Display reuse never supplies purchase authority.
+Keep that boundary mounted through sign-in and sign-up. On identity or access
+change, retire native Router cache and preload entries before navigation and again
+after the synchronous refresh: invalidation alone leaves old data renderable.
+Hidden page content includes its portals and private header slots. The workspace
+presentation context carries only visibility; it is not an authority or Account
+registry. Shared Base Nova/Arc portal wrappers consume that visibility while
+owners retain drafts. Chat additionally waits for its existing authority owner.
+Keep the responsive Sonner presenter inside the same boundary, dismiss previous
+notifications on transition, and suppress obsolete asynchronous notification
+delivery. Preserve accepted command receipts, uncertainty and recovery even when
+their notification is withheld.
+Activity uses the maintained blocking stale-loader policy for primary Calls and
+Plans; optional reports start once for that result. On-page refresh retains
+confirmed content, while returning from another page waits for current primary
+data. Do not add a private-data freshness window without mutation and revocation
+evidence.
+The browser and source read deadlines live in `src/lib/bounded-read.ts`; they
+bound waiting, not the effects of accepted work. Route transitions bound both
+the root group and its fades; changing only fade duration leaves the browser's
+default group animation on the navigation path.
+
+Keep eager route metadata and pending states separate from heavy page owners.
+The installed TanStack compiler does not split pending components by default:
+importing one from a page module can pull that whole feature into first entry.
+Provider, Treasury and Team pending states therefore have lightweight owners;
+Provider inventory reuses the lightweight table skeleton rather than mounting the
+real data grid with empty rows. Market
+defers Directory and Hosts until selected. Check the emitted import graph when
+changing these boundaries, as a source-level lazy declaration alone is not proof.
+
 ## Machine parity
 
 Every consequential UI state must map to the action-specific versioned agent

@@ -2,10 +2,11 @@
 import { ClerkProvider } from '@clerk/tanstack-react-start'
 import { ClientOnly, HeadContent, Outlet, Scripts, createRootRoute, useRouter, useRouterState } from '@tanstack/react-router'
 import { useEffect, type ReactNode } from 'react'
-import { Toaster } from 'sonner'
+import { Toaster, toast as sonnerToast } from 'sonner'
+import { useWorkspacePresentationVisible } from '@/lib/client/workspace-presentation'
 
 import { AeAppShell } from '@/components/ae/layout/AeAppShell'
-import { ChatConfigurationUnavailable, ChatConvexProvider, SignedInConvexProvider, requiresChatProviders } from '@/components/ae/layout/AeConvexProviders'
+import { AeConvexProvider, ChatAuthorityBoundary, ChatConfigurationUnavailable, requiresChatProviders } from '@/components/ae/layout/AeConvexProviders'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { ThemeProvider } from '@/components/ae/theme/ThemeProvider'
 import { RouteProgressBar } from '@/components/ae/layout/AeRouteProgressBar'
@@ -57,7 +58,8 @@ function RootComponent() {
     <RootDocument>
       <ThemeProvider>
         <AeAppShell>
-          {chatUnavailable ? <ChatConfigurationUnavailable /> : <Outlet />}
+          <WorkspaceToaster />
+          {chatUnavailable ? <ChatConfigurationUnavailable /> : <ChatAuthorityBoundary required={requiresChatProviders(pathname)}><Outlet /></ChatAuthorityBoundary>}
         </AeAppShell>
       </ThemeProvider>
     </RootDocument>
@@ -80,13 +82,20 @@ function responsiveToasterProps(isMobile: boolean) {
   }
 }
 
+function WorkspaceToaster() {
+  const visible = useWorkspacePresentationVisible()
+  const isMobile = useIsMobile()
+  useEffect(() => { if (!visible) sonnerToast.dismiss() }, [visible])
+  if (!visible) return null
+  return <ClientOnly><Toaster ref={responsiveToasterRef} {...responsiveToasterProps(isMobile)} /></ClientOnly>
+}
+
 function RootDocument({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname })
-  const isMobile = useIsMobile()
   const chatProvidersRequired = requiresChatProviders(pathname) && Boolean(import.meta.env.VITE_CONVEX_URL?.trim())
   const content = (
     <ClerkProvider appearance={clerkAppearance}>
-      {chatProvidersRequired ? <ChatConvexProvider>{children}</ChatConvexProvider> : <SignedInConvexProvider>{children}</SignedInConvexProvider>}
+      <AeConvexProvider chatRequired={chatProvidersRequired}>{children}</AeConvexProvider>
     </ClerkProvider>
   )
 
@@ -99,9 +108,6 @@ function RootDocument({ children }: { children: ReactNode }) {
         <RouteProgressBar />
         <AeObservabilityBoot />
         <AeObservabilityErrorBoundary>{content}</AeObservabilityErrorBoundary>
-        <ClientOnly>
-          <Toaster ref={responsiveToasterRef} {...responsiveToasterProps(isMobile)} />
-        </ClientOnly>
         <Scripts />
       </body>
     </html>

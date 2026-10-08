@@ -1,19 +1,14 @@
 import { v } from 'convex/values'
 import type { CallIdempotencyReservation } from '@/modules/capability-execution/call-authority'
 import { environment } from './contracts'
+import { monthlySpendSnapshotValue, type MonthlySpendSnapshot } from '../../money/monthlyBudget/exposureContracts'
 
 export const reserveArgs = {
   quoteRef: v.string(), callRef: v.string(), principalId: v.string(), ownerId: v.string(), credentialId: v.string(),
   applicationRef: v.string(), grantRef: v.string(), environment, toolRef: v.string(), idempotencyKey: v.string(),
   inputDigest: v.string(), requestDigest: v.string(), grantGeneration: v.number(), policyDigest: v.string(), grantExpiresAt: v.number(),
   toolJson: v.optional(v.string()), inputJson: v.optional(v.string()), now: v.number(), turnRef: v.optional(v.string()),
-  organizationMonthlySpend: v.optional(v.object({
-    enabled: v.boolean(),
-    ceilingUnits: v.optional(v.string()),
-    monthSpendUnits: v.optional(v.string()),
-    planExposureDigest: v.optional(v.string()),
-    organizationMonth: v.optional(v.string()),
-  })),
+  organizationMonthlySpend: v.optional(monthlySpendSnapshotValue),
 } as const
 export const reservationValue = v.object({
   quoteRef: v.string(),
@@ -84,13 +79,7 @@ export type ReserveArgs = Readonly<{
   toolJson?: string
   inputJson?: string
   now: number
-  organizationMonthlySpend?: Readonly<{
-    enabled: boolean
-    ceilingUnits?: string
-    monthSpendUnits?: string
-    planExposureDigest?: string
-    organizationMonth?: string
-  }>
+  organizationMonthlySpend?: Readonly<MonthlySpendSnapshot>
 }>
 
 export type ReserveResult =

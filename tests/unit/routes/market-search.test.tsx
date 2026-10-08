@@ -1,6 +1,7 @@
+/** @vitest-environment jsdom */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from 'react-dom/server';
-import { RouterContextProvider, createMemoryHistory, createRootRoute, createRouter } from '@tanstack/react-router';
+import { RouterContextProvider, createMemoryHistory, createRootRoute, createRoute, createRouter } from '@tanstack/react-router';
 
 import { Route, parseMarketCompareRefs, validateMarketSearch } from "@/routes/market";
 import { SEARCH_QUERY_MAX_LENGTH } from "@/modules/common/search-query";
@@ -9,6 +10,8 @@ import {
   marketCompareParam,
   marketLoaderDeps,
   retainedMarketCatalogue,
+  loadCanonicalMarketSearch,
+  type MarketCanonicalSearchPage,
   toggleMarketCompareRef,
 } from "@/modules/market/market-route-data";
 import { resolveCanonicalBaseUrl } from "@/lib/server/canonical-url";
@@ -21,7 +24,7 @@ vi.mock("@/modules/market/market.functions", async (importOriginal) => ({
   readMarketDiscoveryRecipientServer: async () => null,
   readMarketChatRecipientServer: async () => null,
 }));
-const reads = vi.hoisted(() => ({ catalogue: vi.fn(), providers: vi.fn(), overview: vi.fn(), resource: vi.fn(), home: vi.fn(), tool: vi.fn(), external: vi.fn() }));
+const reads = vi.hoisted(() => ({ catalogue: vi.fn(), providers: vi.fn(), overview: vi.fn(), resource: vi.fn(), home: vi.fn(), tool: vi.fn(), external: vi.fn(), search: vi.fn() }));
 vi.mock("@/modules/market/x402-directory-index.functions", () => ({
   readX402DirectoryCatalogueServer: reads.catalogue,
   readX402DirectoryProvidersServer: reads.providers,
@@ -30,6 +33,7 @@ vi.mock("@/modules/market/x402-directory-index.functions", () => ({
 }));
 vi.mock("@/modules/market/tool-detail-route.functions", () => ({ readPublicToolDetailRouteServer: reads.tool }));
 vi.mock("@/modules/market/market-comparison.functions", () => ({ readMarketExternalListingServer: reads.external }));
+vi.mock("@/modules/market/market-tool-search.functions", () => ({ searchMarketToolsServer: reads.search }));
 vi.mock("@/modules/market/x402-marketplace-home.functions", () => ({ readX402MarketplaceHomeServer: reads.home }));
 vi.mock("@/modules/market/market-flow.functions", () => ({ readMarketFlowRankServer: async () => undefined }));
 vi.mock("@/modules/market/x402-directory.functions", () => ({
@@ -212,7 +216,7 @@ describe("legacy compare mapping", () => {
     if (typeof loader !== "function") throw new Error("loader_missing");
     const data = await loader({ deps: marketLoaderDeps(search) } as never);
 
-    expect(reads.resource.mock.calls.map(([call]) => call)).toEqual([
+    expect(reads.resource.mock.calls.map(([call]) => ({ data: call.data }))).toEqual([
       { data: { resource: first } },
       { data: { resource: missing } },
     ]);
@@ -240,20 +244,21 @@ describe('indexed directory route', () => {
     if (typeof loader !== 'function') throw new Error('loader_missing');
     const data = await loader({ deps: search } as never);
     expect(data).toMatchObject({ catalogue: { coverage: { indexedTotal: 4000 } } });
-    expect(reads.catalogue).toHaveBeenCalledWith({ data: { directoryCategory: 'creative', indexCursor: 'native-next', sort: 'repeat' } });
+    expect(reads.catalogue).toHaveBeenCalledWith(expect.objectContaining({ data: { directoryCategory: 'creative', indexCursor: 'native-next', sort: 'repeat' } }));
     expect(reads.home).not.toHaveBeenCalled();
   });
 
-  it('loads guided discovery without the unpainted catalogue page', async () => {
+  it('loads discovery without requesting unpainted catalogue sections or facets', async () => {
     const loader = Route.options.loader;
     if (typeof loader !== 'function') throw new Error('loader_missing');
     const data = await loader({ deps: {} } as never);
-    expect(data).toMatchObject({ view: 'discover', home: { rails: [] }, page: { items: [] } });
+    expect(data).toMatchObject({ view: 'discover', home: undefined, overview: undefined, page: { items: [] } });
     expect(reads.catalogue).not.toHaveBeenCalled();
-    expect(reads.home).toHaveBeenCalledOnce();
+    expect(reads.home).not.toHaveBeenCalled();
+    expect(reads.overview).not.toHaveBeenCalled();
   });
 
-  it('keeps guided discovery selected when optional collection data is unavailable', async () => {
+  it('does not depend on unused collection availability to show discovery', async () => {
     reads.home.mockRejectedValueOnce(new Error('collections unavailable'));
     const loader = Route.options.loader;
     if (typeof loader !== 'function') throw new Error('loader_missing');
@@ -261,6 +266,7 @@ describe('indexed directory route', () => {
     const data = await loader({ deps: {} } as never);
 
     expect(data).toMatchObject({ view: 'discover', home: undefined });
+    expect(reads.home).not.toHaveBeenCalled();
   });
 
   it('does not expose the unfiltered index total as a filtered page match count', async () => {
@@ -303,19 +309,19 @@ describe('indexed directory route', () => {
     if (typeof loader !== 'function') throw new Error('loader_missing');
     const filters = { priceBand: '0_01_to_0_03', adoptionBand: '0', tags: ['search', 'a&b'], hasInputSchema: false, minPayers30d: 0, maxPayers30d: 4 };
     await loader({ deps: validateMarketSearch({ view: 'tools', ...filters }) } as never);
-    expect(reads.catalogue).toHaveBeenLastCalledWith({ data: { ...filters, sort: 'adoption' } });
+    expect(reads.catalogue).toHaveBeenLastCalledWith(expect.objectContaining({ data: { ...filters, sort: 'adoption' } }));
     await loader({ deps: validateMarketSearch({ view: 'tools' }) } as never);
-    expect(reads.catalogue).toHaveBeenLastCalledWith({ data: { sort: 'adoption' } });
+    expect(reads.catalogue).toHaveBeenLastCalledWith(expect.objectContaining({ data: { sort: 'adoption' } }));
     reads.catalogue.mockClear();
     await loader({ deps: validateMarketSearch({ view: 'providers', query: 'api.', providerCursor: 'next-host' }) } as never);
-    expect(reads.providers).toHaveBeenLastCalledWith({ data: { providerPrefix: 'api.', providerCursor: 'next-host' } });
+    expect(reads.providers).toHaveBeenLastCalledWith(expect.objectContaining({ data: { providerPrefix: 'api.', providerCursor: 'next-host' } }));
     expect(reads.catalogue).not.toHaveBeenCalled();
     await loader({ deps: { providerCursor: 'legacy-host-page' } } as never);
-    expect(reads.providers).toHaveBeenLastCalledWith({ data: { providerCursor: 'legacy-host-page' } });
+    expect(reads.providers).toHaveBeenLastCalledWith(expect.objectContaining({ data: { providerCursor: 'legacy-host-page' } }));
     // Existing constrained links still group matching Tool results; their constraints are never dropped.
     reads.providers.mockClear();
     await loader({ deps: validateMarketSearch({ view: 'providers', maxUsdPrice: 1 }) } as never);
-    expect(reads.catalogue).toHaveBeenLastCalledWith({ data: { maxUsdPrice: 1, sort: 'adoption' } });
+    expect(reads.catalogue).toHaveBeenLastCalledWith(expect.objectContaining({ data: { maxUsdPrice: 1, sort: 'adoption' } }));
     expect(reads.providers).not.toHaveBeenCalled();
     expect(marketLoaderDeps({ view: 'providers', page: 2 })).toEqual({ view: 'providers', page: 2 });
     await loader({ deps: { view: 'providers', page: 2 } } as never);
@@ -346,7 +352,7 @@ it('keeps the last catalogue when the next view cannot be read', async () => {
 
 describe('catalogue display preference', () => {
   it('accepts the two layouts, rejects malformed preferences and keeps them out of catalogue loader dependencies', () => {
-    const search = { view: 'tools' as const, query: 'weather', sort: 'relevance' as const, network: 'base', page: 2, compare: 'https://example.com/tool/1' }
+    const search = { view: 'tools' as const, query: 'weather', sort: 'relevance' as const, network: 'base', indexCursor: 'opaque-next', page: 2, compare: 'https://example.com/tool/1' }
     expect(validateMarketSearch({ ...search, layout: 'grid' })).toMatchObject({ ...search, layout: 'grid' })
     expect(validateMarketSearch({ layout: 'table' })).toEqual({ layout: 'table' })
     expect(validateMarketSearch({ layout: 'cards' })).toEqual({})
@@ -372,7 +378,7 @@ describe('exact admitted and external comparison reads', () => {
     if (typeof loader !== 'function') throw new Error('market_loader_missing')
     const result = await loader({ deps: { view: 'tools', compare: toolRef } } as never)
     expect(result.compareEntries).toEqual([{ resource: toolRef, tool }])
-    expect(reads.tool).toHaveBeenCalledWith({ data: { toolRef } })
+    expect(reads.tool).toHaveBeenCalledWith(expect.objectContaining({ data: { toolRef } }))
     expect(reads.resource).not.toHaveBeenCalled()
   })
   it('resolves a compact external ID through the exact index and requires current descriptor for its qualified join', async () => {
@@ -382,8 +388,138 @@ describe('exact admitted and external comparison reads', () => {
     const loader = Route.options.loader
     if (typeof loader !== 'function') throw new Error('market_loader_missing')
     const result = await loader({ deps: { view: 'tools', compare: id } } as never)
-    expect(reads.external).toHaveBeenCalledWith({ data: { id } })
-    expect(reads.tool).toHaveBeenCalledWith({ data: { toolRef } })
+    expect(reads.external).toHaveBeenCalledWith(expect.objectContaining({ data: { id } }))
+    expect(reads.tool).toHaveBeenCalledWith(expect.objectContaining({ data: { toolRef } }))
     expect(result.compareEntries).toEqual([{ resource: id, missing: true }])
+  })
+})
+
+
+describe('Router-owned canonical Market search', () => {
+  const result = { kind: 'match', query: 'weather', results: [], assessed: { examined: 8 }, pagination: { hasMore: false }, next: [] }
+  function deferred<T>() {
+    let resolve!: (value: T) => void
+    const promise = new Promise<T>(done => { resolve = done })
+    return { promise, resolve }
+  }
+  async function routerForSearch() {
+    const root = createRootRoute()
+    const market = createRoute({
+      getParentRoute: () => root, path: '/market', validateSearch: validateMarketSearch,
+      loaderDeps: ({ search }) => marketLoaderDeps(search),
+      beforeLoad: ({ matches, routeId }) => ({ previousCanonicalSearch: matches.find(match => match.routeId === routeId)?.loaderData as MarketCanonicalSearchPage | undefined }),
+      loader: ({ deps, abortController, context }) => loadCanonicalMarketSearch(deps, { signal: abortController.signal, previousCanonicalSearch: context.previousCanonicalSearch }),
+      ...(Route.options.staleTime === undefined ? {} : { staleTime: Route.options.staleTime }),
+      ...(Route.options.preload === undefined ? {} : { preload: Route.options.preload }),
+    })
+    const detail = createRoute({ getParentRoute: () => root, path: '/tools/$toolRef' })
+    const router = createRouter({ isServer: false, routeTree: root.addChildren([market, detail]), history: createMemoryHistory({ initialEntries: ['/market?view=tools&query=weather&network=eip155%3A8453'] }) })
+    await router.load()
+    return router
+  }
+  it('returns to the complete filtered input and loaded continuation without reading again', async () => {
+    reads.search.mockResolvedValue(result)
+    const router = await routerForSearch()
+    await router.navigate({ to: '/market', search: { view: 'tools', query: 'weather', network: 'eip155:8453', indexCursor: 'opaque:page/two', page: 2 } })
+    const page = router.state.matches.at(-1)?.loaderData
+    await router.navigate({ to: '/tools/$toolRef', params: { toolRef: 'fixture' } })
+    await router.navigate({ to: '/market', search: { view: 'tools', query: 'weather', network: 'eip155:8453', indexCursor: 'opaque:page/two', page: 2 } })
+    expect(router.state.matches.at(-1)?.loaderData).toEqual(page)
+    expect(reads.search).toHaveBeenCalledTimes(2)
+    expect(reads.search).toHaveBeenLastCalledWith(expect.objectContaining({ data: { query: 'weather', limit: 8, filters: { networkId: 'eip155:8453' }, cursor: 'opaque:page/two' } }))
+    await router.navigate({ to: '/market', search: { view: 'tools', query: 'weather', network: 'eip155:1' } })
+    expect(reads.search).toHaveBeenCalledTimes(3)
+  })
+  it('retires a slow continuation before it can replace a newer search or its cached page', async () => {
+    reads.search.mockResolvedValue(result)
+    const router = await routerForSearch()
+    const old = deferred<typeof result>()
+    reads.search.mockReturnValueOnce(old.promise).mockResolvedValueOnce({ ...result, query: 'storm' })
+    const obsolete = router.navigate({ to: '/market', search: { view: 'tools', query: 'weather', indexCursor: 'opaque:old', page: 2 } })
+    await vi.waitFor(() => expect(reads.search).toHaveBeenCalledTimes(2))
+    const signal = reads.search.mock.calls[1]?.[0].signal as AbortSignal
+    await router.navigate({ to: '/market', search: { view: 'tools', query: 'storm' } })
+    expect(signal.aborted).toBe(true)
+    old.resolve(result)
+    await obsolete
+    expect(router.state.location.search.query).toBe('storm')
+    expect(router.state.matches.at(-1)?.loaderData).toMatchObject({ input: { query: 'storm' }, result: { query: 'storm' } })
+    reads.search.mockResolvedValueOnce(result)
+    await router.navigate({ to: '/market', search: { view: 'tools', query: 'weather', indexCursor: 'opaque:old', page: 2 } })
+    expect(reads.search).toHaveBeenCalledTimes(4)
+  })
+  it('does not launch an external search when a typed-query link is merely preloaded', async () => {
+    reads.search.mockResolvedValue(result)
+    const router = await routerForSearch()
+    await router.preloadRoute({ to: '/market', search: { view: 'tools', query: 'private new draft' } })
+    expect(reads.search).toHaveBeenCalledTimes(1)
+  })
+  it('keeps the exact last-good page in the Router cache after a failed refresh and detail round trip', async () => {
+    reads.search.mockResolvedValueOnce(result).mockRejectedValueOnce(new Error('refresh unavailable'))
+    const router = await routerForSearch()
+    await router.invalidate({ filter: match => match.routeId === '/market' })
+    expect(router.state.matches.at(-1)?.loaderData).toMatchObject({ result, refreshFailed: true })
+    await router.navigate({ to: '/tools/$toolRef', params: { toolRef: 'fixture' } })
+    await router.navigate({ to: '/market', search: { view: 'tools', query: 'weather', network: 'eip155:8453' } })
+    expect(router.state.matches.at(-1)?.loaderData).toMatchObject({ result, refreshFailed: true })
+    expect(reads.search).toHaveBeenCalledTimes(2)
+  })
+  it('bounds a transport that never settles and aborts its read signal', async () => {
+    vi.useFakeTimers()
+    reads.search.mockReturnValue(new Promise(() => {}))
+    try {
+      const pending = loadCanonicalMarketSearch({ view: 'tools', query: 'weather' })
+      const signal = reads.search.mock.calls[0]?.[0].signal as AbortSignal
+      await vi.advanceTimersByTimeAsync(15_000)
+      await expect(pending).resolves.toMatchObject({ input: { query: 'weather' }, result: undefined })
+      expect(signal.aborted).toBe(true)
+    } finally { vi.useRealTimers() }
+  })
+  it('marks failed canonical refreshes for last-good display retention', () => {
+    const catalogue = { kind: 'ok', source: 'index' } as const
+    const good = { page: { kind: 'ok' }, catalogue, canonicalSearch: { input: { query: 'weather', limit: 8 }, result } }
+    const failed = { ...good, canonicalSearch: { ...good.canonicalSearch, result: undefined } }
+    expect(retainedMarketCatalogue(good as never, failed as never)).toEqual({ shown: good, retainPrevious: true })
+  })
+})
+
+
+describe('complete Market route deadline', () => {
+  it('settles hanging catalogue and overview reads as unavailable', async () => {
+    vi.useFakeTimers()
+    const timeout = vi.spyOn(AbortSignal, 'timeout').mockImplementation(ms => {
+      const controller = new AbortController()
+      setTimeout(() => controller.abort(new DOMException('Read timed out', 'TimeoutError')), ms)
+      return controller.signal
+    })
+    reads.catalogue.mockReturnValue(new Promise(() => {}))
+    reads.overview.mockReturnValue(new Promise(() => {}))
+    try {
+      const loader = Route.options.loader
+      if (typeof loader !== 'function') throw new Error('market_loader_missing')
+      const pending = loader({ deps: { view: 'tools' } } as never)
+      await vi.advanceTimersByTimeAsync(15_000)
+      await expect(pending).resolves.toMatchObject({ page: { kind: 'unavailable' }, catalogue: { kind: 'unavailable', reason: 'source_unavailable' }, overview: { kind: 'unavailable', reason: 'source_unavailable' } })
+      expect(reads.catalogue.mock.calls[0]?.[0].signal.aborted).toBe(true)
+      expect(reads.overview.mock.calls[0]?.[0].signal.aborted).toBe(true)
+    } finally { timeout.mockRestore(); vi.useRealTimers() }
+  })
+  it('keeps a completed catalogue while a selected comparison times out', async () => {
+    vi.useFakeTimers()
+    const timeout = vi.spyOn(AbortSignal, 'timeout').mockImplementation(ms => {
+      const controller = new AbortController()
+      setTimeout(() => controller.abort(new DOMException('Read timed out', 'TimeoutError')), ms)
+      return controller.signal
+    })
+    const toolRef = `operation:v1:${'a'.repeat(64)}`
+    reads.tool.mockReturnValue(new Promise(() => {}))
+    try {
+      const loader = Route.options.loader
+      if (typeof loader !== 'function') throw new Error('market_loader_missing')
+      const pending = loader({ deps: { view: 'tools', compare: toolRef } } as never)
+      await vi.advanceTimersByTimeAsync(15_000)
+      await expect(pending).resolves.toMatchObject({ page: { kind: 'ok' }, catalogue: { kind: 'ok' }, compareEntries: [{ resource: toolRef, missing: true }] })
+      expect(reads.tool.mock.calls[0]?.[0].signal.aborted).toBe(true)
+    } finally { timeout.mockRestore(); vi.useRealTimers() }
   })
 })

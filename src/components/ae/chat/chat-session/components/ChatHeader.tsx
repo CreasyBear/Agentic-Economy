@@ -2,6 +2,7 @@
 import { CheckIcon, CopyIcon, MenuIcon, PlusIcon, Share2Icon, UnlinkIcon } from 'lucide-react'
 import { createPortal } from 'react-dom'
 
+import { useWorkspacePresentationVisible } from '@/lib/client/workspace-presentation'
 import { ReuiChatHeader } from '@/components/ae/shared/reui-pro/ai-chat/ai-chat'
 import { AeActionLink } from '@/components/ae/shared/action-link/AeActionLink'
 import { Button } from '@/components/arc/button/button'
@@ -36,6 +37,8 @@ export function ChatHeader({
   onCopyShare,
 }: ChatHeaderProps) {
   const slot = useChatHeaderSlot()
+  const visible = useWorkspacePresentationVisible()
+  if (!visible) return null
   const title = chatStageTitle(threadTitle)
   const leading = (
     <Button type="button" variant="ghost" size="sm" className="arc-chat-nav-icon"

@@ -423,6 +423,8 @@ export const capabilityCallTables = {
     .index('by_createdAt', ['createdAt']),
   capabilityCalls: defineTable({
     quoteRef: v.optional(v.string()),
+    // Immutable gross AUD/6 index projection. The consumed Quote owns the price.
+    buyerAmountUnits: v.optional(v.string()),
     planRef: v.optional(v.string()),
     planNodeId: v.optional(v.string()),
     callRef: v.string(),
@@ -494,6 +496,7 @@ export const capabilityCallTables = {
     .index('by_contentExpiredAt_and_createdAt', ['contentExpiredAt', 'createdAt'])
     .index('by_environment_and_createdAt', ['environment', 'createdAt'])
     .index('by_ownerId_and_environment_and_createdAt', ['ownerId', 'environment', 'createdAt'])
+    .index('by_ownerId_environment_formanceFinancialState_buyerAmountUnits', ['ownerId', 'environment', 'formanceFinancialState', 'buyerAmountUnits'])
     .index('by_environment_and_updatedAt', ['environment', 'updatedAt'])
     .index('by_environment_and_state_and_createdAt', ['environment', 'state', 'createdAt'])
     .index('by_ownerId_and_buyerSaleTransactionRef', ['ownerId', 'buyerSaleTransactionRef'])

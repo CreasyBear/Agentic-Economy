@@ -15,7 +15,7 @@ vi.mock('convex/react-clerk', () => ({
   ConvexProviderWithClerk: ({ children }: { children: ReactNode }) => children,
 }))
 vi.mock('convex/react', () => ({
-  ConvexReactClient: class ConvexReactClient {},
+  ConvexReactClient: class ConvexReactClient { close = async () => undefined },
   useQuery: readOperatorContext,
 }))
 

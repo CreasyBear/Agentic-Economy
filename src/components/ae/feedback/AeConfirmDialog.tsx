@@ -1,6 +1,7 @@
 /* Arc dialog panel/header/body composition over the existing Base UI alert
  * primitive. Requires caller-owned decision facts and outcomes; ensures the
  * same duplicate guard, pending dismissal guard and connected focus return. */
+import { useWorkspacePresentationVisible } from "@/lib/client/workspace-presentation";
 import { AlertDialog } from "@base-ui/react/alert-dialog";
 import { Button } from "@/components/arc/button/button";
 import type { Rule4Diagnostic } from "@/lib/ui/diagnostic";
@@ -42,6 +43,7 @@ export function AeConfirmDialog({
   financialImpact,
   diagnostic = null,
 }: AeConfirmDialogProps) {
+  const visible = useWorkspacePresentationVisible();
   const confirmationInFlightRef = useRef(false);
   const extendedBody =
     children != null || financialImpact != null || diagnostic != null;
@@ -66,6 +68,7 @@ export function AeConfirmDialog({
     }
   }
 
+  if (!visible) return null;
   return (
     <AlertDialog.Root open={open} onOpenChange={handleOpenChange}>
       <AlertDialog.Portal>

@@ -3,7 +3,8 @@ import type { Doc } from '../../../_generated/dataModel'
 import type { MutationCtx } from '../../../_generated/server'
 import { assertAgentAccessRateAdmission } from '../../platform/rateLimit'
 import { evaluateOrganizationMonthlySpendFence } from '@/modules/money/public'
-import { readOutstandingPlanExposureHandler } from '../plans/planCommands'
+import { readAccountExposureHandler } from '../../money/monthlyBudget/exposure'
+import { remainingMonthlyExposure } from '../../money/monthlyBudget/exposureContracts'
 import {
   normalizeStoredAgentAccessGrant,
   normalizeStoredAgentAccessGrantForTool,
@@ -197,7 +198,7 @@ export async function spendingPeriodAdmissionRefusal(
 
 export async function organizationMonthlySpendReserveRefusal(
   ctx: Pick<MutationCtx, 'db'>,
-  args: Pick<ReserveArgs, 'ownerId' | 'now' | 'organizationMonthlySpend'>,
+  args: Pick<ReserveArgs, 'ownerId' | 'environment' | 'now' | 'organizationMonthlySpend'>,
   commitment: Pick<CommitmentRow, 'decisionAudUnits'> | null,
 ): Promise<GrantRefusal | null> {
   if (commitment === null || commitment.decisionAudUnits === '0') return null
@@ -205,10 +206,13 @@ export async function organizationMonthlySpendReserveRefusal(
     .withIndex('by_accountRef', query => query.eq('accountRef', args.ownerId)).unique()
   if (budgetRow === null || !budgetRow.enabled) return null
   const snapshot = args.organizationMonthlySpend
-  const organizationMonth = new Date(args.now).toISOString().slice(0, 7)
-  const held = await readOutstandingPlanExposureHandler(ctx, { accountRef: args.ownerId, organizationMonth })
-  if (held.kind !== 'available' || snapshot?.planExposureDigest !== held.digest
-    || snapshot.organizationMonth !== organizationMonth) return {
+  const now = Date.now()
+  const organizationMonth = new Date(now).toISOString().slice(0, 7)
+  const held = await readAccountExposureHandler(ctx, { accountRef: args.ownerId, environment: args.environment, organizationMonth })
+  if (held.kind !== 'available' || snapshot?.exposureDigest !== held.digest
+    || snapshot.organizationMonth !== organizationMonth || snapshot.snapshotAt === undefined
+    || new Date(args.now).toISOString().slice(0, 7) !== organizationMonth
+    || snapshot.snapshotAt > now || now - snapshot.snapshotAt > 30_000) return {
     kind: 'refused', code: 'budget_exceeded', retryable: true,
     nextAction: 'Retry with the same idempotency key to inspect current organization spend.',
   }
@@ -217,7 +221,7 @@ export async function organizationMonthlySpendReserveRefusal(
     ceilingUnits: budgetRow.ceilingUnits,
     ...(snapshot.monthSpendUnits === undefined ? {} : { monthSpendUnits: snapshot.monthSpendUnits }),
     requestUnits: commitment.decisionAudUnits,
-    heldPlanExposure: { kind: 'known', units: held.units },
+    heldExposure: remainingMonthlyExposure(held, snapshot),
   })
   switch (fence.kind) {
     case 'not_applicable':

@@ -37,6 +37,8 @@ vi.mock('@/components/ae/layout/AePublicPage', () => ({
 }))
 vi.mock('@/lib/ui/toast', () => ({ toast: { success: vi.fn() } }))
 
+import { WorkspacePresentationVisibility } from '@/lib/client/workspace-presentation'
+import { toast } from '@/lib/ui/toast'
 import { Route as PrivacyRemovalRoute } from '@/routes/privacy.remove-business'
 
 afterEach(() => {
@@ -45,6 +47,42 @@ afterEach(() => {
 })
 
 describe('privacy removal unknown outcomes', () => {
+  it.each(['recorded', 'unknown'] as const)('preserves %s removal recovery across role refresh while withholding the obsolete private toast', async outcome => {
+    vi.mocked(toast.success).mockClear()
+    const completion = Promise.withResolvers<unknown>()
+    routeMocks.openRemoval.mockReturnValue(completion.promise)
+    const Component = PrivacyRemovalRoute.options.component
+    if (Component === undefined) throw new Error('privacy_removal_component_missing')
+    let visible = true
+    const fixture = () => <WorkspacePresentationVisibility value={visible}><div hidden={!visible}><Component /></div></WorkspacePresentationVisibility>
+    const view = render(fixture())
+    fireEvent.change(screen.getByLabelText('Your email'), { target: { value: 'owner@example.com' } })
+    fireEvent.change(screen.getByLabelText('What should change?'), { target: { value: 'Remove duplicate.' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Submit request' }))
+    expect(routeMocks.openRemoval).toHaveBeenCalledOnce()
+    visible = false
+    view.rerender(fixture())
+    await act(async () => {
+      completion.resolve(outcome === 'recorded'
+        ? { kind: 'ok', receipt: { disputeId: 'dispute:retained-reference', status: 'opened' } }
+        : { kind: 'error', code: 'dispute_invalid_target', retryable: true, reason: 'Please try again.' })
+      await completion.promise
+    })
+    expect(toast.success).not.toHaveBeenCalled()
+    visible = true
+    view.rerender(fixture())
+    if (outcome === 'recorded') {
+      expect(screen.getByText('Request recorded').closest('[role="status"]')).toHaveTextContent('Reference dispute:retained-reference.')
+    } else {
+      const submit = screen.getByRole('button', { name: 'Outcome not confirmed' })
+      expect(submit).toBeDisabled()
+      const form = submit.closest('form')
+      if (form === null) throw new Error('privacy_removal_form_missing')
+      fireEvent.submit(form)
+      expect(routeMocks.openRemoval).toHaveBeenCalledOnce()
+    }
+  })
+
   it('retains entered information and prevents a blind duplicate submission', async () => {
     routeMocks.openRemoval.mockRejectedValue(new Error('private transport detail'))
     const Component = PrivacyRemovalRoute.options.component

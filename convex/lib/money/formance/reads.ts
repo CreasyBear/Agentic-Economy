@@ -56,19 +56,20 @@ export async function readPeriodSpendHandler(_ctx: unknown, args: {
   accountRef: string
   periodStartAt: number
   periodEndAt: number
+  expectedEnvironment?: 'sandbox' | 'production'
 }) {
   const accountDigest = formanceAccountMetadataDigest(args.accountRef)
   if (accountDigest === undefined) {
     return { kind: 'setup_required' as const, code: 'formance_spend_query_invalid' }
   }
-  const context = configuredContext()
-  return context.kind === 'setup_required'
-    ? context
-    : await readFormancePeriodSpend(context.context, {
-        accountDigest,
-        periodStartAt: args.periodStartAt,
-        periodEndAt: args.periodEndAt,
-      })
+  const context = configuredContext(args.expectedEnvironment)
+  if (context.kind === 'setup_required') return context
+  const result = await readFormancePeriodSpend(context.context, {
+    accountDigest, periodStartAt: args.periodStartAt, periodEndAt: args.periodEndAt,
+  })
+  return result.kind === 'available' || result.kind === 'empty'
+    ? { ...result, sales: result.sales.map(sale => ({ ...sale })) }
+    : result
 }
 
 export async function readAccountHistoryHandler(_ctx: unknown, args: { accountRef: string; cursor?: string }) {

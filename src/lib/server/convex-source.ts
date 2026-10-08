@@ -31,13 +31,15 @@ export type CreateAuthenticatedConvexClientOptions = {
   authObject?: ConvexSourceAuth
   tokenTemplate?: string
   fetch?: typeof globalThis.fetch
+  /** Optional read deadline. Abandoning a response never undoes an accepted mutation. */
+  signal?: AbortSignal
   skipConvexDeploymentUrlCheck?: boolean
 }
 
 export type CreatePublicConvexClientOptions = Pick<
   CreateAuthenticatedConvexClientOptions,
-  'env' | 'fetch' | 'skipConvexDeploymentUrlCheck'
-> & { signal?: AbortSignal }
+  'env' | 'fetch' | 'skipConvexDeploymentUrlCheck' | 'signal'
+>
 export type ConvexServerFunctionAssertion = CustomerRequestServiceAssertion
 
 const CONVEX_SERVER_FUNCTION_PRINCIPAL = {
@@ -126,12 +128,16 @@ export async function createAuthenticatedConvexClient(
 ): Promise<ConvexHttpClient> {
   const env = options.env ?? process.env
   const convexUrl = readRequiredConvexUrl(env)
+  options.signal?.throwIfAborted()
   const authObject = options.authObject ?? (await auth())
+  options.signal?.throwIfAborted()
   const token = await readRequiredConvexAuthToken(authObject, options.tokenTemplate)
+  options.signal?.throwIfAborted()
+  const fetch = sourceFetch(convexUrl, options)
 
   const client = new ConvexHttpClient(convexUrl, {
     auth: token,
-    ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+    ...(fetch === undefined ? {} : { fetch }),
     ...(options.skipConvexDeploymentUrlCheck === undefined
       ? {}
       : { skipConvexDeploymentUrlCheck: options.skipConvexDeploymentUrlCheck }),
@@ -161,11 +167,11 @@ export async function createAuthenticatedConvexClient(
  * cancellation through response-body consumption. A redirect or abort fails the
  * read. This optional signal keeps SDK fetch details out of catalogue callers.
  */
-function createPublicConvexClient(options: CreatePublicConvexClientOptions = {}): ConvexHttpClient {
-  const convexUrl = readRequiredConvexUrl(options.env ?? process.env)
+function sourceFetch(convexUrl: string, options: CreatePublicConvexClientOptions): typeof globalThis.fetch | undefined {
   const signal = options.signal
   const fetchImpl = options.fetch ?? globalThis.fetch
-  const boundedFetch: typeof globalThis.fetch | undefined = signal === undefined ? options.fetch : (input, init) => {
+  return signal === undefined ? options.fetch : (input, init) => {
+    signal.throwIfAborted()
     const target = input instanceof Request ? input.url : input
     if (new URL(target).origin !== new URL(convexUrl).origin) throw new TypeError('Convex source request changed origin.')
     return fetchImpl(input, {
@@ -174,6 +180,11 @@ function createPublicConvexClient(options: CreatePublicConvexClientOptions = {})
       signal: init?.signal == null ? signal : AbortSignal.any([init.signal, signal]),
     })
   }
+}
+
+function createPublicConvexClient(options: CreatePublicConvexClientOptions = {}): ConvexHttpClient {
+  const convexUrl = readRequiredConvexUrl(options.env ?? process.env)
+  const boundedFetch = sourceFetch(convexUrl, options)
   return new ConvexHttpClient(convexUrl, {
     ...(boundedFetch === undefined ? {} : { fetch: boundedFetch }),
     ...(options.skipConvexDeploymentUrlCheck === undefined

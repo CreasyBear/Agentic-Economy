@@ -19,8 +19,8 @@ export type ActivityLoaderResult =
   | Readonly<{
       kind: 'available'
       calls: Awaited<ReturnType<typeof readOwnerCallsServer>>
-      usage: Awaited<ReturnType<typeof readOwnerUsageServer>> | Readonly<{ kind: 'unavailable'; code: 'source_unavailable' }>
-      spend: Awaited<ReturnType<typeof readOwnerSpendServer>> | Readonly<{ kind: 'unavailable'; code: 'source_unavailable' }> | Readonly<{ kind: 'not_requested' }>
+      usage: Readonly<{ kind: 'pending' }> | Awaited<ReturnType<typeof readOwnerUsageServer>> | Readonly<{ kind: 'unavailable'; code: 'source_unavailable' }>
+      spend: Readonly<{ kind: 'pending' }> | Awaited<ReturnType<typeof readOwnerSpendServer>> | Readonly<{ kind: 'unavailable'; code: 'source_unavailable' }> | Readonly<{ kind: 'not_requested' }>
       plans?: readonly OwnerPlanSummary[]
       reconciliation?: UsageReconciliation
       periodStart: string

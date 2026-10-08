@@ -479,6 +479,7 @@ export async function quotePlanHandler(
   const planDigest = canonicalDigest({ format: 'ae.plan-quote:v1', ...data })
   await ctx.db.insert('capabilityPlans', {
     planRef,
+    organizationMonthlyExposureUnits: '0',
     principalId: authority.principal.principalId,
     ownerId: authority.principal.ownerId,
     accountRef: authority.principal.ownerId,

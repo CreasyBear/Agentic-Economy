@@ -6,7 +6,6 @@ dist/
 .env
 .env.*
 !.env.example
-.DS_Store
 .convex/
 playwright-report/
 test-results/
@@ -103,3 +102,6 @@ public/downloads/*.tgz
 
 # local deepsec scanner workspace (contains secrets, ~750MB)
 /.deepsec/
+
+# Keep Finder metadata excluded after the documentation allowlists above.
+.DS_Store

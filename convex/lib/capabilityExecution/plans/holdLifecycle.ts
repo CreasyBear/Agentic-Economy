@@ -66,7 +66,7 @@ export async function claimHoldHandler(ctx: MutationCtx, args: Infer<typeof clai
       if (locked !== null) { await failUnheldPlan(ctx, plan, 'hold_unavailable'); return { kind: 'stopped' } }
     }
     const monthly = await organizationMonthlySpendReserveRefusal(ctx, {
-      ownerId: plan.accountRef, now, ...(args.organizationMonthlySpend === undefined ? {} : { organizationMonthlySpend: args.organizationMonthlySpend }),
+      ownerId: plan.accountRef, environment: plan.environment, now, ...(args.organizationMonthlySpend === undefined ? {} : { organizationMonthlySpend: args.organizationMonthlySpend }),
     }, { decisionAudUnits: plan.approvedTotalAudUnits })
     if (monthly !== null) { await failUnheldPlan(ctx, plan, 'total_exceeds_available'); return { kind: 'stopped' } }
     const credit = await claimPromotionalCredit(ctx, { accountRef: plan.accountRef, environment: plan.environment, amountUnits: plan.approvedTotalAudUnits, now })

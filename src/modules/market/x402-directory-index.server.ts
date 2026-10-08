@@ -1,7 +1,8 @@
+import type { FunctionArgs, FunctionReference, FunctionReturnType } from 'convex/server'
 import { degrade } from '@/lib/observability/degrade'
 import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
 import { x402PaymentProfileForEnvironment } from '@/modules/capability-supply/public'
-import { callPublicSourceQuery, sourceQuery } from '@/lib/server/convex-source'
+import { callPublicSourceQuery, sourceQuery, type CreatePublicConvexClientOptions } from '@/lib/server/convex-source'
 import { CATALOGUE_STALE_AFTER_MS, sourceFreshnessState, type SourceFreshnessState } from '@/modules/common/freshness'
 import { REFERENCE_RATE_MAX_AGE_MS, formatDisplayPrice, parseDecimalExactAmount } from '@/modules/money/public'
 import { readPersistedReferenceRate } from '@/modules/money/reference-rate.server'
@@ -15,6 +16,16 @@ import {
   type X402DirectoryCatalogue, type X402DirectoryCatalogueInput, type X402DirectoryCatalogueOverview,
   type X402DirectoryCatalogueResource, type X402DirectoryCatalogueUnavailable, type X402DirectoryAnalytics,
 } from './x402-directory-catalogue'
+
+/** Keep request cancellation attached to each supported directory source read. */
+async function readDirectoryQuery<Query extends FunctionReference<'query'>>(
+  query: Query, args: FunctionArgs<Query>, options?: CreatePublicConvexClientOptions,
+): Promise<FunctionReturnType<Query>> {
+  options?.signal?.throwIfAborted()
+  const result = options === undefined ? await callPublicSourceQuery(query, args) : await callPublicSourceQuery(query, args, options)
+  options?.signal?.throwIfAborted()
+  return result
+}
 
 type BrowseResult = X402DirectoryCatalogueUnavailable | {
   kind: 'ok'; coverage: X402DirectoryIndexCoverage; searchMethod: 'native_full_text' | 'native_index'
@@ -126,9 +137,11 @@ function cardFromCompact(row: CompactCardRow): X402DirectoryEntry | undefined {
 }
 
 /** One Coinbase observation is shared across the bounded page; no row-level HTTP calls. */
-async function withAudEstimates(entries: readonly X402DirectoryEntry[]): Promise<X402DirectoryEntry[]> {
+async function withAudEstimates(entries: readonly X402DirectoryEntry[], options?: CreatePublicConvexClientOptions): Promise<X402DirectoryEntry[]> {
+  options?.signal?.throwIfAborted()
   const rate = entries.some(entry => minimumDirectoryUsdPrice(entry) !== undefined)
-    ? await readPersistedReferenceRate() : undefined
+    ? await readPersistedReferenceRate(options) : undefined
+  options?.signal?.throwIfAborted()
   const now = Date.now()
   return entries.map(entry => {
     const source = minimumDirectoryUsdPrice(entry)
@@ -185,9 +198,9 @@ export async function readCatalogueFreshness(now: number = Date.now()): Promise<
  * than a route-local "current" guess. Best-effort - a source outage degrades
  * to `absent` instead of failing the caller's primary response.
  */
-export async function readDirectoryFreshnessField(now: number = Date.now()): Promise<X402DirectoryFreshnessField> {
+export async function readDirectoryFreshnessField(now: number = Date.now(), options?: CreatePublicConvexClientOptions): Promise<X402DirectoryFreshnessField> {
   try {
-    const result = await callPublicSourceQuery(status, {})
+    const result = await callPublicSourceQuery(status, {}, options)
     const completedAt = result.coverage?.completedAt
     return {
       source: 'x402_directory',
@@ -204,7 +217,8 @@ export async function readDirectoryFreshnessField(now: number = Date.now()): Pro
   }
 }
 
-export async function readX402DirectoryCatalogue(input: X402DirectoryCatalogueInput): Promise<X402DirectoryCatalogue> {
+export async function readX402DirectoryCatalogue(input: X402DirectoryCatalogueInput, options?: CreatePublicConvexClientOptions): Promise<X402DirectoryCatalogue> {
+  options?.signal?.throwIfAborted()
   const parsed = x402DirectoryCatalogueInputSchema.safeParse(input)
   if (!parsed.success) return { kind: 'unavailable', reason: 'query_invalid' }
   const network = x402PaymentProfileForEnvironment(deploymentPaymentEnvironment(process.env))?.network
@@ -214,19 +228,20 @@ export async function readX402DirectoryCatalogue(input: X402DirectoryCatalogueIn
   const { query: cardQuery, ...cardFilters } = filters
   if (cardQuery !== undefined && alternativeTo === undefined && indexCursor === undefined && offset === undefined && directoryCategory === undefined && Object.keys(cardFilters).length === 0) {
     try {
-      const compact = await callPublicSourceQuery(compactCards, { query: cardQuery, network, paginationOpts: { numItems: COMPACT_CARD_PAGE, cursor: null } })
+      const compact = await readDirectoryQuery(compactCards, { query: cardQuery, network, paginationOpts: { numItems: COMPACT_CARD_PAGE, cursor: null } }, options)
       if (compact.kind === 'unavailable') return compact
       const items = await withAudEstimates(compact.page.flatMap(row => {
         if (row.network !== network) return []
         const card = cardFromCompact(row)
         return card === undefined ? [] : [card]
-      }))
+      }), options)
       return {
         kind: 'ok', source: 'index', searchMethod: 'native_full_text',
         page: { kind: 'ok', items, offset: 0, limit: COMPACT_CARD_PAGE, mode: 'search', appliedFilters: { network } },
         isDone: compact.isDone,
       }
     } catch (reason) {
+      options?.signal?.throwIfAborted()
       console.error('[market] compact directory card read failed, returning source_unavailable', { reason })
       return { kind: 'unavailable', reason: 'source_unavailable' }
     }
@@ -235,25 +250,25 @@ export async function readX402DirectoryCatalogue(input: X402DirectoryCatalogueIn
     let engineCursor: string | null = null
     let cursorScope = 'current'
     if (indexCursor !== undefined) {
-      const directoryStatus = await callPublicSourceQuery(status, {})
+      const directoryStatus = await readDirectoryQuery(status, {}, options)
       if (directoryStatus.kind === 'unavailable') return { kind: 'unavailable', reason: 'index_unavailable' }
       cursorScope = directoryStatus.coverage?.generation ?? 'current'
       const decoded = decodeOpaqueCursor(indexCursor, { kind: 'x402-directory', scope: cursorScope })
       if (decoded === undefined) return { kind: 'unavailable', reason: 'query_invalid' }
       engineCursor = decoded
     }
-    const result = await callPublicSourceQuery(browse, {
+    const result = await readDirectoryQuery(browse, {
       ...filters, network, ...(alternativeTo === undefined ? {} : { alternativeTo }),
       ...(directoryCategory === undefined ? {} : { category: directoryCategory }),
       paginationOpts: { numItems: 24, cursor: engineCursor, maximumRowsRead: 512 },
-    })
+    }, options)
     if (result.kind === 'unavailable') return result
     if (offset) return { kind: 'unavailable', reason: 'index_cursor_required' }
     const { provider, maxUsdPrice } = filters
     const items = await withAudEstimates(result.page.map(item => toDirectoryCardEntry({
       ...item.entry,
       choice: item.choice ?? { access: 'external_listing' as const },
-    })))
+    })), options)
     // The persisted generation already has adoption, popularity and full-text order.
     // A live Jev call would hold this response for the model round-trip, so the page uses that order.
     return {
@@ -267,19 +282,22 @@ export async function readX402DirectoryCatalogue(input: X402DirectoryCatalogueIn
       ...(result.splitCursor === undefined ? {} : { splitCursor: result.splitCursor }),
     }
   } catch (reason) {
+    options?.signal?.throwIfAborted()
     console.error('[market] x402 directory catalogue read failed, returning source_unavailable', { reason })
     return { kind: 'unavailable', reason: 'source_unavailable' }
   }
 }
-export async function readX402DirectoryCatalogueOverview(): Promise<X402DirectoryCatalogueOverview> {
+export async function readX402DirectoryCatalogueOverview(options?: CreatePublicConvexClientOptions): Promise<X402DirectoryCatalogueOverview> {
+  options?.signal?.throwIfAborted()
   try {
-    const result = await callPublicSourceQuery(overview, {})
+    const result = await readDirectoryQuery(overview, {}, options)
     if (result.kind !== 'ok') return result
     const { popular: _popular, recentlyUpdated: _recent, ...rest } = result
     const { rising: _rising, falling: _falling, ...kept } = rest as typeof rest & { rising?: unknown; falling?: unknown }
     return { ...kept, popular: [], recentlyUpdated: [] }
   }
   catch (cause) {
+    options?.signal?.throwIfAborted()
     return degrade(cause, { kind: 'unavailable', reason: 'source_unavailable' } as const, {
       site: 'readX402DirectoryCatalogueOverview',
       reason: 'source_unavailable',
@@ -295,20 +313,22 @@ export async function readX402DirectoryAnalytics(input: { network?: string | und
     })
   }
 }
-export async function readX402DirectoryCatalogueResource(input: { resource: string }): Promise<X402DirectoryCatalogueResource> {
+export async function readX402DirectoryCatalogueResource(input: { resource: string }, options?: CreatePublicConvexClientOptions): Promise<X402DirectoryCatalogueResource> {
+  options?.signal?.throwIfAborted()
   const parsed = x402DirectoryCatalogueResourceInputSchema.safeParse(input)
   if (!parsed.success) return { kind: 'unavailable', reason: 'query_invalid' }
   if (deploymentPaymentEnvironment(process.env) === undefined) return { kind: 'unavailable', reason: 'source_unavailable' }
   try {
-    const result = await callPublicSourceQuery(resource, parsed.data)
+    const result = await readDirectoryQuery(resource, parsed.data, options)
     if (result.kind !== 'found' && result.kind !== 'found_upstream') return result
-    const [estimated] = await withAudEstimates([result.item.entry])
+    const [estimated] = await withAudEstimates([result.item.entry], options)
     const entry = estimated ?? result.item.entry
     // A union spread keeps only shared properties, dropping coverage and indexed item fields.
     if (result.kind === 'found') return { ...result, item: { ...result.item, entry } }
     return { kind: 'found_upstream', item: { entry } }
   }
   catch (cause) {
+    options?.signal?.throwIfAborted()
     return degrade(cause, { kind: 'unavailable', reason: 'source_unavailable' } as const, {
       site: 'readX402DirectoryCatalogueResource',
       reason: 'source_unavailable',
@@ -359,11 +379,13 @@ export async function readX402DirectoryCanonicalUrlForTool(input: { toolRef: str
 }
 
 const providers = sourceQuery<{ kind: 'provider'; providerPrefix?: string; paginationOpts: { numItems: number; cursor: string | null } }, X402DirectoryProvidersPage>('x402DirectoryIndex:facets')
-export async function readX402DirectoryProviders(input: X402DirectoryProvidersInput): Promise<X402DirectoryProvidersPage> {
+export async function readX402DirectoryProviders(input: X402DirectoryProvidersInput, options?: CreatePublicConvexClientOptions): Promise<X402DirectoryProvidersPage> {
+  options?.signal?.throwIfAborted()
   const parsed = x402DirectoryProvidersInputSchema.safeParse(input)
   if (!parsed.success) return { kind: 'unavailable', reason: 'query_invalid' }
-  try { return await callPublicSourceQuery(providers, { kind: 'provider', ...(parsed.data.providerPrefix === undefined ? {} : { providerPrefix: parsed.data.providerPrefix }), paginationOpts: { numItems: 24, cursor: parsed.data.providerCursor ?? null } }) }
+  try { return await readDirectoryQuery(providers, { kind: 'provider', ...(parsed.data.providerPrefix === undefined ? {} : { providerPrefix: parsed.data.providerPrefix }), paginationOpts: { numItems: 24, cursor: parsed.data.providerCursor ?? null } }, options) }
   catch (cause) {
+    options?.signal?.throwIfAborted()
     return degrade(cause, { kind: 'unavailable', reason: 'source_unavailable' } as const, {
       site: 'readX402DirectoryProviders',
       reason: 'source_unavailable',

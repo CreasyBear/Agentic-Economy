@@ -4,6 +4,7 @@ import { getFunctionName } from 'convex/server'
 import { readCapabilityToolSearch } from '@/modules/capability-supply/tool-source'
 import { setPublicSourceTransportForTests } from '@/lib/server/convex-source'
 import * as decisionEngine from '@/modules/decision-engine/public'
+import * as searchJourney from '@/lib/observability/journey'
 import { toolCatalogSearchInputSchema, type SearchEnvelope } from '@/modules/registry/tool-choice-contracts'
 import { registryToolsSearchAction } from '@/modules/registry/tools.actions'
 import { TIMEZONE_QUERY, TOOL_CRYPTO_TX, TOOL_TIMEZONE, jevAnswersForTool, misorderedSearchResult, mockFailedJevFetch, mockSearchTool } from '../../helpers/tool-search-rerank-fixtures'
@@ -67,6 +68,39 @@ function mockDirectoryAssessment(score = 0.94) {
 
 
 describe('registry.tools.search mixed assessment', () => {
+  it('does not deliver or record a completed result when directory ranking is cancelled', async () => {
+    const controller = new AbortController()
+    const recorded = vi.spyOn(searchJourney, 'recordSearchResult')
+    directoryRows = [directoryRow('cancelled-directory-row')]
+    vi.mocked(readCapabilityToolSearch).mockResolvedValue(noCandidates(''))
+    vi.spyOn(decisionEngine, 'executeDecisionGateway').mockImplementation(async () => {
+      controller.abort(new DOMException('Search cancelled', 'AbortError'))
+      throw new decisionEngine.JevUnavailableError('cancelled')
+    })
+    await expect(runSearch('timezone conversion', {}, new Request('https://example.com/market', { signal: controller.signal })))
+      .rejects.toMatchObject({ name: 'AbortError' })
+    expect(recorded).not.toHaveBeenCalled()
+  })
+
+  it('stops cancelled directory status before admitted search, cards, or rate reads', async () => {
+    const controller = new AbortController()
+    const query = vi.fn(async (ref: unknown) => {
+      const name = getFunctionName(ref as never)
+      if (name === 'capabilitySupplyProjection:latestReconcileBusinessSupplyProjectionsCompletion') return Date.now()
+      if (name === 'x402DirectoryIndex:status') {
+        controller.abort(new DOMException('Search cancelled', 'AbortError'))
+        return { kind: 'ready', refreshState: 'complete', coverage: { generation: 'g1', completedAt: Date.now() } }
+      }
+      throw new Error(`Unexpected late query ${name}`)
+    })
+    const restore = setPublicSourceTransportForTests({ query, action: vi.fn() } as never)
+    try {
+      await expect(runSearch('timezone conversion', {}, new Request('https://example.com/market', { signal: controller.signal }))).rejects.toMatchObject({ name: 'AbortError' })
+      expect(query).toHaveBeenCalledTimes(2)
+      expect(readCapabilityToolSearch).not.toHaveBeenCalled()
+    } finally { restore() }
+  })
+
   beforeEach(() => {
     directoryRows = []
     directoryAvailable = true

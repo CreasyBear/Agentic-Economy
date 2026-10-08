@@ -43,10 +43,19 @@ export const readOwnerSpend = action({
       | { kind: 'refused'; code: string }
     > = await ctx.runQuery(internal.capabilityCallProjections.prepareOwnerSpendRead, args)
     if (admission.kind === 'refused') return admission
-    return await ctx.runAction(internal.moneyFormance.readPeriodSpend, {
+    const result = await ctx.runAction(internal.moneyFormance.readPeriodSpend, {
       accountRef: admission.accountRef,
       periodStartAt: args.periodStartAt,
       periodEndAt: args.periodEndAt,
     })
+    // Exact sale identities are internal admission evidence. Keep the existing
+    // owner report contract small and accepted by its strict return validator.
+    if (result.kind === 'empty') return { kind: 'empty' }
+    if (result.kind !== 'available') return result
+    return { kind: result.kind, currency: result.currency, exponent: result.exponent,
+      spendUnits: result.spendUnits, transactionCountUnits: result.transactionCountUnits,
+      periodStartAt: result.periodStartAt, periodEndAt: result.periodEndAt,
+      observedAt: result.observedAt, source: result.source, authoritativeForConsequences: result.authoritativeForConsequences,
+    }
   },
 })

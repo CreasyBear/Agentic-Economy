@@ -1,5 +1,6 @@
 "use client"
 
+import { useWorkspacePresentationVisible } from "@/lib/client/workspace-presentation"
 import * as React from "react"
 import { CheckIcon, ChevronRightIcon } from "lucide-react"
 import { Menu as MenuPrimitive } from "@base-ui/react/menu"
@@ -17,6 +18,8 @@ function DropdownMenu({ ...props }: MenuPrimitive.Root.Props) {
 }
 
 function DropdownMenuPortal({ ...props }: MenuPrimitive.Portal.Props) {
+  const visible = useWorkspacePresentationVisible()
+  if (!visible) return null
   return (
     <MenuPrimitive.Portal data-slot="dropdown-menu-portal" {...props} />
   )
@@ -82,6 +85,8 @@ function DropdownMenuSubContent({
     MenuPrimitive.Positioner.Props,
     "align" | "alignOffset" | "side" | "sideOffset"
   >) {
+  const visible = useWorkspacePresentationVisible()
+  if (!visible) return null
   return (
     <MenuPrimitive.Portal>
       <MenuPrimitive.Positioner
@@ -116,6 +121,8 @@ function DropdownMenuContent({
     MenuPrimitive.Positioner.Props,
     "align" | "alignOffset" | "side" | "sideOffset"
   >) {
+  const visible = useWorkspacePresentationVisible()
+  if (!visible) return null
   return (
     <MenuPrimitive.Portal>
       <MenuPrimitive.Positioner

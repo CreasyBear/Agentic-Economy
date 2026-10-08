@@ -338,7 +338,7 @@ describe('header dropdown navigation', () => {
     renderOperatorShell('owner', '/owner/operations')
     const links = Array.from(navigation().querySelectorAll('a'))
     expect(links.map(link => link.textContent)).toEqual(['Market', 'Ask', 'Agents', 'Activity', 'Credit', 'Settings', 'Support', 'Status', 'Developer docs'])
-    expect(links.map(link => link.getAttribute('href'))).toEqual(['/market', '/t/new', '/agent-access', '/activity', '/owner/credit', '/owner/settings', '/support', '/status', '/developers/api'])
+    expect(links.map(link => link.getAttribute('href'))).toEqual(['/market', '/t/new', '/agent-access', '/activity', '/owner/credit', '/owner/settings/workspace', '/support', '/status', '/developers/api'])
     expect(within(navigation()).getByRole('menuitem', { name: 'Settings' }).getAttribute('aria-current')).toBeNull()
     const provider = providerNavigation()
     expect(within(provider).getByRole('menuitem', { name: 'Tools' }).getAttribute('aria-current')).toBe('page')

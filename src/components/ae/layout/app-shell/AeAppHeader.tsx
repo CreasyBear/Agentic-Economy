@@ -21,6 +21,7 @@ import './AppHeaderComposition.css'
 
 export type AeAppHeaderProps = Readonly<{
   signedIn: boolean
+  workspaceReady?: boolean
   minimal: boolean
   mobileNavOpen: boolean
   setMobileNavOpen: (open: boolean) => void
@@ -50,6 +51,7 @@ function BrandLink() {
 
 export function AeAppHeader({
   signedIn,
+  workspaceReady = true,
   minimal,
   mobileNavOpen,
   setMobileNavOpen,
@@ -58,7 +60,7 @@ export function AeAppHeader({
   chatFrame,
 }: AeAppHeaderProps) {
   const frameChrome = useOperatorFrameChrome()
-  const title = frameChrome?.title
+  const title = workspaceReady ? frameChrome?.title : undefined
   const pageTitle = typeof title === 'string' && title !== '' ? title : null
   const contentOwnsHeading = frameChrome?.contentOwnsHeading === true
 
@@ -71,8 +73,8 @@ export function AeAppHeader({
       {minimal ? (
         <div className={cn('arc-app-header__bar arc-app-header__bar--minimal px-gutter', chatFrame && 'max-sm:!h-11 max-sm:!min-h-11 max-sm:!px-4')}>
           <div className="arc-app-header__lead">
-            <div className={chatFrame ? 'hidden sm:block' : ''}><BrandLink /></div>
-            {chatActionSlot(chatFrame)}
+            <div className={chatFrame && workspaceReady ? 'hidden sm:block' : ''}><BrandLink /></div>
+            {chatActionSlot(chatFrame && workspaceReady)}
           </div>
           <div className="arc-app-header__actions">
             <div className="hidden sm:block"><AeNetworkHealthIndicator /></div>
@@ -88,8 +90,8 @@ export function AeAppHeader({
           data-elevated={elevated ? '' : undefined}
           className={cn('ae-nav arc-app-header__bar arc-app-header__bar--signed-in px-1 sm:px-2 shadow-none data-[elevated]:shadow-soft', chatFrame && 'max-sm:!h-11 max-sm:!min-h-11 max-sm:!px-4')}
         >
-          <div className={chatFrame ? 'hidden sm:block' : ''}><BrandLink /></div>
-          {chatActionSlot(chatFrame)}
+          <div className={chatFrame && workspaceReady ? 'hidden sm:block' : ''}><BrandLink /></div>
+          {chatActionSlot(chatFrame && workspaceReady)}
           {pageTitle === null || chatFrame ? null : contentOwnsHeading ? (
             <p className="arc-app-header__lead arc-app-header__title" title={pageTitle}>
               {pageTitle}
@@ -111,8 +113,8 @@ export function AeAppHeader({
       ) : (
         <Drawer open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
           <div className={cn('ae-nav arc-app-header__bar arc-app-header__bar--public px-1 sm:px-2', chatFrame && 'max-sm:!h-11 max-sm:!min-h-11 max-sm:!px-4')}>
-            <div className={chatFrame ? 'hidden sm:block' : ''}><BrandLink /></div>
-            {chatActionSlot(chatFrame)}
+            <div className={chatFrame && workspaceReady ? 'hidden sm:block' : ''}><BrandLink /></div>
+            {chatActionSlot(chatFrame && workspaceReady)}
             <div className={cn(!chatFrame && 'arc-app-header__lead', chatFrame && 'hidden sm:block')}><AeSitePrimaryNav /></div>
             <div className="arc-app-header__actions">
               <div className="hidden sm:block"><AeNetworkHealthIndicator /></div>

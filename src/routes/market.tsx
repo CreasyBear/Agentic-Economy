@@ -2,7 +2,7 @@ import { createFileRoute, type ErrorComponentProps } from "@tanstack/react-route
 import { AePageSkeleton, AePageState } from "@/components/ae/layout/AePageState";
 import { AeMarketPage } from "@/components/ae/market/AeMarketPage";
 import { Button } from "@/components/arc/button/button";
-import { loadMarketPageRouteData, marketDocumentTitle, marketLoaderDeps, validateMarketSearch } from '@/modules/market/market.functions';
+import { loadMarketPageRouteData, marketDocumentTitle, marketLoaderDeps, validateMarketSearch, type MarketCanonicalSearchPage } from '@/modules/market/market.functions';
 import { buildPublicPageHead, buildSiteJsonLd } from "@/modules/seo/public";
 
 export { parseMarketCompareRefs, validateMarketSearch } from '@/modules/market/market.functions'
@@ -19,7 +19,12 @@ export const Route = createFileRoute("/market")({
   },
   validateSearch: validateMarketSearch,
   loaderDeps: ({ search }) => marketLoaderDeps(search),
-  loader: ({ deps }) => loadMarketPageRouteData(deps),
+  beforeLoad: ({ matches, routeId }): { previousCanonicalSearch: MarketCanonicalSearchPage | undefined } => ({
+    previousCanonicalSearch: (matches.find(match => match.routeId === routeId)?.loaderData as Readonly<{ canonicalSearch?: MarketCanonicalSearchPage }> | undefined)?.canonicalSearch,
+  }),
+  loader: ({ deps, abortController, context }) => loadMarketPageRouteData(deps, { signal: abortController?.signal, previousCanonicalSearch: context?.previousCanonicalSearch }),
+  // Search can send query/candidate text to the disclosed recipient. Activate first.
+  preload: false,
   staleTime: 30_000,
   preloadStaleTime: 30_000,
   // Keep the marketplace frame and tab controls mounted through navigation.

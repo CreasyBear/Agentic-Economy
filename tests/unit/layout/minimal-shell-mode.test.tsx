@@ -3,9 +3,10 @@
  */
 import type * as ConvexReactModule from 'convex/react'
 import type { ReactNode } from 'react'
-import { cleanup, render, screen } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import {
   RouterContextProvider,
+  RouterProvider,
   createMemoryHistory,
   createRootRoute,
   createRoute,
@@ -16,6 +17,11 @@ import '../../setup/jsdom-platform'
 import '../../setup/jsdom-dialog'
 
 import { AeAppShell } from '@/components/ae/layout/AeAppShell'
+
+const authState = vi.hoisted(() => ({
+  isSignedIn: false, isLoaded: true,
+  userId: null as string | null, sessionId: null as string | null, orgId: null as string | null,
+}))
 
 vi.mock('@/lib/observability/funnel-client', () => ({
   emitFunnelEventOnce: vi.fn(),
@@ -29,7 +35,8 @@ vi.mock('convex/react', async (importOriginal) => ({
 
 vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@clerk/tanstack-react-start')>()),
-  useAuth: () => ({ isSignedIn: false }),
+  useAuth: () => authState,
+  useUser: () => ({ user: null }),
   Show: ({ when, children, fallback }: { when: string; children?: ReactNode; fallback?: ReactNode }) => {
     if (when === 'signed-out') return children ?? null
     if (when === 'signed-in') return null
@@ -39,7 +46,11 @@ vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({
   OrganizationSwitcher: () => null,
 }))
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  authState.isSignedIn = false; authState.isLoaded = true
+  authState.userId = null; authState.sessionId = null; authState.orgId = null
+})
 
 describe('minimal shell mode (S-11)', () => {
   it('renders a distraction-free header on routes with shellMode minimal', async () => {
@@ -58,6 +69,43 @@ describe('minimal shell mode (S-11)', () => {
     expect(screen.queryByRole('button', { name: 'Find Tools' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Open public menu' })).toBeNull()
     expect(screen.queryByRole('link', { name: 'Sign in' })).toBeNull()
+  })
+
+  it('retires private route observations when identity changes inside the minimal auth shell', async () => {
+    authState.isSignedIn = true; authState.userId = 'user_alpha'; authState.sessionId = 'session_alpha'; authState.orgId = 'org_alpha'
+    let finish!: (value: string) => void
+    const current = new Promise<string>(resolve => { finish = resolve })
+    const read = vi.fn<() => Promise<string>>().mockResolvedValueOnce('Alpha private record').mockImplementation(() => current)
+    const root = createRootRoute()
+    const privateRoute = createRoute({ getParentRoute: () => root, path: '/owner/operations/$toolRef',
+      loader: () => read(), component: () => <p>{privateRoute.useLoaderData()}</p> })
+    const router = createRouter({ routeTree: root.addChildren([
+      createRoute({ getParentRoute: () => root, path: '/sign-in/$', staticData: { shellMode: 'minimal' } }),
+      privateRoute,
+    ]), history: createMemoryHistory({ initialEntries: ['/owner/operations/private'] }) })
+    await router.load()
+    const fixture = () => <RouterContextProvider router={router}><AeAppShell><RouterProvider router={router} /></AeAppShell></RouterContextProvider>
+    const view = render(fixture())
+    await screen.findByText('Alpha private record')
+    await act(async () => { await router.navigate({ to: '/sign-in/$', params: { _splat: '' } }) })
+    expect(screen.getByRole('link', { name: 'Browse Tools' })).toBeTruthy()
+    authState.isSignedIn = false; authState.userId = null; authState.sessionId = null; authState.orgId = null
+    view.rerender(fixture())
+    await waitFor(() => expect(screen.queryByTestId('workspace-transition-scrim')).toBeNull())
+    expect(router.state.location.pathname).toBe('/sign-in')
+    expect(screen.getByRole('link', { name: 'Browse Tools' })).toBeTruthy()
+    authState.isSignedIn = true; authState.userId = 'user_beta'; authState.sessionId = 'session_beta'; authState.orgId = 'org_beta'
+    view.rerender(fixture())
+    await waitFor(() => expect(screen.queryByTestId('workspace-transition-scrim')).toBeNull())
+    let navigation!: Promise<void>
+    act(() => { navigation = router.navigate({ to: '/owner/operations/$toolRef', params: { toolRef: 'private' } }) })
+    await waitFor(() => expect(read).toHaveBeenCalledTimes(2))
+    try {
+      expect(screen.queryByText('Alpha private record')).toBeNull()
+    } finally {
+      await act(async () => { finish('Current private record'); await navigation })
+    }
+    await screen.findByText('Current private record')
   })
 
   it('renders full primary navigation and Find Tools on standard public routes', async () => {
