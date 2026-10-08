@@ -78,21 +78,21 @@ record inspection, [Profile 2](https://reui.io/preview/base/profile-2) for setti
 record/action sheet owns inspection; do not add a second overlapping inspector.
 Chat 3, Arc market compositions, and Fumadocs/Scalar retain their owners.
 
-`AeAppShell` owns the stable frame. `WorkspaceSidebar` renders the existing
-navigation catalogue and one Clerk Account selector. Backend-confirmed current
+`AeAppShell` owns the stable frame. `WorkspaceMenu` renders the existing
+navigation catalogue inside the header dropdown. The guarded Clerk Account
+selector sits beside it and retains its own popup and focus lifecycle. Backend-confirmed current
 user, session and organization scope controls privileged destinations. Hiding a
 link never establishes authority. `WorkspaceTransitionBoundary` removes old
 protected projections when identity changes and waits for committed route data;
 timers do not establish readiness. The existing command panel, theme provider,
 route focus owner and navigation safety boundary remain authoritative.
 
-The desktop sidebar is opt-in through **Display settings → Show sidebar** in the
-existing header dropdown. `ThemeProvider` owns this browser-local display preference,
-defaulting to hidden; it stores no Account records or authority. Hidden means no
-rail or layout gap. The controlled upstream sidebar, its toggle and keyboard
-shortcut share that preference; hiding a focused navigation control returns focus
-to Display settings. Mobile retains its existing menu. Routed content stays mounted
-when the preference changes.
+Authenticated pages have no global sidebar, sidebar toggle or sidebar preference.
+The header menu contains native route links with scoped Provider/Admin submenus;
+Base UI owns keyboard navigation, dismissal and collision handling. The public
+market stays full-width after sign-in. Chat alone retains its existing conversation
+history sidebar. Appearance remains a separate theme control. Menu changes never
+replace the routed content, and route focus/navigation safety remain authoritative.
 
 The 8 October settings recut replaces the Settings 7 rail with Profile 2's
 horizontal groups, bounded content and section cards. `settingsNavigation` remains

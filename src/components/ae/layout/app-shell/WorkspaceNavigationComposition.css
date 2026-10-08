@@ -9,7 +9,7 @@
 
 .arc-market.arc-workspace-menu {
   width: min(320px, calc(100vw - 24px));
-  max-height: min(640px, calc(100dvh - 32px));
+  max-height: min(640px, var(--available-height, 640px), calc(100dvh - 32px));
   overflow-x: hidden;
   overflow-y: auto;
   border: 1px solid var(--border);
@@ -109,3 +109,6 @@
 .arc-market .arc-theme-menu-item > svg { width: 20px; height: 20px; flex: none; }
 .arc-market :is(.arc-theme-menu-item, .arc-breadcrumb-menu-item):is(:hover, [data-highlighted], :focus-visible) { background: var(--surface-muted); color: var(--foreground); }
 .arc-market .arc-breadcrumb-menu-item { padding-inline: var(--space-3); }
+
+.arc-market .arc-workspace-submenu-trigger { display: flex; min-height: 44px; gap: var(--space-3); border-radius: 10px; padding: 10px var(--space-3); }
+.arc-market .arc-workspace-submenu-trigger > svg { width: 20px; height: 20px; }

@@ -20,7 +20,6 @@ import type { OperatorSurface } from '@/lib/operator/operator-context'
 import { ChatHeader } from '@/components/ae/chat/chat-session/components/ChatHeader'
 import { AeAppShell } from '@/components/ae/layout/AeAppShell'
 import { ThemeProvider } from '@/components/ae/theme/ThemeProvider'
-import { SIDEBAR_VISIBILITY_STORAGE_KEY } from '@/lib/theme/theme-mode'
 
 vi.mock('@/lib/observability/funnel-client', () => ({
   emitFunnelEventOnce: vi.fn(),
@@ -61,7 +60,6 @@ vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({
 }))
 
 beforeEach(() => {
-  localStorage.setItem(SIDEBAR_VISIBILITY_STORAGE_KEY, 'true')
   clerkSignedIn.value = false
   clerkSignedIn.isLoaded = true
   clerkSignedIn.orgId = null
@@ -69,7 +67,6 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  localStorage.removeItem(SIDEBAR_VISIBILITY_STORAGE_KEY)
   vi.unstubAllEnvs()
   cleanup()
   entitlement.isAuthenticated = false
@@ -78,44 +75,29 @@ afterEach(() => {
 })
 
 describe('AeAppShell', () => {
-  it('hides the sidebar by default and remembers the dropdown choice without replacing page content', async () => {
-    localStorage.removeItem(SIDEBAR_VISIBILITY_STORAGE_KEY)
+  it('opens destinations in the header dropdown without adding a sidebar or replacing page content', async () => {
+    // A preference left by the superseded release cannot resurrect a global rail.
+    localStorage.setItem('ae-show-sidebar', 'true')
     clerkSignedIn.value = true
-    const view = renderAppShell('/market', <textarea aria-label="Current draft" defaultValue="Keep my work" />)
+    renderAppShell('/market', <textarea aria-label="Current draft" defaultValue="Keep my work" />)
     const draft = screen.getByRole('textbox', { name: 'Current draft' })
-    expect(screen.queryByRole('navigation', { name: 'Workspace navigation' })).toBeNull()
+    const trigger = screen.getByRole('button', { name: 'Workspace menu' })
+    expect(screen.queryByRole('menu')).toBeNull()
     expect(document.querySelector('[data-slot="sidebar-gap"]')).toBeNull()
-
-    const trigger = screen.getByRole('button', { name: 'Display settings' })
-    fireEvent.click(trigger)
-    const option = await screen.findByRole('menuitemcheckbox', { name: 'Show sidebar' })
-    expect(option.getAttribute('aria-checked')).toBe('false')
-    fireEvent.click(option)
-    expect(workspaceNavigation()).toBeTruthy()
-    expect(localStorage.getItem(SIDEBAR_VISIBILITY_STORAGE_KEY)).toBe('true')
-    expect(screen.getByRole('textbox', { name: 'Current draft', hidden: true })).toBe(draft)
-    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
+    trigger.focus()
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' })
+    const menu = await screen.findByRole('menu', { name: 'Workspace menu' })
+    expect(within(menu).getByRole('menuitem', { name: 'Market' }).tagName).toBe('A')
+    expect(within(menu).getByRole('menuitem', { name: 'Settings' }).getAttribute('href')).toBe('/owner/settings')
+    expect(screen.queryByRole('menuitemcheckbox', { name: 'Show sidebar' })).toBeNull()
+    expect(screen.getByRole('textbox', { name: 'Current draft' })).toBe(draft)
+    fireEvent.keyDown(menu, { key: 'Escape' })
     await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
     await waitFor(() => expect(document.activeElement).toBe(trigger))
-
-    view.unmount()
-    const reloaded = renderAppShell('/market')
-    expect(workspaceNavigation()).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Display settings' }))
-    fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Show sidebar' }))
-    expect(document.querySelector('[data-slot="sidebar"]')).toBeNull()
-    expect(document.querySelector('[data-slot="sidebar-gap"]')).toBeNull()
-    expect(localStorage.getItem(SIDEBAR_VISIBILITY_STORAGE_KEY)).toBe('false')
-    reloaded.unmount()
-    renderAppShell('/market')
-    expect(screen.queryByRole('navigation', { name: 'Workspace navigation' })).toBeNull()
     fireEvent.keyDown(window, { key: 'b', ctrlKey: true })
-    expect(workspaceNavigation()).toBeTruthy()
-    const close = within(screen.getByRole('banner')).getByRole('button', { name: 'Toggle workspace navigation' })
-    close.focus()
-    fireEvent.click(close)
-    expect(screen.queryByRole('navigation', { name: 'Workspace navigation' })).toBeNull()
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Display settings' }))
+    expect(document.querySelector('[data-slot="sidebar"]')).toBeNull()
+    expect(screen.getByRole('textbox', { name: 'Current draft' })).toBe(draft)
+    localStorage.removeItem('ae-show-sidebar')
   })
 
   it('renders exactly one persistent app header with the skip link and public primary nav', () => {
@@ -193,7 +175,7 @@ describe('AeAppShell', () => {
     await waitFor(() => expect(document.activeElement).toBe(trigger))
   })
 
-  it('renders one persistent workspace sidebar with current Account Provider destinations', () => {
+  it('offers current Account destinations through one header menu', () => {
     clerkSignedIn.value = true
     entitlement.isAuthenticated = true
     entitlement.result = authorized(['owner'])
@@ -201,14 +183,14 @@ describe('AeAppShell', () => {
 
     expect(screen.queryByRole('navigation', { name: 'Primary' })).toBeNull()
     expect(screen.queryByRole('navigation', { name: 'App navigation' })).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Workspace menu' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Workspace menu' })).toBeTruthy()
     expect(screen.queryByRole('menu')).toBeNull()
     const nav = workspaceNavigation()
-    expect(within(nav).getAllByRole('link').map(link => link.textContent)).toEqual([
-      'Market', 'Ask', 'Agents', 'Activity', 'Credit', 'Tools', 'Earnings', 'Settings', 'Support', 'Status',
+    expect(within(nav).getAllByRole('menuitem').map(link => link.textContent)).toEqual([
+      'Market', 'Ask', 'Agents', 'Activity', 'Credit', 'Provider', 'Settings', 'Support', 'Status', 'Developer docs',
     ])
-    expect(within(nav).getByRole('link', { name: 'Settings' }).getAttribute('href')).toBe('/owner/settings')
-    expect(within(nav).getByRole('link', { name: 'Market' }).getAttribute('aria-current')).toBe('page')
+    expect(within(nav).getByRole('menuitem', { name: 'Settings' }).getAttribute('href')).toBe('/owner/settings')
+    expect(within(nav).getByRole('menuitem', { name: 'Market' }).getAttribute('aria-current')).toBe('page')
     expect(screen.getAllByTestId('org-switcher')).toHaveLength(1)
     expect(screen.queryByRole('link', { name: 'Sign in' })).toBeNull()
   })
@@ -217,7 +199,7 @@ describe('AeAppShell', () => {
     clerkSignedIn.value = true
     entitlement.isAuthenticated = true
     renderAppShell('/owner/settings')
-    expect(within(workspaceNavigation()).getByRole('link', { name: 'Settings' }).getAttribute('aria-current')).toBe('page')
+    expect(within(workspaceNavigation()).getByRole('menuitem', { name: 'Settings' }).getAttribute('aria-current')).toBe('page')
   })
 
   it('shows one Admin group on an owner page for the current authorized session', () => {
@@ -228,12 +210,12 @@ describe('AeAppShell', () => {
     const nav = workspaceNavigation()
     expect(within(nav).getAllByText('Admin')).toHaveLength(1)
     expect(['Overview', 'Search', 'Exceptions', 'Providers', 'Metrics', 'Audit'].map(label =>
-      within(nav).getByRole('link', { name: label }).textContent
+      within(roleNavigation('Admin')).getByRole('menuitem', { name: label }).textContent
     )).toEqual(['Overview', 'Search', 'Exceptions', 'Providers', 'Metrics', 'Audit'])
     expect(screen.queryByRole('navigation', { name: 'Owner primary navigation' })).toBeNull()
   })
 
-  it('uses one sidebar to mark the active Admin destination', () => {
+  it('marks the active Admin destination inside its submenu', () => {
     clerkSignedIn.value = true
     entitlement.isAuthenticated = true
     entitlement.result = authorized(['owner', 'admin'])
@@ -241,8 +223,8 @@ describe('AeAppShell', () => {
     expect(screen.queryByRole('navigation', { name: 'Admin primary navigation' })).toBeNull()
     const nav = workspaceNavigation()
     expect(within(nav).getAllByText('Admin')).toHaveLength(1)
-    expect(within(nav).getByRole('link', { name: 'Metrics' }).getAttribute('aria-current')).toBe('page')
-    expect(within(nav).getByRole('link', { name: 'Overview' }).getAttribute('aria-current')).toBeNull()
+    expect(within(roleNavigation('Admin')).getByRole('menuitem', { name: 'Metrics' }).getAttribute('aria-current')).toBe('page')
+    expect(within(roleNavigation('Admin')).getByRole('menuitem', { name: 'Overview' }).getAttribute('aria-current')).toBeNull()
   })
 
   it('keeps contextual Developer navigation alongside one Admin group', () => {
@@ -253,7 +235,7 @@ describe('AeAppShell', () => {
     const nav = workspaceNavigation()
     expect(within(nav).getAllByText('Admin')).toHaveLength(1)
     expect(within(nav).getAllByText('Developer')).toHaveLength(1)
-    expect(within(nav).getByRole('link', { name: 'Discovery' })).toBeTruthy()
+    expect(within(roleNavigation('Developer')).getByRole('menuitem', { name: 'Discovery' })).toBeTruthy()
   })
 
   const deniedContexts: { label: string; result: typeof entitlement.result }[] = [
@@ -283,9 +265,9 @@ describe('AeAppShell', () => {
     renderAppShell()
     const nav = workspaceNavigation()
     expect(within(nav).queryByText('Provider')).toBeNull()
-    expect(within(nav).queryByRole('link', { name: 'Tools' })).toBeNull()
-    expect(within(nav).queryByRole('link', { name: 'Earnings' })).toBeNull()
-    expect(within(nav).getByRole('link', { name: 'Credit' })).toBeTruthy()
+    expect(within(nav).queryByRole('menuitem', { name: 'Tools' })).toBeNull()
+    expect(within(nav).queryByRole('menuitem', { name: 'Earnings' })).toBeNull()
+    expect(within(nav).getByRole('menuitem', { name: 'Credit' })).toBeTruthy()
   })
 
   it.each(['Convex authentication', 'Clerk hydration'])('withholds privileged destinations during unresolved %s', state => {
@@ -308,7 +290,7 @@ describe('AeAppShell', () => {
     renderAppShell('/market')
     expect(screen.getByText('Page content')).toBeTruthy()
     const nav = workspaceNavigation()
-    expect(within(nav).getByRole('link', { name: 'Market' })).toBeTruthy()
+    expect(within(nav).getByRole('menuitem', { name: 'Market' })).toBeTruthy()
     expect(within(nav).queryByText('Admin')).toBeNull()
     expect(within(nav).queryByText('Provider')).toBeNull()
   })
@@ -347,7 +329,7 @@ it('continues to use the existing leave confirmation instead of switching Accoun
   clerkSignedIn.value = true
   renderAppShell('/owner/settings', <GuardedAccountChange mode="unknown" />)
   fireEvent.click(screen.getByRole('button', { name: 'Start guarded change' }))
-  fireEvent.click(within(workspaceNavigation()).getByRole('link', { name: 'Market' }))
+  fireEvent.click(within(workspaceNavigation()).getByRole('menuitem', { name: 'Market' }))
   expect(await screen.findByRole('alertdialog')).toBeTruthy()
   expect(screen.queryByTestId('org-switcher')).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: 'Continue editing' }))
@@ -394,9 +376,15 @@ function GuardedAccountChange({ mode }: { mode: 'pending' | 'unknown' | 'dirty' 
 }
 
 function workspaceNavigation() {
-  const navs = screen.getAllByRole('navigation', { name: 'Workspace navigation' })
+  if (!screen.queryByRole('menu', { name: 'Workspace menu' })) fireEvent.click(screen.getByRole('button', { name: 'Workspace menu' }))
+  const navs = screen.getAllByRole('menu', { name: 'Workspace menu' })
   expect(navs).toHaveLength(1)
   return navs[0]!
+}
+
+function roleNavigation(name: string) {
+  if (!screen.queryByRole('menu', { name })) fireEvent.click(within(workspaceNavigation()).getByRole('menuitem', { name }))
+  return screen.getByRole('menu', { name })
 }
 
 function authorized(allowedSurfaces: readonly OperatorSurface[]) {

@@ -399,3 +399,20 @@ domain modules, server handlers and deployment bindings have identical Git trees
 to `ce7a0e57`; that backend and the alpha.2 contract remain compatible without a
 backend redeploy. Read the PR receipt and `/api/v1/release` for the newer web
 revision; the coordinated release tuple above records the preceding rollout.
+
+
+### 8 October header navigation correction
+
+[PR #372](https://github.com/CreasyBear/Agentic-Economy/pull/372) supersedes the
+sidebar visibility follow-up: navigation destinations move into the header menu,
+the global sidebar/preference is removed, and chat retains its conversation history.
+This is a web-only release for `agentic-economy` / `app.aecon.ai`. The existing
+`cautious-zebra-473` backend remains on `ce7a0e57`; backend, domain, server and
+deployment trees are unchanged. Clerk, Formance and payment audience are unchanged.
+
+The PR receipt owns the exact gated source, Vercel deployment, promotion/readback
+and current readiness observations. The preceding web rollback target is
+`dpl_GU335fgpfBQwTdiHJk9sFsx1yRpb` (`dbb79bc089e48a34790c3091292c63540340ce8e`).
+No data migration or backend redeploy is required. Source/component and read-only
+header fixtures do not establish real Clerk popup or authenticated journey
+qualification; that acceptance remains with Joel under the existing deferral.

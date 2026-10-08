@@ -1,15 +1,12 @@
 'use client'
 
-import { Monitor, Moon, Settings2, Sun } from 'lucide-react'
+import { Monitor, Moon, Sun } from 'lucide-react'
 
 import { useAppearance } from '@/components/ae/theme/ThemeProvider'
 import { Button } from '@/components/arc/button/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuCheckboxItem,
-  DropdownMenuGroup,
-  DropdownMenuSeparator,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
@@ -33,17 +30,17 @@ const OPTIONS: readonly ThemeOption[] = [
 const DEFAULT_OPTION: ThemeOption =
   OPTIONS.find((option) => option.value === DEFAULT_APPEARANCE_PREFERENCE) ?? SYSTEM_OPTION
 
-export function ThemeToggle({ workspace = false }: { workspace?: boolean }) {
-  const { preference, setPreference, sidebarVisible, setSidebarVisible } = useAppearance()
+export function ThemeToggle() {
+  const { preference, setPreference } = useAppearance()
   const activeOption =
     OPTIONS.find((option) => option.value === preference) ?? DEFAULT_OPTION
-  const ActiveIcon = workspace ? Settings2 : activeOption.icon
+  const ActiveIcon = activeOption.icon
   const currentLabel = activeOption.label
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        render={<Button type="button" variant="ghost" size="md" className="arc-market arc-workspace-menu-trigger" data-workspace-display-settings={workspace ? '' : undefined} aria-label={workspace ? 'Display settings' : `Appearance: ${currentLabel}`} />}
+        render={<Button type="button" variant="ghost" size="md" className="arc-market arc-workspace-menu-trigger" aria-label={`Appearance: ${currentLabel}`} />}
       >
         <ActiveIcon aria-hidden="true" className="size-4" />
       </DropdownMenuTrigger>
@@ -59,12 +56,6 @@ export function ThemeToggle({ workspace = false }: { workspace?: boolean }) {
             </DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>
-        {workspace ? <DropdownMenuGroup className="hidden md:block">
-          <DropdownMenuSeparator />
-          <DropdownMenuCheckboxItem checked={sidebarVisible} onCheckedChange={setSidebarVisible} className="min-h-11">
-            Show sidebar
-          </DropdownMenuCheckboxItem>
-        </DropdownMenuGroup> : null}
       </DropdownMenuContent>
     </DropdownMenu>
   )
