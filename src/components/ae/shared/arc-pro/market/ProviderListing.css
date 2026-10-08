@@ -23,18 +23,11 @@
 .arc-provider-tags span { overflow-wrap: anywhere; }
 .arc-provider-tags span + span::before { content: '·'; margin-right: var(--space-2); }
 .arc-provider-card :where(a, button):focus-visible, .arc-provider-header a:focus-visible, .arc-provider-index a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-.arc-provider-table-identity { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
-.arc-provider-table-identity > div { min-width: 0; max-width: 24rem; }
-.arc-provider-table-identity h3 { margin: 0; font-size: var(--text-sm); font-weight: 500; line-height: 18px; }
-.arc-provider-table-identity p { margin: 0; }
-.arc-provider-table-identity .arc-provider-mark { width: 28px; height: 28px; }
 .arc-provider-table-action { display: inline-block; max-width: 100%; min-height: 18px; overflow: hidden; padding: 0; border: 0; background: none; color: var(--foreground); font: inherit; font-weight: 500; line-height: 18px; text-align: left; text-decoration: none; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; vertical-align: top; }
-.arc-provider-table-caption { margin: 0; color: var(--text-secondary); font-size: var(--text-xs); line-height: 1.5; overflow-wrap: anywhere; }
 .arc-provider-lead { display: block; max-width: 100%; min-height: 18px; overflow: hidden; padding: 0; color: var(--text-secondary); line-height: 14px; text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
 .arc-provider-lead-caption { max-width: 100%; overflow: hidden; line-height: 14px; text-overflow: ellipsis; white-space: nowrap; }
 .arc-provider-index-price p { line-height: 18px; }
 .arc-provider-index-price .arc-provider-price-context { max-width: 18rem; overflow: hidden; line-height: 14px; text-overflow: ellipsis; white-space: nowrap; }
-.arc-provider-table-numeric { font-variant-numeric: tabular-nums; }
 .arc-provider-index, .arc-provider-header { display: grid; gap: var(--space-6); min-width: 0; color: var(--foreground); }
 .arc-provider-index-heading { display: grid; gap: var(--space-2); min-width: 0; }
 .arc-provider-index-heading h2 { margin: 0; font-family: var(--font-display); font-size: var(--text-2xl); font-weight: 500; line-height: var(--leading-display); letter-spacing: var(--tracking-display); }

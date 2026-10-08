@@ -137,6 +137,16 @@ sort, render or measure another table. Router and Start versions are independent
 Do not convert money to formatted strings for ordering, infer totals from loaded
 rows, expose unused bulk actions, or enable spreadsheet writes on audit records.
 
+Public catalogue and Host tables compose the installed
+[REUI auto-width example](https://reui.io/preview/base/components/c-data-grid-6)
+directly: native column definitions and `useTable`, then `DataGrid`,
+`DataGridContainer`, `DataGridScrollArea` and `DataGridTable`. They do not inherit
+the operator's resizable tracks, presentation preferences or toolbar. The
+catalogue owner retains ordering and opaque pagination. Table view remains a
+semantic scrolling table on narrow screens; the separate Cards view owns cards.
+Cell content may wrap, including price provenance. Do not reintroduce a fixed
+price child width, clipped price text or CSS that turns table cells into cards.
+
 Complete local collections may sort/filter in the grid. Paginated collections
 declare loaded-page scope unless their owner applies constraints before paging.
 Provider inventory uses owner-filtered server name/text/date queries and up to

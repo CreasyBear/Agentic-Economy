@@ -610,3 +610,87 @@ scan shortcut is absent from deployed source. Daily full import requires current
 cost/allowance evidence; no cadence increase or timestamp-only freshness repair
 was made. AWS session expiry and joint financial restoration remain separate
 Operations acceptance boundaries.
+
+## 8 October alpha readiness release
+
+[PR #373](https://github.com/CreasyBear/Agentic-Economy/pull/373) merged at
+11:23:47 UTC as `c5f9671e7248af34ccb5d5061d29775ef366d98c`. The deployed runtime
+source is `c608833bd9b015d1b89600377d7aeb83b6edd2e9`, including the performance
+lineage above. Native Convex `cautious-zebra-473` and the public web release
+endpoint both reported that runtime revision after deployment.
+
+Vercel deployment `dpl_6YhthsjQUGVZffbTB5Gu41TCLWkd`
+(`agentic-economy-6cqi1owo8-creasybears-projects.vercel.app`) was promoted to
+`https://app.aecon.ai`. The backend dry run and deploy added the three reviewed
+indexes and retained existing documents. No historical financial migration,
+credential, RPC allowance, quorum, billing or payment-audience change occurred.
+Payments remain Admin-only, revision 2. No test purchase budget was spent.
+
+The deployed exposure reader returned complete native coverage at 11:22 UTC:
+24 current-month sales, 182,595 AUD/6 units, high-water 195 and zero outstanding
+allocations for the observed Account. At 11:27 UTC installed CLI, official MCP
+and direct HTTPS again read the same historical Call with the unchanged
+projection digest recorded above. Private Call reads remained `no-store`.
+Release, health, OpenAPI, SKILL and llms endpoints returned 200. Readiness
+remained 503 with payments unavailable, stale catalogue and quoting unavailable.
+Fresh paid delivery and response-loss replay therefore remain unqualified.
+
+An anonymous tab opened before promotion navigated afterward without a reload
+failure. Fresh desktop and mobile-width page checks had no JavaScript errors or
+horizontal page overflow. The first desktop Market observation took 4,275ms to
+the hydrated-header/visible-heading marker and missed the desktop target. This
+was one sample, not p95; mobile widths were not a controlled mobile profile.
+These checks did not establish table readability, which Joel subsequently
+reported as defective. Signed-in transitions and paid journeys remain separate.
+Evidence is retained in the execution workspace under `performance/alpha-release/`.
+
+Rollback web target: `dpl_5ojMkJbKXCqwtHc9xzZt2xXhstHR`, source `6e1abd016`.
+The prior backend source is `ce7a0e57e1fbc13a0bf8f0ff8d1bb5ecc99bab7a`; retain the
+new optional Call field and additive indexes if rolling its code back. The
+financial guard and original-reference precautions in the candidate entry still
+apply. A code rollback never restores financial data or replaces accepted keys.
+
+## 8 October public table repair
+
+[PR #374](https://github.com/CreasyBear/Agentic-Economy/pull/374) replaces the public
+catalogue's operator-table wrappers with the installed REUI auto-width
+composition. Native components retain layout and scrolling; existing owners
+retain prices, identities, Save/Compare, Host selection and opaque pagination.
+No upstream vendor source, dependency, API, backend or financial owner changed.
+
+Runtime source `b8d4570c7241cf28ce0557953fb6897cc3ba2f62` was built from a clean Git
+archive as Vercel `dpl_2AUthBPTg2eZPXZLjvqNLyfX1thR`,
+`agentic-economy-4c81a95ej-creasybears-projects.vercel.app`, and promoted to
+`https://app.aecon.ai`. The protected candidate and public release endpoint both
+reported that source. The backend retains the established `c608833bd` release;
+this was a web-only deployment. Rollback web target is
+`dpl_6YhthsjQUGVZffbTB5Gu41TCLWkd`; no backend or financial rollback is needed.
+
+The complete source gate passed: 9,650 unit tests (one existing skip), 3,133
+integration tests (77 skips, three todos), 20 public browser checks (18 skips),
+20 accessibility checks, CLI packaging, and 228 docs pages with 84 owner examples.
+Twelve focused existing table tests and independent Sol source review passed.
+Local actual-component evidence covers three table views at six widths, dark
+mode, keyboard actions and saved-status failure/recovery. A source hook reported
+two advisory pure-helper allocation warnings; no React errors.
+
+At 12:23 UTC, anonymous production Tool and Host tables passed at 1440px and
+390px: no filler cells, clipped cell content, page overflow or JavaScript errors.
+Tool names received 451px at desktop instead of the old 150px; price decimals
+and provenance remained visible. Compare toggled on/off and opaque pagination
+advanced and returned to the original rows. A tab retained across promotion
+navigated successfully in 56ms. Signed-in saved persistence and purchases were
+not exercised. Screenshots and raw checks are in the execution workspace under
+`performance/market-table-hosted.json` and `performance/market-table-release/`.
+
+The first fresh desktop Tools load took 4,688ms to the hydrated-header/table
+marker and remains a performance miss. Later fresh diagnostic samples took
+1,878–2,363ms; their first response arrived in 177–201ms, while the document
+finished at 976–1,398ms. Neither the earlier landing-page cohort nor these three
+Tools observations establishes p95 or explains the first-load outlier. The next
+Web/DX package must separate streamed data completion from hydration and reduce
+confirmed unnecessary reads/imports before claiming a timing improvement.
+
+Health returned 200. Readiness remained 503 (`payments_unavailable`), with stale
+catalogue and quoting ready at this observation. RPC configuration and the
+Admin-only payment audience were unchanged; no purchase budget was spent.

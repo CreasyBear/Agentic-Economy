@@ -12,7 +12,7 @@ owns shipped source and environments.
 | Boundary | Next action / evidence |
 | --- | --- |
 | Production availability | Alchemy's existing Base project reports exhausted monthly capacity; Infura responds. Joel chose to leave Alchemy unchanged on 8 October. Preserve two-provider agreement and closed payment readiness; the separate US$25/month proposal is not activated. |
-| Account monthly cap — High | Authority/finance: source correction, independent review and full release gate complete for [MM-004](docs/operations/mercator-maturity-register.md#mm-004); deployment and hosted purchase qualification remain open. Existing Calls and Plan Holds now share one bounded admission fence, preserving accepted identity and recovery. |
+| Account monthly cap — High | Authority/finance: [MM-004](docs/operations/mercator-maturity-register.md#mm-004) correction deployed through PR #373; independent source review, full gate and read-only deployed recovery passed. Hosted purchase qualification remains blocked by unchanged RPC readiness. Existing Calls and Plan Holds share one bounded admission fence, preserving accepted identity and recovery. |
 | Alpha invitations | [#288](https://github.com/CreasyBear/Agentic-Economy/issues/288): Joel's go/no-go. Production remains Admin-only. |
 | Paid development chat | [#279](https://github.com/CreasyBear/Agentic-Economy/issues/279): real Base Sepolia journey, separate from completed mainnet CLI acceptance. |
 | Metering operations | Qualify hosted large-period exports, any historical backfill, automatic monthly schedule activation and financial-evidence archive operation in the actual environment. [Runbook](docs/operations/usage-metering.md). |
@@ -33,8 +33,8 @@ requests, deferred startup work, stable Convex ownership, Router-owned Market
 state, Calls before optional reports, bounded read cancellation and existing REUI
 loading states. Account isolation corrections cover cached data, private headers,
 portals and delayed notifications while preserving accepted-operation recovery.
-`npm run check` and the complete `npm run gate` pass. Source closeout is complete;
-no deployment.
+`npm run check` and the complete `npm run gate` passed. This lineage was deployed
+with [PR #373](docs/operations/deployments.md#8-october-alpha-readiness-release).
 
 The [deployment record](docs/operations/deployments.md#8-october-performance-and-resilience-candidate)
 owns measurements, evidence limits, compatibility and rollback. Local public warm
@@ -47,11 +47,11 @@ Next work stays with these owners:
 - **Web/DX:** protected-screen latency, hosted hydration, two-Account isolation
   and retained-browser/accepted-operation compatibility. The inherited
   render-time Chat identity ref flagged by the advisory React Doctor hook is
-  corrected in the alpha candidate; its abandoned-render regression passes. Local fixtures and test
+  corrected in the deployed alpha source; its abandoned-render regression passes. Local fixtures and test
   Clerk journeys do not replace Joel's deferred hosted acceptance.
 - **Authority/finance — MM-004:** repair the Account monthly-cap race confirmed by
   independent source review and two local guard cases. The correction is now
-  implemented and independently reviewed; complete its release and hosted
+  deployed and independently reviewed; complete its hosted
   qualification without waiving current payment readiness.
 - **Money/infrastructure — MM-041/MM-042:** qualify current RPC allowance and
   payment readiness, then coherent Convex/storage/Formance restoration. Native
@@ -60,9 +60,37 @@ Next work stays with these owners:
 - **Existing Datadog owner — [#284](https://github.com/CreasyBear/Agentic-Economy/issues/284):**
   current metrics, backup coverage, alert delivery and recovery evidence.
 
-Preserved unrelated whitepaper/strategy drafts and existing worktrees. No paid
-production Calls, cap/credential/failover changes, additional infrastructure,
-archived-worker activation or deployment promotion occurred.
+Preserved unrelated whitepaper/strategy drafts and existing worktrees. The web
+and backend release is recorded; no paid production Calls, cap/credential/failover
+changes, additional infrastructure or archived-worker activation occurred.
+
+The 8 October public loading re-audit retains the 4.275s hosted cold-entry miss.
+Five additional fresh anonymous desktop contexts measured 1.401–1.469s to the
+same usable marker (median 1.439s), with 178–193ms initial response times. This is
+diagnostic sampling, not a p95 or signed-in acceptance. The startup graph fetched
+153 JavaScript resources, about 2.16MB decoded excluding unreported cross-origin
+Clerk bytes. Web/DX's next bounded package is to remove the unused Discover/Host
+chat-recipient read, separate shared chrome contexts from admin recovery UI,
+and remove eager animation dependencies from static public surfaces. Then review
+off-route loader/contract imports using TanStack's maintained splitting. Compare
+emitted imports, bytes and repeated cold/warm timings; preserve disclosure,
+keyboard actions, admin recovery and Account isolation. Do not claim timing gains
+from source inspection alone. Broad HTML caching, infrastructure changes and
+telemetry removal are not part of the table repair.
+References: [React lazy boundaries](https://react.dev/reference/react/lazy),
+[TanStack route splitting](https://tanstack.com/router/latest/docs/guide/automatic-code-splitting)
+and [Motion bundle guidance](https://motion.dev/docs/react-reduce-bundle-size).
+The subsequent table release retains a separate 4.688s fresh desktop catalogue
+miss to hydrated header plus visible rows. Three additional fresh Tools traces
+took 1.878–2.363s to that combined marker; document completion alone took
+0.976–1.398s. For Tools, first trace the owning catalogue/overview/disclosure reads
+and SSR flush boundaries. The gap after the first response is 0.799–1.210s;
+browser evidence cannot separate upstream reads, SSR, streaming and transfer.
+Use [TanStack deferred loading](https://tanstack.com/router/latest/docs/guide/deferred-data-loading)
+for optional overview/comparison data only after attribution. Capture stage data
+with the next threshold miss. Retain the bundle work above; no long tasks were
+observed in these samples. These small anonymous cohorts across different views
+and releases do not establish a controlled improvement, protected navigation or p95.
 
 ## Platform UI upgrade — production journey qualification
 
@@ -101,6 +129,19 @@ lookup. The optional public Host-prefix reader is deployed with its matching web
 caller. It reuses an existing index and needs no data backfill.
 The populated local browser fixture uses synthetic read-only data. Hosted
 qualification stays open under Joel's deferral.
+
+The 8 October table repair replaces the public Tool, grouped Host and Host-index
+operator wrappers with the installed [REUI auto-width composition](https://reui.io/components/data-grid/c-data-grid-6).
+UI owns the composition; Registry/Money retain ordering, cursors, identity and
+price facts. The deployed defect was reproduced: five 150px columns left a 606px
+filler and clipped price decimals. Local actual-component checks with captured
+public catalogue data pass at six widths for each table, with keyboard Save,
+Compare state changes, saved-status failure/recovery, dark mode and horizontal
+table scrolling. Twelve affected tests, `npm run check` and the full source gate
+pass. [PR #374's web release](docs/operations/deployments.md#8-october-public-table-repair)
+also passes actual production desktop/mobile layout, Compare toggling, forward
+and back paging, and retained-browser navigation. This evidence does not qualify
+signed-in persistence, purchases or the unresolved cold-loading performance.
 
 The For Providers recut now uses licensed REUI Hero 14, generated Aecon artwork,
 the installed Stepper and Arc FAQ. Its supported setup scope is explicit; the
