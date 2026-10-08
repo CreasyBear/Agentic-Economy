@@ -344,3 +344,58 @@ requires reconciliation. Configuration and backend probes pass. Preserve that
 failure independently of UI release acceptance; paid production journeys and
 expanded Customer access are not qualified by this release. The release PR and
 subsequent readback record own the exact deployed tuple and outcomes.
+
+## 8 October platform UI production release
+
+[PR #370](https://github.com/CreasyBear/Agentic-Economy/pull/370) merged at
+02:44:56 UTC as `a4de76f2bf846646ddb303c2a6fb61b44a201841`. Joel authorized the
+coordinated production release and subsequent manual testing. The preceding
+candidate sections preserve historical preparation, not current deployment status.
+
+| Surface | Deployed or verified evidence |
+| --- | --- |
+| Source | `ce7a0e57e1fbc13a0bf8f0ff8d1bb5ecc99bab7a`, gated and read back from both web and backend. |
+| Web | `app.aecon.ai`, Vercel `agentic-economy`; `dpl_6wpnJZLa4aZmFLY6Y8oQQB5nZD7L`, built before backend cutover and promoted through the native CLI after merge. |
+| Backend | `cautious-zebra-473`; deployed from the exact committed-source archive. |
+| Contract/docs/client | OpenAPI `1.0.0-alpha.2`, 62 paths. Source gate verified 228 docs pages, 84 owner examples and packaged CLI on Node 20/22. No standalone docs deployment or authenticated installed-client qualification is claimed. |
+| Bindings | Existing `clerk.aecon.ai`, production Formance gateway/ledger and custody configuration retained; persisted payment audience read back as `admins`. |
+
+Inventory preparation retained the preceding production Quote/date-only contracts
+and added only the reviewed projection/schema/backfill changes. Native deploy
+deleted no indexes. The bounded backfill processed **1**, skipped **0**, and
+completed in one page. The final deployment enabled both name/text indexes;
+read-only probes returned the owned projection through each. No purchase,
+financial history or ledger rewrite occurred.
+
+`check` and the full `gate` passed: 9,538 unit tests, 3,118 integration tests,
+20 public browser checks, 20 accessibility checks, types, import/security
+boundaries, SEO, production build, docs and packaged CLI. Existing unavailable
+qualifications remain 1 unit skip, 77 integration skips/3 todos and 18 browser
+skips. Source fixtures do not replace authenticated production journeys.
+
+Post-promotion health is 200. Market, Provider, sign-in, OpenAPI, `/llms.txt` and
+`/SKILL.md` return 200. Anonymous browser inspection of Market, populated Tools,
+Provider and sign-in at 390/1440px found no uncaught JavaScript errors or document
+overflow. Recipient disclosures precede their actions. No paid Calls or account
+mutations were exercised; Joel's signed-in journey qualification remains open.
+
+Readiness remains 503: Base RPC reports `treasury_chain_unavailable`, treasury
+reports `treasury_reconciliation_required`, and the catalogue is stale. Those
+payment failures preceded the release. The post-release commercial probe also
+reports quoting unavailable; a populated directory is not proof of callable
+supply. Configuration/Convex probes pass. Money/Registry owners retain this work;
+no policy relaxation was used to clear it.
+
+Rollback reference: previous web `dpl_6QuZitnMGqaoLy8cyUESZVw5dWBF`, source
+`1cfe08489f3f3d3dfc36d2a37619c509e4924034`. Backend rollback must retain additive
+inventory fields now stored in projections; reverting the old schema alone is
+unsafe. Preserve accepted operations and financial history; financial recovery
+remains fix-forward. Automatic Git deployment from `main` remains disabled.
+
+**Sidebar visibility follow-up:** [PR #371](https://github.com/CreasyBear/Agentic-Economy/pull/371)
+owns the subsequent web-only release and its exact deployment receipt. It makes
+the desktop sidebar opt-in from the existing Display settings dropdown. Backend,
+domain modules, server handlers and deployment bindings have identical Git trees
+to `ce7a0e57`; that backend and the alpha.2 contract remain compatible without a
+backend redeploy. Read the PR receipt and `/api/v1/release` for the newer web
+revision; the coordinated release tuple above records the preceding rollout.

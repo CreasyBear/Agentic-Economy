@@ -1,5 +1,5 @@
 import { AeNavigationSafetyProvider } from './AeNavigationSafetyContext'
-import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, type CSSProperties, type ReactNode } from 'react'
 
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { WorkspaceSidebar } from './app-shell/WorkspaceSidebar'
@@ -11,6 +11,8 @@ import { OperatorChromeProvider } from '@/components/ae/layout/AeOperatorPage'
 import { KeyboardShortcutsDialog } from '@/components/ae/shortcuts/KeyboardShortcutsDialog'
 import { CommandPanelProvider } from '@/components/ae/command-panel'
 import { cn } from '@/lib/utils'
+import { useIsMobile } from '@/hooks/use-mobile'
+import { useAppearance } from '@/components/ae/theme/ThemeProvider'
 
 import { AeAppHeader } from './app-shell/AeAppHeader'
 import { ChatHeaderSlotProvider } from './app-shell/ChatHeaderSlot'
@@ -37,6 +39,15 @@ function usePublicDocumentFocus(pathname: string) {
 
 export function AeAppShell({ children }: { children: ReactNode }) {
   const shell = useAppShellState()
+  const { sidebarVisible, setSidebarVisible } = useAppearance()
+  const isMobile = useIsMobile()
+  const handleSidebarOpenChange = useCallback((visible: boolean) => {
+    if (!visible && document.activeElement instanceof HTMLElement
+      && document.activeElement.closest('[data-slot="sidebar"], [data-slot="sidebar-trigger"]')) {
+      document.querySelector<HTMLButtonElement>('[data-workspace-display-settings]')?.focus()
+    }
+    setSidebarVisible(visible)
+  }, [setSidebarVisible])
   usePublicDocumentFocus(shell.pathname)
   const chatFrame = shell.pathname.startsWith('/t/') || shell.pathname.startsWith('/s/')
   const contentClassName = cn(
@@ -80,8 +91,8 @@ export function AeAppShell({ children }: { children: ReactNode }) {
           // Keep this frame stable while Clerk resolves, so routed pages do not remount.
           <OperatorChromeProvider>
           <WorkspaceFrameContext.Provider value={shell.isSignedIn}>
-          <SidebarProvider className={cn('min-w-0 flex-1 [--sidebar-width:260px] [--sidebar-border:transparent]', chatFrame && 'h-full min-h-0 overflow-hidden')}>
-            {shell.isSignedIn ? <WorkspaceSidebar /> : null}
+          <SidebarProvider open={sidebarVisible} onOpenChange={handleSidebarOpenChange} className={cn('min-w-0 flex-1 [--sidebar-width:260px] [--sidebar-border:transparent]', chatFrame && 'h-full min-h-0 overflow-hidden')}>
+            {shell.isSignedIn && (isMobile || sidebarVisible) ? <WorkspaceSidebar /> : null}
             <SidebarInset className="min-w-0 rounded-none bg-transparent">
             <div
               data-shell="app-content"

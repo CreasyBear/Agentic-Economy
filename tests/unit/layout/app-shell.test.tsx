@@ -19,6 +19,8 @@ import '../../setup/jsdom-dialog'
 import type { OperatorSurface } from '@/lib/operator/operator-context'
 import { ChatHeader } from '@/components/ae/chat/chat-session/components/ChatHeader'
 import { AeAppShell } from '@/components/ae/layout/AeAppShell'
+import { ThemeProvider } from '@/components/ae/theme/ThemeProvider'
+import { SIDEBAR_VISIBILITY_STORAGE_KEY } from '@/lib/theme/theme-mode'
 
 vi.mock('@/lib/observability/funnel-client', () => ({
   emitFunnelEventOnce: vi.fn(),
@@ -59,6 +61,7 @@ vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({
 }))
 
 beforeEach(() => {
+  localStorage.setItem(SIDEBAR_VISIBILITY_STORAGE_KEY, 'true')
   clerkSignedIn.value = false
   clerkSignedIn.isLoaded = true
   clerkSignedIn.orgId = null
@@ -66,6 +69,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  localStorage.removeItem(SIDEBAR_VISIBILITY_STORAGE_KEY)
   vi.unstubAllEnvs()
   cleanup()
   entitlement.isAuthenticated = false
@@ -74,6 +78,46 @@ afterEach(() => {
 })
 
 describe('AeAppShell', () => {
+  it('hides the sidebar by default and remembers the dropdown choice without replacing page content', async () => {
+    localStorage.removeItem(SIDEBAR_VISIBILITY_STORAGE_KEY)
+    clerkSignedIn.value = true
+    const view = renderAppShell('/market', <textarea aria-label="Current draft" defaultValue="Keep my work" />)
+    const draft = screen.getByRole('textbox', { name: 'Current draft' })
+    expect(screen.queryByRole('navigation', { name: 'Workspace navigation' })).toBeNull()
+    expect(document.querySelector('[data-slot="sidebar-gap"]')).toBeNull()
+
+    const trigger = screen.getByRole('button', { name: 'Display settings' })
+    fireEvent.click(trigger)
+    const option = await screen.findByRole('menuitemcheckbox', { name: 'Show sidebar' })
+    expect(option.getAttribute('aria-checked')).toBe('false')
+    fireEvent.click(option)
+    expect(workspaceNavigation()).toBeTruthy()
+    expect(localStorage.getItem(SIDEBAR_VISIBILITY_STORAGE_KEY)).toBe('true')
+    expect(screen.getByRole('textbox', { name: 'Current draft', hidden: true })).toBe(draft)
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
+    await waitFor(() => expect(document.activeElement).toBe(trigger))
+
+    view.unmount()
+    const reloaded = renderAppShell('/market')
+    expect(workspaceNavigation()).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Display settings' }))
+    fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Show sidebar' }))
+    expect(document.querySelector('[data-slot="sidebar"]')).toBeNull()
+    expect(document.querySelector('[data-slot="sidebar-gap"]')).toBeNull()
+    expect(localStorage.getItem(SIDEBAR_VISIBILITY_STORAGE_KEY)).toBe('false')
+    reloaded.unmount()
+    renderAppShell('/market')
+    expect(screen.queryByRole('navigation', { name: 'Workspace navigation' })).toBeNull()
+    fireEvent.keyDown(window, { key: 'b', ctrlKey: true })
+    expect(workspaceNavigation()).toBeTruthy()
+    const close = within(screen.getByRole('banner')).getByRole('button', { name: 'Toggle workspace navigation' })
+    close.focus()
+    fireEvent.click(close)
+    expect(screen.queryByRole('navigation', { name: 'Workspace navigation' })).toBeNull()
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Display settings' }))
+  })
+
   it('renders exactly one persistent app header with the skip link and public primary nav', () => {
     clerkSignedIn.value = false
     renderAppShell()
@@ -410,7 +454,7 @@ function renderAppShell(pathname = clerkSignedIn.value ? '/market' : '/', childr
     history: createMemoryHistory({ initialEntries: [pathname] }),
   })
 
-  const tree = () => <RouterContextProvider router={router}><AeAppShell>{children}</AeAppShell></RouterContextProvider>
+  const tree = () => <RouterContextProvider router={router}><ThemeProvider><AeAppShell>{children}</AeAppShell></ThemeProvider></RouterContextProvider>
   const view = render(tree())
-  return { rerenderShell: () => view.rerender(tree()) }
+  return { rerenderShell: () => view.rerender(tree()), unmount: view.unmount }
 }

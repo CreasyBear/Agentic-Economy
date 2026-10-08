@@ -69,6 +69,8 @@ vi.mock('@/components/ae/command-panel', () => ({
 
 
 import { AeAppShell } from '@/components/ae/layout/AeAppShell'
+import { ThemeProvider } from '@/components/ae/theme/ThemeProvider'
+import { SIDEBAR_VISIBILITY_STORAGE_KEY } from '@/lib/theme/theme-mode'
 import { AeOperatorPage, OperatorChromeProvider } from '@/components/ae/layout/AeOperatorPage'
 import { OperatorRouteError, OperatorRouteNotFound, OperatorRoutePending } from '@/components/ae/layout/AeRouteStates'
 import {
@@ -79,11 +81,15 @@ import { Route as OperatorLayoutRoute } from '@/routes/_operator'
 import { Route as AgentAccessRoute } from '@/routes/_operator/agent-access'
 
 
-beforeEach(() => vi.stubEnv('VITE_CONVEX_URL', 'http://127.0.0.1:3210'))
+beforeEach(() => {
+  vi.stubEnv('VITE_CONVEX_URL', 'http://127.0.0.1:3210')
+  localStorage.setItem(SIDEBAR_VISIBILITY_STORAGE_KEY, 'true')
+})
 
 afterEach(() => {
   vi.unstubAllEnvs()
   cleanup()
+  localStorage.removeItem(SIDEBAR_VISIBILITY_STORAGE_KEY)
   shellMocks.readAgentKeys.mockReset()
   shellMocks.readAgentKeys.mockResolvedValue([])
   shellMocks.useUser.mockClear()
@@ -306,7 +312,7 @@ describe('operator shell nested chrome', () => {
 
 })
 
-describe('persistent workspace navigation', () => {
+describe('opt-in workspace navigation', () => {
   function navigation() { return screen.getByRole('navigation', { name: 'Workspace navigation' }) }
 
   it('uses native route navigation and focuses committed main content', async () => {
@@ -528,5 +534,5 @@ function renderAt(ui: ReactElement, pathname: string) {
     history: createMemoryHistory({ initialEntries: [pathname] }),
   })
 
-  return render(<RouterContextProvider router={router}>{ui}</RouterContextProvider>)
+  return render(<RouterContextProvider router={router}><ThemeProvider>{ui}</ThemeProvider></RouterContextProvider>)
 }

@@ -2,6 +2,7 @@ export type AppearancePreference = 'light' | 'dark' | 'system'
 export type ResolvedAppearance = 'light' | 'dark'
 
 export const THEME_STORAGE_KEY = 'ae-theme'
+export const SIDEBAR_VISIBILITY_STORAGE_KEY = 'ae-show-sidebar'
 export const DEFAULT_APPEARANCE_PREFERENCE: AppearancePreference = 'light'
 
 export function parseStoredAppearance(raw: string | null): AppearancePreference {
