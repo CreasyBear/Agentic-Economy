@@ -56,15 +56,13 @@ afterEach(() => {
 })
 
 describe('ThemeToggle', () => {
-  it('keeps the sidebar control usable when browser storage is blocked', async () => {
+  it('keeps appearance usable when browser storage is blocked', async () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('Storage blocked') })
     vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('Storage blocked') })
-    render(<ThemeProvider><ThemeToggle workspace /></ThemeProvider>)
-    fireEvent.click(screen.getByRole('button', { name: 'Display settings' }))
-    const toggle = await screen.findByRole('menuitemcheckbox', { name: 'Show sidebar' })
-    expect(toggle).toHaveAttribute('aria-checked', 'false')
-    fireEvent.click(toggle)
-    expect(toggle).toHaveAttribute('aria-checked', 'true')
+    renderThemeToggle()
+    openAppearanceMenu()
+    fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Dark' }))
+    expect(document.documentElement.classList.contains('dark')).toBe(true)
   })
 
   it('T1: renders trigger with an accessible appearance label', () => {

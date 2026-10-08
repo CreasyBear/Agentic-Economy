@@ -70,7 +70,6 @@ vi.mock('@/components/ae/command-panel', () => ({
 
 import { AeAppShell } from '@/components/ae/layout/AeAppShell'
 import { ThemeProvider } from '@/components/ae/theme/ThemeProvider'
-import { SIDEBAR_VISIBILITY_STORAGE_KEY } from '@/lib/theme/theme-mode'
 import { AeOperatorPage, OperatorChromeProvider } from '@/components/ae/layout/AeOperatorPage'
 import { OperatorRouteError, OperatorRouteNotFound, OperatorRoutePending } from '@/components/ae/layout/AeRouteStates'
 import {
@@ -83,13 +82,11 @@ import { Route as AgentAccessRoute } from '@/routes/_operator/agent-access'
 
 beforeEach(() => {
   vi.stubEnv('VITE_CONVEX_URL', 'http://127.0.0.1:3210')
-  localStorage.setItem(SIDEBAR_VISIBILITY_STORAGE_KEY, 'true')
 })
 
 afterEach(() => {
   vi.unstubAllEnvs()
   cleanup()
-  localStorage.removeItem(SIDEBAR_VISIBILITY_STORAGE_KEY)
   shellMocks.readAgentKeys.mockReset()
   shellMocks.readAgentKeys.mockResolvedValue([])
   shellMocks.useUser.mockClear()
@@ -164,7 +161,7 @@ describe('operator shell nested chrome', () => {
     expect(screen.getAllByRole('heading', { level: 1 }).map(({ textContent }) => textContent)).toEqual(['Page not found'])
     expect(screen.getAllByRole('main')).toHaveLength(1)
     expect(screen.getAllByTestId('skip-to-content')).toHaveLength(1)
-    expect(screen.getAllByRole('navigation', { name: 'Workspace navigation' })).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: 'Workspace menu' })).toHaveLength(1)
     expect(screen.queryByRole('navigation', { name: 'App navigation' })).toBeNull()
     expect(screen.queryByRole('navigation', { name: 'Primary' })).toBeNull()
 
@@ -312,40 +309,49 @@ describe('operator shell nested chrome', () => {
 
 })
 
-describe('opt-in workspace navigation', () => {
-  function navigation() { return screen.getByRole('navigation', { name: 'Workspace navigation' }) }
+describe('header dropdown navigation', () => {
+  function navigation() {
+    if (!screen.queryByRole('menu', { name: 'Workspace menu' })) fireEvent.click(screen.getByRole('button', { name: 'Workspace menu' }))
+    return screen.getByRole('menu', { name: 'Workspace menu' })
+  }
+  function providerNavigation() {
+    if (!screen.queryByRole('menu', { name: 'Provider' })) fireEvent.click(within(navigation()).getByRole('menuitem', { name: 'Provider' }))
+    return screen.getByRole('menu', { name: 'Provider' })
+  }
 
   it('uses native route navigation and focuses committed main content', async () => {
     renderOperatorShell('owner', '/owner/operations')
-    fireEvent.click(within(navigation()).getByRole('link', { name: 'Activity' }))
+    fireEvent.click(within(navigation()).getByRole('menuitem', { name: 'Activity' }))
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('main')))
     expect(screen.queryByRole('menu')).toBeNull()
-    expect(screen.getAllByRole('navigation', { name: 'Workspace navigation' })).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: 'Workspace menu' })).toHaveLength(1)
   })
 
   it('marks the committed destination after navigation without a document reload', async () => {
     renderOperatorShell('owner', '/owner/operations')
-    fireEvent.click(within(navigation()).getByRole('link', { name: 'Activity' }))
-    await waitFor(() => expect(within(navigation()).getByRole('link', { name: 'Activity' }).getAttribute('aria-current')).toBe('page'))
-    expect(within(navigation()).getByRole('link', { name: 'Tools' }).getAttribute('aria-current')).toBeNull()
+    fireEvent.click(within(navigation()).getByRole('menuitem', { name: 'Activity' }))
+    await waitFor(() => expect(within(navigation()).getByRole('menuitem', { name: 'Activity' }).getAttribute('aria-current')).toBe('page'))
+    expect(within(providerNavigation()).getByRole('menuitem', { name: 'Tools' }).getAttribute('aria-current')).toBeNull()
   })
 
-  it('keeps every current Account destination in one sidebar', () => {
+  it('keeps destinations in one menu with Provider maintenance in its submenu', () => {
     renderOperatorShell('owner', '/owner/operations')
-    const links = within(navigation()).getAllByRole('link')
-    expect(links.map(link => link.textContent)).toEqual(['Market', 'Ask', 'Agents', 'Activity', 'Credit', 'Tools', 'Earnings', 'Settings', 'Support', 'Status'])
-    expect(links.map(link => link.getAttribute('href'))).toEqual(['/market', '/t/new', '/agent-access', '/activity', '/owner/credit', '/owner/operations', '/owner/operations#earnings', '/owner/settings', '/support', '/status'])
-    expect(within(navigation()).getByRole('link', { name: 'Tools' }).getAttribute('aria-current')).toBe('page')
-    expect(within(navigation()).getByRole('link', { name: 'Settings' }).getAttribute('aria-current')).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Workspace menu' })).toBeNull()
+    const links = Array.from(navigation().querySelectorAll('a'))
+    expect(links.map(link => link.textContent)).toEqual(['Market', 'Ask', 'Agents', 'Activity', 'Credit', 'Settings', 'Support', 'Status', 'Developer docs'])
+    expect(links.map(link => link.getAttribute('href'))).toEqual(['/market', '/t/new', '/agent-access', '/activity', '/owner/credit', '/owner/settings', '/support', '/status', '/developers/api'])
+    expect(within(navigation()).getByRole('menuitem', { name: 'Settings' }).getAttribute('aria-current')).toBeNull()
+    const provider = providerNavigation()
+    expect(within(provider).getByRole('menuitem', { name: 'Tools' }).getAttribute('aria-current')).toBe('page')
+    expect(within(provider).getByRole('menuitem', { name: 'Earnings' }).getAttribute('href')).toBe('/owner/operations#earnings')
+    expect(document.querySelector('[data-slot="sidebar"]')).toBeNull()
   })
 
   it('uses one navigation owner for resources, receipts and authorized Admin pages', () => {
     const owner = renderOperatorShell('owner', '/owner/operations')
-    expect(within(navigation()).getByRole('link', { name: 'Tools' }).getAttribute('aria-current')).toBe('page')
+    expect(within(providerNavigation()).getByRole('menuitem', { name: 'Tools' }).getAttribute('aria-current')).toBe('page')
     owner.unmount()
     const receipt = renderOperatorShell('owner', '/calls/call_test_123')
-    expect(within(navigation()).getByRole('link', { name: 'Activity' }).getAttribute('aria-current')).toBe('page')
+    expect(within(navigation()).getByRole('menuitem', { name: 'Activity' }).getAttribute('aria-current')).toBe('page')
     receipt.unmount()
     shellMocks.canAccessAdmin = true
     renderOperatorShell('admin', '/admin')
@@ -356,7 +362,7 @@ describe('opt-in workspace navigation', () => {
     renderOperatorShell('owner', '/owner/operations')
     const content = document.querySelector('[data-shell="app-content"]')
     expect(content?.classList.contains('pb-[calc(var(--ae-mobile-nav-height)+env(safe-area-inset-bottom,0px))]')).toBe(false)
-    for (const link of within(navigation()).getAllByRole('link')) {
+    for (const link of Array.from(navigation().querySelectorAll('a'))) {
       expect(link.tagName).toBe('A')
       link.focus()
       expect(document.activeElement).toBe(link)

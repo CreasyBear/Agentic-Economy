@@ -18,7 +18,6 @@ import {
   resolveAppearance,
   DEFAULT_APPEARANCE_PREFERENCE,
   THEME_STORAGE_KEY,
-  SIDEBAR_VISIBILITY_STORAGE_KEY,
   type AppearancePreference,
   type ResolvedAppearance,
 } from '@/lib/theme/theme-mode'
@@ -27,8 +26,6 @@ type ThemeProviderState = {
   preference: AppearancePreference
   resolved: ResolvedAppearance
   setPreference: (preference: AppearancePreference) => void
-  sidebarVisible: boolean
-  setSidebarVisible: (visible: boolean) => void
 }
 
 const ThemeContext = createContext<ThemeProviderState | undefined>(undefined)
@@ -66,7 +63,6 @@ export function ThemeProvider({
 }) {
   const [preference, setPreferenceState] = useState<AppearancePreference>(defaultTheme)
   const [prefersDark, setPrefersDark] = useState(false)
-  const [sidebarVisible, setSidebarVisibleState] = useState(false)
 
   useEffect(() => {
     const fromDataset = document.documentElement.dataset.appearancePreference ?? null
@@ -78,26 +74,6 @@ export function ThemeProvider({
     setPrefersDark(readPrefersDark())
     applyAppearance(stored)
   }, [storageKey])
-
-  useEffect(() => {
-    try {
-      setSidebarVisibleState(localStorage.getItem(SIDEBAR_VISIBILITY_STORAGE_KEY) === 'true')
-    } catch { /* Keep the default when browser storage is unavailable. */ }
-    const onStorage = (event: StorageEvent) => {
-      if (event.key === SIDEBAR_VISIBILITY_STORAGE_KEY || event.key === null) {
-        setSidebarVisibleState(event.newValue === 'true')
-      }
-    }
-    window.addEventListener('storage', onStorage)
-    return () => window.removeEventListener('storage', onStorage)
-  }, [])
-
-  const setSidebarVisible = useCallback((visible: boolean) => {
-    setSidebarVisibleState(visible)
-    try {
-      localStorage.setItem(SIDEBAR_VISIBILITY_STORAGE_KEY, String(visible))
-    } catch { /* The control still works for this visit. */ }
-  }, [])
 
   useEffect(() => {
     if (preference !== 'system') {
@@ -127,10 +103,8 @@ export function ThemeProvider({
       preference,
       resolved,
       setPreference,
-      sidebarVisible,
-      setSidebarVisible,
     }),
-    [preference, resolved, setPreference, sidebarVisible, setSidebarVisible],
+    [preference, resolved, setPreference],
   )
 
   return (
@@ -148,8 +122,6 @@ export function useAppearance(): ThemeProviderState {
       preference: DEFAULT_APPEARANCE_PREFERENCE,
       resolved: 'light',
       setPreference: () => {},
-      sidebarVisible: false,
-      setSidebarVisible: () => {},
     }
   }
   return context
