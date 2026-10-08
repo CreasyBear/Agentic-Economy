@@ -73,6 +73,12 @@
   },
   {
     "visibility": "public",
+    "module": "adminConsoleAudit",
+    "method": "readAdminCommandReceipt",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
     "module": "adminConsoleExceptions",
     "method": "listAdminExceptionsPage",
     "kind": "query"
@@ -1617,6 +1623,12 @@
     "visibility": "internal",
     "module": "capabilityProviderTools",
     "method": "backfillDraftPage",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityProviderTools",
+    "method": "backfillInventoryPage",
     "kind": "mutation"
   },
   {
@@ -3180,6 +3192,12 @@
     "kind": "query"
   },
   {
+    "visibility": "public",
+    "module": "moneyLedger",
+    "method": "readOwnerProviderEarningsPage",
+    "kind": "query"
+  },
+  {
     "visibility": "internal",
     "module": "moneyManagedCall",
     "method": "attachReservation",
@@ -4299,6 +4317,12 @@
     "visibility": "public",
     "module": "workspaceAccounts",
     "method": "readWorkspaceOrganizationBinding",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "workspaceAccounts",
+    "method": "readWorkspaceTerminalReceipt",
     "kind": "query"
   },
   {

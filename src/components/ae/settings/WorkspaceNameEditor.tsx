@@ -10,26 +10,28 @@ import { renameWorkspaceServer } from '@/lib/server/workspace-profile.functions'
 import './IdentityFieldsComposition.css'
 const renameUnboundWorkspaceRef = makeFunctionReference<
   'mutation',
-  Readonly<{ name: string; expectedRevision: number; correlationRef: string; idempotencyRef: string }>,
+  Readonly<{ name: string; expectedAccountRef: string; expectedRevision: number; correlationRef: string; idempotencyRef: string }>,
   Readonly<{ kind: 'updated' | 'replayed' | 'unchanged'; name: string }>
 >('workspaceAccounts:renameUnboundWorkspace')
 
 export type WorkspaceNameEditorProps = Readonly<{
   name: string
+  accountRef: string
   canonicalName: string
   accountRevision: number
   clerkOrgId: string | null
   canEdit: boolean
 }>
 
-export function WorkspaceNameEditor({ name, canonicalName, accountRevision, clerkOrgId, canEdit }: WorkspaceNameEditorProps) {
+export function WorkspaceNameEditor({ name, accountRef, canonicalName, accountRevision, clerkOrgId, canEdit }: WorkspaceNameEditorProps) {
   const renameUnboundWorkspace = useMutation(renameUnboundWorkspaceRef)
   const idempotencyRef = useRef(`idem:workspace-name:${crypto.randomUUID()}`)
+  const replayPayload = useRef<Parameters<typeof renameUnboundWorkspace>[0] | null>(null)
   const [draft, setDraft] = useState(name)
   const [requestedName, setRequestedName] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
   const [message, setMessage] = useState('')
-  const [saveOutcome, setSaveOutcome] = useState<'idle' | 'saved' | 'failed'>('idle')
+  const [saveOutcome, setSaveOutcome] = useState<'idle' | 'saved' | 'failed' | 'outcome_unknown'>('idle')
   const [observedIdentity, setObservedIdentity] = useState({ name, canonicalName })
   const confirmationSeenRef = useRef(false)
   const saveRef = useRef<HTMLButtonElement>(null)
@@ -45,8 +47,8 @@ export function WorkspaceNameEditor({ name, canonicalName, accountRevision, cler
       setMessage('Workspace name saved and confirmed.')
       setSaveOutcome('saved')
     } else if (requestedName === null) {
-      setDraft(name)
-      setSaveOutcome('idle')
+      if (draft.trim() === observedIdentity.name.trim()) { setDraft(name); setSaveOutcome('idle') }
+      else { setMessage(`The recorded name changed to ${name}. Your draft is retained; review it before saving.`) }
     }
   }
   // Commit this readback before an in-flight promise can overwrite its feedback.
@@ -56,8 +58,9 @@ export function WorkspaceNameEditor({ name, canonicalName, accountRevision, cler
 
   const normalized = draft.trim()
   const invalid = normalized.length === 0 || normalized.length > 200 || !/^[\p{L}\p{N}\p{P}\p{S}\p{Zs}]+$/u.test(normalized)
-  const waitingForConfirmation = pending || requestedName !== null
-  const submitDisabled = waitingForConfirmation || invalid || normalized === canonicalName
+  const unknown = saveOutcome === 'outcome_unknown'
+  const waitingForConfirmation = pending || (requestedName !== null && !unknown)
+  const submitDisabled = waitingForConfirmation || invalid || (normalized === canonicalName && !unknown)
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -69,45 +72,47 @@ export function WorkspaceNameEditor({ name, canonicalName, accountRevision, cler
     setMessage('Saving workspace name…')
     void (async () => {
       if (clerkOrgId === null) {
-        await renameUnboundWorkspace({
+        replayPayload.current ??= {
+          expectedAccountRef: accountRef,
           name: normalized,
           expectedRevision: accountRevision,
           correlationRef: 'ui:workspace-name:save',
           idempotencyRef: idempotencyRef.current,
-        })
+        }
+        await renameUnboundWorkspace(replayPayload.current)
         idempotencyRef.current = `idem:workspace-name:${crypto.randomUUID()}`
         if (!confirmationSeenRef.current) setMessage('Name saved. Waiting for the workspace to confirm it…')
         return
       }
-      const result = await renameWorkspaceServer({ data: { name: normalized } })
+      const result = await renameWorkspaceServer({ data: { expectedAccountRef: accountRef, name: normalized } })
       if (result.kind === 'refused') {
         if (confirmationSeenRef.current) return
-        setRequestedName(null)
-        setSaveOutcome('failed')
+        if (result.code === 'forbidden') setRequestedName(null)
+        setSaveOutcome(result.code === 'forbidden' ? 'failed' : 'outcome_unknown')
         setMessage(result.code === 'forbidden'
           ? 'Only the workspace owner can change its name.'
-          : 'Name was not saved. Try again; the existing name is unchanged.')
+          : 'Name update is unconfirmed. Retry the same name, or wait for the workspace to confirm it.')
       } else {
         if (!confirmationSeenRef.current) setMessage('Name saved. Waiting for the workspace to confirm it…')
       }
     })().catch((cause: unknown) => {
       captureClientExceptionOnClient(cause)
       if (confirmationSeenRef.current) return
-      setRequestedName(null)
-      setSaveOutcome('failed')
-      setMessage('Name was not saved. Try again; the existing name is unchanged.')
+      setSaveOutcome('outcome_unknown')
+      setMessage('Name update is unconfirmed. Retry the same name, or wait for the workspace to confirm it.')
     }).finally(() => setPending(false))
   }
 
   if (!canEdit) return <span className="arc-market arc-identity-editor arc-identity-readonly">{name}</span>
 
-  const dirty = normalized !== name.trim()
+  const dirty = normalized !== name.trim() || requestedName !== null || pending || unknown
   let saveBarState: 'edit' | 'saving' | 'saved' | null = null
   if (saveOutcome === 'saved') saveBarState = 'saved'
   if (dirty) saveBarState = 'edit'
   if (waitingForConfirmation) saveBarState = 'saving'
   let saveLabel = 'Save workspace name'
   if (requestedName !== null) saveLabel = 'Confirming…'
+  if (unknown) saveLabel = 'Retry same rename'
   if (pending) saveLabel = 'Saving…'
   return (
     <AeNavigationSafetyBoundary
@@ -116,18 +121,18 @@ export function WorkspaceNameEditor({ name, canonicalName, accountRevision, cler
       state={{ dirty, pending, saveOutcome }}
       title={requestedName === null ? 'Leave without saving the workspace name?' : 'Leave before the workspace name is confirmed?'}
       pendingTitle="Workspace name is still saving"
-      description={requestedName === null ? 'The name you typed will be discarded.' : 'The rename request was accepted. Check the workspace name when you return.'}
-      pendingDescription="Wait until the save finishes. The current name is unchanged until it confirms."
+      description={unknown ? 'The rename may have been recorded. Check the workspace name when you return.' : requestedName === null ? 'The name you typed will be discarded.' : 'The rename request was accepted. Check the workspace name when you return.'}
+      pendingDescription="Wait for the rename response before leaving."
       saveActionRef={saveRef}
       headingRef={inputRef}
     >
       <form onSubmit={onSubmit} className="arc-market arc-identity-editor">
         <div role="group" data-invalid={invalid || undefined} className="arc-identity-field">
           <label htmlFor="workspace-name" className="sr-only">Workspace name</label>
-          <input ref={inputRef} type="text" id="workspace-name" className="arc-identity-input" value={draft} maxLength={200} disabled={waitingForConfirmation}
+          <input ref={inputRef} type="text" id="workspace-name" className="arc-identity-input" value={draft} maxLength={200} disabled={waitingForConfirmation || unknown}
             aria-invalid={invalid} spellCheck={false}
             aria-describedby={invalid ? 'workspace-name-error' : undefined}
-            onChange={(event) => { setDraft(event.currentTarget.value); setMessage(''); setSaveOutcome('idle') }} />
+            onChange={(event) => { setDraft(event.currentTarget.value); setMessage(''); setSaveOutcome('idle'); replayPayload.current = null; idempotencyRef.current = `idem:workspace-name:${crypto.randomUUID()}` }} />
           {invalid ? <p id="workspace-name-error" role="alert" className="arc-identity-error">Enter a name of 1 to 200 characters.</p> : null}
         </div>
         <SettingsSaveBar

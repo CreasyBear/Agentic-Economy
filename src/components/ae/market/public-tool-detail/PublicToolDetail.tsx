@@ -1,3 +1,4 @@
+import { MarketBackButton } from './MarketBackButton'
 import { Link } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 import { recordProductJourney } from '@/lib/observability/product-journey'
@@ -70,7 +71,7 @@ export function PublicToolDetail({ result }: PublicToolDetailProps) {
         title={decisionView.title}
         {...(decisionView.outcome === undefined ? {} : { summary: decisionView.outcome })}
         surfaceLabel="Admitted Tool"
-        breadcrumb={<><Link to="/market">Market</Link><span aria-hidden="true"> / </span><span aria-current="page">Tool</span></>}
+        breadcrumb={<><MarketBackButton label="Back to results" className="min-h-touch" variant="ghost" /><span aria-hidden="true"> / </span><span aria-current="page">Tool</span></>}
         {...(decisionView.price === undefined ? {} : { priceLabel: decisionView.price.label })}
         facts={<>
           <ToolFacts view={{ title: decisionView.title, listing, readiness: decisionView.readiness }} />

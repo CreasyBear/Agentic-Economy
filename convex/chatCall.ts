@@ -9,6 +9,8 @@ import { internalAction, internalQuery, query } from './_generated/server'
 import { internalMutation } from './usageTrackedMutation'
 import { trustedChatAuthorityValue } from './lib/chat/turns/contracts'
 import { principalValue } from './lib/capabilityExecution/callLifecycle/contracts'
+import { approvalDecisionContextValue } from './lib/capabilityExecution/callLifecycle/admissionApproval'
+import { readCallApprovalDecisionContext } from './lib/capabilityExecution/callLifecycle/admissionApprovals'
 import { requireChatOwner } from './chatThreads'
 import { resolveOwnerChatActor } from './lib/chat/threads/listing'
 import { chatThreadBelongsToPrincipal } from './lib/chat/threads/ownership'
@@ -51,6 +53,11 @@ const pendingCardValue = v.object({
   quoteAmount: amountValue, expiresAt: v.number(), inputSummary: v.string(),
   remainingCap: v.optional(v.object({ amount: amountValue, window: v.string() })),
   blockedReason: v.optional(v.string()),
+  decisionContext: v.optional(approvalDecisionContextValue),
+  acceptedIdentity: v.optional(v.object({
+    accountRef: v.string(), toolRef: v.string(), toolVersion: v.number(),
+    grantRef: v.string(), grantGeneration: v.number(), policyDigest: v.string(),
+  })),
 })
 const outcomeCardValue = v.object({
   kind: v.literal('result'), turnRef: v.string(), callRef: v.string(),
@@ -121,11 +128,17 @@ export const readOwnerChatCards = query({
             ? validCandidates.reduce((minimum, item) => BigInt(item.units) < BigInt(minimum.units)
               ? item : minimum)
             : null
+          const decisionContext = await readCallApprovalDecisionContext(ctx, call)
           result.push({
             kind: 'pending', turnRef: turn.turnRef, callRef, quoteRef: quote.quoteRef,
             toolRef: call.toolRef, toolName: tool.contract.name, provider,
             quoteAmount: { currency: 'AUD', units: quote.decisionAudUnits, exponent: 6 },
             expiresAt: quote.expiresAt, inputSummary: quote.normalizedInputJson,
+            ...(decisionContext === undefined ? {} : { decisionContext }),
+            ...(decisionContext?.acceptedQuote.kind !== 'available' ? {} : { acceptedIdentity: {
+              accountRef: quote.accountRef, toolRef: quote.toolRef, toolVersion: quote.toolVersion,
+              grantRef: quote.grantRef, grantGeneration: quote.grantGeneration, policyDigest: quote.grantPolicyDigest,
+            } }),
             ...(binding === null
               ? { blockedReason: 'Remaining spend cap cannot be verified. Approval is unavailable; request a fresh Quote.' }
               : { remainingCap: { amount: { currency: 'AUD', exponent: 6,

@@ -1,4 +1,5 @@
 /** @vitest-environment jsdom */
+import { getFunctionName } from 'convex/server'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type * as ClerkModule from '@clerk/tanstack-react-start'
 import {
@@ -9,7 +10,7 @@ import {
   createRouter,
 } from '@tanstack/react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-const clerkAuth = vi.hoisted(() => ({ orgId: null as string | null, isLoaded: true }))
+const clerkAuth = vi.hoisted(() => ({ orgId: null as string | null, isLoaded: true, isSignedIn: true, userId: 'user-current', sessionId: 'session-current' }))
 const reviewAccess = vi.hoisted(() => ({ error: null as Error | null }))
 
 vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({
@@ -19,7 +20,8 @@ vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({
   useAuth: () => clerkAuth,
 }))
 vi.mock('@/components/ae/command-panel', () => ({ AeCommandPanel: () => null }))
-vi.mock('convex/react', () => ({ useQuery: () => {
+vi.mock('convex/react', () => ({ useQuery: (query: Parameters<typeof getFunctionName>[0]) => {
+  if (getFunctionName(query) !== 'adminConsoleAudit:readAdminAuditAccess') return undefined
   if (reviewAccess.error !== null) throw reviewAccess.error
   return { kind: 'allowed', role: 'support' }
 } }))
@@ -28,8 +30,6 @@ vi.mock('@/components/ae/layout/AeNetworkHealthIndicator', () => ({
   AeNetworkHealthIndicator: () => null,
 }))
 vi.mock('@/components/ae/layout/ThemeToggle', () => ({ ThemeToggle: () => null }))
-vi.mock('@/components/ae/layout/app-shell/OperatorWorkspaceMenu', () => ({ OperatorWorkspaceMenu: () => null }))
-vi.mock('@/components/ae/layout/app-shell/WorkspaceMenu', () => ({ WorkspaceMenu: () => null }))
 vi.mock('@/components/ae/website/AeSiteNav', () => ({
   AeSiteDrawerNav: () => null,
   AeSiteIconButton: () => null,
@@ -37,6 +37,8 @@ vi.mock('@/components/ae/website/AeSiteNav', () => ({
 }))
 
 import { AeAppHeader } from '@/components/ae/layout/app-shell/AeAppHeader'
+import { WorkspaceTransitionBoundary } from '@/components/ae/layout/WorkspaceTransitionBoundary'
+import { SidebarProvider } from '@/components/ui/sidebar'
 import { OperatorChromeProvider } from '@/components/ae/layout/AeOperatorPage'
 import { AdminCallObjectPage } from '@/components/ae/admin/call-object/AdminCallObjectPage'
 import { ADMIN_CALL_OBJECT_COPY } from '@/components/ae/admin/call-object/call-object.contracts'
@@ -100,10 +102,9 @@ function renderCallPage(view: AdminCallView = uncertainView) {
   const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }) })
   const renderTree = () => (
     <RouterContextProvider router={router}>
-      <OperatorChromeProvider>
+      <SidebarProvider><OperatorChromeProvider>
         <AeAppHeader
           signedIn
-          operatorRole="admin"
           minimal={false}
           mobileNavOpen={false}
           setMobileNavOpen={() => undefined}
@@ -111,8 +112,8 @@ function renderCallPage(view: AdminCallView = uncertainView) {
           hydrated
           chatFrame={false}
         />
-        <AdminCallObjectPage result={view} />
-      </OperatorChromeProvider>
+        <WorkspaceTransitionBoundary><AdminCallObjectPage result={view} /></WorkspaceTransitionBoundary>
+      </OperatorChromeProvider></SidebarProvider>
     </RouterContextProvider>
   )
   const rendered = render(renderTree())
@@ -157,8 +158,14 @@ describe('/admin/calls/$callRef', () => {
     expect(within(table).getByRole('button', { name: 'Sort by Model' })).toBeTruthy()
     expect(within(table).getAllByRole('columnheader')[2]?.getAttribute('aria-sort')).toBeNull()
     expect(within(table).getAllByRole('columnheader')[3]?.getAttribute('aria-sort')).toBeNull()
-    expect(within(table).getAllByRole('columnheader')[2]?.hasAttribute('data-numeric')).toBe(true)
-    expect(within(table).getAllByRole('columnheader')[3]?.hasAttribute('data-numeric')).toBe(true)
+    for (const index of [2, 3]) {
+      expect(within(table).getAllByRole('columnheader')[index]?.classList.contains('text-end')).toBe(true)
+      for (const row of requestRows()) {
+        const cell = within(row).getAllByRole('cell')[index]
+        expect(cell?.hasAttribute('data-numeric')).toBe(true)
+        expect(cell?.classList.contains('tabular-nums')).toBe(true)
+      }
+    }
     expect(within(table).getByText('test/actual')).toBeTruthy()
     expect(within(table).getByText('Reported model')).toBeTruthy()
     expect(within(table).getByText('~typesafe/jev-latest')).toBeTruthy()

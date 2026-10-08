@@ -7,6 +7,7 @@ import '../../setup/jsdom-platform'
 vi.mock('@tanstack/react-router', async () => {
   const React = await import('react')
   return {
+    useRouter: () => undefined,
     Link: React.forwardRef(function MockLink({ children, to, hash, ...props }: { children: ReactNode; to: string; hash?: string }, ref: React.Ref<HTMLAnchorElement>) {
       return <a ref={ref} href={`${to}${hash === undefined ? '' : `#${hash}`}`} {...props}>{children}</a>
     }),
@@ -81,7 +82,7 @@ describe('owner workspace settings surfaces', () => {
     fireEvent.change(input, { target: { value: requestedName } })
     const save = screen.getByRole('button', { name: 'Save public name' })
     fireEvent.click(save)
-    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('existing public name is unchanged'))
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('The rename may have been recorded'))
     expect(onRename).toHaveBeenCalledTimes(1)
     const firstRequest = onRename.mock.calls[0]?.[0]
     expect(firstRequest).toEqual({ businessId: identity.businessId, name: requestedName, requestKey: expect.any(String) })
@@ -107,7 +108,7 @@ describe('owner workspace settings surfaces', () => {
     render(<AeWorkspaceGeneral result={{ kind: 'available', readback: buildPublicOwnerStatusReadback(catalog) }} onRename={onRename} />)
     fireEvent.change(screen.getByRole('textbox', { name: 'Public Provider name' }), { target: { value: 'Name still here' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save public name' }))
-    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('existing public name is unchanged'))
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('The rename may have been recorded'))
     expect(screen.getByDisplayValue('Name still here')).toBeTruthy()
     expect(document.body.textContent).not.toContain('private upstream detail')
   })
@@ -115,15 +116,16 @@ describe('owner workspace settings surfaces', () => {
   it('reuses the rename request key until the user changes the command', async () => {
     const onRename = vi.fn()
       .mockResolvedValueOnce({ kind: 'refused', code: 'source_unavailable' })
-      .mockResolvedValueOnce({ kind: 'refused', code: 'source_unavailable' })
+      .mockResolvedValueOnce({ kind: 'updated', businessId: catalog.businessId, slug: catalog.slug, name: 'Quote Works One' })
       .mockResolvedValueOnce({ kind: 'updated', businessId: catalog.businessId, slug: catalog.slug, name: 'Quote Works Two' })
     render(<AeWorkspaceGeneral result={{ kind: 'available', readback: buildPublicOwnerStatusReadback(catalog) }} onRename={onRename} />)
     const input = screen.getByRole('textbox', { name: 'Public Provider name' })
     fireEvent.change(input, { target: { value: 'Quote Works One' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save public name' }))
     await waitFor(() => expect(onRename).toHaveBeenCalledTimes(1))
-    fireEvent.click(screen.getByRole('button', { name: 'Save public name' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Retry same rename' }))
     await waitFor(() => expect(onRename).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(input.hasAttribute('disabled')).toBe(false))
     expect(onRename.mock.calls[1]?.[0].requestKey).toBe(onRename.mock.calls[0]?.[0].requestKey)
 
     fireEvent.change(input, { target: { value: 'Quote Works Two' } })

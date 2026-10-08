@@ -9,6 +9,7 @@ const originalMatchMedia = typeof window === 'undefined'
 const originalScrollIntoView = typeof Element === 'undefined'
   ? undefined
   : Object.getOwnPropertyDescriptor(Element.prototype, 'scrollIntoView')
+const originalGetAnimations = typeof Element === 'undefined' ? undefined : Object.getOwnPropertyDescriptor(Element.prototype, 'getAnimations')
 const originalCss = Object.getOwnPropertyDescriptor(globalThis, 'CSS')
 const originalCssEscape = typeof globalThis.CSS === 'undefined'
   ? undefined
@@ -51,6 +52,9 @@ beforeAll(() => {
       dispatchEvent: vi.fn(),
     })),
   })
+  if (typeof Element.prototype.getAnimations !== 'function') {
+    Object.defineProperty(Element.prototype, 'getAnimations', { configurable: true, value: () => [] })
+  }
   Object.defineProperty(Element.prototype, 'scrollIntoView', {
     configurable: true,
     value: vi.fn(),
@@ -65,6 +69,7 @@ afterAll(() => {
   restoreGlobal('IntersectionObserver', originalIntersectionObserver)
   restoreGlobal('matchMedia', originalMatchMedia, window)
   restoreGlobal('scrollIntoView', originalScrollIntoView, Element.prototype)
+  restoreGlobal('getAnimations', originalGetAnimations, Element.prototype)
   if (originalCss !== undefined) {
     const css = globalThis.CSS
     if (css !== undefined) restoreGlobal('escape', originalCssEscape, css)

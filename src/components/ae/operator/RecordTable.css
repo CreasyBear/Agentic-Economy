@@ -1,5 +1,7 @@
 /* AE controls and viewbar refinements around the shared record table. */
 .arc-record-root { display: grid; min-width: 0; gap: var(--space-4); }
+/* Base UI scrolls the viewport, so the supplied maxHeight must constrain that node too. */
+.arc-record-scroll > [data-slot="scroll-area-viewport"] { max-height: inherit; }
 
 .arc-record-action { min-height: 32px; max-width: 100%; }
 .arc-record-selection-hit { display: flex; width: 44px; height: 44px; min-width: 44px; min-height: 44px; align-items: center; justify-content: center; }

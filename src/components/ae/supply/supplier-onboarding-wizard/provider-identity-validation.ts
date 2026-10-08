@@ -1,5 +1,4 @@
 import type { Rule4Diagnostic } from '@/lib/ui/diagnostic'
-import { isValidAbn } from '@/modules/money/public'
 
 export const FINANCIAL_NO_UPDATE = 'A$0.00 affected — profile was not updated.'
 
@@ -9,7 +8,7 @@ export const SAVE_FAILURE_DIAGNOSTIC: Rule4Diagnostic = {
   nextStep: 'Please check connection and try again.',
 }
 
-export type ProviderIdentityFieldId = 'name' | 'website' | 'abn'
+export type ProviderIdentityFieldId = 'name' | 'website'
 
 export type ProviderIdentityValidationIssue = Readonly<{
   field: ProviderIdentityFieldId
@@ -27,7 +26,6 @@ function invalidHttpsWebsiteDiagnostic(): Rule4Diagnostic {
 export function profileValidationIssue(
   trimmedName: string,
   trimmedWebsite: string,
-  cleanAbn: string,
 ): ProviderIdentityValidationIssue | undefined {
   if (trimmedName.length === 0) {
     return {
@@ -35,7 +33,7 @@ export function profileValidationIssue(
       diagnostic: {
         whatHappened: 'Enter your supplier / brand name.',
         financialImpact: FINANCIAL_NO_UPDATE,
-        nextStep: 'Enter the public name shown on Tool cards and invoices.',
+        nextStep: 'Enter the public name shown on Tool cards.',
       },
     }
   }
@@ -50,24 +48,12 @@ export function profileValidationIssue(
     return { field: 'website', diagnostic: invalidHttpsWebsiteDiagnostic() }
   }
 
-  if (!isValidAbn(cleanAbn)) {
-    return {
-      field: 'abn',
-      diagnostic: {
-        whatHappened: 'Invalid Australian Business Number (ABN).',
-        financialImpact: FINANCIAL_NO_UPDATE,
-        nextStep: 'Enter an 11-digit ABN with valid ATO checksum or check ABN Lookup.',
-      },
-    }
-  }
-
   return undefined
 }
 
 export function diagnosticForProfileValidation(
   trimmedName: string,
   trimmedWebsite: string,
-  cleanAbn: string,
 ): Rule4Diagnostic | undefined {
-  return profileValidationIssue(trimmedName, trimmedWebsite, cleanAbn)?.diagnostic
+  return profileValidationIssue(trimmedName, trimmedWebsite)?.diagnostic
 }

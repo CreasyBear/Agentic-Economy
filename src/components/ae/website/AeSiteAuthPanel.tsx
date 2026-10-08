@@ -35,7 +35,7 @@ type AeSiteAuthPanelProps = {
 }
 
 /**
- * Login / signup / session panel — Opensource UI form composition, AE tokens.
+ * REUI Auth 18 form column with Aecon tokens and the existing Clerk owner.
  * Clerk (or a local-preview stand-in) renders as `children`.
  */
 export function AeSiteAuthPanel({
@@ -103,7 +103,7 @@ export function AeSiteAuthPanel({
   )
 }
 
-/** Ink submit matching the Opensource UI login button. Forwards props so Clerk can clone it. */
+/** Aecon submit for provider-owned authentication controls. Forwards props so Clerk can clone it. */
 export function AeSiteAuthSubmit({
   className,
   children,

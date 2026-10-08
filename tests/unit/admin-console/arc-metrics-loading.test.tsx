@@ -7,10 +7,14 @@ import {
   createRoute,
   createRouter,
 } from '@tanstack/react-router'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
 import { AdminMetricsPageSkeleton } from '@/components/ae/admin/metrics/AdminMetricsPageSkeleton'
+
+vi.mock('convex/react', () => ({
+  useQuery: () => ({ kind: 'allowed', actorRef: 'principal:metrics-loading', role: 'support' }),
+}))
 
 afterEach(cleanup)
 

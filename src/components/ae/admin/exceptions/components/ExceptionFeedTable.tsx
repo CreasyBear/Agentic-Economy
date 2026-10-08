@@ -1,3 +1,4 @@
+import type { AeRecordTableFeatures } from '@/components/ae/operator/AeOperatorDataTable'
 import type { ColumnDef } from '@tanstack/react-table'
 
 import { Button } from '@/components/arc/button/button'
@@ -10,7 +11,7 @@ import {
   type ExceptionFeedTableProps,
 } from '../exceptions.contracts'
 
-const columns: ColumnDef<AdminExceptionRowModel, unknown>[] = [
+const columns: ColumnDef<AeRecordTableFeatures, AdminExceptionRowModel, unknown>[] = [
   {
     accessorKey: 'kindLabel',
     header: ADMIN_EXCEPTIONS_COPY.columnLabels.kind,
@@ -47,7 +48,7 @@ const columns: ColumnDef<AdminExceptionRowModel, unknown>[] = [
   },
 ]
 
-export function ExceptionFeedTable({ rows, observed, complete, unavailable, orderLabel, paginationStatus, scanRequests, onLoadMore, onOpen }: ExceptionFeedTableProps) {
+export function ExceptionFeedTable({ rows, observed, complete, unavailable, orderLabel, paginationStatus, scanRequests, onLoadMore, onOpen, focusId, restoreFocus }: ExceptionFeedTableProps) {
   return (
     <AeSection
       title={ADMIN_EXCEPTIONS_COPY.exceptionsTitle}
@@ -64,6 +65,7 @@ export function ExceptionFeedTable({ rows, observed, complete, unavailable, orde
           : paginationStatus !== 'Exhausted'
             ? 'No cases in this loaded page. Load more to continue.'
             : ADMIN_EXCEPTIONS_COPY.nothingNeedsAttention}
+        rowActionFocus={{ ...(focusId === undefined ? {} : { currentId: focusId }), restore: restoreFocus ?? false }}
         rowAction={{
           kind: 'button',
           label: ADMIN_EXCEPTIONS_COPY.viewDetails,

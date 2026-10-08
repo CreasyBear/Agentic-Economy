@@ -1,8 +1,8 @@
-// Installed Arc AI Chat header with native sharing, authority and portal bindings.
+// ReUI chat presentation with native sharing, authority and shell-owned portal bindings.
 import { CheckIcon, CopyIcon, MenuIcon, PlusIcon, Share2Icon, UnlinkIcon } from 'lucide-react'
 import { createPortal } from 'react-dom'
 
-import { ArcAiChatHeader } from '@/components/ae/shared/arc-pro/ai-chat/ai-chat'
+import { ReuiChatHeader } from '@/components/ae/shared/reui-pro/ai-chat/ai-chat'
 import { AeActionLink } from '@/components/ae/shared/action-link/AeActionLink'
 import { Button } from '@/components/arc/button/button'
 import { Drawer, DrawerContent } from '@/components/ae/shared/base-ui/drawer/drawer'
@@ -73,7 +73,7 @@ export function ChatHeader({
       ) : null}
     </>
   )
-  const controls = <ArcAiChatHeader title={title} description={chatStageDetail(authenticated)} leading={leading} actions={actions} />
+  const controls = <ReuiChatHeader title={title} description={chatStageDetail(authenticated)} leading={leading} actions={actions} />
   return (
     <>
       {slot === null ? (

@@ -17,6 +17,10 @@ export function AeOwnerOfferingsList({
   projectionState = 'current',
   onRetryProjection,
   loading = false,
+  serverControlled = false,
+  toolbar,
+  inventoryQuery,
+  emptyMessage,
   hideEmptyState = false,
   filterValue,
   onFilterChange,
@@ -40,12 +44,16 @@ export function AeOwnerOfferingsList({
         projectionState={projectionState}
         {...(onRetryProjection === undefined ? {} : { onRetryProjection })}
       />
-      {offerings.length === 0 && !loading ? (
+      {offerings.length === 0 && !loading && !serverControlled ? (
         hideEmptyState ? null : <OwnerOfferingsEmptyState />
       ) : (
         <OwnerOfferingsTable
           offerings={offerings}
           loading={loading}
+          serverControlled={serverControlled}
+          {...(inventoryQuery === undefined ? {} : { inventoryQuery })}
+          {...(toolbar === undefined ? {} : { toolbar })}
+          {...(emptyMessage === undefined ? {} : { emptyMessage })}
           {...(filterValue === undefined ? {} : { filterValue })}
           {...(onFilterChange === undefined ? {} : { onFilterChange })}
           {...(sorting === undefined ? {} : { sorting })}

@@ -1,4 +1,5 @@
 import { v } from 'convex/values'
+import { clerkActiveOrganizationId } from './lib/principalAccount/interactiveAuthority/clerk'
 
 import { query } from './_generated/server'
 import { readCurrentActiveAdminMembership, resolveBusinessActor } from './authz'
@@ -13,6 +14,7 @@ const operatorContextResult = v.union(
   v.object({
     kind: v.literal('authorized'),
     userId: v.string(),
+    authScope: v.object({ organizationId: v.union(v.string(), v.null()), sessionId: v.union(v.string(), v.null()) }),
     principalRef: v.string(),
     accountRef: v.optional(v.string()),
     allowedSurfaces: v.array(operatorSurface),
@@ -37,6 +39,7 @@ export const readCurrent = query({
       return { kind: 'denied' as const, reason: 'canonical_owner_required' as const }
     }
 
+    const authScope = { organizationId: clerkActiveOrganizationId(identity), sessionId: typeof identity.sid === 'string' ? identity.sid : null }
     const [actor, adminMembership] = await Promise.all([
       resolveBusinessActor(ctx),
       readCurrentActiveAdminMembership(ctx),
@@ -50,6 +53,7 @@ export const readCurrent = query({
       return {
         kind: 'authorized' as const,
         userId: identity.subject,
+        authScope,
         principalRef: actor.canonicalPrincipalRef,
         accountRef: actor.canonicalAccountRef,
         allowedSurfaces: [...allowedSurfaces],
@@ -90,6 +94,7 @@ export const readCurrent = query({
           return {
             kind: 'authorized' as const,
             userId: identity.subject,
+        authScope,
             principalRef: principal.principalRef,
             allowedSurfaces: [...allowedSurfaces],
           }
@@ -99,6 +104,7 @@ export const readCurrent = query({
           return {
             kind: 'authorized' as const,
             userId: identity.subject,
+        authScope,
             principalRef: principal.principalRef,
             allowedSurfaces: [...(['admin', 'developer'] as const)],
           }
@@ -110,6 +116,7 @@ export const readCurrent = query({
       return {
         kind: 'authorized' as const,
         userId: identity.subject,
+        authScope,
         principalRef: identity.tokenIdentifier,
         allowedSurfaces: [...(['admin', 'developer'] as const)],
       }

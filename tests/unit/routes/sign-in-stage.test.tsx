@@ -65,7 +65,8 @@ describe('sign-in site stage', () => {
 
     expect(screen.getByRole('heading', { name: 'Sign in to connect an Agent' })).toBeTruthy()
     expect(screen.getByText(/return to the Agent connection you started/)).toBeTruthy()
-    expect(screen.getByText('/sign-in').tagName).toBe('CODE')
+    expect(screen.queryByText('/sign-in')).toBeNull()
+    expect(screen.getByRole('navigation', { name: 'Account help' })).toBeTruthy()
     expect(screen.getByText('clerk-sign-in')).toBeTruthy()
     expect(document.querySelector('[data-slot="ae-site-auth-clerk-well"]')).toBeTruthy()
   })

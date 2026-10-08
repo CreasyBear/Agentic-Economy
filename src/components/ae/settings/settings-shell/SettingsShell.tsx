@@ -1,13 +1,7 @@
 import { useEffect, useRef } from 'react'
-import { ChevronDownIcon } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
-import { SettingsPage as ArcSettingsPage } from '@/components/ae/shared/arc-pro/settings-page/settings-page'
-import { Button } from '@/components/arc/button/button'
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem,
-  DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
+import { SettingsScrollView } from '@/components/ae/shared/reui-pro/settings/SettingsLayout'
 import { settingsDestinationForPath, settingsNavigation, type SettingsShellProps } from './settings-shell.contracts'
 import '@/components/ae/layout/app-shell/WorkspaceNavigationComposition.css'
 import './SettingsComposition.css'
@@ -16,9 +10,12 @@ export function SettingsShell({ pathname, children }: SettingsShellProps) {
   const contentRef = useRef<HTMLDivElement>(null)
   const destination = settingsDestinationForPath(pathname)
   const title = destination?.title ?? destination?.label ?? 'Settings'
+  const activeGroup = settingsNavigation.find(group => group.items.some(item => item.href === destination?.href)) ?? settingsNavigation[0]
   useEffect(() => {
     const content = contentRef.current
     if (!content) return
+    content.querySelector<HTMLElement>('nav[aria-label="Settings groups"] [data-active="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+    const routeFocus = document.activeElement
     let frame = 0
     const focusHeading = () => {
       const heading = [...content.querySelectorAll<HTMLElement>('h1')]
@@ -28,8 +25,8 @@ export function SettingsShell({ pathname, children }: SettingsShellProps) {
       frame = requestAnimationFrame(() => {
         frame = requestAnimationFrame(() => {
           if (!heading.isConnected || !content.contains(heading)) return
-          // A user can open the menu before these committed-route frames finish.
-          if (content.querySelector('[aria-haspopup="menu"][aria-expanded="true"]')) {
+          // Do not steal focus from a navigation link or editor the user reached.
+          if (content.contains(document.activeElement) && document.activeElement !== routeFocus && document.activeElement !== heading) {
             observer.disconnect()
             return
           }
@@ -45,34 +42,28 @@ export function SettingsShell({ pathname, children }: SettingsShellProps) {
     return () => { observer.disconnect(); cancelAnimationFrame(frame) }
   }, [pathname, title])
   return <AeOperatorPage operatorRole="owner" title={title} description="" currentPath={pathname} contentOwnsHeading>
-    <div ref={contentRef} className="arc-market">
-      <ArcSettingsPage
-        title="Settings"
-        description=""
-        showHeader={false}
-        navigationMenu={<div className="ae-settings-toolbar">
-          <span>Settings</span>
-          <DropdownMenu>
-            <DropdownMenuTrigger render={<Button type="button" variant="secondary" size="md" aria-label={`Settings section: ${destination?.label ?? 'Choose a section'}`} />}>
-              {destination?.label ?? 'Choose a section'}<ChevronDownIcon aria-hidden="true" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="arc-market arc-workspace-menu" aria-label="Settings sections">
-              {settingsNavigation.map((group, index) => <DropdownMenuGroup key={group.label} className="arc-workspace-menu-group">
-                {index > 0 && <DropdownMenuSeparator className="arc-workspace-menu-separator" />}
-                <DropdownMenuLabel className="arc-workspace-menu-label">{group.label}</DropdownMenuLabel>
-                {group.items.map(item => <DropdownMenuItem key={item.href} className="arc-breadcrumb-menu-item" render={<Link to={item.href} activeOptions={{ exact: true }} aria-current={item.href === destination?.href ? 'page' : undefined} />}>
-                  {item.label}
-                </DropdownMenuItem>)}
-              </DropdownMenuGroup>)}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>}
-        navigation={[]}
-        currentHref={pathname.replace(/\/$/u, '')}
-        renderNavigationLink={(item, props) => <Link to={item.href} activeOptions={{ exact: true }} {...props} />}
-      >
-        {children}
-      </ArcSettingsPage>
+    <div ref={contentRef} className="arc-market mx-auto w-full max-w-4xl space-y-8" data-reui-block="profile-2">
+      <div className="min-w-0 space-y-3">
+        <nav aria-label="Settings groups" className="min-w-0 border-b">
+          <SettingsScrollView><ul className="flex w-max min-w-full gap-6">
+            {settingsNavigation.map(group => <li key={group.label}>
+              <Link to={group === activeGroup ? destination?.href ?? group.items[0]?.href ?? '/owner/settings' : group.items[0]?.href ?? '/owner/settings'}
+                aria-current={group === activeGroup ? 'page' : undefined} data-active={group === activeGroup ? 'true' : undefined} activeOptions={{ exact: true }}
+                className="inline-flex min-h-11 items-center whitespace-nowrap border-b-2 border-transparent py-3 text-sm font-medium text-muted-foreground hover:text-foreground data-[active=true]:border-primary data-[active=true]:text-foreground focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring">
+                {group.shortLabel}
+              </Link>
+            </li>)}
+          </ul></SettingsScrollView>
+        </nav>
+        <nav aria-label="Settings sections"><ul className="flex flex-wrap gap-1">
+          {activeGroup?.items.map(item => <li key={item.href}><Link to={item.href} activeOptions={{ exact: true }}
+            aria-current={item.href === destination?.href ? 'page' : undefined}
+            className="inline-flex min-h-11 items-center rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground aria-[current=page]:bg-muted aria-[current=page]:font-medium aria-[current=page]:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+            {item.label}
+          </Link></li>)}
+        </ul></nav>
+      </div>
+      <div className="min-w-0">{children}</div>
     </div>
   </AeOperatorPage>
 }

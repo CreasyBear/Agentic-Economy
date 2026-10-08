@@ -1,3 +1,3 @@
 import type { OwnerProviderEarningsReadback } from '@/modules/capability-supply/supply-funnel.functions'
 
-export type AeSupplyEarningsCardProps = Readonly<{ readback: OwnerProviderEarningsReadback }>
+export type AeSupplyEarningsCardProps = Readonly<{ readback: OwnerProviderEarningsReadback; onRetry?: () => void; onLoadMore?: () => void; pending?: boolean }>

@@ -2,10 +2,10 @@
 
 **Status:** active product design contract
 
-**Revised:** 2026-10-01
+**Revised:** 2026-10-07
 Aligned to aecon brand guidelines (PDF, 2026-09). The lived visual reference is
-`/market?view=discover` (`DirectoryHero.tsx`, `DirectoryHomeDiscovery.tsx`,
-`DirectoryToolCard.tsx`).
+`/market` (`MarketLanding.tsx`) for the opening, and the Arc Tool and Host
+compositions for discovery results.
 
 ## Arc Tool market pilot
 
@@ -40,11 +40,190 @@ unused catalogue components, a general compatibility wrapper or Next.js for an
 image leaf. Arc's global outline suppression is deliberately omitted because
 keyboard focus must remain visible.
 
+## Chat presentation
+
+The 7 October chat shell uses licensed [ReUI Chat 3](https://reui.io/blocks/ai-agents/ai-chat/ai-chat-3),
+Base Nova. Maintained presentation lives in
+`src/components/ae/shared/reui-pro/ai-chat/`: the parent-sized flex shell,
+scrollable welcome/Start rows and controlled InputGroup composer. Source comments
+record the retrieved registry SHA-256. Inspect upgrades through ReUI MCP and the
+shadcn CLI before merging the relevant source regions; do not overwrite shared
+primitives or import the demo application. `components.json` names the actual
+Base UI family and the authenticated ReUI registry; the license stays local.
+
+Aecon's session owns draft clearing, admission, retries and optional Stop.
+The existing transcript/scroller owns real streaming, Tool cards, approvals,
+receipts and recovery. Simulated replies, model/context/effort controls and
+mock history from the block are excluded. Existing starter prompts still submit
+through the session's guarded callback. The same shell serves read-only shares
+without a composer. History retains its search and pagination when collapsed;
+the app shell registers the live header portal target across authentication.
+
+Keep the existing Aecon theme, 44px touch targets, visible keyboard focus and
+reduced-motion rules. The composer and material retention notice remain visible
+on short screens; welcome content owns its overflow. Qualify hydrated UI rather
+than server-rendered screenshots. Current local evidence covers 320–1440px,
+light/dark appearance and mocked anonymous response/recovery; it does not replace
+signed-in hosted or paid Call qualification.
+
+## Workspace and operational presentation
+
+The 7 October platform candidate uses the licensed REUI Base Nova compositions:
+[App Shell 2](https://reui.io/preview/base/app-shell-2) for the workspace,
+[Solution Agents 7](https://reui.io/preview/base/solution-agents-7) for attention and
+record inspection, [Profile 2](https://reui.io/preview/base/profile-2) for settings,
+[Wizard 1](https://reui.io/preview/base/wizard-1) and
+[Dialog 14](https://reui.io/preview/base/dialog-14) for Provider setup, and
+[Profile 8](https://reui.io/preview/base/profile-8) for Credit. The existing
+record/action sheet owns inspection; do not add a second overlapping inspector.
+Chat 3, Arc market compositions, and Fumadocs/Scalar retain their owners.
+
+`AeAppShell` owns the stable frame. `WorkspaceSidebar` renders the existing
+navigation catalogue and one Clerk Account selector. Backend-confirmed current
+user, session and organization scope controls privileged destinations. Hiding a
+link never establishes authority. `WorkspaceTransitionBoundary` removes old
+protected projections when identity changes and waits for committed route data;
+timers do not establish readiness. The existing command panel, theme provider,
+route focus owner and navigation safety boundary remain authoritative.
+
+The 8 October settings recut replaces the Settings 7 rail with Profile 2's
+horizontal groups, bounded content and section cards. `settingsNavigation` remains
+the only destination catalogue: five groups reveal at most three native route
+links. The current pathname selects both levels, including nested Clerk security
+routes. Real page headings, save/readback owners and navigation guards remain;
+there is no demo global Update action. `SettingsLayout.tsx` records the licensed
+source hashes. Registry dry-run inspection prevented overwriting shared primitives.
+
+Team uses Profile 2's member grid and [Solution Users 4](https://reui.io/preview/base/solution-users-4)
+for the invitation queue/dialog. `TeamAccessManagement` retains revision checks,
+MFA and confirmation; `useInviteTeamMember` retains drafts and uncertain outcomes.
+Member controls join on durable membership identity and the recorded role. The
+whole workspace component resets on Account change. Keep the invitation dialog
+mounted in one stable location while initial reads settle. Load-more offsets
+remain owner-controlled; search/sort describe their loaded-row scope. Do not add
+demo invitation history, totals, roles or bulk actions. The superseded Arc member
+composition has no remaining caller and is removed. Arc save bars and specialised
+security content retain their existing callers.
+
+The completion review uses [REUI Auth 18](https://reui.io/preview/base/auth-18)
+for the sign-in/sign-up split stage. `AeSiteAuthStage` retains its sidebar/form
+composition; the licensed grid source is under `shared/reui-pro/auth/` with its
+hash. Aecon copy replaces demonstration testimonials and customer logos. The
+existing Clerk form, appearance, redirect and verification owners remain intact.
+Mobile prioritises the form; the decorative panel is desktop-only. Authentication
+pages use compact account help/legal links instead of the full promotional footer.
+
+Account-affecting edits carry the Account they were prepared for to their existing
+authority owner. Team explicit reads supersede stale initial reads; an unknown
+command closes confirmation and directs focus to observation before another
+write. Name editors and usage-alert drafts use the existing navigation safety
+boundary. Live source changes must not erase dirty drafts. A lost rename response
+is unknown, not proof that the old value is unchanged; retain the exact retry
+material and keep already observed success authoritative.
+
+Operational tables use REUI's actual Data Grid with exact TanStack Table 9.2.6.
+`AeRecordTable` supplies domain columns, action eligibility, exact comparators,
+stable IDs, cursor handoffs and focus restoration. The remaining `AeDataColumn`
+adapter translates existing callers into that same table engine. It does not
+sort, render or measure another table. Router and Start versions are independent.
+Do not convert money to formatted strings for ordering, infer totals from loaded
+rows, expose unused bulk actions, or enable spreadsheet writes on audit records.
+
+Complete local collections may sort/filter in the grid. Paginated collections
+declare loaded-page scope unless their owner applies constraints before paging.
+Provider inventory uses owner-filtered server name/text/date queries and up to
+50 records with query-bound opaque cursors. Unknown index readiness is a visible
+incomplete state, not an empty search result. Layout controls work without login;
+only allowlisted nonsecret column/density choices persist, keyed by user, Account,
+table and schema version. Query text, records, selections and authority do not.
+
+Keep upstream layouts and interaction primitives. Registry upgrades are reviewed
+in a scratch candidate; never overwrite adapted shared primitives blindly.
+`src/components/reui/upstream-manifest.json` records upstream and integrated
+hashes and narrow adaptations. Only its two named upstream grid files exceed
+the maintained-source size ceiling. All imported code retains strict TypeScript,
+security and import checks; Aecon adapters receive no vendor exception.
+
+Use Aecon's existing palette, typography, appearance controller and responsive
+tokens. Working and recovery pages use a compact footer. The public-footer
+selector must never hide action-card footers. Show accepted Quote facts and
+historical unknowns explicitly; current Tool metadata cannot fill missing purchase
+facts. Attention, valid recovery and useful output precede financial reporting.
+The maturity register owns source and journey evidence; a successful render is
+not authenticated or commercial qualification.
+
+## Market discovery composition
+
+The public opening uses the installed Arc `HeroContent` split composition,
+approved Aecon mark, Manrope, forest, chalk and gold. `MarketLanding.tsx` owns
+this composition and its reduced-motion treatment. Its broad categories use
+`listing-evidence.ts` and open ordinary market searches. They are not invented
+Provider facet identifiers. Recipient disclosure stays next to the category links.
+The landing's large type, near-square gold action and brand palette are explicit
+art-direction choices within the existing appearance owner.
+
+Tools use Arc search, filter and listing components. Canonical mixed results
+show readable summaries and actual access/price facts, with the existing REUI
+Table available for comparison. `MarketAgentHandoff` constructs an explicit send
+action from the current need and selected constraints. Chat retains its own
+session and purchase authority. A search handoff never clears guest history or
+authorizes a Call.
+
+`DirectoryHostsPage` reads the existing Host facet index. Hostname prefixes apply
+before opaque pagination. Listing counts cover the indexed Host, while any
+example Tool remains a separate fact. `ProviderFacetPicker` uses that same reader
+instead of overview's bounded twelve-Host shelf. Its query resets with the Arc
+combobox and ignores obsolete responses. Existing Tool-constrained Host links
+retain their filters and describe grouped Tool results. Legacy numbered Host
+pages keep that older grouping mode; new Host traversal uses only opaque cursors.
+
+Arc's `search-results` block was inspected but not adopted. Its local array
+filtering would repeat the discovery-scope problem. Keep owner queries, existing
+Arc controls, and one REUI table engine. No new component registry, chat session,
+search index or pagination framework is introduced. Mobile categories use the
+existing Base UI Collapsible. The Agent action remains a native Link, with its
+recipient notice before sending. Native form and aside elements keep their
+semantics. Empty filter composition hides Arc's noninteractive empty frame, while
+keeping its live toolbar and focus return mounted. Review that narrow DOM/CSS
+adaptation when upgrading FilterToolbar. Record browser and local query evidence
+separately from hosted qualification in the maturity register.
+
+## Provider entry composition
+
+`/for-providers` uses licensed [REUI Hero 14](https://reui.io/preview/base/hero-14):
+its wrapping split header, bottom-aligned action column and wide media frame.
+`ProviderHero.tsx` replaces the demo announcement and analytics console with
+concrete endpoint copy, the existing Add Tool route and Aecon artwork. The registry
+dry run would overwrite shared primitives; only the hero composition was integrated.
+Record the retrieved source hash in the component, following Chat 3. The adapted
+hero receives no vendor exception in `src/components/reui/upstream-manifest.json`.
+Navigation retains link semantics; split headings retain word spacing.
+
+The image was generated for Aecon with image_gen: chalk curves, a forest setting
+and one gold endpoint. It is decorative, not evidence of product state. The three
+local WebP exports in `public/brand/aecon-provider-market*` share one image; retain
+responsive source selection, intrinsic dimensions and the mobile focal point.
+The largest export is 116 KB; the 768px source is 19 KB. No animation or new image
+runtime is required. Keep Aecon's existing appearance controller and tokens.
+
+`AeSupplyLanding` composes the installed REUI Stepper as a static three-item list
+and the existing Arc-backed `AeSiteFaq`. No tab, completion tick or active progress
+claim belongs in this anonymous overview. The existing signed-in supply funnel
+owns profile, payment-recipient attestation, checks and publication. State the
+current x402 v2/Base USDC scope and check costs before that handoff.
+
+The public page is static. Its former twelve-item external-directory projection
+was not evidence of published Provider supply. The bespoke gallery and isolated
+landing loader are removed; the directory link opens the actual market owner.
+Keep compact Help/legal navigation in normal flow. Browser qualification and
+authenticated Provider acceptance remain separate in the maturity register.
+
 ## Current app and market direction
 
 The working platform is `app.aecon.ai`; `aecon.ai` is the separate marketing
-website. The app opens directly into the Tool market and uses a compact neutral
-footer. Approved AECON marks, Manrope type and the chalk/forest palette come from
+website. The app opens with the branded market landing. Public market pages
+omit the site footer. The landing keeps compact Help and legal links in normal
+document flow. Approved AECON marks, Manrope type and the chalk/forest palette come from
 the maintained local marketing website.
 
 Discovery uses familiar Airbnb-style listing cards and responsive filters,
@@ -76,8 +255,9 @@ commercial state and provenance need to remain visible.
 ### Feel
 
 Agentic Economy feels like the Airbnb of the agentic economy, not a trading
-desk: Tools are listings, Providers are hosts, and trust comes from Qualified
-Use and provenance. Customer-facing surfaces must not use tickers, time-window
+desk: Tools are listings, Providers supply the service, and trust comes from Qualified
+Use and provenance. A directory Host identifies an endpoint and is not by itself
+a verified Provider identity. Customer-facing surfaces must not use tickers, time-window
 selectors, movers or sparklines.
 
 ## What the interface must make legible

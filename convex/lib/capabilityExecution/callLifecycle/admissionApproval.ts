@@ -1,7 +1,7 @@
 import { v, type Infer } from 'convex/values'
 
 export const approvalDecision = v.union(v.literal('approve'), v.literal('deny'))
-const approvalDecisionContext = v.object({
+export const approvalDecisionContextValue = v.object({
   agent: v.object({ principalRef: v.string(), applicationRef: v.string(), currentDisplayName: v.union(v.string(), v.null()) }),
   purpose: v.null(),
   acceptedQuote: v.union(
@@ -45,7 +45,7 @@ export const pendingApprovalView = v.object({
     expiresAt: v.optional(v.string()),
   }),
   createdAt: v.number(),
-  decisionContext: v.optional(approvalDecisionContext),
+  decisionContext: v.optional(approvalDecisionContextValue),
 })
 export const approvalDecisionResult = v.union(
   v.object({ kind: v.union(v.literal('approved'), v.literal('denied'), v.literal('replayed')), callRef: v.string() }),

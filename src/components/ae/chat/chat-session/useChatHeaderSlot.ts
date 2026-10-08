@@ -1,11 +1,6 @@
-import { useLayoutEffect, useState } from 'react'
-
-import { chatHeaderActionsId } from '@/lib/public/chat-ia'
+import { useContext } from 'react'
+import { ChatHeaderTargetContext } from '@/components/ae/layout/app-shell/ChatHeaderSlot'
 
 export function useChatHeaderSlot(): HTMLElement | null {
-  const [slot, setSlot] = useState<HTMLElement | null>(null)
-  useLayoutEffect(() => {
-    setSlot(document.getElementById(chatHeaderActionsId))
-  }, [])
-  return slot
+  return useContext(ChatHeaderTargetContext)
 }

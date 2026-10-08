@@ -7,10 +7,11 @@ export type DirectoryHeroProps = Readonly<{
   children: ReactNode
   compact?: boolean
   compactTitle?: string
+  description?: string
   headingLevel?: 1 | 2
   onStartChat?: () => void
 }>
 
-export function DirectoryHero({ children, compactTitle = 'Tool market', headingLevel = 1 }: DirectoryHeroProps) {
-  return <ProductListingHeader title={compactTitle} headingLevel={headingLevel} description="Search for a service, compare Tools, or browse the Providers behind them.">{children}</ProductListingHeader>
+export function DirectoryHero({ children, compactTitle = 'Tool market', headingLevel = 1, description = 'Search for a service, compare Tools, or browse the Providers behind them.' }: DirectoryHeroProps) {
+  return <ProductListingHeader title={compactTitle} headingLevel={headingLevel} description={description}>{children}</ProductListingHeader>
 }

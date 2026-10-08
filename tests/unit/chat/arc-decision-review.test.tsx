@@ -3,6 +3,7 @@ import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
+import { projectOwnerChatCards } from '@/components/ae/chat/chat-session/owner-chat-cards'
 import { ChatApprovalCards } from '@/components/ae/chat/chat-session/components/ChatApprovalCards'
 import { ToolPanel } from '@/components/ae/chat/tool-panel/ToolPanel'
 import { ToolPanelActions } from '@/components/ae/chat/tool-panel/components/ToolPanelActions'
@@ -21,6 +22,18 @@ const quote: QuoteConfirmationView = {
   quoteAmount: { currency: 'AUD', exponent: 6, units: '1' },
   expiresAt: 2_000_000_000_000, inputSummary: 'Sydney',
   remainingCap: { amount: { currency: 'AUD', exponent: 2, units: '1250' }, window: 'month' },
+  decisionContext: {
+    agent: { principalRef: 'agent:weather', applicationRef: 'ae-owner-chat', currentDisplayName: 'Weather Agent' },
+    purpose: null,
+    acceptedQuote: { kind: 'available', quoteRef: 'quote:v1:weather',
+      tool: { name: 'Weather lookup', description: 'Accepted weather lookup contract.' },
+      provider: { ref: 'provider:weather', name: null },
+      maximumSpend: { currency: 'AUD', exponent: 6, units: '1' },
+      effects: [{ effectId: 'release_city', class: 'data_release', authority: 'explicit', reversibility: 'irreversible' }],
+      dataUse: [{ effectId: 'release_city', inputPointer: '/city', classification: 'personal', phase: 'execution',
+        recipient: { kind: 'selected_binding' }, purposes: ['weather_lookup'] }],
+    },
+  },
   expired: false, pending: false,
 }
 const review: ToolPanelView = {
@@ -47,6 +60,37 @@ describe('Arc Call decision presentation', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Not now' }))
     expect(onDeny).toHaveBeenCalledExactlyOnceWith(quote.callRef)
     expect(screen.getByRole('region', { name: 'Confirm this Call' })).toHaveAttribute('data-call-ref', quote.callRef)
+  })
+
+  it('shows accepted effects and data release while preserving historical unknowns', () => {
+    const [card] = projectOwnerChatCards([{ kind: 'pending', turnRef: 'turn:weather',
+      toolRef: 'tool:weather', toolName: 'Current renamed Tool', provider: quote.provider,
+      callRef: quote.callRef, quoteRef: quote.quoteRef, quoteAmount: quote.quoteAmount,
+      expiresAt: quote.expiresAt, inputSummary: quote.inputSummary, remainingCap: quote.remainingCap,
+      decisionContext: quote.decisionContext! }], 0, false)
+    if (card?.kind !== 'pending') throw new Error('pending fixture missing')
+    render(<QuoteConfirmation view={card.view} onApprove={vi.fn()} onDeny={vi.fn()} onFreshQuote={vi.fn()} />)
+    expect(screen.queryByText('Current renamed Tool')).toBeNull()
+    expect(screen.getByText('Releases data · irreversible')).toBeInTheDocument()
+    expect(screen.getByText('Personal data: city to selected Provider during execution for weather lookup')).toBeInTheDocument()
+    expect(screen.getByText('Weather Agent (current Account label)')).toBeInTheDocument()
+    expect(screen.getByText('provider:weather (name not recorded)')).toBeInTheDocument()
+    expect(screen.getByText('Not established by this Quote record.')).toBeInTheDocument()
+  })
+
+  it('withholds approval for missing or mismatched accepted facts and keeps decline available', () => {
+    const onApprove = vi.fn()
+    const props = { onApprove, onDeny: vi.fn(), onFreshQuote: vi.fn() }
+    const { decisionContext: _omitted, ...historical } = quote
+    const { rerender } = render(<QuoteConfirmation view={historical} {...props} />)
+    expect(screen.getByRole('alert')).toHaveTextContent('Approval stays unavailable')
+    expect(screen.queryByRole('button', { name: 'Approve this Call' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Not now' })).toBeEnabled()
+    const context = quote.decisionContext!
+    rerender(<QuoteConfirmation view={{ ...quote, decisionContext: { ...context,
+      acceptedQuote: { kind: 'unavailable', reason: 'quote_mismatch' } } }} {...props} />)
+    expect(screen.queryByRole('button', { name: 'Approve this Call' })).toBeNull()
+    expect(onApprove).not.toHaveBeenCalled()
   })
 
   it('gives an expired Quote only the current fresh-Quote action', () => {

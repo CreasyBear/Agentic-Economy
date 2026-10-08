@@ -38,12 +38,14 @@ describe('Arc daily metric views', () => {
     expect(within(table).getByRole('button', { name: 'View snapshot for 2026-10-02' })).toBeInTheDocument()
     expect(within(table).getByRole('columnheader', { name: 'Details' })).not.toHaveAttribute('aria-sort')
 
-    fireEvent.click(within(table).getByRole('button', { name: 'Sort by Day, currently descending' }))
+    fireEvent.click(within(table).getByRole('button', { name: 'Sort by Day' }))
+    expect(within(table).getByRole('columnheader', { name: /Day/ })).toHaveAttribute('aria-sort', 'none')
+    fireEvent.click(within(table).getByRole('button', { name: 'Sort by Day' }))
     expect(within(table).getByRole('columnheader', { name: /Day/ })).toHaveAttribute('aria-sort', 'ascending')
     expect(within(table).getAllByRole('row').slice(1).map((record) => record.querySelector('time')?.dateTime)).toEqual([
       '2026-10-01', '2026-10-02', '2026-10-03',
     ])
-    fireEvent.click(within(table).getByRole('button', { name: 'Sort by Day, currently ascending' }))
+    fireEvent.click(within(table).getByRole('button', { name: 'Sort by Day' }))
     expect(within(table).getByRole('columnheader', { name: /Day/ })).toHaveAttribute('aria-sort', 'descending')
 
     fireEvent.click(within(table).getByRole('button', { name: 'Sort by Attempted Calls' }))
@@ -53,6 +55,19 @@ describe('Arc daily metric views', () => {
     expect(within(table).getByRole('columnheader', { name: /Attempted Calls/ })).toHaveAttribute('aria-sort', 'ascending')
     fireEvent.click(within(table).getByRole('button', { name: /Sort by Attempted Calls/ }))
     expect(within(table).getAllByRole('row').slice(1).map((record) => record.querySelector('time')?.dateTime)).toEqual([
+      '2026-10-03', '2026-10-02', '2026-10-01',
+    ])
+    fireEvent.click(screen.getByRole('button', { name: 'Money' }))
+    const moneyTable = screen.getByRole('table', { name: 'Daily metrics: Money' })
+    expect(within(moneyTable).getByRole('columnheader', { name: /Day/ })).toHaveAttribute('aria-sort', 'none')
+    expect(screen.queryByRole('status')).toBeNull()
+    expect(within(moneyTable).getAllByRole('row').slice(1).map(record => record.querySelector('time')?.dateTime)).toEqual([
+      '2026-10-02', '2026-10-03', '2026-10-01',
+    ])
+    fireEvent.click(screen.getByRole('button', { name: 'Calls' }))
+    const returnedTable = screen.getByRole('table', { name: 'Daily metrics: Calls' })
+    expect(within(returnedTable).getByRole('columnheader', { name: /Attempted Calls/ })).toHaveAttribute('aria-sort', 'descending')
+    expect(within(returnedTable).getAllByRole('row').slice(1).map(record => record.querySelector('time')?.dateTime)).toEqual([
       '2026-10-03', '2026-10-02', '2026-10-01',
     ])
     expect(rows.map((record) => record.day)).toEqual(['2026-10-02', '2026-10-03', '2026-10-01'])

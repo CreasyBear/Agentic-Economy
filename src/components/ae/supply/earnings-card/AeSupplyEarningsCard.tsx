@@ -1,18 +1,23 @@
+import { Button } from '@/components/arc/button/button'
+import { SUPPORT_EMAIL } from '@/components/ae/support/help/help.contracts'
 import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { AeEmptyState } from '@/components/ae/shared/empty-state/AeEmptyState'
 import { formatCurrencyAmount, formatDisplayAmount } from '@/modules/money/public'
 import type { AeSupplyEarningsCardProps } from './earnings-card.contracts'
 
-export function AeSupplyEarningsCard({ readback }: AeSupplyEarningsCardProps) {
+export function AeSupplyEarningsCard({ readback, onRetry, onLoadMore, pending = false }: AeSupplyEarningsCardProps) {
   if (readback.kind === 'error' || readback.kind === 'conflict') {
     return (
-      <AeAlert tone="danger" title="Earnings unavailable" className="arc-market">{readback.kind === 'conflict' ? 'Provider ownership requires resolution before earnings can be shown.' : 'The earnings source could not be read. Try again.'}</AeAlert>
+      <AeAlert tone="danger" title="Earnings unavailable" className="arc-market">{readback.kind === 'conflict' ? 'Provider ownership requires resolution before earnings can be shown.' : 'The earnings source could not be read. Try again.'}
+        {readback.kind === 'error' && onRetry !== undefined ? <Button type="button" variant="secondary" size="md" disabled={pending} onClick={onRetry}>Try earnings again</Button> : null}
+        {readback.kind === 'conflict' ? <a href={`${SUPPORT_EMAIL}?subject=${encodeURIComponent('Provider earnings ownership help')}`}>Contact private support (opens email app)</a> : null}
+      </AeAlert>
     )
   }
   if (readback.kind === 'not_found') {
     return <AeEmptyState compact titleAs="p" title="Set up a Provider profile to view earnings." description="" />
   }
-  if (readback.obligations.length === 0 && readback.transfers.length === 0) {
+  if (readback.obligations.length === 0 && readback.transfers.length === 0 && readback.isDone !== false) {
     return <AeEmptyState compact titleAs="p" title="No Provider obligations have been recorded." description="" />
   }
   return (
@@ -25,6 +30,8 @@ export function AeSupplyEarningsCard({ readback }: AeSupplyEarningsCardProps) {
             <span>Obligation: {obligation.state}</span>
             <span>Call: {obligation.callRef}</span>
             <span>Obligation reference: {obligation.obligationRef}</span>
+            <span>Tool reference: {obligation.toolRef}</span>
+            <a href={`${SUPPORT_EMAIL}?subject=${encodeURIComponent('Provider obligation help')}&body=${encodeURIComponent(`Call reference: ${obligation.callRef}\nObligation reference: ${obligation.obligationRef}\nTool reference: ${obligation.toolRef}\n\nWhat happened:\n`)}`}>Ask about this Call (opens email app)</a>
             <span>Recorded: {new Date(obligation.createdAt).toLocaleString()}</span>
             {obligation.settlementTransactionRef === undefined ? null : (
               <span>Settlement transaction: {obligation.settlementTransactionRef}</span>
@@ -35,7 +42,8 @@ export function AeSupplyEarningsCard({ readback }: AeSupplyEarningsCardProps) {
           </li>
         ))}
       </ul>
-      {readback.truncated ? <p className="arc-provider-earnings-disclaimer">Showing the latest 100 obligations. Older records are not included.</p> : null}
+      {readback.isDone === undefined ? readback.truncated ? <p className="arc-provider-earnings-disclaimer">Showing the latest 100 obligations. Older records are not included.</p> : null : <p className="arc-provider-earnings-disclaimer">{readback.obligations.length} obligations loaded · {readback.isDone ? 'end of recorded history' : 'older records remain'}. Records are read on request.</p>}
+      {readback.isDone === false && onLoadMore !== undefined ? <Button type="button" variant="secondary" size="md" disabled={pending} onClick={onLoadMore}>Load older obligations (up to 50)</Button> : null}
       {readback.transfers.length === 0 ? null : (
         <section className="arc-provider-payout-records">
           <h3>Recorded payout entries</h3>

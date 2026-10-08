@@ -9,6 +9,8 @@ import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { Button } from '@/components/arc/button/button'
 import { trialClaimResultValue } from '@/modules/money/public'
 import { formatPerthTimestamp } from '@/lib/ui/format-time'
+import { trialNextAction } from './trial-next-action'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import { claimTrialServer } from './claimTrial.functions'
 
 type TrialResult = Infer<typeof trialClaimResultValue>
@@ -58,6 +60,17 @@ function TrialActivation() {
   const useCurrent = current !== undefined && current !== result?.currentAtResult
     && !(current.kind === 'refused' && current.code === 'trial_not_approved' && result?.outcome.kind === 'refused')
   const outcome = useCurrent ? current : result?.outcome ?? current
+  async function activate() {
+    if (pending) return
+    setPending(true)
+    setError(false)
+    try {
+      const outcome = await claimTrialServer({ data: {} })
+      setResult({ outcome, currentAtResult: currentSnapshot.current })
+    } catch { setError(true) }
+    finally { setPending(false) }
+  }
+  const remedy = outcome?.kind === 'refused' ? trialNextAction(outcome.code) : undefined
   return (
     <div className="grid gap-related">
       {outcome?.kind === 'granted' ? <AeAlert title={outcome.booking === 'booked' ? 'Trial credit granted' : 'Confirming your trial credit'} tone={outcome.booking === 'booked' ? 'success' : 'info'}>
@@ -65,18 +78,9 @@ function TrialActivation() {
       </AeAlert> : outcome?.kind === 'refused' ? <AeAlert title="Trial status" tone="warning">{REFUSAL_COPY[outcome.code]}</AeAlert>
         : <p>Activate an invitation approved for your primary email. The 30-day period starts when activation is recorded.</p>}
       {error ? <AeAlert title="Activation could not be confirmed" tone="warning">Check again to recover the same trial. A retry does not create another grant.</AeAlert> : null}
-      {outcome?.kind === 'granted' && outcome.booking === 'booked' ? null : <Button type="button" disabled={pending} className="justify-self-start" onClick={async () => {
-        if (pending) return
-        setPending(true)
-        setError(false)
-        try {
-          const outcome = await claimTrialServer({ data: {} })
-          setResult({ outcome, currentAtResult: currentSnapshot.current })
-        }
-        catch { setError(true) }
-        finally { setPending(false) }
-      }}>{pending ? 'Checking trial…' : outcome?.kind === 'granted' ? 'Check credit status' : 'Activate approved trial'}</Button>}
-      <a className="underline underline-offset-4" href="/owner/credit">View credit</a>
+      {remedy !== undefined ? <a href={remedy.href} className={actionLinkClassName('primary', 'md')}>{remedy.label}</a> : outcome?.kind === 'granted' && outcome.booking === 'booked' ? null : <Button type="button" disabled={pending} className="justify-self-start" onClick={() => void activate()}>{pending ? 'Checking trial…' : outcome?.kind === 'granted' ? 'Check credit status' : 'Activate approved trial'}</Button>}
+      {remedy !== undefined && outcome?.kind === 'refused' && outcome.code !== 'trial_already_claimed' ? <Button type="button" variant="secondary" disabled={pending} onClick={() => void activate()}>{pending ? 'Checking trial…' : 'Check trial status'}</Button> : null}
+      {remedy?.href === '/owner/credit' ? null : <a className="underline underline-offset-4" href="/owner/credit">View credit</a>}
       <a className="underline underline-offset-4" href="/market">Browse Tools</a>
     </div>
   )

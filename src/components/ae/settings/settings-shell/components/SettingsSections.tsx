@@ -1,20 +1,20 @@
 import type {
   SettingsDangerZoneProps, SettingsEmptyStateProps, SettingsGroupProps, SettingsPageProps, SettingsRowProps,
 } from '../settings-section.contracts'
-import { SettingsPageGroup, SettingsPagePane, SettingsPageRow } from '@/components/ae/shared/arc-pro/settings-page/settings-page'
+import { ProfileSettingsPage, ProfileSettingsSection, ProfileSettingRow } from '@/components/ae/shared/reui-pro/settings/SettingsLayout'
 import '../SettingsComposition.css'
 
 /** Every caller is a routed settings page; its pane owns the sole page heading. */
 export function SettingsPage(props: SettingsPageProps) {
-  return <SettingsPagePane {...props} headingLevel={1} />
+  return <ProfileSettingsPage {...props} />
 }
 
 export function SettingsGroup(props: SettingsGroupProps) {
-  return <SettingsPageGroup {...props} headingLevel={2} />
+  return <ProfileSettingsSection {...props} />
 }
 
 export function SettingsRow(props: SettingsRowProps) {
-  return <SettingsPageRow {...props} headingLevel={3} />
+  return <ProfileSettingRow {...props} />
 }
 
 export function SettingsEmptyState({ title, description, action }: SettingsEmptyStateProps) {

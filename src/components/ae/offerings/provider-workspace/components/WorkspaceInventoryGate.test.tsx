@@ -16,7 +16,7 @@ vi.mock('@/components/ae/supply/supplier-onboarding-wizard/AeSupplierOnboardingW
   }) => (
     <button
       type="button"
-      onClick={() => void onSaveProfile({ name: 'N', website: 'https://n.example', abn: '' })}
+      onClick={() => void onSaveProfile({ name: 'N', website: 'https://n.example' })}
     >
       Save profile
     </button>
@@ -32,7 +32,7 @@ describe('WorkspaceInventoryGate', () => {
     const onSaveProfile = vi.fn(async () => ({ kind: 'ok' as const }))
     render(<WorkspaceInventoryGate kind="not_found" onSaveProfile={onSaveProfile} />)
     fireEvent.click(screen.getByRole('button', { name: 'Save profile' }))
-    expect(onSaveProfile).toHaveBeenCalledWith({ name: 'N', website: 'https://n.example', abn: '' })
+    expect(onSaveProfile).toHaveBeenCalledWith({ name: 'N', website: 'https://n.example' })
   })
 
   it('renders the ownership conflict alert', () => {

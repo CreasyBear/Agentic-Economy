@@ -14,19 +14,16 @@ export const SUPPLIER_IDENTITY_ERROR_ID = 'supplier-identity-error'
 const FIELD_IDS = {
   name: 'supplier-name',
   website: 'supplier-website',
-  abn: 'supplier-abn',
 } as const
 
 export function ProviderIdentityFields({
   name,
   website,
-  abn,
   pending,
   invalidField,
   fieldError,
   onNameChange,
   onWebsiteChange,
-  onAbnChange,
   onSubmit,
 }: ProviderIdentityFieldsProps) {
   useEffect(() => {
@@ -41,8 +38,8 @@ export function ProviderIdentityFields({
 
   return (
     <form onSubmit={(e) => void onSubmit(e)} className="arc-market arc-provider-identity-form">
-      <AeAlert role="alert" tone="info" title="Step 1: Business Profile & Tax Facts" className="arc-provider-identity-notice"><div className="arc-provider-identity-notice-description">
-          Define your public supplier brand and verify your Australian tax registration for invoice compliance.
+      <AeAlert role="alert" tone="info" title="Step 1: Provider identity" className="arc-provider-identity-notice"><div className="arc-provider-identity-notice-description">
+          Set the public Provider name and website shown with your Tools.
         </div></AeAlert>
 
       <FieldGroup className="arc-provider-identity-fields">
@@ -62,13 +59,13 @@ export function ProviderIdentityFields({
             aria-describedby={invalidField === 'name' ? errorDescribedBy : undefined}
           />
           <FieldDescription className="arc-provider-identity-description">
-            The public name displayed on Tool cards and invoices.
+            The public name displayed with your Tools.
           </FieldDescription>
         </Field>
 
         <Field className="arc-provider-identity-field" data-invalid={invalidField === 'website' || undefined}>
           <FieldLabel htmlFor="supplier-website" className="arc-provider-identity-label">
-            Provider Website (HTTPS)
+            Provider website (HTTPS)
           </FieldLabel>
           <input
             data-slot="input"
@@ -87,25 +84,6 @@ export function ProviderIdentityFields({
           </FieldDescription>
         </Field>
 
-        <Field className="arc-provider-identity-field" data-invalid={invalidField === 'abn' || undefined}>
-          <FieldLabel htmlFor="supplier-abn" className="arc-provider-identity-label">
-            Australian Business Number (ABN)
-          </FieldLabel>
-          <input
-            data-slot="input"
-            className="arc-provider-identity-input arc-provider-identity-abn"
-            id="supplier-abn"
-            value={abn}
-            disabled={pending}
-            onChange={(e) => onAbnChange(e.target.value)}
-            placeholder="51 824 753 556"
-            aria-invalid={invalidField === 'abn' || undefined}
-            aria-describedby={invalidField === 'abn' ? errorDescribedBy : undefined}
-          />
-          <FieldDescription className="arc-provider-identity-description">
-            Your 11-digit ABN for GST attribution and Australian Tax Invoice issuance.
-          </FieldDescription>
-        </Field>
       </FieldGroup>
 
       <div className="arc-provider-identity-footer">

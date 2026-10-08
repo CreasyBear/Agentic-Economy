@@ -1,3 +1,4 @@
+import { AdminInvestigationReturn, AdminInvestigationLink } from '../../exceptions/AdminInvestigationReturn'
 import { Link } from '@tanstack/react-router'
 
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
@@ -53,7 +54,7 @@ export function ToolVersionObjectView({ view }: ToolVersionObjectViewProps) {
           },
           { id: 'record', label: view.ref },
         ]}
-        actions={<Badge tone={status.tone}>{status.label}</Badge>}
+        actions={<><AdminInvestigationReturn /><Badge tone={status.tone}>{status.label}</Badge></>}
         detail={(
           <div className="arc-market arc-admin-object-reference">
             <span>{ADMIN_OBJECT_PAGE_COPY.referenceLabel}</span>
@@ -85,7 +86,7 @@ export function ToolVersionObjectView({ view }: ToolVersionObjectViewProps) {
         <AeSection title={ADMIN_OBJECT_PAGE_COPY.relatedTitle}>
           <div className="arc-admin-object-related-list">
             <div className="arc-admin-object-related-row">
-              <a className="arc-admin-record-link" href={`/admin/providers/${view.businessSlug}`}>{copy.provider}</a>
+              <AdminInvestigationLink className="arc-admin-record-link" href={`/admin/providers/${view.businessSlug}`}>{copy.provider}</AdminInvestigationLink>
               <AeCopyReference label={copy.provider} value={view.businessSlug} />
             </div>
             {view.admissionCaseRef === null ? null : (

@@ -1,3 +1,4 @@
+import type { OwnerInventoryQuery } from '@/lib/operator/owner-inventory-search'
 import type { SortingState } from '@tanstack/react-table'
 import type { ReactNode } from 'react'
 
@@ -19,6 +20,9 @@ export const PROVIDER_WORKSPACE_EARNINGS_COPY = {
 
 export type ProviderWorkspaceEarningsSectionProps = Readonly<{
   earningsDetail?: OwnerProviderEarningsReadback
+  earningsReadAt?: number
+  onRefreshEarnings?: () => void
+  onLoadMoreEarnings?: () => void
   earningsOpen: boolean
   earningsPending: boolean
   earningsUnavailable: boolean
@@ -29,6 +33,7 @@ export type ProviderWorkspaceEarningsSectionProps = Readonly<{
 
 export type AeProviderWorkspaceProps = Readonly<{
   inventory: ProviderWorkspaceInventoryResult
+  inventoryQuery?: OwnerInventoryQuery
   lifecycle?: Promise<ProviderWorkspaceLifecycleResult>
   connections?: Promise<ProviderWorkspaceConnectionsResult>
   publicStatus?: Promise<ProviderWorkspacePublicStatusResult>
@@ -47,6 +52,7 @@ export type WorkspaceInventoryGateProps = Readonly<
   | { kind: 'conflict' }
   | {
       kind: 'unavailable'
+      reason?: 'inventory_index_pending'
       refreshPending: boolean
       onRefresh: () => void
     }

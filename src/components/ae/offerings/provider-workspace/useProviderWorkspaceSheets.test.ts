@@ -142,4 +142,27 @@ describe('useProviderWorkspaceSheets', () => {
     await result.current.onRename({ businessId: 'biz:one', name: 'N', requestKey: 'req-key-56' })
     expect(calls.invalidate).toHaveBeenCalledTimes(2)
   })
+
+  it('refreshes on reopening and retains continuation context after a structured read failure', async () => {
+    const row = { obligationRef: 'obligation:one', callRef: 'call:one', toolRef: 'tool:one', currency: 'USDC', exponent: 6, amountUnits: '1250000', state: 'settled', createdAt: 1 }
+    const first = { kind: 'available', businessId: 'biz:one', obligations: [row], truncated: true, transfers: [], transfersTruncated: false, isDone: false, continueCursor: 'opaque:next' }
+    calls.earnings.mockResolvedValueOnce(first)
+    const { result } = renderHook(() => useProviderWorkspaceSheets({ enabled: true }))
+    act(() => result.current.openEarnings())
+    await waitFor(() => expect(result.current.earningsPending).toBe(false))
+    expect(result.current.earningsReadAt).toEqual(expect.any(Number))
+    calls.earnings.mockResolvedValueOnce({ kind: 'error', code: 'source_unavailable' })
+    act(() => result.current.loadMoreEarnings())
+    await waitFor(() => expect(result.current.earningsUnavailable).toBe(true))
+    expect(result.current.earningsDetail).toEqual(first)
+    expect(calls.earnings).toHaveBeenLastCalledWith({ data: { cursor: 'opaque:next' } })
+    calls.earnings.mockResolvedValueOnce({ ...first, obligations: [row, { ...row, obligationRef: 'obligation:two' }], truncated: false, isDone: true, continueCursor: '' })
+    act(() => result.current.retryEarnings())
+    await waitFor(() => expect(result.current.earningsDetail?.kind === 'available' ? result.current.earningsDetail.obligations.length : 0).toBe(2))
+    expect(calls.earnings).toHaveBeenLastCalledWith({ data: { cursor: 'opaque:next' } })
+    calls.earnings.mockResolvedValueOnce(first)
+    act(() => { result.current.closeEarnings(); result.current.openEarnings() })
+    await waitFor(() => expect(calls.earnings).toHaveBeenCalledTimes(4))
+    expect(calls.earnings).toHaveBeenLastCalledWith({ data: {} })
+  })
 })

@@ -13,6 +13,7 @@ const directoryOwnerValue = v.object({
   email: v.union(v.string(), v.null()),
   clerkUserId: v.union(v.string(), v.null()),
   ownershipRef: v.string(),
+  revision: v.number(),
   joinedAt: v.number(),
 })
 
@@ -23,6 +24,7 @@ const directoryMemberValue = v.object({
   email: v.union(v.string(), v.null()),
   clerkUserId: v.union(v.string(), v.null()),
   membershipRef: v.string(),
+  revision: v.number(),
   role: v.union(v.literal('admin'), v.literal('member')),
   lifecycle: v.literal('active'),
   joinedAt: v.number(),
@@ -30,6 +32,7 @@ const directoryMemberValue = v.object({
 
 const directoryViewValue = v.object({
   accountRef: v.string(),
+  accountRevision: v.number(),
   owner: directoryOwnerValue,
   members: v.array(directoryMemberValue),
 })
@@ -40,6 +43,7 @@ type DirectoryOwner = {
   displayName: string
   email: string | null
   clerkUserId: string | null
+  revision: number
   ownershipRef: string
   joinedAt: number
 }
@@ -50,6 +54,7 @@ type DirectoryMember = {
   displayName: string
   email: string | null
   clerkUserId: string | null
+  revision: number
   membershipRef: string
   role: 'admin' | 'member'
   lifecycle: 'active'
@@ -57,6 +62,7 @@ type DirectoryMember = {
 }
 
 type DirectoryView = {
+  accountRevision: number
   accountRef: string
   owner: DirectoryOwner
   members: DirectoryMember[]
@@ -150,6 +156,7 @@ export const listDirectoryHandler = async (ctx: QueryCtx): Promise<DirectoryView
       email: ownerEmail,
       clerkUserId: await resolveClerkUserIdForPrincipal(ctx.db, ownerPrincipal.principalRef),
       ownershipRef: currentOwnership.ownershipRef,
+      revision: currentOwnership.revision,
       joinedAt: currentOwnership.createdAt,
     }
 
@@ -190,6 +197,7 @@ export const listDirectoryHandler = async (ctx: QueryCtx): Promise<DirectoryView
         clerkUserId: await resolveClerkUserIdForPrincipal(ctx.db, memberPrincipal.principalRef),
         email: memberEmail,
         membershipRef: membership.membershipRef,
+        revision: membership.revision,
         role: membership.role === 'org:admin' ? 'admin' : 'member',
         lifecycle: 'active',
         joinedAt: membership.createdAt,
@@ -198,6 +206,7 @@ export const listDirectoryHandler = async (ctx: QueryCtx): Promise<DirectoryView
 
     return {
       accountRef: canonicalAccountRef,
+      accountRevision: account.revision,
       owner,
       members,
     }

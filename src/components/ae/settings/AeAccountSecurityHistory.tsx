@@ -87,7 +87,7 @@ export function AeAccountSecurityHistory({ initialResult }: AeAccountSecurityHis
               <strong>What happened:</strong> Security history is temporarily unavailable.
             </p>
             <p className="font-mono text-xs tabular-nums">
-              <strong>Financial impact:</strong> A$0.00 affected — Profile, sessions, and Recovery stay available.
+              <strong>Financial impact:</strong> Financial impact cannot be assessed from unavailable history. Profile, sessions and recovery remain available.
             </p>
             <p>
               <strong>Next step:</strong> Check your connection and try again.

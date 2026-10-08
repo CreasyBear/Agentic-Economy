@@ -184,6 +184,7 @@ describe('owner x402 connection controls', () => {
     { name: 'return navigation', failure: 'navigate' as const, invalidateCount: 2, navigationCount: 2 },
   ])('locks the source-first x402 handoff and retries the saved draft after $name fails once', async ({ failure, invalidateCount, navigationCount }) => {
     const handoff = {
+      inventoryQ: 'weather', inventorySort: 'relevance' as const, inventoryCursor: 'opaque:+/=',
       connect: 'x402' as const,
       draft: `sha256:${'c'.repeat(64)}`,
       resourceUrl: 'https://seller.example/sandbox-paid',
@@ -240,6 +241,9 @@ describe('owner x402 connection controls', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Prove payee control' }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Payee control proved' })).toBeTruthy())
     fireEvent.click(screen.getByRole('button', { name: 'Connect verified endpoint' }))
+    expect(mocks.connect).not.toHaveBeenCalled()
+    expect(await screen.findByRole('dialog', { name: 'Review Provider connection' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Connect this endpoint' }))
 
     await waitFor(() => expect(mocks.connect).toHaveBeenCalledWith({
       data: expect.objectContaining({
@@ -259,12 +263,14 @@ describe('owner x402 connection controls', () => {
     expect(mocks.navigate).toHaveBeenLastCalledWith({
       to: '/owner/operations/new',
       search: {
+        inventoryQ: handoff.inventoryQ, inventorySort: handoff.inventorySort, inventoryCursor: handoff.inventoryCursor,
         draft: handoff.draft,
         connection: 'connection:x402:confirmed',
         environment: handoff.environment,
       },
       replace: true,
     })
+    expect(mocks.connect.mock.calls[0]?.[0].data).not.toHaveProperty('inventoryCursor')
     expect(walletRequest).toHaveBeenCalledTimes(1)
     expect(mocks.connect).toHaveBeenCalledTimes(1)
     expect(mocks.invalidate).toHaveBeenCalledTimes(invalidateCount)
@@ -315,6 +321,9 @@ describe('owner x402 connection controls', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Prove payee control' }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Payee control proved' })).toBeTruthy())
     fireEvent.click(screen.getByRole('button', { name: 'Connect verified endpoint' }))
+    expect(mocks.connect).not.toHaveBeenCalled()
+    expect(await screen.findByRole('dialog', { name: 'Review Provider connection' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Connect this endpoint' }))
     await waitFor(() => expect(mocks.connect).toHaveBeenCalledTimes(1))
     await waitFor(() => expect(mocks.invalidate).toHaveBeenCalledTimes(1))
 
@@ -416,8 +425,12 @@ describe('owner x402 connection controls', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Prove payee control' }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Payee control proved' })).toBeTruthy())
     fireEvent.click(screen.getByRole('button', { name: 'Connect verified endpoint' }))
+    expect(mocks.connect).not.toHaveBeenCalled()
+    expect(await screen.findByRole('dialog', { name: 'Review Provider connection' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Connect this endpoint' }))
     expect(await screen.findByText('The payee claim expired or no longer matches this provider and endpoint. Inspect it and sign again.')).toBeTruthy()
     expect(mocks.navigate).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Back to endpoint' }))
 
     fireEvent.click(screen.getByRole('button', { name: 'Inspect endpoint' }))
     await waitFor(() => expect(mocks.inspect).toHaveBeenCalledTimes(2))

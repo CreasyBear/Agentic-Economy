@@ -54,7 +54,6 @@ export type {
   OwnerProviderRecordedTransfer,
   OwnerProviderEarningsReadback,
 } from './internal/supply-funnel/earnings-readback'
-export type { SupplyLandingPorts, SupplyLandingReadback, SupplyLandingTool } from './internal/supply-funnel/landing'
 export type { PricingStepResult } from './internal/supply-funnel/pricing-port'
 export type {
   OwnerSupplyActionInput,
@@ -78,7 +77,6 @@ export {
   readOwnerProviderEarnings,
 } from './internal/supply-funnel/connections'
 export { checkOwnerX402, connectOwnerX402, inspectOwnerX402 } from './internal/supply-funnel/connections'
-export { loadSupplyLandingReadback } from './internal/supply-funnel/landing'
 export { ownerSupplyActionContext } from './internal/supply-funnel/types'
 
 export const readOwnerProviderConnectionsServer = createServerFn().handler(readOwnerProviderConnections)
@@ -159,7 +157,9 @@ export const revokeOwnerProviderConnectionServer = createServerFn({
   .validator((data) => ownerConnectionCommandSchema.parse(data))
   .handler(revokeOwnerProviderConnection)
 
-export const readOwnerProviderEarningsServer = createServerFn().handler(readOwnerProviderEarnings)
+export const readOwnerProviderEarningsServer = createServerFn()
+  .validator((data) => z.strictObject({ cursor: z.string().min(1).max(10_000).optional() }).parse(data ?? {}))
+  .handler(({ data }) => readOwnerProviderEarnings(data.cursor === undefined ? {} : { cursor: data.cursor }))
 
 export const assessOwnerSupplySourceServer = createServerFn({ method: 'POST' })
   .validator((data) => ownerSourceAssessmentInputSchema.parse(data))

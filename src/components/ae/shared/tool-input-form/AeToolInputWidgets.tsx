@@ -107,6 +107,7 @@ export function AeToolTextareaWidget({
   options,
   className,
   label,
+  rawErrors = [],
 }: WidgetProps) {
   const handleChange = ({ target: { value: newValue } }: ChangeEvent<HTMLTextAreaElement>) =>
     onChange(newValue === '' ? options.emptyValue : newValue)
@@ -128,6 +129,7 @@ export function AeToolTextareaWidget({
         onChange={handleChange}
         onBlur={handleBlur}
         onFocus={handleFocus}
+        aria-invalid={rawErrors.length > 0 || undefined}
         aria-describedby={ariaDescribedByIds(id)}
         className={className}
         label={hideLabel ? '' : `${label}${required ? '*' : ''}`}
@@ -154,6 +156,7 @@ export function AeToolCheckboxWidget(props: WidgetProps) {
     registry,
     uiSchema,
     className,
+    rawErrors = [],
   } = props
   const required = schemaRequiresTrueValue(schema)
   const DescriptionFieldTemplate = getTemplate('DescriptionFieldTemplate', registry, options)
@@ -180,6 +183,7 @@ export function AeToolCheckboxWidget(props: WidgetProps) {
         onCheckedChange={handleChange}
         onBlur={handleBlur}
         onFocus={handleFocus}
+        aria-invalid={rawErrors.length > 0 || undefined}
         aria-describedby={ariaDescribedByIds(id)}
         className={className}
         {...(visibleLabel ? { label: visibleLabel } : {})}

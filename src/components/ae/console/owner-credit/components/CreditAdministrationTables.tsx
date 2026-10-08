@@ -1,5 +1,7 @@
 'use client'
 
+import type { AeRecordTableFeatures } from '@/components/ae/operator/AeOperatorDataTable'
+
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ColumnDef, ColumnMeta, FilterFn } from '@tanstack/react-table'
 
@@ -70,7 +72,7 @@ function searchIncludes(values: readonly string[], filterValue: unknown): boolea
   return query === '' || values.some((value) => value.toLowerCase().includes(query))
 }
 
-const reconciliationGlobalFilter: FilterFn<MoneyReconciliationCaseView> = (
+const reconciliationGlobalFilter: FilterFn<AeRecordTableFeatures, MoneyReconciliationCaseView> = (
   row,
   _columnId,
   filterValue,
@@ -101,7 +103,7 @@ const reconciliationGlobalFilter: FilterFn<MoneyReconciliationCaseView> = (
   ], filterValue)
 }
 
-const providerObligationGlobalFilter: FilterFn<MoneyProviderObligationView> = (
+const providerObligationGlobalFilter: FilterFn<AeRecordTableFeatures, MoneyProviderObligationView> = (
   row,
   _columnId,
   filterValue,
@@ -245,10 +247,10 @@ export function CreditReconciliationRecords({
     selectedRecord,
     tableRootRef,
   } = useRecordInspection(rows, reconciliationCaseId, unavailable)
-  const columns = useMemo<ColumnDef<MoneyReconciliationCaseView, unknown>[]>(() => [
+  const columns = useMemo<ColumnDef<AeRecordTableFeatures, MoneyReconciliationCaseView, unknown>[]>(() => [
     {
       id: 'difference',
-      meta: { label: 'Difference' } as ColumnMeta<MoneyReconciliationCaseView, unknown>,
+      meta: { label: 'Difference' } as ColumnMeta<AeRecordTableFeatures, MoneyReconciliationCaseView, unknown>,
       accessorFn: (record) => humanizeCode(record.kind),
       header: ({ column }) => <AeOperatorSortableHeader label="Difference" column={column} />,
       cell: ({ row }) => humanizeCode(row.original.kind),
@@ -257,7 +259,7 @@ export function CreditReconciliationRecords({
       id: 'scope',
       accessorFn: reconciliationScope,
       header: ({ column }) => <AeOperatorSortableHeader label="Affected scope" column={column} />,
-      meta: { label: 'Affected scope', truncate: true } as ColumnMeta<MoneyReconciliationCaseView, unknown>,
+      meta: { label: 'Affected scope', truncate: true } as ColumnMeta<AeRecordTableFeatures, MoneyReconciliationCaseView, unknown>,
       cell: ({ row }) => {
         const scope = reconciliationScope(row.original)
         return <span className="arc-credit-administration-scope" title={scope}>{scope}</span>
@@ -265,16 +267,16 @@ export function CreditReconciliationRecords({
     },
     {
       id: 'status',
-      meta: { label: 'Status' } as ColumnMeta<MoneyReconciliationCaseView, unknown>,
+      meta: { label: 'Status' } as ColumnMeta<AeRecordTableFeatures, MoneyReconciliationCaseView, unknown>,
       accessorKey: 'status',
       header: ({ column }) => <AeOperatorSortableHeader label="Status" column={column} />,
       cell: ({ row }) => row.original.status,
     },
     {
       id: 'updated',
-      meta: { label: 'Updated', numeric: true } as ColumnMeta<MoneyReconciliationCaseView, unknown>,
+      meta: { label: 'Updated', numeric: true } as ColumnMeta<AeRecordTableFeatures, MoneyReconciliationCaseView, unknown>,
       accessorFn: (record) => record.updatedAt,
-      sortingFn: (left, right, columnId) => {
+      sortFn: (left, right, columnId) => {
         const leftUpdatedAt = left.getValue<number>(columnId)
         const rightUpdatedAt = right.getValue<number>(columnId)
         return leftUpdatedAt < rightUpdatedAt ? -1 : leftUpdatedAt > rightUpdatedAt ? 1 : 0
@@ -356,12 +358,12 @@ export function CreditProviderObligationRecords({
     selectedRecord,
     tableRootRef,
   } = useRecordInspection(rows, providerObligationId, unavailable)
-  const columns = useMemo<ColumnDef<MoneyProviderObligationView, unknown>[]>(() => [
+  const columns = useMemo<ColumnDef<AeRecordTableFeatures, MoneyProviderObligationView, unknown>[]>(() => [
     {
       id: 'provider',
       accessorKey: 'providerRef',
       header: ({ column }) => <AeOperatorSortableHeader label="Provider" column={column} />,
-      meta: { label: 'Provider', truncate: true } as ColumnMeta<MoneyProviderObligationView, unknown>,
+      meta: { label: 'Provider', truncate: true } as ColumnMeta<AeRecordTableFeatures, MoneyProviderObligationView, unknown>,
       cell: ({ row }) => (
         <span className="arc-credit-administration-identity" title={row.original.providerRef}>
           {row.original.providerRef}
@@ -371,12 +373,12 @@ export function CreditProviderObligationRecords({
     {
       id: 'buyerAmount',
       accessorFn: (record) => BigInt(record.buyerAmountUnits),
-      sortingFn: (left, right, columnId) => amountSort(
+      sortFn: (left, right, columnId) => amountSort(
         left.getValue<bigint>(columnId),
         right.getValue<bigint>(columnId),
       ),
       header: ({ column }) => <AeOperatorSortableHeader label="Buyer amount" column={column} />,
-      meta: { label: 'Buyer amount', numeric: true } as ColumnMeta<MoneyProviderObligationView, unknown>,
+      meta: { label: 'Buyer amount', numeric: true } as ColumnMeta<AeRecordTableFeatures, MoneyProviderObligationView, unknown>,
       cell: ({ row }) => (
         <span className="arc-credit-administration-amount">
           {formatCreditAmount({ currency: 'AUD', exponent: 6, units: row.original.buyerAmountUnits })}
@@ -386,12 +388,12 @@ export function CreditProviderObligationRecords({
     {
       id: 'providerAmount',
       accessorFn: (record) => BigInt(record.providerAmountUnits),
-      sortingFn: (left, right, columnId) => amountSort(
+      sortFn: (left, right, columnId) => amountSort(
         left.getValue<bigint>(columnId),
         right.getValue<bigint>(columnId),
       ),
       header: ({ column }) => <AeOperatorSortableHeader label="Provider amount" column={column} />,
-      meta: { label: 'Provider amount', numeric: true } as ColumnMeta<MoneyProviderObligationView, unknown>,
+      meta: { label: 'Provider amount', numeric: true } as ColumnMeta<AeRecordTableFeatures, MoneyProviderObligationView, unknown>,
       cell: ({ row }) => (
         <span className="arc-credit-administration-amount">
           {formatCurrencyAmount({ currency: 'USDC', exponent: 6, units: row.original.providerAmountUnits })}
@@ -400,7 +402,7 @@ export function CreditProviderObligationRecords({
     },
     {
       id: 'state',
-      meta: { label: 'State' } as ColumnMeta<MoneyProviderObligationView, unknown>,
+      meta: { label: 'State' } as ColumnMeta<AeRecordTableFeatures, MoneyProviderObligationView, unknown>,
       accessorKey: 'state',
       header: ({ column }) => <AeOperatorSortableHeader label="State" column={column} />,
       cell: ({ row }) => row.original.state,

@@ -1,3 +1,4 @@
+import type { AeRecordTableFeatures } from '@/components/ae/operator/AeOperatorDataTable'
 import { useState } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 
@@ -15,7 +16,7 @@ import {
 } from '../audit.contracts'
 import { auditEventLabel, auditOutcomeLabel } from './audit-labels'
 
-const columns: ColumnDef<AdminAuditRowModel, unknown>[] = [
+const columns: ColumnDef<AeRecordTableFeatures, AdminAuditRowModel, unknown>[] = [
   {
     accessorKey: 'createdAtLabel',
     header: AUDIT_COPY.columnLabels.time,

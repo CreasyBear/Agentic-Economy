@@ -16,24 +16,31 @@ import {
   type AdminActionSheetState,
   type AdminCommandRequest,
 } from './actions.contracts'
+import { adminCommandRecoveryScope, retainAdminCommandRecovery, forgetAdminCommandRecovery, readAdminCommandRecovery } from './admin-command-recovery'
 import { useAdminCommandProof } from './useAdminCommandProof'
 
 /** Requires a reviewed command and current authority. Submission captures its entire request once.
  * Ensures MFA, pending and uncertain retries use identical terms and operation identity.
  * An unresolved request can be minimized and resumed in the same mounted instance; it cannot be edited.
- * A known refusal permits an explicit new request. Page reload/navigation is outside this local lifetime. */
+ * A known refusal permits an explicit new request. Durable recovery stores identity only; restored observation never replays. */
 export function useAdminActionSheet(props: AdminActionSheetProps): AdminActionSheetController {
   const access = useQuery(api.adminConsoleAudit.readAdminAuditAccess, {})
   const role = access?.kind === 'allowed' ? access.role : null
   const allowed = role !== null && canAdminRolePerformAction(role, ADMIN_ACTION_PERMISSION[props.action])
   const execute = useAdminCommandProof()
+  const scope = access?.kind === 'allowed' ? adminCommandRecoveryScope(access.actorRef) : null
+  const activeScope = useRef(scope)
+  const [stateScope, setStateScope] = useState(scope)
+  const mounted = useRef(true)
+  const [durableRecovery, setDurableRecovery] = useState(false)
   const operationKey = useRef(createPrefixedRandomId('admin:'))
   const correlationId = useRef(createPrefixedRandomId('admin:correlation:'))
   const generation = useRef(0)
   const flights = useRef(0)
   const abandoned = useRef(false)
   const submittedRequest = useRef<AdminCommandRequest | null>(null)
-  const unresolved = useRef(false)
+  const unresolvedRef = useRef(false)
+  const [unresolved, setUnresolved] = useState(false)
   const [pending, setPending] = useState(false)
   const [minimized, setMinimized] = useState(false)
   const [state, setState] = useState<AdminActionSheetState>({
@@ -46,7 +53,10 @@ export function useAdminActionSheet(props: AdminActionSheetProps): AdminActionSh
     generation.current += 1
     abandoned.current = false
     submittedRequest.current = null
-    unresolved.current = false
+    setDurableRecovery(false)
+    unresolvedRef.current = false
+    setUnresolved(false)
+    setStateScope(scope)
     setMinimized(false)
     setPending(flights.current > 0)
     operationKey.current = createPrefixedRandomId('admin:')
@@ -59,7 +69,25 @@ export function useAdminActionSheet(props: AdminActionSheetProps): AdminActionSh
   })
 
   useEffect(() => {
-    if (props.open) resetFromCurrentProps()
+    mounted.current = true
+    return () => { mounted.current = false }
+  }, [])
+
+  useEffect(() => {
+    const previousScope = activeScope.current
+    activeScope.current = scope
+    // Access loss/loading hides the capture without discarding an unresolved request.
+    if (scope === null) return
+    if (stateScope !== scope) {
+      resetFromCurrentProps()
+    } else if (previousScope === null && flights.current === 0 && unresolvedRef.current) {
+      setState(previous => previous.phase === 'submitting'
+        ? { ...previous, phase: 'preview', error: ADMIN_ACTION_SHEET_COPY.unavailable } : previous)
+    }
+  }, [scope, stateScope])
+
+  useEffect(() => {
+    if (props.open && !unresolvedRef.current) resetFromCurrentProps()
   }, [props.open])
 
   function setReason(value: string) {
@@ -127,9 +155,13 @@ export function useAdminActionSheet(props: AdminActionSheetProps): AdminActionSh
 
   async function submit(intent = state.approval) {
     if (props.approval?.kind === 'approve' && intent.kind !== 'approve') return
-    if (!allowed || flights.current > 0 || state.phase === 'submitting') return
+    if (!allowed || scope === null || activeScope.current !== scope || flights.current > 0 || state.phase === 'submitting') return
+    if (readAdminCommandRecovery(scope).some(entry => entry.action === props.action && entry.operationKey !== operationKey.current)) {
+      setState(previous => ({ ...previous, error: 'Check the previous command in Command recovery before submitting another command of this type.' }))
+      return
+    }
     if (intent.kind !== state.approval.kind) {
-      if (unresolved.current) return
+      if (unresolvedRef.current) return
       operationKey.current = createPrefixedRandomId('admin:')
       correlationId.current = createPrefixedRandomId('admin:correlation:')
       if (submittedRequest.current !== null) submittedRequest.current = {
@@ -146,8 +178,13 @@ export function useAdminActionSheet(props: AdminActionSheetProps): AdminActionSh
       setState((previous) => ({ ...previous, error: 'Review the reason, evidence and command details before submitting.' }))
       return
     }
+    const priorUnresolved = unresolvedRef.current
     submittedRequest.current = validated.data
-    unresolved.current = true
+    const identity = { action: validated.data.action, operationKey: validated.data.operationKey, correlationId: validated.data.correlationId }
+    const durable = retainAdminCommandRecovery(scope, identity)
+    setDurableRecovery(durable)
+    unresolvedRef.current = true
+    setUnresolved(true)
     const ticket = generation.current
     flights.current += 1
     abandoned.current = false
@@ -155,12 +192,22 @@ export function useAdminActionSheet(props: AdminActionSheetProps): AdminActionSh
     setState((previous) => ({ ...previous, phase: 'submitting', approval: intent, error: null, receipt: null, submittedRequest: validated.data }))
     try {
       const receipt = await execute(validated.data)
-      if (generation.current !== ticket) return
+      if (!mounted.current || generation.current !== ticket || activeScope.current !== scope) return
       if (receipt == null || (receipt.kind !== 'completed' && receipt.kind !== 'pending' && receipt.kind !== 'proposed' && receipt.kind !== 'refused')) {
         setState((previous) => ({ ...previous, phase: 'preview', error: ADMIN_ACTION_SHEET_COPY.unavailable }))
         return
       }
-      unresolved.current = receipt.kind === 'pending'
+      // A new refusal does not settle an earlier request whose acknowledgement was lost.
+      // Authority and MFA refusals can precede the original operation's durable lookup.
+      if (priorUnresolved && (receipt.kind === 'refused'
+        || receipt.action !== identity.action || receipt.correlationId !== identity.correlationId)) {
+        abandoned.current = false
+        setState(previous => ({ ...previous, phase: 'preview', receipt: null, error: ADMIN_ACTION_SHEET_COPY.unavailable }))
+        return
+      }
+      unresolvedRef.current = receipt.kind === 'pending'
+      setUnresolved(unresolvedRef.current)
+      if (!unresolvedRef.current) forgetAdminCommandRecovery(scope, identity)
       if (abandoned.current) {
         abandoned.current = false
         if (receipt.kind === 'refused' && receipt.code === 'mfa_reverification_required') return
@@ -169,12 +216,16 @@ export function useAdminActionSheet(props: AdminActionSheetProps): AdminActionSh
       }
       setState((previous) => ({ ...previous, phase: 'receipt', receipt }))
     } catch (cause) {
-      if (generation.current !== ticket) return
+      if (!mounted.current || generation.current !== ticket || activeScope.current !== scope) return
       const cancelled = isReverificationCancelledError(cause)
-      unresolved.current = !cancelled
+      // Cancellation establishes no new effect; it cannot settle a previous unknown request.
+      const stillUnresolved = priorUnresolved || !cancelled
+      unresolvedRef.current = stillUnresolved
+      setUnresolved(stillUnresolved)
+      if (!stillUnresolved) forgetAdminCommandRecovery(scope, identity)
       if (abandoned.current) {
         abandoned.current = false
-        if (!cancelled) {
+        if (stillUnresolved) {
           setState((previous) => ({ ...previous, phase: 'preview', error: ADMIN_ACTION_SHEET_COPY.unavailable }))
         }
         return
@@ -182,15 +233,16 @@ export function useAdminActionSheet(props: AdminActionSheetProps): AdminActionSh
       setState((previous) => ({
         ...previous,
         phase: 'preview',
-        error: cancelled ? unchangedPreview() : ADMIN_ACTION_SHEET_COPY.unavailable,
+        error: stillUnresolved ? ADMIN_ACTION_SHEET_COPY.unavailable : unchangedPreview(),
       }))
     } finally {
       flights.current = Math.max(0, flights.current - 1)
-      setPending(flights.current > 0)
+      if (mounted.current) setPending(flights.current > 0)
     }
   }
 
   async function retry(newKey: boolean) {
+    if (newKey && unresolvedRef.current) return
     if (state.receipt?.kind === 'pending') {
       await submit()
       return
@@ -207,7 +259,7 @@ export function useAdminActionSheet(props: AdminActionSheetProps): AdminActionSh
   }
 
   function edit() {
-    if (props.approval?.kind === 'approve' || state.receipt?.kind !== 'refused') return
+    if (unresolvedRef.current || props.approval?.kind === 'approve' || state.receipt?.kind !== 'refused') return
     submittedRequest.current = null
     operationKey.current = createPrefixedRandomId('admin:')
     correlationId.current = createPrefixedRandomId('admin:correlation:')
@@ -215,9 +267,9 @@ export function useAdminActionSheet(props: AdminActionSheetProps): AdminActionSh
   }
 
   return {
-    ...state, role, allowed, pending, minimized, resume: () => setMinimized(false), setReason, setEvidence,
+    ...(stateScope === scope ? state : { ...state, submittedRequest: null, receipt: null, reasonCode: '', evidenceRefs: [], typedEvidence: '', error: null }), role, allowed: allowed && stateScope === scope, pending, minimized, durableRecovery, navigationRisk: !durableRecovery && unresolved, resume: () => setMinimized(false), setReason, setEvidence,
     onOpenChange: (open) => {
-      if (!open && (flights.current > 0 || unresolved.current)) {
+      if (!open && (flights.current > 0 || unresolvedRef.current)) {
         setMinimized(true)
         return
       }

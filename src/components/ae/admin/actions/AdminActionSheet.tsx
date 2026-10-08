@@ -1,3 +1,5 @@
+import { useRef, type ReactNode } from 'react'
+import { AeNavigationSafetyBoundary } from '@/components/ae/layout/AeNavigationSafetyBoundary'
 import { AeRecordSheet } from '@/components/ae/layout/AeRecordSheet'
 import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { Button } from '@/components/arc/button/button'
@@ -11,6 +13,17 @@ import { CommercialPolicyReview } from '../treasury/CommercialPolicyReview'
 
 export function AdminActionSheet(props: AdminActionSheetProps) {
   const command = useAdminActionSheet(props)
+  const recoveryFocusRef = useRef<HTMLButtonElement | null>(null)
+  const protect = (content: ReactNode) => <AeNavigationSafetyBoundary
+    state={{ dirty: command.navigationRisk, pending: command.pending, saveOutcome: command.navigationRisk ? 'outcome_unknown' : 'saved' }}
+    title="Command outcome is unresolved"
+    pendingTitle="Command response is pending"
+    description="Recovery could not be saved on this device. Keep this page open to check the same command. Leaving will lose this recovery entry."
+    pendingDescription="Recovery could not be saved on this device. Wait for the command response before leaving."
+    saveActionRef={recoveryFocusRef}
+    headingRef={recoveryFocusRef}
+    cancelLabel="Keep checking"
+  >{content}</AeNavigationSafetyBoundary>
   const destructive = props.action === 'revoke_admin_membership' || props.action === 'close_removal_dispute'
   const showBack = command.allowed && (
     command.phase === 'submitting'
@@ -21,25 +34,25 @@ export function AdminActionSheet(props: AdminActionSheetProps) {
   ) : command.allowed && (command.phase === 'evidence' || command.phase === 'proof') ? (
     <Button type="button" size="md" onClick={command.next}>{ADMIN_ACTION_SHEET_COPY.continue}</Button>
   ) : command.allowed && command.phase === 'preview' ? (
-    <Button type="button" size="md" disabled={command.pending} onClick={() => {
+    <Button ref={recoveryFocusRef} type="button" size="md" disabled={command.pending} onClick={() => {
       if (command.pending) return
       if (destructive) command.next()
       else void command.submit()
     }}>{destructive ? ADMIN_ACTION_SHEET_COPY.continue : ADMIN_ACTION_SHEET_COPY.submit}</Button>
   ) : command.allowed && command.phase === 'confirm' ? (
-    <Button type="button" variant="danger" size="md" disabled={command.pending} onClick={() => { if (!command.pending) void command.submit() }}>
+    <Button ref={recoveryFocusRef} type="button" variant="danger" size="md" disabled={command.pending} onClick={() => { if (!command.pending) void command.submit() }}>
       {ADMIN_ACTION_SHEET_COPY.confirm}
     </Button>
   ) : command.phase === 'submitting' ? (
     <Button type="button" size="md" disabled aria-busy="true">{ADMIN_ACTION_SHEET_COPY.processing}</Button>
   ) : null
 
-  if (props.open && command.minimized) return <div className="grid gap-intra" role="status">
-    <p className="text-sm">{ADMIN_ACTION_COPY[props.action]}: {command.pending ? 'response pending' : command.receipt !== null ? 'receipt available' : command.error === ADMIN_ACTION_SHEET_COPY.unavailable ? 'outcome unknown' : 'review retained'}. Resume to check the outcome before leaving or reloading.</p>
-    <Button type="button" variant="secondary" size="md" onClick={command.resume}>Resume command</Button>
-  </div>
+  if (props.open && command.minimized) return protect(<div className="grid gap-intra" role="status">
+    <p className="text-sm">{ADMIN_ACTION_COPY[props.action]}: {command.pending ? 'response pending' : command.receipt !== null ? 'receipt available' : command.error === ADMIN_ACTION_SHEET_COPY.unavailable ? 'outcome unknown' : 'review retained'}. {command.durableRecovery ? 'Its identity is saved in Command recovery.' : 'Resume to check the outcome before leaving or reloading.'}</p>
+    <Button ref={recoveryFocusRef} type="button" variant="secondary" size="md" onClick={command.resume}>Resume command</Button>
+  </div>)
 
-  return (
+  return protect(
     <AeRecordSheet
       open={props.open}
       onOpenChange={command.onOpenChange}

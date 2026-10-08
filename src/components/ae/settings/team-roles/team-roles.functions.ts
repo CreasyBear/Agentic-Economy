@@ -26,22 +26,22 @@ export const readTeamRolesServer = createServerFn({ method: 'GET' }).handler(asy
       joinedAt: person.joinedAt,
     }
   }))
-  return { members, inviteAvailability: invitation.kind }
+  return { accountRef: directory.accountRef, members, inviteAvailability: invitation.kind === 'available' && invitation.accountRef !== directory.accountRef ? 'binding_unavailable' : invitation.kind }
 })
 
 export const inviteTeamMemberServer = createServerFn({ method: 'POST' })
-  .inputValidator(z.object({ email: z.email(), role: z.enum(['admin', 'member']) }))
+  .inputValidator(z.strictObject({ expectedAccountRef: z.string().min(1), email: z.email(), role: z.enum(['admin', 'member']), returnForTransfer: z.boolean().optional() }))
   .handler(async ({ data }) => {
     const session = await auth()
     if (!session.userId) throw new Error('Sign in to invite a member.')
     const invitation = await callSourceQuery(api.workspaceTeam.invitationContext, {})
-    if (invitation.kind !== 'available') throw new Error('Invitations are no longer available. Refresh Team & roles to see why.')
+    if (invitation.kind !== 'available' || invitation.accountRef !== data.expectedAccountRef || session.orgId !== invitation.organizationId) throw new Error('Invitations are no longer available. Refresh Team & roles to see why.')
     await clerkClient().organizations.createOrganizationInvitation({
       organizationId: invitation.organizationId,
       inviterUserId: session.userId,
       emailAddress: data.email.trim(),
       role: data.role === 'admin' ? 'org:admin' : 'org:member',
-      redirectUrl: '/owner/settings/team',
+      redirectUrl: data.returnForTransfer ? '/owner/settings/team?purpose=transfer' : '/owner/settings/team',
     })
     return { invited: true as const }
   })

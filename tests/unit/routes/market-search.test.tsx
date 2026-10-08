@@ -21,13 +21,15 @@ vi.mock("@/modules/market/market.functions", async (importOriginal) => ({
   readMarketDiscoveryRecipientServer: async () => null,
   readMarketChatRecipientServer: async () => null,
 }));
-const reads = vi.hoisted(() => ({ catalogue: vi.fn(), providers: vi.fn(), overview: vi.fn(), resource: vi.fn(), home: vi.fn() }));
+const reads = vi.hoisted(() => ({ catalogue: vi.fn(), providers: vi.fn(), overview: vi.fn(), resource: vi.fn(), home: vi.fn(), tool: vi.fn(), external: vi.fn() }));
 vi.mock("@/modules/market/x402-directory-index.functions", () => ({
   readX402DirectoryCatalogueServer: reads.catalogue,
   readX402DirectoryProvidersServer: reads.providers,
   readX402DirectoryCatalogueOverviewServer: reads.overview,
   readX402DirectoryCatalogueResourceServer: reads.resource,
 }));
+vi.mock("@/modules/market/tool-detail-route.functions", () => ({ readPublicToolDetailRouteServer: reads.tool }));
+vi.mock("@/modules/market/market-comparison.functions", () => ({ readMarketExternalListingServer: reads.external }));
 vi.mock("@/modules/market/x402-marketplace-home.functions", () => ({ readX402MarketplaceHomeServer: reads.home }));
 vi.mock("@/modules/market/market-flow.functions", () => ({ readMarketFlowRankServer: async () => undefined }));
 vi.mock("@/modules/market/x402-directory.functions", () => ({
@@ -41,6 +43,8 @@ beforeEach(() => {
   reads.providers.mockResolvedValue({ kind: "unavailable", reason: "index_unavailable" });
   reads.overview.mockResolvedValue({ kind: "unavailable", reason: "index_unavailable" });
   reads.resource.mockResolvedValue({ kind: "not_found" });
+  reads.tool.mockResolvedValue({ kind: "not_found" });
+  reads.external.mockResolvedValue({ kind: "not_found" });
   reads.home.mockResolvedValue({ observedAt: "2026-09-08T00:00:00Z", rails: [] });
 });
 afterEach(() => {
@@ -302,8 +306,19 @@ describe('indexed directory route', () => {
     expect(reads.catalogue).toHaveBeenLastCalledWith({ data: { ...filters, sort: 'adoption' } });
     await loader({ deps: validateMarketSearch({ view: 'tools' }) } as never);
     expect(reads.catalogue).toHaveBeenLastCalledWith({ data: { sort: 'adoption' } });
-    await loader({ deps: validateMarketSearch({ view: 'providers' }) } as never);
-    expect(reads.catalogue).toHaveBeenLastCalledWith({ data: { sort: 'adoption' } });
+    reads.catalogue.mockClear();
+    await loader({ deps: validateMarketSearch({ view: 'providers', query: 'api.', providerCursor: 'next-host' }) } as never);
+    expect(reads.providers).toHaveBeenLastCalledWith({ data: { providerPrefix: 'api.', providerCursor: 'next-host' } });
+    expect(reads.catalogue).not.toHaveBeenCalled();
+    await loader({ deps: { providerCursor: 'legacy-host-page' } } as never);
+    expect(reads.providers).toHaveBeenLastCalledWith({ data: { providerCursor: 'legacy-host-page' } });
+    // Existing constrained links still group matching Tool results; their constraints are never dropped.
+    reads.providers.mockClear();
+    await loader({ deps: validateMarketSearch({ view: 'providers', maxUsdPrice: 1 }) } as never);
+    expect(reads.catalogue).toHaveBeenLastCalledWith({ data: { maxUsdPrice: 1, sort: 'adoption' } });
+    expect(reads.providers).not.toHaveBeenCalled();
+    expect(marketLoaderDeps({ view: 'providers', page: 2 })).toEqual({ view: 'providers', page: 2 });
+    await loader({ deps: { view: 'providers', page: 2 } } as never);
     expect(reads.providers).not.toHaveBeenCalled();
   });
 });
@@ -322,7 +337,7 @@ it('keeps the last catalogue when the next view cannot be read', async () => {
   reads.catalogue.mockRejectedValueOnce(new Error('aborted'));
   const loader = Route.options.loader;
   if (typeof loader !== 'function') throw new Error('loader_missing');
-  const failed = await loader({ deps: { view: 'providers' } } as never);
+  const failed = await loader({ deps: { view: 'tools' } } as never);
   expect(failed.catalogue).toEqual({ kind: 'unavailable', reason: 'source_unavailable' });
   const previous = { page: { kind: 'ok' }, catalogue: { kind: 'ok', source: 'index' } as const };
   expect(retainedMarketCatalogue(previous, { page: failed.page, catalogue: failed.catalogue })).toEqual({ shown: previous, retainPrevious: true });
@@ -345,5 +360,30 @@ describe('catalogue display preference', () => {
     expect(carryMarketCompare(from, { view: 'providers' })).toEqual({ view: 'providers', ...from })
     expect(carryMarketCompare(from, { layout: 'table', compare: undefined })).toEqual({ layout: 'table', compare: undefined })
     expect(carryMarketCompare(from, { layout: undefined })).toEqual({ layout: undefined, compare: from.compare })
+  })
+})
+
+describe('exact admitted and external comparison reads', () => {
+  it('uses canonical Tool identity without reclassifying a Host or endpoint', async () => {
+    const toolRef = `operation:v1:${'a'.repeat(64)}`
+    const tool = { toolRef, listing: { label: 'Admitted Tool' } }
+    reads.tool.mockResolvedValue({ kind: 'found', tool })
+    const loader = Route.options.loader
+    if (typeof loader !== 'function') throw new Error('market_loader_missing')
+    const result = await loader({ deps: { view: 'tools', compare: toolRef } } as never)
+    expect(result.compareEntries).toEqual([{ resource: toolRef, tool }])
+    expect(reads.tool).toHaveBeenCalledWith({ data: { toolRef } })
+    expect(reads.resource).not.toHaveBeenCalled()
+  })
+  it('resolves a compact external ID through the exact index and requires current descriptor for its qualified join', async () => {
+    const id = `registry:${'b'.repeat(64)}`, toolRef = `operation:v1:${'a'.repeat(64)}`
+    reads.external.mockResolvedValue({ kind: 'found', item: { toolRef, entry: { resource: 'https://example.test/weather' } } })
+    reads.tool.mockResolvedValue({ kind: 'not_found' })
+    const loader = Route.options.loader
+    if (typeof loader !== 'function') throw new Error('market_loader_missing')
+    const result = await loader({ deps: { view: 'tools', compare: id } } as never)
+    expect(reads.external).toHaveBeenCalledWith({ data: { id } })
+    expect(reads.tool).toHaveBeenCalledWith({ data: { toolRef } })
+    expect(result.compareEntries).toEqual([{ resource: id, missing: true }])
   })
 })

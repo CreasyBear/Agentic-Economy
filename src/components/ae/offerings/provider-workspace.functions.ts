@@ -1,6 +1,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { setResponseHeader } from '@tanstack/react-start/server'
 import { z } from 'zod'
+import { ownerInventoryQuery, ownerInventorySortSchema, type OwnerInventoryQuery, type OwnerInventorySort } from '@/lib/operator/owner-inventory-search'
 
 import { callSourceMutation, callSourceQuery, sourceMutation, sourceQuery } from '@/lib/server/convex-source'
 import { requireStrictClerkConsequenceProof } from '@/lib/server/clerk-consequence-proof'
@@ -49,7 +50,7 @@ export type ProviderWorkspaceInventoryResult =
     }>
   | Readonly<{ kind: 'not_found' }>
   | Readonly<{ kind: 'conflict'; reason: 'multiple_providers' | 'business_mismatch' }>
-  | Readonly<{ kind: 'unavailable' }>
+  | Readonly<{ kind: 'unavailable'; reason?: 'inventory_index_pending' }>
 
 export type ProviderWorkspaceLifecycleRow = Readonly<{
   offeringRef: string
@@ -154,8 +155,9 @@ type OwnerProviderToolDirectoryReadback =
       continueCursor: string
     }>
   | Readonly<{ kind: 'not_found' }>
+  | Readonly<{ kind: 'index_pending' }>
 const listOwnerProviderToolsQuery = sourceQuery<
-  { businessId: string; now: number; paginationOpts: { numItems: number; cursor: string | null } },
+  { businessId: string; now: number; search?: string; sort?: OwnerInventorySort; paginationOpts: { numItems: number; cursor: string | null } },
   OwnerProviderToolDirectoryReadback
 >('capabilityProviderTools:listOwner')
 
@@ -170,14 +172,14 @@ export type ProviderWorkspacePageResult = Readonly<{
 }>
 
 export const readProviderWorkspacePageServer = createServerFn()
-  .validator((data) => z.strictObject({ cursor: z.string().min(1).max(10_000).optional() }).parse(data))
+  .validator((data) => z.strictObject({ cursor: z.string().min(1).max(10_000).optional(), q: z.string().trim().max(120).optional(), sort: ownerInventorySortSchema.optional() }).parse(data))
   .handler(async ({ data }): Promise<ProviderWorkspacePageResult> => {
     privateOwnerResponse()
-    return readProviderWorkspacePageThroughSource(data.cursor === undefined ? {} : { cursor: data.cursor })
+    return readProviderWorkspacePageThroughSource(ownerInventoryQuery(data))
   })
 
 export async function readProviderWorkspacePageThroughSource(
-  data: Readonly<{ cursor?: string }> = {},
+  data: OwnerInventoryQuery = {},
 ): Promise<ProviderWorkspacePageResult> {
   const identity = await readCurrentOwnerIdentity()
   if (identity.kind === 'not_found') return { inventory: { kind: 'not_found' } }
@@ -187,9 +189,12 @@ export async function readProviderWorkspacePageThroughSource(
     const result = await callSourceQuery(listOwnerProviderToolsQuery, {
       businessId: identity.businessId,
       now: Date.now(),
+      ...(data.q === undefined ? {} : { search: data.q }),
+      ...(data.sort === undefined ? {} : { sort: data.sort }),
       paginationOpts: { numItems: 50, cursor: data.cursor ?? null },
     })
     if (result.kind === 'not_found') return { inventory: { kind: 'not_found' } }
+    if (result.kind === 'index_pending') return { inventory: { kind: 'unavailable', reason: 'inventory_index_pending' } }
     const lifecycle: ProviderWorkspaceLifecycleRow[] = []
     const diagnostics: { offeringRef: string; reason: 'invalid_status' }[] = []
     for (const row of result.page) {

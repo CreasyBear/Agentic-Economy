@@ -7,7 +7,8 @@ export type TeamMemberView = Readonly<{
   joinedAt: number
 }>
 export type TeamRolesView = Readonly<{
+  accountRef?: string
   members: readonly TeamMemberView[]
   inviteAvailability: 'available' | 'role_restricted' | 'organization_unset' | 'binding_unavailable'
 }>
-export type TeamRolesPageProps = TeamRolesView
+export type TeamRolesPageProps = TeamRolesView & Readonly<{ transferRequested?: boolean }>

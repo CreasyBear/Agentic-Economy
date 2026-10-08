@@ -24,6 +24,55 @@ prove external Customer traction, paid chat, a joint restore of those purchases
 or indefinite provider availability. Screening remains explicitly deferred under
 the approved alpha policy.
 
+## Platform UI upgrade — source candidate
+
+Owner: the canonical UI integrator, with Registry, Supply, Identity, Execution
+and Admin owners retaining domain authority. Continue [Wayfinder #256](https://github.com/CreasyBear/Agentic-Economy/issues/256).
+The [UI execution record](docs/operations/mercator-maturity-register.md#7-october-platform-ui-upgrade)
+tracks F01–F16, dependencies and evidence. REUI/Base Nova and Table 9.2.6 are
+integrated as one source candidate; independent review and complete repository
+qualification remain the acceptance gate. Preserve the pre-existing Chat 3 work
+and unrelated whitepaper/strategy drafts.
+
+Next: finish the integrated source gate and the coordinated production release
+authorized by Joel on 8 October. Joel explicitly deferred authenticated
+production journey qualification until later; keep that separate acceptance
+open for the Identity/Supply/Admin owners. Current local
+authenticated test configuration lacks `AE_E2E_OWNER_EMAIL` and `CONVEX_URL`;
+do not substitute a production Account or treat component fixtures as hosted
+proof. The deployment owner must stage/backfill Provider inventory indexes before
+enabling the new indexed reads; [release sequencing](docs/operations/deployments.md#platform-ui-candidate--7-october)
+records that obligation. The release preserves the Admin-only payment audience;
+public access expansion and paid Calls are outside this release.
+
+The public market recut is part of this UI candidate. UI/Registry own the branded
+opening, readable Tool results, explicit Agent handoff, and complete Host-index
+lookup. The release owner must deploy the optional public Host-prefix reader
+before its web caller. It reuses an existing index and needs no data backfill.
+The populated local browser fixture uses synthetic read-only data. Hosted
+qualification stays open under Joel's deferral.
+
+The For Providers recut now uses licensed REUI Hero 14, generated Aecon artwork,
+the installed Stepper and Arc FAQ. Its supported setup scope is explicit; the
+custom gallery and unnecessary backend loader are removed. Source checks, five
+affected tests and local public browser navigation pass. The release gate stops
+at the development manifest because `AE_FORMANCE_ENVIRONMENT` is missing. The
+release owner must supply the real development configuration and rerun the gate;
+no later gate stage or authenticated publication journey is claimed complete.
+
+The settings recut replaces the second sidebar with licensed REUI Profile 2 and
+uses Solution Users 4 for Team invitations. UI owns the composition; Identity
+retains membership, invitation, MFA and readback mechanics. Current source checks
+and affected settings suites pass; 320–1440px read-only browser fixtures cover
+responsive layout, routed focus, member search, keyboard access to scrolled
+controls and dialog focus. Authenticated writes remain deferred with the existing
+journey hold. The completion pass also fixes stale Team reads, unknown-command
+recovery, invitation/rename Account fences and draft loss; receipt amounts and
+Notifications composition are repaired. Auth uses licensed REUI Auth 18 around
+Clerk. Two independent Sol reviews and 234 affected tests pass. The source and
+read-only visual scope is complete; the integrated release gate and authenticated
+journeys remain open. See the same UI execution record for detailed limits.
+
 ## Mercator maturity
 
 Reuse [#256](https://github.com/CreasyBear/Agentic-Economy/issues/256). The

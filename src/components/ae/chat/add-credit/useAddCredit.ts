@@ -1,3 +1,5 @@
+import { saveFundingReturnScope } from '@/lib/call-recovery/funding-return-scope'
+import { useChatBuyerReturnScope } from '../chat-session/buyer-return-context'
 import { useAuth } from '@clerk/tanstack-react-start'
 import { useServerFn } from '@tanstack/react-start'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
@@ -41,6 +43,7 @@ function fundingProblemCopy(result: MoneyRefusal | AccountFundingOutcomeUnknownR
  * On violation: refuse locally; a submitted/unknown attempt keeps its original recovery key.
  */
 export function useAddCredit(open: boolean, onFunded: () => void) {
+  const returnScope = useChatBuyerReturnScope()
   const { userId } = useAuth()
   const beginAccountFunding = useServerFn(beginAccountFundingServer)
   const readAccountFundingBalance = useServerFn(readAccountFundingBalanceServer)
@@ -375,6 +378,8 @@ export function useAddCredit(open: boolean, onFunded: () => void) {
         setBusy(false)
         return
       }
+      saveFundingReturnScope(result.session.evidence.externalRef, returnScope)
+      try { saveFundingReturnScope(result.session.evidence.externalRef, returnScope, checkoutWindow.sessionStorage) } catch { /* The original conversation remains available if popup storage is blocked. */ }
       checkoutWindow.location.replace(result.session.checkoutUrl)
       setPaymentStatus('checking')
       setBusy(false)
@@ -391,7 +396,7 @@ export function useAddCredit(open: boolean, onFunded: () => void) {
     } finally {
       beginInFlightRef.current = false
     }
-  }, [balance, beginAccountFunding, busy, constraints, open, readAccountFundingBalance, readAccountFundingConstraints, selected, userId, waitingForCredit])
+  }, [returnScope, balance, beginAccountFunding, busy, constraints, open, readAccountFundingBalance, readAccountFundingConstraints, selected, userId, waitingForCredit])
 
   return { selected, setSelected, begin, busy, problem, balance, constraints, paymentStatus, checkPayment }
 }

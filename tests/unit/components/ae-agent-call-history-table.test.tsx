@@ -137,8 +137,8 @@ describe('AeAgentCallHistoryTable (W-29)', () => {
 
     const table = screen.getByRole('table')
     const receiptHeader = within(table).getAllByRole('columnheader').at(-1)
-    expect(receiptHeader).toHaveAttribute('data-key', 'receipt')
-    expect(receiptHeader).not.toHaveAttribute('data-sortable')
+    expect(receiptHeader).toHaveAttribute('data-col-id', 'receipt')
+    expect(within(receiptHeader!).queryByRole('button', { name: /Sort by/ })).toBeNull()
     const firstDataRow = within(table).getAllByRole('row')[1]!
     const cells = within(firstDataRow).getAllByRole('cell')
     expect(cells.map((cell) => cell.getAttribute('data-label'))).toEqual([
@@ -149,7 +149,7 @@ describe('AeAgentCallHistoryTable (W-29)', () => {
       'When',
       'Receipt',
     ])
-    expect(cells[2]).toHaveAttribute('data-numeric')
+    expect(cells[2]).toHaveClass('tabular-nums')
 
     const filter = screen.getByRole('searchbox', { name: 'Filter rows…' })
     fireEvent.change(filter, { target: { value: toolLabel } })

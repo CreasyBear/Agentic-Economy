@@ -94,7 +94,7 @@ test.describe('app shell persistence', () => {
     })
 
     await navigateMarketToForProviders(page)
-    await expect(page.getByRole('heading', { level: 1, name: 'Add a Tool.' })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: 'Put your API on the market', exact: true })).toBeVisible()
 
     const stillAlive = page.locator('[data-shell="app-header"][data-probe="alive"]')
     await expect(stillAlive).toHaveCount(1)

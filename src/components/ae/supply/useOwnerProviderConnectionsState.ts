@@ -1,3 +1,4 @@
+import { inventoryQueryFromReturnSearch, ownerInventoryReturnSearch } from '@/lib/operator/owner-inventory-return'
 import { useNavigate, useRouter } from '@tanstack/react-router'
 import { useReverification } from '@clerk/tanstack-react-start'
 import { useServerFn } from '@tanstack/react-start'
@@ -71,6 +72,10 @@ export function useOwnerProviderConnectionsState({
   const handoffResourceUrl = x402Handoff?.resourceUrl
   const handoffMethod = x402Handoff?.method
   const handoffEnvironment = x402Handoff?.environment
+  const inventoryReturnRef = useRef(ownerInventoryReturnSearch(inventoryQueryFromReturnSearch(x402Handoff ?? {})))
+  useLayoutEffect(() => {
+    inventoryReturnRef.current = ownerInventoryReturnSearch(inventoryQueryFromReturnSearch(x402Handoff ?? {}))
+  }, [x402Handoff])
   const currentHandoffRef = useRef<X402HandoffIdentity | undefined>(undefined)
   useLayoutEffect(() => {
     currentHandoffRef.current = handoffDraft === undefined || handoffResourceUrl === undefined || handoffMethod === undefined || handoffEnvironment === undefined
@@ -141,6 +146,7 @@ export function useOwnerProviderConnectionsState({
             to: '/owner/operations/new',
             search: {
               draft: pendingReturn.draft,
+              ...inventoryReturnRef.current,
               connection: pendingReturn.connection,
               environment: pendingReturn.environment,
             },

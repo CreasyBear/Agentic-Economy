@@ -1,5 +1,7 @@
 'use client'
 
+import type { AeRecordTableFeatures } from '@/components/ae/operator/AeOperatorDataTable'
+
 import { useMemo, useState, type ReactNode } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 import { ReceiptText as ReceiptTextIcon } from 'lucide-react'
@@ -169,7 +171,7 @@ function AvailableAccountHistoryView({
   const [activeRowId, setActiveRowId] = useState<string | undefined>()
   const selectedEntry = selectedId === null ? undefined : state.entries.find((entry) => entry.transactionId === selectedId)
   if (selectedId !== null && selectedEntry === undefined) setSelectedId(null)
-  const columns = useMemo<ColumnDef<AccountHistoryEntry, unknown>[]>(() => [
+  const columns = useMemo<ColumnDef<AeRecordTableFeatures, AccountHistoryEntry, unknown>[]>(() => [
     {
       id: 'activity',
       accessorFn: (entry) => accountHistoryLabel(entry.kind),

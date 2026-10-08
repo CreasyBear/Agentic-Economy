@@ -81,9 +81,9 @@ export function isWorkspaceMfaReverificationRefusal(
 export type WorkspaceDangerDiagnostic = Rule4Diagnostic
 
 export const FENCE_MESSAGES: Record<WorkspaceDecommissionFence, string> = {
-  unsettled_provider_obligations: 'Provider obligations are still unsettled. Settle them before close.',
+  unsettled_provider_obligations: 'Provider obligations are still unsettled. Review their status and ask Support to resolve any obligation you cannot settle.',
   open_calls: 'One or more Calls are still open. Wait until they finish before close.',
-  unreleased_call_holds: 'Call holds have not been released. Release them before close.',
+  unreleased_call_holds: 'Call credit is still reserved. Review the affected Calls; only their recorded completion or recovery can release a hold.',
   in_flight_funding: 'A funding command is still in flight. Wait until it finishes before close.',
   open_reconciliation: 'A reconciliation case is still open. Resolve it before close.',
 }
@@ -104,4 +104,16 @@ export function fenceMessagesFor(
   fences: readonly WorkspaceDecommissionFence[],
 ): readonly string[] {
   return fences.map((fence) => FENCE_MESSAGES[fence])
+}
+
+export type WorkspaceFenceDestination = Readonly<{ fence: WorkspaceDecommissionFence; label: string; href: string; actionLabel: string }>
+export function fenceDestinationsFor(fences: readonly WorkspaceDecommissionFence[], accountRef: string): readonly WorkspaceFenceDestination[] {
+  const destinations: Record<WorkspaceDecommissionFence, { href: string; actionLabel: string }> = {
+    open_calls: { href: '/activity', actionLabel: 'Review open Calls' },
+    unreleased_call_holds: { href: '/activity', actionLabel: 'Review Call holds and recovery' },
+    in_flight_funding: { href: '/owner/credit', actionLabel: 'Check the original funding attempt' },
+    open_reconciliation: { href: '/activity', actionLabel: 'Review Calls needing reconciliation' },
+    unsettled_provider_obligations: { href: '/support', actionLabel: 'Get help with unsettled Provider obligations' },
+  }
+  return fences.map(fence => ({ fence, label: fence === 'unsettled_provider_obligations' ? `${FENCE_MESSAGES[fence]} Workspace reference: ${accountRef}.` : FENCE_MESSAGES[fence], ...destinations[fence] }))
 }

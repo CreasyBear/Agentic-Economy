@@ -1,4 +1,4 @@
-/* Arc Pro ai-chat header/thread composition with live shared transcript data.
+/* ReUI chat shell with live shared transcript data.
  * Pagination cursors, privacy and read-only semantics remain caller-owned.
  * Sample composer/menus and local demo messages are omitted. */
 import { useConvex, useQuery } from 'convex/react'
@@ -9,7 +9,7 @@ import { createPortal } from 'react-dom'
 import { api } from '../../../../convex/_generated/api'
 import { AeChatPage } from '@/components/ae/layout/AeChatPage'
 import { AeEmptyState } from '@/components/ae/shared/empty-state/AeEmptyState'
-import { ArcAiChatHeader } from '@/components/ae/shared/arc-pro/ai-chat/ai-chat'
+import { ReuiChatHeader } from '@/components/ae/shared/reui-pro/ai-chat/ai-chat'
 import { AeAlert as Alert } from '@/components/ae/shared/alert/AeAlert'
 import { Button } from '@/components/arc/button/button'
 import './SharedChatComposition.css'
@@ -75,9 +75,9 @@ function SharedChatThread({ shareToken }: { shareToken: string }) {
   const loadingMore = loadMoreStatus === 'loading'
   const slot = useChatHeaderSlot()
   const title = initial?.title ?? chatShared.fallbackTitle
-  const sharedBar = <ArcAiChatHeader title={title} description={chatShared.detail}
-    leading={<LockKeyholeIcon aria-hidden="true" size={18} />} actions={null}
-    notice={<span>{chatShared.badge}</span>} />
+  const sharedBar = <ReuiChatHeader title={title} description={chatShared.detail}
+    leading={<LockKeyholeIcon aria-hidden="true" size={18} />}
+    actions={<span className="text-xs text-muted-foreground">{chatShared.badge}</span>} />
 
   async function onLoadMore(): Promise<void> {
     if (!mounted.current || continueCursor === undefined || inFlightRequest.current !== null) return

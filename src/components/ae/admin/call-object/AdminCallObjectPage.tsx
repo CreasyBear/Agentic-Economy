@@ -1,3 +1,4 @@
+import { AdminInvestigationReturn } from '../exceptions/AdminInvestigationReturn'
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { ErrorBoundary } from '@sentry/react'
 import { AeSection } from '@/components/ae/layout/AeSection'
@@ -78,9 +79,12 @@ function AdminCallObjectFound({ view }: AdminCallObjectFoundProps) {
           { id: 'record', label: view.ref },
         ]}
         actions={(
+          <>
+          <AdminInvestigationReturn />
           <Badge tone={model.status.tone}>
             {model.status.compactLabel}
           </Badge>
+          </>
         )}
         detail={(
           <div className="flex min-w-0 flex-wrap items-center gap-intra text-sm text-muted-foreground">

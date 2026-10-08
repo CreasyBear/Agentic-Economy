@@ -1,7 +1,9 @@
 // Adapted from vercel/ai-chatbot, c2f8235e1f3ea903ad8b7f61447c4f74164b5c58, components/chat/shell.tsx and components/chat/app-sidebar.tsx, Apache-2.0.
 import { ErrorBoundary } from '@sentry/react'
 import { useEffect, useState } from 'react'
-import { ArcAiChatDock, ArcAiChatFrame } from '@/components/ae/shared/arc-pro/ai-chat/ai-chat'
+import { ReuiChatDock, ReuiChatFrame } from '@/components/ae/shared/reui-pro/ai-chat/ai-chat'
+import { ReuiChatWelcome } from '@/components/ae/shared/reui-pro/ai-chat/welcome'
+import { ChatGreeting } from './ChatGreeting'
 import '@/components/ae/shared/arc-pro/chat/ChatComposition.css'
 import { AeChatPage } from '@/components/ae/layout/AeChatPage'
 
@@ -42,7 +44,6 @@ export function ChatLayout({ model, ownerChatEnabled = false, enableSpendingBusy
       return !open
     })
   }
-  const empty = !model.pageBusy && !model.transcript.pending && model.transcript.messages.length === 0
   const fallbackHeader = { ...model.header }
   delete fallbackHeader.onEnableSpending
   if (model.signInToThread !== undefined) {
@@ -57,11 +58,11 @@ export function ChatLayout({ model, ownerChatEnabled = false, enableSpendingBusy
     )
   }
   return (
-    <ArcAiChatFrame sidebarOpen={historyOpen} onNewChat={model.header.onNewChat}
-      sidebar={model.showHistoryRail ? historyOpen ? <ErrorBoundary key={String(model.header.threadId) + ':' + historyVersion}
+    <ReuiChatFrame sidebarOpen={historyOpen} onNewChat={model.header.onNewChat}
+      sidebar={model.showHistoryRail ? <ErrorBoundary key={historyVersion}
         fallback={<RecoveryNotice reason="history_unavailable" onRetry={retryHistory} onNewChat={model.header.onNewChat} className="arc-chat-sidebar-recovery" />}>
         {model.createHistoryPanel('rail')}
-      </ErrorBoundary> : <></> : null}>
+      </ErrorBoundary> : null}>
       <AeChatPage
         header={
           <ErrorBoundary key={model.header.threadId} fallback={<ChatHeader {...fallbackHeader}
@@ -93,18 +94,16 @@ export function ChatLayout({ model, ownerChatEnabled = false, enableSpendingBusy
             </div>
           ) : null}
           <ChatTranscript {...model.transcript} ownerChatEnabled={ownerChatEnabled}
+            emptyState={<ReuiChatWelcome><ChatGreeting />
+              {model.transcript.onStarter === undefined ? null : <ChatSuggestedActions onPick={model.transcript.onStarter} />}
+            </ReuiChatWelcome>}
             onRunTool={model.onRunTool}
             enableSpendingBusy={enableSpendingBusy}
             {...(onAddCredit === undefined ? {} : { onAddCredit })}
             {...(onEnableSpending === undefined ? {} : { onEnableSpending })} />
-          <ArcAiChatDock>
-                {empty && model.transcript.onStarter ? (
-                  <div className="arc-chat-starters"><ChatSuggestedActions onPick={model.transcript.onStarter} /></div>
-                ) : null}
-                <ChatComposer {...model.composer} />
-          </ArcAiChatDock>
+          <ReuiChatDock><ChatComposer {...model.composer} /></ReuiChatDock>
         </div>
       </AeChatPage>
-    </ArcAiChatFrame>
+    </ReuiChatFrame>
   )
 }

@@ -15,6 +15,9 @@ import {
 } from './lib/money/credit/balance'
 import { listCreditActivityHandler, readKeyUsageHandler } from './lib/money/credit/activity'
 import {
+  ownerProviderEarningsPageArgs,
+  ownerProviderEarningsPageResultValue,
+  readOwnerProviderEarningsPageHandler,
   ownerProviderEarningsArgs,
   ownerProviderEarningsResultValue,
   agentProviderEarningsArgs,
@@ -62,3 +65,5 @@ import { credentialActivityJoinArgs,readCredentialActivityFactsHandler,credentia
 export const readCredentialActivityFacts=internalQuery({args:credentialActivityJoinArgs,returns:creditActivityResultValue,handler:readCredentialActivityFactsHandler})
 export const readCredentialSource=internalQuery({args:credentialSourceArgs,returns:credentialSourceResult,handler:readCredentialSourceHandler})
 export const readCredentialCreatedCalls=internalQuery({args:credentialCreatedCallsArgs,returns:credentialCreatedCallsResult,handler:readCredentialCreatedCallsHandler})
+
+export const readOwnerProviderEarningsPage = query({ args: ownerProviderEarningsPageArgs, returns: ownerProviderEarningsPageResultValue, handler: readOwnerProviderEarningsPageHandler })

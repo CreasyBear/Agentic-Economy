@@ -65,6 +65,19 @@ describe('AeOwnerOfferingsList (W-34)', () => {
     },
   ]
 
+  it('carries exact list context on both live slug and unpublished offering references', () => {
+    render(<AeOwnerOfferingsList offerings={testTools} serverControlled inventoryQuery={{ q: 'postal & tax', sort: 'relevance', cursor: 'opaque:+/=' }} />)
+    const links = screen.getAllByRole('link', { name: /Open Tool/ })
+    const urls = links.map(link => new URL(link.getAttribute('href')!, 'https://aecon.test'))
+    expect(urls.some(url => url.pathname === '/owner/operations/tax-calculator')).toBe(true)
+    expect(urls.some(url => url.pathname === '/owner/operations/offering%3Apostcode-lookup')).toBe(true)
+    for (const url of urls) {
+      expect(url.searchParams.get('inventoryQ')).toBe('postal & tax')
+      expect(url.searchParams.get('inventorySort')).toBe('relevance')
+      expect(url.searchParams.get('inventoryCursor')).toBe('opaque:+/=')
+    }
+  })
+
   it('T1: renders Tool name, canonical status badges, pricing, and Calls', () => {
     render(<AeOwnerOfferingsList offerings={testTools} />)
 
@@ -289,4 +302,19 @@ describe('AeOwnerOfferingsList (W-34)', () => {
     expect(screen.getAllByText('Australian Tax Calculator')).toHaveLength(1)
     expect(screen.getAllByRole('link', { name: 'Open Tool for Australian Tax Calculator' })).toHaveLength(1)
   })
+})
+
+
+describe('Server inventory results', () => {
+  afterEach(cleanup)
+  it('keeps the server inventory toolbar and explicit no-match result reachable on an empty page', () => {
+  render(<AeOwnerOfferingsList offerings={[]} serverControlled
+    toolbar={<button type="button">Clear inventory search</button>}
+    emptyMessage="No Tools match this search." />)
+  expect(screen.getByRole('button', { name: 'Clear inventory search' })).toBeTruthy()
+  expect(screen.getByRole('table', { name: 'Tools' })).toBeTruthy()
+  expect(screen.getByText('No Tools match this search.')).toBeTruthy()
+  expect(screen.queryByRole('link', { name: 'Add Tool' })).toBeNull()
+})
+
 })

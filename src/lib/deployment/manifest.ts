@@ -162,12 +162,14 @@ const optionalNames = Object.freeze([
   'AE_SITE_URL', 'SITE_URL', 'SENTRY_RELEASE', 'VITE_POSTHOG_KEY', 'POSTHOG_KEY', 'VITE_POSTHOG_HOST', 'POSTHOG_HOST',
   'VITE_POSTHOG_APP_URL', 'POSTHOG_APP_URL',   'AE_WBA_SIGNATURE_AGENT_ALLOWLIST', 'AE_WBA_DIRECTORY_PUBLIC_JWK_JSON',
   'AE_CLI_BASE_URL',
+  'AE_PUBLIC_DOCS_URL', 'VITE_AE_DOCS_APP_URL',
   'AE_INFISICAL_CUSTOMER_ORGANIZATION_SLUG',
   'AE_INFISICAL_PLATFORM_ORGANIZATION_SLUG',
 ])
 
 export const fieldRules: readonly FieldRule[] = [
   { name: 'AE_JEV_DISCOVERY_ENABLED', kind: 'boolean' },
+  { name: 'AE_PUBLIC_DOCS_URL', kind: 'url' }, { name: 'VITE_AE_DOCS_APP_URL', kind: 'url' },
   { name: 'AE_CANONICAL_BASE_URL', kind: 'url' }, { name: 'AE_CANONICAL_HOST_ALLOWLIST', kind: 'host-list' },
   { name: 'CONVEX_URL', kind: 'url' }, { name: 'VITE_CONVEX_URL', kind: 'url' }, { name: 'CLERK_JWT_ISSUER_DOMAIN', kind: 'url' },
   { name: 'AE_GATEWAY_SMOKE_BASE_URL', kind: 'url' }, { name: 'AE_RELEASE_CONVEX_URL', kind: 'url' },

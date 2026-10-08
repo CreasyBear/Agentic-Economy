@@ -1,3 +1,4 @@
+import { adminInvestigationSearchSchema } from '@/components/ae/admin/exceptions/admin-investigation-return'
 import { createFileRoute } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 
@@ -44,6 +45,7 @@ const readAdminCallServer = createServerFn()
 
 export const Route = createFileRoute('/_operator/admin/calls/$callRef')({
   ...operatorRouteOptions,
+  validateSearch: (search: Record<string, unknown>) => adminInvestigationSearchSchema.parse(search),
   loader: ({ params }) => readAdminCallServer({ data: { callRef: params.callRef } }),
   pendingComponent: AdminCallObjectPageSkeleton,
   head: () => ({

@@ -1,18 +1,27 @@
+import { AeNavigationSafetyProvider } from './AeNavigationSafetyContext'
 import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react'
 
-import { AeOwnerMobileNavigation } from '@/components/ae/layout/AeOwnerMobileNavigation'
+import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
+import { WorkspaceSidebar } from './app-shell/WorkspaceSidebar'
+import { WorkspaceTablePreferences } from './app-shell/WorkspaceTablePreferences'
+import { WorkspaceFrameContext } from './app-shell/WorkspaceFrameContext'
+import { WorkspaceTransitionBoundary } from './WorkspaceTransitionBoundary'
+import { useRouterState } from '@tanstack/react-router'
 import { OperatorChromeProvider } from '@/components/ae/layout/AeOperatorPage'
 import { KeyboardShortcutsDialog } from '@/components/ae/shortcuts/KeyboardShortcutsDialog'
 import { CommandPanelProvider } from '@/components/ae/command-panel'
 import { cn } from '@/lib/utils'
 
 import { AeAppHeader } from './app-shell/AeAppHeader'
+import { ChatHeaderSlotProvider } from './app-shell/ChatHeaderSlot'
 import { useAppShellState } from './app-shell/useAppShellState'
 import './AppFrameComposition.css'
 
 function usePublicDocumentFocus(pathname: string) {
+  const pending = useRouterState({ select: state => state.isLoading })
   const previousPathRef = useRef<string | undefined>(undefined)
   useEffect(() => {
+    if (pending) return
     if (previousPathRef.current === undefined) {
       previousPathRef.current = pathname
       return
@@ -23,7 +32,7 @@ function usePublicDocumentFocus(pathname: string) {
       document.querySelector<HTMLElement>('main#main-content[data-shell-mode]')?.focus()
     })
     return () => window.cancelAnimationFrame(frame)
-  }, [pathname])
+  }, [pathname, pending])
 }
 
 export function AeAppShell({ children }: { children: ReactNode }) {
@@ -33,13 +42,12 @@ export function AeAppShell({ children }: { children: ReactNode }) {
   const contentClassName = cn(
     'flex min-h-0 flex-1 flex-col',
     chatFrame ? 'overflow-hidden' : null,
-    shell.hidePublicFooter ? '[&_footer]:hidden' : null,
+    shell.hidePublicFooter ? '[&_.arc-site-footer]:hidden' : null,
   )
 
   const header = () => (
     <AeAppHeader
       signedIn={shell.isSignedIn}
-      operatorRole={shell.operatorRole}
       minimal={shell.isMinimalShell}
       mobileNavOpen={shell.mobileNavOpen}
       setMobileNavOpen={shell.setMobileNavOpen}
@@ -50,8 +58,8 @@ export function AeAppShell({ children }: { children: ReactNode }) {
   )
 
   return (
-    <div
-      className={cn('arc-market arc-app-frame', chatFrame ? 'h-svh overflow-hidden' : null)}
+    <AeNavigationSafetyProvider><ChatHeaderSlotProvider><div
+      className={cn('arc-market arc-app-frame', chatFrame ? 'h-dvh overflow-hidden' : null)}
       style={{ '--header-height': '4rem' } as CSSProperties}
     >
       <a
@@ -71,25 +79,28 @@ export function AeAppShell({ children }: { children: ReactNode }) {
         ) : (
           // Keep this frame stable while Clerk resolves, so routed pages do not remount.
           <OperatorChromeProvider>
+          <WorkspaceFrameContext.Provider value={shell.isSignedIn}>
+          <SidebarProvider className={cn('min-w-0 flex-1 [--sidebar-width:260px] [--sidebar-border:transparent]', chatFrame && 'h-full min-h-0 overflow-hidden')}>
+            {shell.isSignedIn ? <WorkspaceSidebar /> : null}
+            <SidebarInset className="min-w-0 rounded-none bg-transparent">
             <div
               data-shell="app-content"
               data-owner-scroll={shell.isSignedIn && !chatFrame ? 'document' : undefined}
               className={cn(
                 'flex min-h-0 w-full flex-1 flex-col',
                 chatFrame ? 'overflow-hidden' : 'min-h-svh',
-                shell.isSignedIn
-                  ? 'pb-[calc(var(--ae-mobile-nav-height)+env(safe-area-inset-bottom,0px))] md:pb-0'
-                  : null,
+
               )}
             >
               {header()}
-              <div className={contentClassName}>{children}</div>
-              {shell.isSignedIn ? <AeOwnerMobileNavigation currentPath={shell.pathname} /> : null}
+              <div className={contentClassName}><WorkspaceTransitionBoundary><WorkspaceTablePreferences>{children}</WorkspaceTablePreferences></WorkspaceTransitionBoundary></div>
             </div>
+          </SidebarInset></SidebarProvider>
+          </WorkspaceFrameContext.Provider>
           </OperatorChromeProvider>
         )}
         <KeyboardShortcutsDialog open={shell.shortcutsOpen} onOpenChange={shell.setShortcutsOpen} />
       </CommandPanelProvider>
-    </div>
+    </div></ChatHeaderSlotProvider></AeNavigationSafetyProvider>
   )
 }

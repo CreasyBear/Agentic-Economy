@@ -1,11 +1,12 @@
+import { scopedCallHref, type ActivityReturnScope } from '@/lib/call-recovery/activity-return-scope'
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { DecisionPanel } from '@/components/ae/shared/arc-pro/chat/DecisionPanel'
 import { formatCurrencyAmount, formatDisplayAmount } from '@/modules/money/public'
 import type { CallOutcomeView } from './object-family.contracts'
 
-export type CallOutcomeProps = Readonly<{ view: CallOutcomeView }>
+export type CallOutcomeProps = Readonly<{ view: CallOutcomeView; returnScope?: ActivityReturnScope }>
 
-export function CallOutcome({ view }: CallOutcomeProps) {
+export function CallOutcome({ view, returnScope }: CallOutcomeProps) {
   return (
     <DecisionPanel role="region" aria-label="Call outcome">
       <header className="arc-decision-header">
@@ -27,7 +28,7 @@ export function CallOutcome({ view }: CallOutcomeProps) {
       </div>
       <div className="arc-decision-actions">
         {view.receiptHref === undefined ? null : (
-          <a href={view.receiptHref} className="arc-decision-link">View Call receipt</a>
+          <a href={scopedCallHref(view.receiptHref, returnScope)} className="arc-decision-link">View Call receipt</a>
         )}
         <a href="/trust" target="_blank" rel="noreferrer" aria-label="Trust centre (opens in a new tab)"
           className="arc-decision-link">Trust centre</a>

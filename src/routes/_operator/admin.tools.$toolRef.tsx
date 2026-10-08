@@ -1,3 +1,4 @@
+import { adminInvestigationSearchSchema } from '@/components/ae/admin/exceptions/admin-investigation-return'
 import { createFileRoute } from '@tanstack/react-router'
 
 import { AdminObjectPage } from '@/components/ae/admin/object-pages/AdminObjectPage'
@@ -8,6 +9,7 @@ import { parseAdminObjectRef } from '@/lib/operator/admin-console/ref-parsers'
 
 export const Route = createFileRoute('/_operator/admin/tools/$toolRef')({
   ...operatorRouteOptions,
+  validateSearch: (search: Record<string, unknown>) => adminInvestigationSearchSchema.parse(search),
   head: () => ({
     meta: [
       { title: ADMIN_OBJECT_PAGE_COPY.toolVersion.metaTitle },

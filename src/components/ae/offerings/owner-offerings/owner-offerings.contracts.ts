@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react'
+import type { OwnerInventoryQuery } from '@/lib/operator/owner-inventory-search'
 import type { OnChangeFn, SortingState } from '@tanstack/react-table'
 
 import type { OwnerOfferingSummary } from '@/components/ae/offerings/provider-workspace-projection'
@@ -22,6 +24,10 @@ export type AeOwnerOfferingsListProps = Readonly<{
   projectionState?: 'current' | 'projection_pending'
   onRetryProjection?: () => void
   loading?: boolean
+  serverControlled?: boolean
+  inventoryQuery?: OwnerInventoryQuery
+  toolbar?: ReactNode
+  emptyMessage?: string
   /** When true, empty inventory does not mount the empty-state Add Tool CTA. */
   hideEmptyState?: boolean
   filterValue?: string
@@ -36,6 +42,10 @@ export type AeOwnerOfferingsListProps = Readonly<{
 export type OwnerOfferingsTableProps = Readonly<{
   offerings: readonly OwnerOfferingSummary[]
   loading: boolean
+  serverControlled?: boolean
+  inventoryQuery?: OwnerInventoryQuery
+  toolbar?: ReactNode
+  emptyMessage?: string
   filterValue?: string
   onFilterChange?: (value: string) => void
   sorting?: SortingState

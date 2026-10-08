@@ -5,12 +5,14 @@ import type * as TanstackReactStartModule from '@tanstack/react-start'
 
 const boundary = vi.hoisted(() => ({
   callSourceQuery: vi.fn(),
+  auth: vi.fn(),
+  invite: vi.fn(),
   clerkClient: vi.fn(),
   getUser: vi.fn(),
 }))
 
 vi.mock('@clerk/tanstack-react-start/server', () => ({
-  auth: vi.fn(),
+  auth: boundary.auth,
   clerkClient: boundary.clerkClient,
 }))
 vi.mock('@tanstack/react-start', async (importOriginal) => ({
@@ -20,10 +22,12 @@ vi.mock('@tanstack/react-start', async (importOriginal) => ({
     inputValidator: () => ({ handler: (handler: unknown) => handler }),
   }),
 }))
+vi.mock('@/lib/client/useTypedReverification', () => ({ useTypedReverification: (request: unknown) => request }))
+
 vi.mock('@/lib/server/convex-source', () => ({ callSourceQuery: boundary.callSourceQuery }))
 
 import { TeamRolesPage } from './TeamRolesPage'
-import { readTeamRolesServer } from './team-roles.functions'
+import { readTeamRolesServer, inviteTeamMemberServer } from './team-roles.functions'
 
 afterEach(() => {
   vi.clearAllMocks()
@@ -61,4 +65,14 @@ it('renders authoritative members and binding status when Clerk name lookup fail
   expect(markup).toContain('user_former_member')
   expect(markup).toContain('Admin')
   expect(markup).not.toContain('Invite member')
+})
+
+it('refuses a stale Account invitation before writing to Clerk, even when the current organization is authorized', async () => {
+  boundary.auth.mockResolvedValue({ userId: 'user_owner', orgId: 'org_B' })
+  boundary.callSourceQuery.mockResolvedValue({ kind: 'available', accountRef: 'account:B', organizationId: 'org_B' })
+  boundary.clerkClient.mockReturnValue({ organizations: { createOrganizationInvitation: boundary.invite } })
+  await expect(inviteTeamMemberServer({ data: { expectedAccountRef: 'account:A', email: 'new@example.test', role: 'member' } })).rejects.toThrow('Invitations are no longer available')
+  expect(boundary.invite).not.toHaveBeenCalled()
+  await inviteTeamMemberServer({ data: { expectedAccountRef: 'account:B', email: 'new@example.test', role: 'member' } })
+  expect(boundary.invite).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ organizationId: 'org_B', emailAddress: 'new@example.test' }))
 })

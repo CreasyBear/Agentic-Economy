@@ -165,7 +165,8 @@ describe('ProviderNameEditor', () => {
       fireEvent.submit(form)
       await screen.findByRole('alert')
       expect(getNameInput()).toHaveValue(rawName)
-      expect(screen.getByRole('alert')).toHaveTextContent('Try again. The existing public name is unchanged.')
+      expect(getNameInput()).toBeDisabled()
+      expect(screen.getByRole('alert')).toHaveTextContent('The rename may have been recorded.')
       const firstPayload = getRenameInput(onRename, 0)
       expect(firstPayload).toMatchObject({ businessId: 'business-17', name: rawName, requestKey: expect.any(String) })
 
@@ -243,4 +244,27 @@ describe('ProviderNameEditor', () => {
       expect(saveButton).toBeEnabled()
     }
   })
+})
+
+it('keeps a dirty draft across an unrelated source update', () => {
+  const onRename = createOnRename()
+  const view = renderEditor(onRename)
+  fireEvent.change(getNameInput(), { target: { value: 'My draft' } })
+  view.rerender(<ProviderNameEditor businessId="business-17" currentName="External name" onRename={onRename} />)
+  expect(getNameInput()).toHaveValue('My draft')
+  expect(screen.getByRole('status')).toHaveTextContent('Your draft is retained')
+})
+it('keeps same-request retry available when a matching readback arrives after response loss', async () => {
+  const onRename = createOnRename()
+  onRename.mockRejectedValueOnce(new Error('response lost')).mockResolvedValueOnce(unchanged('New name'))
+  const view = renderEditor(onRename)
+  fireEvent.change(getNameInput(), { target: { value: 'New name' } })
+  fireEvent.submit(getForm())
+  await screen.findByRole('alert')
+  const original = getRenameInput(onRename, 0)
+  view.rerender(<ProviderNameEditor businessId="business-17" currentName="New name" onRename={onRename} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Retry same rename' }))
+  await waitFor(() => expect(onRename).toHaveBeenCalledTimes(2))
+  expect(getRenameInput(onRename, 1)).toEqual(original)
+  await waitFor(() => expect(getNameInput()).toBeEnabled())
 })

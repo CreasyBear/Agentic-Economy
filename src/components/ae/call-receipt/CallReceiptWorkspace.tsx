@@ -1,4 +1,4 @@
-import { activityReturnHref, activityReturnSearch, type ActivityReturnScope } from '@/lib/call-recovery/activity-return-scope'
+import { activityReturnHref, activityReturnSearch, buyerReturnDestination, type ActivityReturnScope } from '@/lib/call-recovery/activity-return-scope'
 import { Link } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
 
@@ -21,6 +21,7 @@ export function CallReceiptWorkspace({
   pending?: boolean
   children: ReactNode
 }>) {
+  const returnDestination = buyerReturnDestination(returnScope)
   return (
     <AeOperatorPage
       operatorRole="owner"
@@ -30,6 +31,7 @@ export function CallReceiptWorkspace({
       breadcrumbs={[{ label: 'Calls', href: activityReturnHref(returnScope) }, { label: 'Call receipt' }]}
       actions={(
         <div className="arc-market arc-call-actions">
+          {returnDestination === undefined ? null : <a href={returnDestination.href} className={actionLinkClassName('secondary', 'md')}>{returnDestination.label}</a>}
           <Link
             to="/support"
             search={{ callRef }}

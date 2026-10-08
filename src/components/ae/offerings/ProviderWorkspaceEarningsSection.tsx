@@ -18,6 +18,9 @@ export function ProviderWorkspaceEarningsSection({
   onOpenEarnings,
   onCloseEarnings,
   onRetryEarnings,
+  onRefreshEarnings,
+  onLoadMoreEarnings,
+  earningsReadAt,
 }: ProviderWorkspaceEarningsSectionProps) {
   return (
     <AeSection id="earnings" title="Earnings" description="Source-recorded Provider obligations and Call settlements.">
@@ -25,12 +28,14 @@ export function ProviderWorkspaceEarningsSection({
       <Drawer open={earningsOpen} onOpenChange={(open) => { if (!open) onCloseEarnings() }}>
         <DrawerContent side="right" title="Earnings" description="Source-recorded Provider obligations and Call settlements." className="arc-provider-earnings-drawer">
           <div className="arc-provider-earnings-body">
-            {earningsOpen ? (
-              earningsPending ? <Skeleton label="Loading provider earnings" lines={3} className="h-24 w-full" />
-                : earningsUnavailable || earningsDetail === undefined
-                  ? <UnavailableSummary title={PROVIDER_WORKSPACE_EARNINGS_COPY.unavailable} retryLabel={PROVIDER_WORKSPACE_EARNINGS_COPY.retryAction} onRetry={onRetryEarnings} />
-                  : <AeSupplyEarningsCard readback={earningsDetail} />
-            ) : null}
+            {earningsOpen ? <>
+              <p className="text-sm text-muted-foreground">{earningsReadAt === undefined ? 'No successful read in this view yet.' : `Last read: ${new Date(earningsReadAt).toLocaleString()}`}</p>
+              {onRefreshEarnings === undefined ? null : <ArcButton type="button" variant="secondary" size="md" disabled={earningsPending} onClick={onRefreshEarnings}>Refresh earnings</ArcButton>}
+              {earningsPending && earningsDetail === undefined ? <Skeleton label="Loading provider earnings" lines={3} className="h-24 w-full" /> : null}
+              {earningsPending && earningsDetail !== undefined ? <p role="status">Reading recorded obligations… Previously loaded records remain visible.</p> : null}
+              {earningsUnavailable && (earningsDetail === undefined || earningsDetail.kind === 'available') ? <UnavailableSummary title={PROVIDER_WORKSPACE_EARNINGS_COPY.unavailable} retryLabel={PROVIDER_WORKSPACE_EARNINGS_COPY.retryAction} onRetry={onRetryEarnings} /> : null}
+              {earningsDetail === undefined ? null : <AeSupplyEarningsCard readback={earningsDetail} onRetry={onRetryEarnings} pending={earningsPending} {...(onLoadMoreEarnings === undefined ? {} : { onLoadMore: onLoadMoreEarnings })} />}
+            </> : null}
           </div>
         </DrawerContent>
       </Drawer>

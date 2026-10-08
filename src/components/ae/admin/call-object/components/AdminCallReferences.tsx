@@ -1,3 +1,4 @@
+import { AdminInvestigationLink } from '../../exceptions/AdminInvestigationReturn'
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import type { AdminCallRelatedRef } from '../call-object.contracts'
@@ -21,12 +22,12 @@ export function AdminCallReferences({ refs }: AdminCallReferencesProps) {
             {ref.href === undefined ? (
               <span>{ref.label}</span>
             ) : (
-              <a
+              <AdminInvestigationLink
                 href={ref.href}
                 className="arc-admin-record-link"
               >
                 {ref.label}
-              </a>
+              </AdminInvestigationLink>
             )}
             <AeCopyReference label={ref.label} value={ref.value} />
           </div>

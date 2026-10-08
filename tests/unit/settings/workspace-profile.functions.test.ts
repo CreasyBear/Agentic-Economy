@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const boundary = vi.hoisted(() => ({ auth: vi.fn(), mutation: vi.fn() }))
+const boundary = vi.hoisted(() => ({ auth: vi.fn(), mutation: vi.fn(), receipt: vi.fn().mockResolvedValue(null) }))
+vi.mock('@/lib/server/workspace-terminal-receipt', () => ({ readWorkspaceTerminalReceipt: boundary.receipt }))
 vi.mock('@clerk/tanstack-react-start/server', () => ({ auth: boundary.auth, clerkClient: vi.fn() }))
 vi.mock('@tanstack/react-start', async importOriginal => ({
   ...(await importOriginal<typeof import('@tanstack/react-start')>()),
@@ -36,7 +37,7 @@ const ownerBinding = {
 describe('workspace name writer', () => {
   it('updates the bound Clerk organisation exactly once, then waits for webhook confirmation', async () => {
     const update = vi.fn().mockResolvedValue({ name: 'New Acme' })
-    const result = await renameWorkspaceThroughClerk('New Acme', 'org_one', async () => ownerBinding, update)
+    const result = await renameWorkspaceThroughClerk('New Acme', 'account:one', 'org_one', async () => ownerBinding, update)
     expect(result).toEqual({ kind: 'accepted', name: 'New Acme' })
     expect(update).toHaveBeenCalledOnce()
     expect(update).toHaveBeenCalledWith('org_one', 'New Acme')
@@ -44,9 +45,11 @@ describe('workspace name writer', () => {
 
   it('refuses a non-owner or a different active organisation before any Clerk write', async () => {
     const update = vi.fn()
-    expect(await renameWorkspaceThroughClerk('New Acme', 'org_one', async () => ({ ...ownerBinding, callerIsOwner: false }), update))
+    expect(await renameWorkspaceThroughClerk('New Acme', 'account:one', 'org_one', async () => ({ ...ownerBinding, callerIsOwner: false }), update))
       .toEqual({ kind: 'refused', code: 'forbidden' })
-    expect(await renameWorkspaceThroughClerk('New Acme', 'org_other', async () => ownerBinding, update))
+    expect(await renameWorkspaceThroughClerk('New Acme', 'account:one', 'org_other', async () => ownerBinding, update))
+      .toEqual({ kind: 'refused', code: 'forbidden' })
+    expect(await renameWorkspaceThroughClerk('New Acme', 'account:stale', 'org_one', async () => ownerBinding, update))
       .toEqual({ kind: 'refused', code: 'forbidden' })
     expect(update).not.toHaveBeenCalled()
   })

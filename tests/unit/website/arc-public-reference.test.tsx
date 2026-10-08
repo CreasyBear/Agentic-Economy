@@ -14,6 +14,7 @@ import { ABOUT } from '@/content/brand-copy'
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({ children, to, className }: { children: ReactNode; to: string; className?: string }) => <a href={to} className={className}>{children}</a>,
+  useLocation: () => ({ pathname: '/developers/api' }),
   useRouter: () => ({ navigate: vi.fn(), preloadRoute: vi.fn().mockResolvedValue(undefined) }),
 }))
 
@@ -110,6 +111,19 @@ describe('Arc public document compositions', () => {
     expect(errors.getByText(api.problems[0]!.type)).toBeTruthy()
     expect(errors.getByText(/Do not retry blindly/)).toBeTruthy()
     checkContents('API reference contents', ['api-requests-heading', 'api-setup-heading', 'api-errors-heading'])
+  })
+
+  it('keeps the local reference as default and only adds deliberately configured docs handoffs', () => {
+    const rendered = render(<DevelopersApiPage page={api} />)
+    expect(screen.queryByRole('link', { name: /Full documentation/ })).toBeNull()
+    expect(screen.getByRole('link', { name: DEVELOPERS_API_COPY.openApiLink }).getAttribute('href')).toBe('/openapi.json')
+    expect(document.getElementById('operation-requestQuote')).toBeTruthy()
+    const documentation = { home: 'https://guides.example/docs', customer: 'https://guides.example/docs/guides/customer', authority: 'https://guides.example/docs/concepts/authority', recovery: 'https://guides.example/docs/guides/recovery', api: 'https://guides.example/docs/reference' }
+    rendered.rerender(<DevelopersApiPage page={{ ...api, documentation }} />)
+    expect(screen.getByRole('link', { name: /Full documentation/ }).getAttribute('href')).toBe(documentation.api)
+    expect(screen.getByRole('link', { name: /Full documentation/ }).getAttribute('target')).toBe('_blank')
+    expect(screen.getByRole('link', { name: 'Browse Tools' }).getAttribute('href')).toBe('/market')
+    expect(screen.getByRole('link', { name: 'Recover the same Call' }).getAttribute('href')).toBe(documentation.recovery)
   })
 
   it('preserves every published About fact, founder paragraph and destination', () => {

@@ -43,7 +43,8 @@ describe('account security history', () => {
     expect(screen.getByText('This page does not mark the account contained')).toBeTruthy()
     expect(screen.getByText(/Resetting MFA alone does not revoke existing sessions/u)).toBeTruthy()
     expect(screen.getByText(/Opening this checklist does not revoke access/u)).toBeTruthy()
-    expect(screen.getByText('A$0.00 affected. Opening this list does not revoke sessions or Agents.')).toBeTruthy()
+    expect(screen.getByText('Viewing this checklist changes no access or funds. Financial impact has not been assessed here.')).toBeTruthy()
+    expect(document.body.textContent).not.toContain('A$0.00 financial impact')
 
     expect(screen.getAllByRole('heading', { level: 3 }).map((heading) => heading.textContent)).toEqual([
       'Review and revoke sessions',
@@ -138,7 +139,7 @@ describe('account security history', () => {
 
     expect(screen.getByRole('alert').textContent).toContain('Security history is temporarily unavailable')
     expect(screen.getByText(/What happened:/u)).toBeTruthy()
-    expect(screen.getByText(/A\$0\.00 affected — Profile, sessions, and Recovery stay available\./u))
+    expect(screen.getByText(/Financial impact cannot be assessed from unavailable history\. Profile, sessions and recovery remain available\./u))
       .toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
     await waitFor(() => expect(screen.getByText('Session revoked')).toBeTruthy())
@@ -295,7 +296,7 @@ describe('account security history', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Retry older events' })).toBeTruthy())
     expect(screen.getByText('Session revoked')).toBeTruthy()
     expect(screen.getByText(/Older security events could not be loaded\./u)).toBeTruthy()
-    expect(screen.getByText(/A\$0\.00 affected — known security history remains visible\./u)).toBeTruthy()
+    expect(screen.getByText(/Financial impact has not been assessed here\. Known security history remains visible\./u)).toBeTruthy()
     expect(screen.getByText(/Check your connection and retry older events\./u)).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'Retry older events' }))
@@ -416,7 +417,7 @@ describe('Agent security history', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Retry older events' })).toBeTruthy())
     expect(screen.getByText('Session revoked')).toBeTruthy()
     expect(screen.getByText(/Older security events could not be loaded\./u)).toBeTruthy()
-    expect(screen.getByText(/A\$0\.00 affected — known security history remains visible\./u)).toBeTruthy()
+    expect(screen.getByText(/Financial impact has not been assessed here\. Known security history remains visible\./u)).toBeTruthy()
     expect(screen.getByText(/Check your connection and retry older events\./u)).toBeTruthy()
   })
 

@@ -440,6 +440,7 @@ const requiredIndexes = {
     'by_businessId_and_updatedAt',
   ],
   capabilityProviderToolProjections: [
+    'by_businessId_and_inventoryName',
     'by_businessId_and_updatedAt',
     'by_businessId_and_toolRef',
     'by_businessId_and_offeringRef',

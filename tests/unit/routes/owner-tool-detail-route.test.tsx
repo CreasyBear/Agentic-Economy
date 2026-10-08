@@ -14,6 +14,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { formatTimestamp } from '@/lib/ui/format-time'
 
 const mocks = vi.hoisted(() => ({
+  detailProps: vi.fn(),
   action: vi.fn(async () => ({ kind: 'applied', message: 'ok' })),
   invalidate: vi.fn(async () => undefined),
 }))
@@ -24,15 +25,16 @@ vi.mock('@/components/ae/offerings/provider-workspace.functions', () => ({
   readProviderWorkspaceIdentityDetailServer: vi.fn(),
 }))
 vi.mock('@/components/ae/layout/AeOperatorPage', () => ({
-  AeOperatorPage: ({ children, title }: { children: ReactNode; title: string }) => createElement(
+  AeOperatorPage: ({ children, title, breadcrumbs }: { children: ReactNode; title: string; breadcrumbs?: readonly { label: string; href?: string }[] }) => createElement(
     'main',
     null,
     createElement('h1', null, title),
+    ...((breadcrumbs ?? []).filter(item => item.href !== undefined).map(item => createElement('a', { href: item.href, key: item.label }, item.label))),
     children,
   ),
 }))
 vi.mock('@/components/ae/supply/AeProviderToolDetail', () => ({
-  AeProviderToolDetail: ({ name }: { name: string }) => createElement('div', { 'data-testid': 'tool-detail' }, name),
+  AeProviderToolDetail: (props: { name: string; resumeHref?: string }) => { mocks.detailProps(props); return createElement('div', { 'data-testid': 'tool-detail' }, props.name) },
 }))
 vi.mock('@/modules/capability-supply/supply-funnel.functions', () => ({
   recheckOwnerCapabilityServer: vi.fn(),
@@ -59,9 +61,10 @@ function createTestRouter(path = '/owner/operations/weather') {
   })
 }
 
-function renderRoute(loaderData: unknown, toolRef = 'weather') {
+function renderRoute(loaderData: unknown, toolRef = 'weather', inventorySearch: Record<string, string> = {}) {
   const Component = OwnerToolDetailRoute.options.component
   if (Component === undefined) throw new Error('owner_tool_detail_component_missing')
+  vi.spyOn(OwnerToolDetailRoute, 'useSearch').mockReturnValue(inventorySearch as never)
   vi.spyOn(OwnerToolDetailRoute, 'useParams').mockReturnValue({ toolRef } as never)
   vi.spyOn(OwnerToolDetailRoute, 'useLoaderData').mockReturnValue(loaderData as never)
   render(
@@ -133,4 +136,25 @@ describe('owner Tool detail route', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Page not found' })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Return to Tools' }).getAttribute('href')).toBe('/owner/operations')
   })
+  it('retains inventory context in the visible Tools breadcrumb and saved-draft continuation', () => {
+    const inventorySearch = { inventoryQ: 'weather forecast', inventorySort: 'relevance', inventoryCursor: 'opaque:+/=' }
+    renderRoute({ identity: { kind: 'available', businessId: 'business:one', slug: 'weather-provider' }, status: { kind: 'available', tool: { offeringRef: 'offering:one', name: 'Weather lookup', slug: 'weather' }, status, resumeCandidateRef: 'sha256:exact-draft' } }, 'weather', inventorySearch)
+    const back = new URL(screen.getByRole('link', { name: 'Tools' }).getAttribute('href')!, 'https://aecon.test')
+    expect(back.pathname).toBe('/owner/operations')
+    expect(back.searchParams.get('q')).toBe('weather forecast')
+    expect(back.searchParams.get('sort')).toBe('relevance')
+    expect(back.searchParams.get('cursor')).toBe('opaque:+/=')
+    const resume = new URL(mocks.detailProps.mock.calls.at(-1)![0].resumeHref, 'https://aecon.test')
+    expect(resume.searchParams.get('draft')).toBe('sha256:exact-draft')
+    expect(Object.fromEntries(resume.searchParams)).toMatchObject(inventorySearch)
+  })
+
+  it('retains unfiltered name order/cursor in the unavailable recovery link', () => {
+    renderRoute({ identity: { kind: 'available', businessId: 'business:one' }, status: { kind: 'unavailable' } }, 'offering:business:exact', { inventorySort: 'name_desc', inventoryCursor: 'opaque:page-two' })
+    const back = new URL(screen.getByRole('link', { name: 'Return to Tools' }).getAttribute('href')!, 'https://aecon.test')
+    expect(back.pathname).toBe('/owner/operations')
+    expect(back.searchParams.get('sort')).toBe('name_desc')
+    expect(back.searchParams.get('cursor')).toBe('opaque:page-two')
+  })
+
 })

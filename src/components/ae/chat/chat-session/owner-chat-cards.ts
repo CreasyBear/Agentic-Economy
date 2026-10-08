@@ -28,6 +28,8 @@ export function projectOwnerChatCards(
       callRef: card.callRef,
       quoteRef: card.quoteRef, quoteAmount: card.quoteAmount, expiresAt: card.expiresAt,
       inputSummary: card.inputSummary, remainingCap: card.remainingCap,
+      ...(card.decisionContext === undefined ? {} : { decisionContext: card.decisionContext }),
+      ...(card.acceptedIdentity === undefined ? {} : { acceptedIdentity: card.acceptedIdentity }),
       expired: now >= card.expiresAt, pending: approvalBusy,
     } }
   }).reverse()

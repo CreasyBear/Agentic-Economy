@@ -1,3 +1,4 @@
+import type { AeRecordTableFeatures } from '@/components/ae/operator/AeOperatorDataTable'
 import { scopedCallHref } from '@/lib/call-recovery/activity-return-scope'
 import { useId, useMemo } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
@@ -32,7 +33,7 @@ export function ActivityCallQueue({
   returnScope,
 }: ActivityCallQueueProps) {
   const headingId = useId()
-  const columns = useMemo<ColumnDef<ActivityCallRowView, unknown>[]>(
+  const columns = useMemo<ColumnDef<AeRecordTableFeatures, ActivityCallRowView, unknown>[]>(
     () => [
       {
         id: 'call',
@@ -87,7 +88,7 @@ export function ActivityCallQueue({
         accessorFn: (item) => item.amountUnits,
         meta: { label: 'Amount', numeric: true },
         sortUndefined: 'last',
-        sortingFn: (left, right) => {
+        sortFn: (left, right) => {
           const a = BigInt(left.original.amountUnits ?? '0')
           const b = BigInt(right.original.amountUnits ?? '0')
           return a < b ? -1 : a > b ? 1 : 0

@@ -1,5 +1,6 @@
 import type {
   WorkspaceDangerDiagnostic,
+  WorkspaceFenceDestination,
   WorkspaceTransferCandidate,
 } from '@/modules/principal-account/workspace-decommission.view-model'
 
@@ -11,12 +12,14 @@ export type WorkspaceDangerDiagnosticSlotProps = Readonly<{
 }>
 
 export type DecommissionFenceListProps = Readonly<{
+  fenceDestinations?: readonly WorkspaceFenceDestination[]
   fenceMessages: readonly string[]
 }>
 
 export type WorkspaceClosePanelProps = Readonly<{
   callerIsOwner: boolean
   fencesPresent: boolean
+  fenceDestinations?: readonly WorkspaceFenceDestination[]
   fenceMessages: readonly string[]
   displayName: string
   confirmationName: string
@@ -24,6 +27,7 @@ export type WorkspaceClosePanelProps = Readonly<{
   closeDiagnostic: WorkspaceDangerDiagnostic | null
   showCloseConfirmDialog: boolean
   closePending: boolean
+  closeAttemptUnconfirmed?: boolean
   onConfirmationNameChange: (value: string) => void
   onRequestClose: () => void
   onCloseDialogOpenChange: (open: boolean) => void
@@ -39,6 +43,7 @@ export type WorkspaceTransferPanelProps = Readonly<{
   transferDiagnostic: WorkspaceDangerDiagnostic | null
   showTransferConfirmDialog: boolean
   transferPending: boolean
+  transferAttemptUnconfirmed?: boolean
   onSuccessorChange: (principalRef: string) => void
   onRequestTransfer: () => void
   onTransferDialogOpenChange: (open: boolean) => void
@@ -46,6 +51,9 @@ export type WorkspaceTransferPanelProps = Readonly<{
 }>
 
 export type UseWorkspaceDangerZoneResult = Readonly<{
+  completion?: Readonly<{ kind: 'closed' | 'transferred'; accountRef: string; displayName: string; successorName?: string }>
+  readUnavailable?: boolean
+  onRetryRead?: () => void
   loading: boolean
   closePanel: WorkspaceClosePanelProps | null
   transferPanel: WorkspaceTransferPanelProps | null

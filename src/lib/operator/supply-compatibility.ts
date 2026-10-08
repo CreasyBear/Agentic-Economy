@@ -1,6 +1,8 @@
+import { ownerInventoryReturnSchema, ownerInventoryReturnKeys, ownerInventoryReturnSearch, inventoryQueryFromReturnSearch, type OwnerInventoryReturnSearch } from './owner-inventory-return'
+import { ownerInventoryQuery, ownerInventorySortSchema, type OwnerInventorySort } from './owner-inventory-search'
 import { degrade } from '@/lib/observability/degrade'
 
-export type OwnerToolsX402ConnectionIntent = Readonly<{
+export type OwnerToolsX402ConnectionIntent = OwnerInventoryReturnSearch & Readonly<{
   connect: 'x402'
   draft: string
   resourceUrl: string
@@ -12,6 +14,8 @@ type OwnerToolsLegacyCompatibilitySearch = Readonly<{
   rebind?: string
   connect?: 'return' | 'refresh'
   cursor?: string
+  q?: string
+  sort?: OwnerInventorySort
 }>
 
 type OwnerToolsX402CompatibilitySearch = OwnerToolsX402ConnectionIntent & Readonly<{
@@ -34,8 +38,12 @@ export function parseOwnerToolsCompatibilitySearch(
   if (typeof search.rebind === 'string' && isSafeReference(search.rebind) && Object.keys(search).length === 1) {
     return { rebind: search.rebind }
   }
-  if (typeof search.cursor === 'string' && search.cursor.length > 0 && search.cursor.length <= 10_000 && Object.keys(search).length === 1) {
-    return { cursor: search.cursor }
+  if (Object.keys(search).every(key => key === 'q' || key === 'sort' || key === 'cursor')) {
+    if (Object.keys(search).length === 0) return {}
+    const sort = ownerInventorySortSchema.safeParse(search.sort ?? 'updated_desc')
+    const q = search.q === undefined ? undefined : typeof search.q === 'string' && search.q.trim().length <= 120 ? search.q.trim() : null
+    const cursor = search.cursor === undefined ? undefined : typeof search.cursor === 'string' && search.cursor.length > 0 && search.cursor.length <= 10_000 ? search.cursor : null
+    if (sort.success && q !== null && cursor !== null) return ownerInventoryQuery({ ...(q === undefined ? {} : { q }), sort: sort.data, ...(cursor === undefined ? {} : { cursor }) })
   }
   return {}
 }
@@ -46,6 +54,7 @@ export function parseOwnerToolsX402ConnectionSearch(
   if (!isX402ConnectionSearch(search)) return undefined
   return {
     connect: 'x402',
+    ...ownerInventoryReturnSearch(inventoryQueryFromReturnSearch(search)),
     draft: search.draft,
     resourceUrl: search.resourceUrl,
     method: search.method,
@@ -66,7 +75,7 @@ function isX402ConnectionSearch(
   method: 'GET' | 'POST'
   environment: 'sandbox' | 'production'
 }> {
-  if (Object.keys(search).length !== 5 || search.connect !== 'x402') return false
+  if (search.connect !== 'x402' || Object.keys(search).some(key => !['connect', 'draft', 'resourceUrl', 'method', 'environment', ...ownerInventoryReturnKeys].includes(key)) || !ownerInventoryReturnSchema.safeParse(search).success) return false
   if (typeof search.draft !== 'string' || !/^sha256:[0-9a-f]{64}$/u.test(search.draft)) return false
   if (typeof search.resourceUrl !== 'string' || !isSafeHttpsUrl(search.resourceUrl)) return false
   if (search.method !== 'GET' && search.method !== 'POST') return false

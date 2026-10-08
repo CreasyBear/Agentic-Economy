@@ -40,6 +40,60 @@ async function seedRefresh(backend: ConvexFixtureBackend, generation: string) {
 }
 
 describe('complete external directory index', () => {
+  it('finds hostname prefixes beyond the overview sample and paginates matching hosts with scoped cursors', async () => {
+    const { backend, workload } = await setup()
+    const generation = 'coinbase-host-prefix'
+    await seedRefresh(backend, generation)
+    const hostSource = (index: number, provider: string) => {
+      const item = source(index, { provider })
+      const resource = `https://${provider}/tools/${index}`
+      const raw = { resource, type: 'http', description: 'Public research' }
+      return { ...item, resource, sourceJson: JSON.stringify(raw), sourceDigest: canonicalDigest(raw), entry: { ...item.entry, resource } }
+    }
+    const items = [
+      ...Array.from({ length: 13 }, (_, index) => hostSource(index, `a${String(index).padStart(2, '0')}.test`)),
+      ...Array.from({ length: 25 }, (_, index) => hostSource(100 + index, `z${String(index).padStart(2, '0')}.test`)),
+      hostSource(200, 'z00.test'),
+    ]
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 0, reportedTotal: items.length, observedAt: 2, runStartedAt: 1, workload, items })
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 100, reportedTotal: items.length, observedAt: 3, runStartedAt: 1, workload, items: [] })
+    const overview = await backend.query(api.x402DirectoryIndex.overview, {})
+    expect(overview.kind).toBe('ok')
+    if (overview.kind !== 'ok') throw new Error('expected overview')
+    expect(overview.providers).toHaveLength(12)
+    expect(overview.providers.every(host => host.key.startsWith('a'))).toBe(true)
+    const first = await backend.query(api.x402DirectoryIndex.facets, { kind: 'provider', providerPrefix: ' Z ', paginationOpts: { cursor: null, numItems: 24 } })
+    expect(first.kind).toBe('ok')
+    if (first.kind !== 'ok') throw new Error('expected prefix page')
+    expect(first.page).toHaveLength(24)
+    expect(first.isDone).toBe(false)
+    expect(first.page[0]).toMatchObject({ key: 'z00.test', count: 2 })
+    // The public envelope must round-trip every native cursor position,
+    // including the end boundary used by reactive page splitting.
+    const bounded = await backend.query(api.x402DirectoryIndex.facets, { kind: 'provider', providerPrefix: 'z', paginationOpts: { cursor: null, numItems: 24, maximumRowsRead: 8, maximumBytesRead: 1024 * 1024, id: 5 } })
+    expect(bounded.kind).toBe('ok')
+    if (bounded.kind !== 'ok' || typeof bounded.splitCursor !== 'string') throw new Error('expected split cursor')
+    expect(bounded.pageStatus).toBe('SplitRequired')
+    expect(bounded.page).toHaveLength(8)
+    const firstHalf = await backend.query(api.x402DirectoryIndex.facets, { kind: 'provider', providerPrefix: 'z', paginationOpts: { cursor: null, endCursor: bounded.splitCursor, numItems: 1 } })
+    const secondHalf = await backend.query(api.x402DirectoryIndex.facets, { kind: 'provider', providerPrefix: 'z', paginationOpts: { cursor: bounded.splitCursor, endCursor: bounded.continueCursor, numItems: 1 } })
+    expect(firstHalf.kind).toBe('ok')
+    expect(secondHalf.kind).toBe('ok')
+    if (firstHalf.kind !== 'ok' || secondHalf.kind !== 'ok') throw new Error('expected split pages')
+    expect([...firstHalf.page, ...secondHalf.page]).toEqual(bounded.page)
+    expect(await backend.query(api.x402DirectoryIndex.facets, { kind: 'provider', providerPrefix: 'z', paginationOpts: { cursor: null, endCursor: null, numItems: 24 } })).toMatchObject({ kind: 'ok', page: first.page })
+    expect(await backend.query(api.x402DirectoryIndex.facets, { kind: 'provider', providerPrefix: 'a', paginationOpts: { cursor: null, endCursor: bounded.splitCursor, numItems: 24 } })).toEqual({ kind: 'unavailable', reason: 'query_invalid' })
+    const next = await backend.query(api.x402DirectoryIndex.facets, { kind: 'provider', providerPrefix: 'z', paginationOpts: { cursor: first.continueCursor, numItems: 24 } })
+    expect(next).toMatchObject({ kind: 'ok', page: [{ key: 'z24.test', count: 1 }], isDone: true })
+    expect(await backend.query(api.x402DirectoryIndex.facets, { kind: 'provider', providerPrefix: 'a', paginationOpts: { cursor: first.continueCursor, numItems: 24 } })).toEqual({ kind: 'unavailable', reason: 'query_invalid' })
+    expect(await backend.query(api.x402DirectoryIndex.facets, { kind: 'provider', providerPrefix: 'https://z', paginationOpts: { cursor: null, numItems: 24 } })).toEqual({ kind: 'unavailable', reason: 'query_invalid' })
+    expect(await backend.query(api.x402DirectoryIndex.facets, { kind: 'category', providerPrefix: 'z', paginationOpts: { cursor: null, numItems: 24 } })).toEqual({ kind: 'unavailable', reason: 'query_invalid' })
+    await seedRefresh(backend, 'coinbase-host-prefix-next-generation')
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation: 'coinbase-host-prefix-next-generation', offset: 0, reportedTotal: 0, observedAt: 4, runStartedAt: 1, workload, items: [] })
+    expect(await backend.query(api.x402DirectoryIndex.facets, { kind: 'provider', providerPrefix: 'z', paginationOpts: { cursor: first.continueCursor, numItems: 24 } })).toEqual({ kind: 'unavailable', reason: 'query_invalid' })
+    expect(await backend.query(api.x402DirectoryIndex.facets, { kind: 'provider', providerPrefix: 'z', paginationOpts: { cursor: null, endCursor: bounded.splitCursor, numItems: 24 } })).toEqual({ kind: 'unavailable', reason: 'query_invalid' })
+  })
+
   beforeEach(() => { vi.useFakeTimers(); vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production') })
   afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs() })
 

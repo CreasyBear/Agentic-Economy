@@ -1442,3 +1442,229 @@ author-reported; no comparative runtime equivalence is claimed.
 Completion of this checklist qualifies source only. MM-055 public sandbox,
 installed clients/harnesses and persona end conditions, MM-057 → MM-022 real
 Provider completion and MM-056 wider product parity remain independently open.
+
+## 7 October platform UI upgrade
+
+**Disposition: source integration; final repository qualification pending.** Joel
+authorized all 16 platform audit findings and the selected REUI compositions,
+including Table 9.2.6. Baseline is `84abbda0bd892b7f9688e53d84001e970ba32ab1`
+plus the pre-existing Chat 3 candidate; unrelated whitepaper and strategy drafts
+remain outside this change. One canonical integrator writes this checkout. Sol
+owners prepared bounded patches and independently reviewed recovery and journeys.
+This record extends [Wayfinder #256][WF], not the numbered maturity requirements.
+
+Joel explicitly deferred authenticated/production journey qualification until
+later. Local component fixtures and public loopback browsers are source evidence;
+they do not close that deferred gate, MM-055 or MM-056. No paid Calls, production
+writes, backfills, publishing, deployments or new worktrees were performed.
+
+| Finding | Owner and source correction | Evidence / acceptance boundary |
+| --- | --- | --- |
+| F01 footer visibility | UI shell: only `.arc-site-footer` is hidden; action footers remain visible. | Shell and decision-card fixtures; public mobile/desktop review. |
+| F02 unsupported ABN claims | Supply identity: remove ABN collection/checksum verification claims; retain real Provider identity owner. | Existing onboarding and validation fixtures. |
+| F03 purchase disclosure | Execution/DX: chat and Agent approval share recorded accepted-Quote facts; historical unknowns remain unknown. | Approval/decision fixtures; no current Tool fallback for missing purchase facts. |
+| F04 security impact | Identity/UI: unassessed financial impact is explicit, never an invented A$0. | Existing security-history fixtures. |
+| F05 uncertain admin command | Admin: actor-scoped durable nonsecret operation identity and authenticated read-only receipt observation; local query-error retry boundary. | Unknown→reload, authority loss and MFA-cancel recheck fixtures; fresh command/edit blocked while original remains unknown. |
+| F06 transient Plan reads | Execution/DX: retain confirmed same-scope Plan facts, continue safe observation after transient rejection, clear on refusal or scope loss. | Actual read union is available/refused; thrown transient reads were the gap. Plan owner-status fixtures cover this corrected diagnosis. |
+| F07 discovery/comparison | Registry/UI: explain and enforce filter applicability, preserve exact admitted/external comparison identities, label failed reads as unavailable. | Market filter, comparison and real memory-router regression; public unavailable-state browser review. |
+| F08 task continuation | DX: validated bounded intent through sign-in, setup, funding, receipt/Plan and admin investigation. | Route/context fixtures; navigation does not grant authority or repeat a purchase. |
+| F09 Activity structure | UI/Execution: attention and recent outcomes lead; latest-50 Plan scope is separate from Call filters. | Activity/Plan scope fixtures and responsive composition review. |
+| F10 inventory/earnings | Supply: owner-filtered name/text/date queries before opaque 50-row pagination; pending index readiness, retained maintenance context, fresh/retry earnings. | Owner-query/backfill and cursor fixtures; actual deployed index/backfill remains a release prerequisite. |
+| F11 Account transitions | Identity/UI: current identity/session/organization evidence fences privileged destinations; committed route readiness replaces timer; active recovery guard also covers deliberate Account selection. | Workspace/shell and guard fixtures; external identity loss still removes stale protected content immediately. |
+| F12 reconciliation evidence | Execution/UI: show required evidence and permitted reconciliation before submission. | Existing receipt/reconciliation review fixtures. |
+| F13 completion/offboarding | Identity/Supply: authorized blocker handoffs, stable public completion after closure, original-operation observation, state-specific trial next action. | Workspace terminal-receipt, Provider offboarding race and trial fixtures. |
+| F14 lifecycle completion | Registry/Identity/Supply: saved-need refs/status/withdrawal; bounded Team invitation/member pagination and mutations; interrupted Provider setup resumes with fresh attestation. | Existing owner fixtures; full backend-driven human journeys deferred by Joel. |
+| F15 interaction consistency | UI: Base UI/REUI controls, touch sizing, invalid-state ARIA, route/step/record focus, narrow overlay owners. | Table keyboard/selection/focus and shell fixtures; public mobile/desktop browser review. |
+| F16 composition/ownership | UI/DX: shared workspace navigation, compact work footer, upstream composition/provenance, dead caller-verified shell removal, deliberate docs/help return. | Updated DESIGN, exact upstream manifest, import/security checks and emitted docs boundary. |
+
+The table migration replaces both existing v8 consumers and the independent
+sortable-table implementation. `AeRecordTable` is the shared REUI integration;
+the small legacy column descriptor adapter feeds that same engine. Exact bigint
+ordering, missing-last treatment, stable IDs, guarded range selection and
+return-focus survive. Layout controls work without authentication; persisted
+preferences are allowlisted by user/Account/table/schema and contain no records,
+queries, selections or authority. Numbered pages/totals appear only where owned
+by the source; Provider inventory stays fixed at up to 50 with opaque cursors.
+
+References: [REUI Data Grid](https://reui.io/docs/components/base/data-grid),
+[TanStack 9.2.6](https://github.com/TanStack/table/releases/tag/@tanstack%2Freact-table@9.2.6),
+and the selected official block links in [DESIGN](../../DESIGN.md#workspace-and-operational-presentation).
+Root retained Base Nova, Aecon theme and shared primitive adaptations. The exact
+upstream source manifest names the only two size exceptions; strict TypeScript
+and security/import boundaries still apply. The full frontend check exceeded
+4 GB; the frontend no-emit compiler budget is now 8 GB. Arc/Convex checks retain
+their 4 GB budgets. This changes compiler capacity, not strictness.
+
+REUI registry API validation and post-install checklist were completed. The
+installed engineering-review, design and cognitive-load instructions informed
+manual bounded reviews; formal gstack bootstrap/telemetry was not run and no
+tool-generated clearance is claimed. The requested pstack skill was unavailable.
+Wayfinder remains the existing frontier; no duplicate issue/register was created.
+
+**Qualification:** final combined `check`, `gate` and source-fixture results will
+be recorded here after completion. Independent public browser review covered
+desktop/mobile app, Help/reference continuations and Fumadocs. It found no page
+errors or page-wide overflow in reviewed views; unavailable/auth-loading states
+do not prove populated authenticated behavior. Compare wording was corrected
+when browser review exposed an unsupported removal implication.
+
+**Market recut.** The opening now uses Arc HeroContent and approved Aecon assets.
+Tool results keep readable summaries, exact identities and comparison controls.
+The explicit Agent handoff carries the latest need and discovery constraints.
+The Host page and picker query the full Host index instead of overview's twelve
+suggestions or a grouping of loaded Tool pages. Whole-Host listing counts remain
+separate from example Tool facts. Prefix and split cursors retain query and
+generation scope. Existing constrained links retain their original Tool filters.
+
+Independent Sol review reproduced a prefix `endCursor` decoding failure and a
+combobox query-reset mismatch. Both corrections have focused behavioral evidence.
+The eight affected market route, filtering, navigation, card/index, real Arc picker
+and in-memory directory suites pass 172 tests. `npm run check` passes. The picker
+journey covers lookup beyond twelve suggestions, obsolete responses and query
+resets. The actual integrated browser composition passes category selection,
+last-chip keyboard focus, form semantics and Agent handoff checks at 390, 768
+and 1440 pixels. Desktop/mobile light/dark captures have no page errors or
+horizontal document overflow. Actual loopback routes have no full site footer.
+Populated screenshots use synthetic owner data and blocked external traffic;
+they do not establish hosted catalogue availability. The final mobile choice
+keeps native form/panel semantics and the existing Arc filter focus owner.
+Repository `gate` remains required before merging this larger UI candidate.
+
+Joel invoked pstack/Poteto Mode during this slice. The installed resources were
+found in the Codex plugin cache at version 0.15.15 after the earlier skill lookup
+missed them. Experience First, Subtract Before You Add, Model the Domain and
+Prove It Works guided the final composition and verification. Technical writing
+and unslop guided this record. Sol reviewers substitute for unavailable Cursor
+model/agent roles; no formal unavailable-tool clearance is claimed.
+
+**Provider recut.** UI owns the public composition; Supply retains all setup,
+authority and publication mechanics. The selected reference is licensed
+[REUI Hero 14](https://reui.io/preview/base/hero-14), retrieved through the configured
+registry and inspected with the shadcn dry run. Only its split header and wide
+media composition were integrated; shared primitives and theme were preserved.
+`ProviderHero.tsx` records the upstream source hash and narrow adaptation, following
+the existing Chat 3 convention without adding a vendor exception. The
+forest/chalk/gold artwork was generated with image_gen and exported as responsive
+local WebP assets. It carries no fabricated metric or product-state claim.
+
+The opening now says “Put your API on the market” and identifies public x402 v2
+on Base USDC. The installed REUI Stepper is an informational list, not completed
+setup. The existing Arc FAQ explains admission, recipient control, check costs
+and publication limits. The Add Tool target remains `/owner/operations/new`;
+the signed-in funnel retains its authority owner. Domain review verified the
+recipient signature proves control and does not authorise a payment.
+
+The old `publishedTools` gallery was sourced from a bounded external-directory
+projection. Its naming could imply actual first-party publication. The gallery,
+unused loader/server export and obsolete loader-only test were removed after
+caller inspection. The static page links to the real directory and no longer
+requires backend availability for marketing content. No public supply contract
+or purchase mechanic changed.
+
+Independent Sol source and rendered reviews passed. Final `npm run check` and
+the two affected test files pass (five tests). Tests caught missing word spacing
+in split headings and button roles on navigation links; the source was corrected.
+Browser evidence covers 320–1440px, desktop/mobile light and dark, no horizontal
+overflow or page errors. Keyboard checks at 390/768/1440 verify the setup anchor,
+FAQ, directory navigation and return, and the actual API-reference destination.
+The Add Tool href is verified; authenticated setup is not executed. Local evidence
+lives in the task workspace under `proposals/provider-page/`; this is source and
+public loopback qualification, not hosted Provider acceptance.
+
+`npm run gate` was attempted with production access disabled. It stops at the
+development deployment-manifest preflight: missing `AE_FORMANCE_ENVIRONMENT`.
+No subsequent gate stages ran. The release owner must provide the actual
+development environment and rerun the gate. No deployment, paid Call or production
+write was made. This recut does not close MM-014, MM-055 or the deferred journeys.
+
+**Remaining acceptance:** release owner stages/backfills inventory and confirms
+indexes before new indexed reads; Identity/Supply/Admin owners qualify real
+Account switching, membership, publication/maintenance and uncertain-command
+recovery in the later environment authorized by Joel. Record the actual
+web/backend/contract/docs/client tuple in [deployments](deployments.md#platform-ui-candidate--7-october).
+Source acceptance never silently checks off that deferred runtime work.
+
+
+**8 October settings and Team recut.** UI owns composition; Identity retains all
+access and invitation authority. Joel approved licensed
+[REUI Profile 2](https://reui.io/preview/base/profile-2) and
+[Solution Users 4](https://reui.io/preview/base/solution-users-4) after source and
+rendered comparison. Five horizontal groups replace the second settings rail;
+the active group exposes two or three native routes from the existing catalogue.
+Profile 2 supplies section/card/field geometry. Existing page saves, deep links,
+Clerk security ownership and leave guards are preserved.
+
+Team now has one recorded member grid, a pending invitation queue and a stable
+invite dialog. Existing owner handlers retain revision checks, MFA, pagination,
+confirmation and uncertain-send readback. Member controls require matching durable
+membership and recorded role; the Account key resets protected component state.
+The block's demo totals, extra roles, history and bulk mutations are excluded.
+Source hashes and adaptations live beside the imported compositions; shared
+primitives and dependencies were not overwritten. The unused Arc member block
+and stylesheet were removed after caller inspection.
+
+Independent Sol source review found the initial-read dialog remount risk, fixed
+by keeping its trigger/dialog in a stable header. Existing focused suites cover
+that deferred read, duplicate submission, unknown outcome observation, all twelve
+route mappings and save/leave behaviour. The expanded settings suites also caught
+duplicate field labelling and missing post-save heading focus; both were corrected
+in the shared layout. `npm run check` and 168 affected existing tests pass.
+
+Read-only browser fixtures cover Business profile, Team and the invite dialog at
+320, 390 and 1440px, including dark appearance. Browser inspection caught and
+corrected grid-induced document overflow; tables now scroll within their cards.
+Keyboard checks verify native route navigation and heading focus, member search,
+reaching offscreen table actions and the last settings group, and dialog focus
+entry/restoration. The fixture uses sample records and blocks all writes. Local
+evidence is in the task workspace under `proposals/settings-solutions/`.
+Authenticated invitation/access changes remain deferred by Joel; no hosted or
+production journey is claimed. The existing release-gate environment blocker
+and broader UI acceptance remain open. No deployment or production write occurred.
+
+
+**8 October settings/account completion review.** Owner: canonical UI integrator;
+Identity retains authorization and mutation ownership. Two independent Sol reviews
+covered source mechanics and rendered composition against Profile 2, Solution
+Users 4 and [REUI Auth 18](https://reui.io/preview/base/auth-18). The selected fixes
+address demonstrated failures:
+
+- Team request generations prevent late initial reads replacing explicit refresh.
+  Mutations/readback are serialized. A lost access-command response closes the
+  confirmation dialog, disables new writes and restores focus to Refresh.
+- Invitation and workspace-name writes carry their expected Account to the
+  existing authority owner; mixed directory/invitation reads cannot enable Team
+  controls. Known pre-dispatch invitation refusal stays distinct from uncertainty.
+- Provider/workspace name drafts survive unrelated live updates. Their existing
+  navigation guard covers unsaved, pending and unknown outcomes. Unknown renames
+  retain exact request material; a matching readback cannot leave Provider retry
+  permanently disabled. Invalidation failure cannot replace a confirmed Provider
+  mutation result. Public profile links and an actual profile-refresh action
+  complete the existing settings handoff.
+- Receipt numbers and headers remain unbroken on desktop. Notifications reuse
+  Profile 2 fields/cards without duplicate labels, keep consent visible, disclose
+  evaluation detail progressively and protect drafts across navigation/unrelated
+  preference revisions. Unconfirmed preference writes do not claim old values
+  are unchanged.
+- Auth 18 supplies the split presentation and licensed grid. Clerk continues to
+  own authentication, verification, contextual redirects and forms; demo login
+  mechanics/endorsements were not introduced. Aecon tokens and reduced motion are
+  retained; mobile starts with the form and the promotional footer is removed.
+
+The two newly reproduced Team regressions failed before the correction and pass
+after it. The affected existing suites pass **234 tests in 27 files**. Browser
+fixtures verify Business profile/Team plus seven additional settings destinations
+at desktop/mobile widths, light/dark auth wrappers, alert-draft departure, Team
+unknown-response recovery, and delayed Clerk fallback recovery. The actual
+sign-in/sign-up page wrappers include contextual copy, retained Agent redirect
+and signup legal footer. No horizontal document overflow or browser errors were
+observed in those fixtures. Source checks and final diff whitespace checks are
+recorded in `proposals/settings-solutions/completion-check.log` and related local
+evidence; rendered review is in `expanded-review/REVIEW.md` under the task workspace.
+
+This completes the reviewed source/fixture slice, not all platform qualification.
+Actual Clerk controls, Agent-key wizard/controller, populated Provider connections,
+Admin bootstrap, real access changes and backend/webhook readback remain unverified.
+The release gate still requires the genuine development configuration, and Joel's
+authenticated journey deferral remains open. Required coordinated Account-fence
+rollout is recorded in [deployments](deployments.md#platform-ui-candidate--7-october).
+No production writes, paid Calls, deployment or merge occurred.

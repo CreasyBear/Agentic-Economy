@@ -1,3 +1,4 @@
+import type { PublicDocumentationLinks } from '@/lib/documentation/public-documentation'
 export const ISSUE_URL = 'https://github.com/CreasyBear/Agentic-Economy/issues/new/choose'
 export const SUPPORT_EMAIL = 'mailto:support@aecon.ai'
 export const MALFORMED_CALL_REFERENCE_MESSAGE =
@@ -26,6 +27,12 @@ export const SUPPORT_FAQ_ITEMS = [
 ] as const
 
 export type SupportHelpTopic = 'status' | 'connection' | 'private' | 'developer'
+export const SUPPORT_TOPIC_ANCHORS: Readonly<Record<SupportHelpTopic, string>> = {
+  status: 'current-status', connection: 'agent-connection', private: 'private-support', developer: 'developer-issue',
+}
+export function supportTopicForHash(hash: string): SupportHelpTopic {
+  return (Object.entries(SUPPORT_TOPIC_ANCHORS).find(([, anchor]) => anchor === hash)?.[0] as SupportHelpTopic | undefined) ?? 'status'
+}
 
 export type SupportCallRef =
   | Readonly<{ kind: 'absent' }>
@@ -38,6 +45,9 @@ export type SupportSearch = Readonly<{
 
 export type AeSupportHelpPageProps = Readonly<{
   canonicalBaseUrl: string
+  documentation?: PublicDocumentationLinks
+  initialTopic?: SupportHelpTopic
+  onTopicChange?: (topic: SupportHelpTopic) => void
   callRef: SupportCallRef
 }>
 

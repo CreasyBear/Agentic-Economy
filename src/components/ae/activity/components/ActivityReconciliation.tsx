@@ -1,3 +1,4 @@
+import type { AeRecordTableFeatures } from '@/components/ae/operator/AeOperatorDataTable'
 import type { ActivityReturnScope } from '@/lib/call-recovery/activity-return-scope'
 import { Link } from '@tanstack/react-router'
 import { Button } from '@/components/arc/button/button'
@@ -20,7 +21,7 @@ function amount(units: string, currency: 'AUD' | 'USDC' = 'AUD') {
 }
 const bridgeLabels = { before_period: 'Calls created before this period', in_period: 'Calls created in this period', after_period: 'Calls created after this period', unattributed: 'Unattributed entries' } as const
 export function ActivityReconciliation({ result, retryPending, onRetry, returnScope, sourceFactsCapturedAt }: { result: UsageReconciliation; retryPending: boolean; onRetry: () => void; returnScope: ActivityReturnScope; sourceFactsCapturedAt?: number }) {
-  const columns = useMemo<ColumnDef<Credential, unknown>[]>(() => [
+  const columns = useMemo<ColumnDef<AeRecordTableFeatures, Credential, unknown>[]>(() => [
     { accessorKey: 'credentialRef', header: 'Credential', cell: ({ row }) => <span className="block min-w-48 max-w-full whitespace-normal break-all">{row.original.credentialRef}</span> },
     { accessorKey: 'createdCallCountUnits', header: 'Calls created' },
     { accessorKey: 'linkedCallCountUnits', header: 'Calls linked to period entries' },
@@ -29,7 +30,7 @@ export function ActivityReconciliation({ result, retryPending, onRetry, returnSc
     { id: 'net', header: 'Net purchased cost', cell: ({ row }) => amount(row.original.totals.netChargeUnits) },
     { id: 'promo', header: 'Net promotional use', cell: ({ row }) => amount(row.original.totals.netPromotionalUseUnits) },
   ], [])
-  const entryColumns = useMemo<ColumnDef<Summary['entries'][number], unknown>[]>(() => [
+  const entryColumns = useMemo<ColumnDef<AeRecordTableFeatures, Summary['entries'][number], unknown>[]>(() => [
     { accessorKey: 'transactionId', header: 'Ledger transaction' },
     { accessorKey: 'kind', header: 'Financial entry' },
     { id: 'amount', header: 'Amount', cell: ({row}) => row.original.units === null || row.original.currency === null ? 'Unknown' : amount(row.original.units, row.original.currency) },

@@ -1,3 +1,5 @@
+import { scopedCallHref } from '@/lib/call-recovery/activity-return-scope'
+import { useChatBuyerReturnScope } from './chat-session/buyer-return-context'
 import { Link } from '@tanstack/react-router'
 import { createContext, useContext } from 'react'
 import { AeFactList } from '@/components/ae/data/AeFactList'
@@ -189,7 +191,7 @@ export function SearchNext({ next, onRepeatSearch }: SearchNextProps) {
       onClick={() => onRepeatSearch(next.args.query)}>Try again</Button>
 }
 
-function cardBody(projection: ToolCardProjection, onAddCredit?: ToolCardProps['onAddCredit'], reportOwner?: { onPosted: () => void } | null) {
+function cardBody(projection: ToolCardProjection, onAddCredit?: ToolCardProps['onAddCredit'], reportOwner?: { onPosted: () => void } | null, returnScope?: ReturnType<typeof useChatBuyerReturnScope>) {
   switch (projection.kind) {
     case 'working':
     case 'clarify':
@@ -197,7 +199,7 @@ function cardBody(projection: ToolCardProjection, onAddCredit?: ToolCardProps['o
     case 'status': {
       if (projection.state === 'attention') {
         return <AeAlert tone="info" role="alert" title={projection.summary}>
-          {projection.planRef === undefined ? null : <Link to="/plans/$planRef" params={{ planRef: projection.planRef }} className="mt-2 block underline">Review Plan</Link>}
+          {projection.planRef === undefined ? null : <Link to="/plans/$planRef" params={{ planRef: projection.planRef }} search={returnScope ?? {}} className="mt-2 block underline">Review Plan</Link>}
         </AeAlert>
       }
       const funding = projection.funding
@@ -259,12 +261,13 @@ function executeStateTitle(state: Extract<ToolCardProjection, { kind: 'execute' 
 function ExecuteNextAction({ projection }: Readonly<{
   projection: Extract<ToolCardProjection, { kind: 'execute' }>
 }>) {
+  const returnScope = useChatBuyerReturnScope()
   const suggestedNextAction = projection.suggestedNextAction
   if (suggestedNextAction === undefined || projection.state === 'reconciliation_required' || projection.state === 'refused') return null
   if (suggestedNextAction.href !== undefined) {
     return (
       <a
-        href={suggestedNextAction.href}
+        href={scopedCallHref(suggestedNextAction.href, returnScope)}
         className={secondaryLink}
       >
         {suggestedNextAction.label}
@@ -290,6 +293,7 @@ const STATUS_VARIANT = {
  * Invariant: no financial or execution fact is inferred beyond the projection.
  * On violation: existing refusal and recovery guards decide the message and available actions. */
 export function ToolCard({ projection, onContinueSearch, onRepeatSearch, signedThread, onAddCredit }: ToolCardProps) {
+  const returnScope = useChatBuyerReturnScope()
   const needActions = useContext(ChatNeedActionsContext)
   const reportOwner = useContext(PaidCallReportOwnerContext)
   if (projection.kind === 'working') {
@@ -309,7 +313,7 @@ export function ToolCard({ projection, onContinueSearch, onRepeatSearch, signedT
         <Badge tone={STATUS_VARIANT[state]}>{chatToolStatus[state]}</Badge>
       </header>
       <div className="arc-tool-result-body">
-        {cardBody(projection, onAddCredit, reportOwner)}
+        {cardBody(projection, onAddCredit, reportOwner, returnScope)}
       </div>
       {(projection.kind === 'choices' && (projection.count !== undefined || projection.next !== undefined))
         || (projection.kind === 'status' && (projection.next !== undefined || projection.saveNeed !== undefined)) ? (

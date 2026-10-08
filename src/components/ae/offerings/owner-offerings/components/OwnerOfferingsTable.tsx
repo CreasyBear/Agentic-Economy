@@ -1,5 +1,7 @@
+import type { AeRecordTableFeatures } from '@/components/ae/operator/AeOperatorDataTable'
 import type { ColumnDef, FilterFn } from '@tanstack/react-table'
 import { useMemo } from 'react'
+import { appendOwnerInventoryReturnContext } from '@/lib/operator/owner-inventory-return'
 
 import { AeOperatorSortableHeader, AeRecordTable } from '@/components/ae/operator/AeOperatorDataTable'
 import {
@@ -24,12 +26,16 @@ import {
 } from '../owner-offerings.view-model'
 import './OwnerInventoryComposition.css'
 
-const inventoryFilter: FilterFn<OwnerOfferingSummary> = (row, _columnId, filterValue) =>
+const inventoryFilter: FilterFn<AeRecordTableFeatures, OwnerOfferingSummary> = (row, _columnId, filterValue) =>
   matchesOwnerOfferingInventory(row.original, String(filterValue))
 
 export function OwnerOfferingsTable({
   offerings,
   loading,
+  serverControlled = false,
+  toolbar,
+  inventoryQuery,
+  emptyMessage,
   filterValue,
   onFilterChange,
   sorting,
@@ -40,7 +46,7 @@ export function OwnerOfferingsTable({
   state,
 }: OwnerOfferingsTableProps) {
   const { filterEmptyMessage } = state
-  const columns = useMemo<ColumnDef<OwnerOfferingSummary, unknown>[]>(() => [
+  const columns = useMemo<ColumnDef<AeRecordTableFeatures, OwnerOfferingSummary, unknown>[]>(() => [
     {
       id: 'name',
       meta: { label: 'Tool' },
@@ -59,6 +65,7 @@ export function OwnerOfferingsTable({
       meta: { label: 'Status' },
       accessorFn: (item) => item.lifecycleLabel ?? statusLabel(item.status),
       enableGlobalFilter: false,
+      enableSorting: !serverControlled,
       header: ({ column }) => <AeOperatorSortableHeader label="Status" column={column} />,
       cell: ({ row }) => <OwnerOfferingStatusCluster item={row.original} showBlocker />,
     },
@@ -67,6 +74,8 @@ export function OwnerOfferingsTable({
       meta: { label: 'Price' },
       accessorFn: (item) => item.pricingLabel ?? '—',
       enableGlobalFilter: false,
+      // This projection supplies display text, not a comparable exact price.
+      enableSorting: false,
       header: ({ column }) => <AeOperatorSortableHeader label="Price" column={column} />,
       cell: ({ row }) => (
         <span className="font-mono arc-owner-inventory-metric">
@@ -79,6 +88,7 @@ export function OwnerOfferingsTable({
       meta: { label: OWNER_OFFERINGS_COPY.callsColumn, numeric: true },
       accessorFn: (item) => item.callsCount ?? 0,
       enableGlobalFilter: false,
+      enableSorting: !serverControlled,
       header: ({ column }) => <AeOperatorSortableHeader label={OWNER_OFFERINGS_COPY.callsColumn} column={column} />,
       cell: ({ row }) => (
         <span className="font-mono arc-owner-inventory-metric">
@@ -86,16 +96,19 @@ export function OwnerOfferingsTable({
         </span>
       ),
     },
-  ], [])
+  ], [serverControlled])
 
   return (
     <AeRecordTable
       columns={columns}
+      serverControlled={serverControlled}
+      hideFilter={serverControlled}
+      {...(toolbar === undefined ? {} : { action: toolbar })}
       data={offerings}
       caption="Tools"
       countLabel="Tools"
       filterPlaceholder="Search name, protocol, or ID…"
-      {...(filterEmptyMessage === undefined ? {} : { emptyMessage: filterEmptyMessage })}
+      {...(emptyMessage !== undefined ? { emptyMessage } : filterEmptyMessage !== undefined ? { emptyMessage: filterEmptyMessage } : serverControlled ? { emptyMessage: 'No Tools in this inventory page.' } : {})}
       getRowId={(item) => item.offering.offeringRef}
       loading={loading}
       {...(filterValue === undefined ? {} : { filterValue })}
@@ -112,7 +125,7 @@ export function OwnerOfferingsTable({
         kind: 'link',
         label: 'Next action',
         getLabel: (item) => item.continuation?.label ?? 'Open Tool',
-        getHref: (item) => item.continuation?.href ?? `/owner/operations/${encodeURIComponent(item.slug ?? item.offering.offeringRef)}`,
+        getHref: (item) => appendOwnerInventoryReturnContext(item.continuation?.href ?? `/owner/operations/${encodeURIComponent(item.slug ?? item.offering.offeringRef)}`, inventoryQuery),
         getAccessibleLabel: (item) => `${item.continuation?.label ?? 'Open Tool'} for ${item.offering.name}`,
       }}
     />

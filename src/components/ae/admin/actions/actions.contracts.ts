@@ -44,6 +44,8 @@ export type AdminActionSheetController = AdminActionSheetState & Readonly<{
   allowed: boolean
   pending: boolean
   minimized: boolean
+  durableRecovery: boolean
+  navigationRisk: boolean
   resume: () => void
   onOpenChange: (open: boolean) => void
   setReason: (value: string) => void

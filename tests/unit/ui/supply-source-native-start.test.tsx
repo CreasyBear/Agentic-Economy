@@ -347,4 +347,54 @@ describe('Add Tool', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Read endpoint' }))
     expect(await screen.findByText('x402 source needs attention')).toBeTruthy()
   })
+
+  it('restores owner-read terms and source identity while requiring fresh publication authority', () => {
+    const onPublish = vi.fn()
+    const onPreview = vi.fn()
+    const source = { kind: 'x402' as const, resourceUrl: 'https://seller.example/restored', method: 'POST' as const, environment: 'production' as const }
+    const candidate = { ...supplyCandidate, sourceSelector: { resourceUrl: source.resourceUrl, method: source.method } }
+    render(<AeSupplySourceNativeStart businessRef="business:one" onPreview={onPreview} onConnect={vi.fn()} onSelectCandidate={vi.fn()} onPublish={onPublish} initial={{
+      source, candidateRef: candidate.candidateRef,
+      preview: { kind: 'ready', sourceDigest: digest, sourceRevision: `x402:${digest}`, provenance: { sourceKind: 'x402', sourceUrl: source.resourceUrl, authority: 'observed_external' }, authentication: [{ kind: 'public' }], candidates: [candidate] },
+      terms: { name: 'Restored Tool', description: 'Saved description', category: 'Research', serviceArea: '', availability: '', pricingKind: 'free', price: '', externalEffect: false, dataRelease: false, financialExposure: false, dataClassification: 'public' },
+    }} />)
+    expect((screen.getByLabelText('Tool name') as HTMLInputElement).value).toBe('Restored Tool')
+    expect(screen.getByRole('tab', { name: /Terms/ }).getAttribute('aria-selected')).toBe('true')
+    expect(onPreview).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to review' }))
+    const authority = screen.getByRole('checkbox', { name: 'I am authorised to list this endpoint for this business' })
+    expect(authority.getAttribute('aria-checked')).toBe('false')
+    fireEvent.click(screen.getByRole('button', { name: 'List this endpoint' }))
+    expect(onPublish).not.toHaveBeenCalled()
+  })
+})
+
+
+it.each(['submitted', 'unknown'] as const)('returns to exact inventory context after a %s publication response', async (outcome) => {
+  const source = { kind: 'x402' as const, resourceUrl: 'https://seller.example/restored', method: 'POST' as const, environment: 'production' as const }
+  const candidate = {
+    ...supplyCandidate,
+    sourceSelector: { resourceUrl: source.resourceUrl, method: source.method },
+    x402: { scheme: 'exact' as const, network: 'eip155:8453', amount: '1000', asset: '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913', payTo: '0x1111111111111111111111111111111111111111', environment: 'production' as const },
+  }
+  const onPublish = vi.fn(async (_input: Parameters<ComponentProps<typeof AeSupplySourceNativeStart>['onPublish']>[0]) => {
+    if (outcome === 'unknown') throw new Error('lost response')
+    return { kind: 'submitted' as const, publicationRef: 'publication:exact', publicationRevision: 1, toolRef: 'offering:exact', state: 'Submitted' as const }
+  })
+  render(<AeSupplySourceNativeStart businessRef="business:one" returnInventoryQuery={{ q: 'weather & forecast', sort: 'relevance', cursor: 'opaque:+/=' }} onPreview={vi.fn()} onConnect={vi.fn()} onSelectCandidate={vi.fn()} onPublish={onPublish} initial={{
+    source, candidateRef: candidate.candidateRef,
+    preview: { kind: 'ready', sourceDigest: digest, sourceRevision: `x402:${digest}`, provenance: { sourceKind: 'x402', sourceUrl: source.resourceUrl, authority: 'observed_external' }, authentication: [{ kind: 'public' }], candidates: [candidate] },
+    terms: { name: 'Restored Tool', description: 'Saved description', category: 'Research', serviceArea: '', availability: '', pricingKind: 'source_x402', price: '', externalEffect: false, dataRelease: false, financialExposure: false, dataClassification: 'public' },
+  }} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Continue to review' }))
+  fireEvent.click(screen.getByRole('checkbox', { name: 'I am authorised to list this endpoint for this business' }))
+  fireEvent.click(screen.getByRole('button', { name: 'List this endpoint' }))
+  const back = new URL((await screen.findByRole('link', { name: 'Open Tools' })).getAttribute('href')!, 'https://aecon.test')
+  expect(back.pathname).toBe('/owner/operations')
+  expect(back.searchParams.get('q')).toBe('weather & forecast')
+  expect(back.searchParams.get('sort')).toBe('relevance')
+  expect(back.searchParams.get('cursor')).toBe('opaque:+/=')
+  expect(onPublish).toHaveBeenCalledTimes(1)
+  expect(onPublish.mock.calls[0]?.[0]).not.toHaveProperty('inventoryCursor')
+  expect(screen.getByRole('button', { name: 'List this endpoint' }).hasAttribute('disabled')).toBe(true)
 })

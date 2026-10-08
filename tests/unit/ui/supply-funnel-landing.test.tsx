@@ -1,63 +1,37 @@
 // @vitest-environment jsdom
 
-import { publishedTool, renderWithRouter, tool } from "./supply-funnel-harness";
-import { screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { renderWithRouter } from './supply-funnel-harness'
+import { fireEvent, screen, within } from '@testing-library/react'
+import { describe, expect, it } from 'vitest'
 
-import { AeSupplyLanding } from "@/components/ae/supply/AeSupplyLanding";
+import { AeSupplyLanding } from '@/components/ae/supply/AeSupplyLanding'
 
-describe("supply landing", () => {
-  it("leads with a plain-language Provider fit decision and published Tool rows", () => {
-    renderWithRouter(<AeSupplyLanding tools={[tool]} publishedTools={[publishedTool]} />);
-    expect(
-      screen.getByRole("heading", { name: "Add a Tool." }),
-    ).toBeDefined();
-    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
-    const heroRegion = screen.getByRole("region", { name: "Add a Tool." });
-    expect(heroRegion.contains(screen.getByRole("heading", { level: 1, name: "Add a Tool." }))).toBe(true);
-    expect(screen.getByRole("heading", { name: "Before you sign in" })).toBeDefined();
-    expect(
-      screen
-        .getByRole("link", { name: "Add Tool" })
-        .getAttribute("href"),
-    ).toBe("/owner/operations/new");
-    expect(screen.getByRole("heading", { name: "Check whether your Tool is a fit." })).toBeDefined();
-    expect(screen.getByText(/may consume provider quota or cost/i)).toBeDefined();
-    expect(screen.getByText(/does not publish the Tool, create earnings, or guarantee delivery/i)).toBeDefined();
-    expect(screen.getByText(/Publication means the current Tool passed/i)).toBeDefined();
-    expect(screen.getByRole("heading", { name: "Public x402 endpoint" })).toBeDefined();
-    expect(screen.queryByRole("link", { name: "x402 Provider requirements" })).toBeNull();
-    expect(screen.getByRole("heading", { name: "What agents can inspect" })).toBeDefined();
-    expect(screen.getByText("Quote API")).toBeDefined();
-    expect(screen.getByText(/AUD 0\.00/i)).toBeDefined();
-    expect(screen.queryByText(/payment support is enabled|unavailable until payment support/i)).toBeNull();
-    expect(screen.queryByText(/\b[0-9]+ actions available/i)).toBeNull();
-    expect(
-      screen.queryByText(/publisher console|money rail|machine surfaces/i),
-    ).toBeNull();
-  });
+describe('supply landing', () => {
+  it('explains supported Provider setup without requiring catalogue data', () => {
+    renderWithRouter(<AeSupplyLanding />)
+    expect(screen.getByRole('heading', { level: 1, name: /Put your API\s+on the market/ })).toBeDefined()
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+    expect(screen.getByRole('link', { name: 'Add Tool' }).getAttribute('href')).toBe('/owner/operations/new')
+    expect(screen.getByRole('link', { name: 'See how it works' }).getAttribute('href')).toBe('#provider-setup')
+    expect(screen.getByText('For public x402 v2 endpoints on Base USDC.')).toBeDefined()
+    expect(screen.getByRole('complementary', { name: 'What your endpoint needs' })).toBeDefined()
+    expect(screen.getByText(/Never paste a private key/)).toBeDefined()
+    expect(screen.getByText(/consume quota or incur cost/)).toBeDefined()
+    expect(screen.getByText(/does not publish the Tool, create earnings, or guarantee delivery/)).toBeDefined()
+    const steps = screen.getByRole('list', { name: 'Steps to add a Tool' })
+    expect(within(steps).getAllByRole('listitem')).toHaveLength(3)
+    expect(within(steps).queryByRole('tablist')).toBeNull()
+    expect(steps.querySelector('[data-state="completed"], [aria-current]')).toBeNull()
+    expect(screen.getByRole('link', { name: 'Browse the directory' }).getAttribute('href')).toBe('/market?view=tools')
+    expect(screen.queryByText(/No Tools are published yet|Be the first provider|Ready now/)).toBeNull()
+  })
 
-  it("renders the honest empty state", () => {
-    renderWithRouter(<AeSupplyLanding tools={[]} publishedTools={[]} />);
-    expect(screen.getByText(/No Tools are published yet/)).toBeDefined();
-  });
-
-  it("does not present an unavailable catalogue as empty", () => {
-    renderWithRouter(
-      <AeSupplyLanding
-        tools={[]}
-        publishedTools={[]}
-        sourceError="Provider information is temporarily unavailable. Try again."
-      />,
-    );
-
-    expect(screen.getByText("Provider information is unavailable")).toBeDefined();
-    expect(
-      screen.getByText("Provider information is temporarily unavailable. Try again."),
-    ).toBeDefined();
-    expect(screen.queryByText(/No Tools are published yet/)).toBeNull();
-    expect(
-      screen.queryByRole("heading", { name: "What agents can inspect" }),
-    ).toBeNull();
-  });
-});
+  it('explains costs and the limit of publication through the installed FAQ', () => {
+    renderWithRouter(<AeSupplyLanding />)
+    const question = screen.getByRole('button', { name: 'Does publication guarantee purchases or payouts?' })
+    fireEvent.click(question)
+    expect(question.getAttribute('aria-expanded')).toBe('true')
+    expect(screen.getByText(/does not guarantee demand, payment, delivery or payout/)).toBeDefined()
+    expect(screen.getByRole('link', { name: 'Add Tool' })).toBeDefined()
+  })
+})

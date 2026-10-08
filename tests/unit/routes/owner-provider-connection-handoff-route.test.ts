@@ -122,7 +122,7 @@ describe('Provider connection handoff route', () => {
       resumeRequested: false,
       sourceUnavailable: false,
     } as never)
-    vi.spyOn(DestinationRoute, 'useSearch').mockReturnValue({ environment: 'sandbox' } as never)
+    vi.spyOn(DestinationRoute, 'useSearch').mockReturnValue({ environment: 'sandbox', inventoryQ: 'weather', inventorySort: 'relevance', inventoryCursor: 'opaque:page-two' } as never)
     const navigate = vi.fn().mockResolvedValue(undefined)
     vi.spyOn(DestinationRoute, 'useNavigate').mockReturnValue(navigate as never)
     const Component = DestinationRoute.options.component
@@ -133,6 +133,7 @@ describe('Provider connection handoff route', () => {
 
     await waitFor(() => expect(navigate).toHaveBeenCalledWith({
       search: {
+        inventoryQ: 'weather', inventorySort: 'relevance', inventoryCursor: 'opaque:page-two',
         draft: `sha256:${'a'.repeat(64)}`,
         connection: 'connection:x402',
         environment: 'sandbox',

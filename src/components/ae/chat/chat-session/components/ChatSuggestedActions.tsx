@@ -1,8 +1,8 @@
-import { ArcAiChatSuggestions } from '@/components/ae/shared/arc-pro/ai-chat/ai-chat'
+import { ReuiChatStarters } from '@/components/ae/shared/reui-pro/ai-chat/welcome'
 import { chatSuggestions } from '@/lib/public/chat-ia'
 
 export type ChatSuggestedActionsProps = Readonly<{ onPick(prompt: string): void }>
 
 export function ChatSuggestedActions({ onPick }: ChatSuggestedActionsProps) {
-  return <ArcAiChatSuggestions suggestions={chatSuggestions} onPick={onPick} />
+  return <ReuiChatStarters suggestions={chatSuggestions} onPick={onPick} />
 }

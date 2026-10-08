@@ -2,7 +2,7 @@
 import { cleanup, render, screen } from '@testing-library/react'
 import { type ReactNode } from 'react'
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterContextProvider } from '@tanstack/react-router'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   action: vi.fn(async () => ({ kind: 'applied', message: 'ok' })),
@@ -48,6 +48,10 @@ import { readProviderWorkspaceIdentityDetailServer } from '@/components/ae/offer
 import { Route as OwnerSupplyDetailRoute } from '@/routes/_operator/owner.operations.$toolRef'
 import { Route as OwnerSupplyIndexRoute } from '@/routes/_operator/owner.operations'
 import { Route as OwnerSupplyNewRoute } from '@/routes/_operator/owner.operations.new'
+
+beforeEach(() => {
+  vi.spyOn(OwnerSupplyDetailRoute, 'useSearch').mockReturnValue({})
+})
 
 afterEach(() => {
   cleanup()

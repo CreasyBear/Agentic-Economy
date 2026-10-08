@@ -14,6 +14,8 @@ type AePublicPageHeader = {
 
 type AePublicEditorialPageProps = {
   kind?: 'editorial'
+  /** Working surfaces may supply their own compact help/legal navigation. */
+  footer?: 'site' | 'none'
   children: ReactNode
   /** When true, omit the footer closer panel. Default off. */
   hideFooterCloser?: boolean
@@ -78,7 +80,7 @@ export function AePublicPage(
       <main id="main-content" data-shell-mode="page" tabIndex={-1} className="flex-1">
         {composition}
       </main>
-      <AeSiteFooter hideCloser={hideFooterCloser} />
+      {'footer' in props && props.footer === 'none' ? null : <AeSiteFooter hideCloser={hideFooterCloser} />}
     </div>
   )
 }

@@ -23,7 +23,7 @@ describe('provider supply route', () => {
   })
 
   it('opens Add Tool from the single primary call to action', () => {
-    render(createElement(AeSupplyLanding, { tools: [], publishedTools: [] }))
+    render(createElement(AeSupplyLanding))
 
     const primaryCta = screen.getByRole('link', { name: 'Add Tool' })
     expect(primaryCta.getAttribute('href')).toBe('/owner/operations/new')
@@ -31,7 +31,7 @@ describe('provider supply route', () => {
   })
 
   it('shows provider publishing questions', () => {
-    render(createElement(AeSupplyLanding, { tools: [], publishedTools: [] }))
+    render(createElement(AeSupplyLanding))
 
     expect(screen.getByRole('heading', { name: 'Before you publish' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'What kinds of Tools are supported first?' })).toBeTruthy()

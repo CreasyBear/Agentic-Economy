@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { directoryProviderKey } from '@/modules/market/x402-directory-index'
+import { MARKET_LINK_STATE } from './market-return-context'
 import { Link } from "@tanstack/react-router";
 import { Button as ArcButton } from "@/components/arc/button/button";
 import { Drawer, DrawerContent, DrawerTrigger } from '@/components/ae/shared/base-ui/drawer/drawer';
@@ -11,6 +13,7 @@ import { directoryDate } from "./directory-presentation";
 
 type CanonicalSearchResultsProps = {
   results: readonly SearchResult[];
+  layout?: 'table' | 'grid';
   sourceFreshness?: SupplyProjectionFreshness;
   renderActions: (item: SearchResult) => ReactNode;
 };
@@ -49,10 +52,14 @@ function ToolDestination({ item, children }: { item: SearchResult; children: Rea
   if (item.toolRef !== undefined && item.access !== "external_listing") {
     return <Link to="/tools/$toolRef" params={{ toolRef: item.toolRef }} state={{ fromMarket: true }}>{children}</Link>;
   }
+  const host = item.host ?? (item.sourceRouteRef !== undefined && URL.canParse(item.sourceRouteRef) ? new URL(item.sourceRouteRef).hostname : undefined);
+  if (host !== undefined && /^registry:[a-f0-9]{64}$/u.test(item.id)) {
+    return <Link to="/tools/$providerHost/$slug" params={{ providerHost: directoryProviderKey(host), slug: item.id }} state={MARKET_LINK_STATE}>{children}</Link>;
+  }
   return <a href={item.detailRef}>{children}</a>;
 }
 
-export function CanonicalSearchResults({ results, renderActions, sourceFreshness }: CanonicalSearchResultsProps) {
+export function CanonicalSearchResults({ results, renderActions, sourceFreshness, layout = 'table' }: CanonicalSearchResultsProps) {
   const [selectedIdentity, setSelectedIdentity] = useState<string | null>(null);
   const selected = selectedIdentity === null
     ? undefined
@@ -73,7 +80,7 @@ export function CanonicalSearchResults({ results, renderActions, sourceFreshness
     },
     {
       key: "provider",
-      label: "Provider",
+      label: "Provider or Host",
       width: 120,
       sortable: false,
       render: (_value, item) => <CellText>{item.provider}</CellText>,
@@ -119,22 +126,31 @@ export function CanonicalSearchResults({ results, renderActions, sourceFreshness
       open={selected !== undefined}
       onOpenChange={open => { if (!open) setSelectedIdentity(null); }}
     >
-      <AeSortableDataTable
+      {layout === 'grid' ? <ul className="ae-market-result-cards" aria-label="Tool search results">{results.map(item => <li key={identity(item)}>
+        <article className="ae-market-result-card">
+          <p className="ae-market-result-provider">{item.provider}</p>
+          <h3><ToolDestination item={item}>{item.title}</ToolDestination></h3>
+          <p className="ae-market-result-summary">{item.summary}</p>
+          <dl><div><dt>Access</dt><dd>{accessProjection(item)}</dd></div><div><dt>Price</dt><dd>{priceProjection(item)}</dd></div></dl>
+          <div className="ae-market-result-actions">{renderActions(item)}<DrawerTrigger onClick={() => setSelectedIdentity(identity(item))} render={<ArcButton type="button" variant="secondary" size="sm" aria-label={`Inspect ${item.title}`}>Inspect</ArcButton>} /></div>
+        </article>
+      </li>)}</ul> : <AeSortableDataTable
         rows={rows}
         columns={columns}
         rowKey={identity}
         caption="Canonical search results"
+        mobileLayout="scroll"
         ariaLabel="Canonical search results"
-        animateRows={false}
+
         tableClassName="arc-canonical-search-table"
         rowClassName="arc-canonical-search-row"
-      />
+      />}
       <DrawerContent
         title={selected?.title ?? ""}
         description={selected?.summary ?? ""}
       >
         {selected === undefined ? null : <dl className="arc-canonical-facts">
-          <dt>Provider</dt><dd>{selected.provider}</dd>
+          <dt>{selected.access === "external_listing" ? "Directory Host" : "Provider"}</dt><dd>{selected.provider}</dd>
           <dt>Access</dt><dd>{accessProjection(selected)}</dd>
           <dt>Price</dt><dd>{priceProjection(selected)}</dd>
           {selected.sourcePrice === undefined ? null : <><dt>Provider-listed source</dt><dd>{selected.sourcePrice}</dd></>}

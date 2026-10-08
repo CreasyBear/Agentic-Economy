@@ -43,6 +43,8 @@ export type X402DirectoryCatalogueResource = X402DirectoryCatalogueUnavailable |
 }> | Readonly<{ kind: 'found_upstream'; item: Readonly<{ entry: X402DirectoryEntry }> }>
 
 export const x402DirectoryProvidersInputSchema = z.strictObject({
+  /** Hostname prefix lookup; this is not a capability-description search. */
+  providerPrefix: z.string().trim().toLowerCase().min(1).max(253).regex(/^[a-z0-9][a-z0-9.-]*$/u).optional(),
   providerCursor: z.string().min(1).max(16384).optional(),
 })
 export type X402DirectoryProvidersInput = z.infer<typeof x402DirectoryProvidersInputSchema>

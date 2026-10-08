@@ -20,7 +20,7 @@ function renderFooter(hideCloser = false) {
 
 describe('actual Arc site footer', () => {
   it('keeps every supplied navigation group, brand, copyright and external destination', () => {
-    renderFooter(true)
+    renderFooter()
     const footer = screen.getByRole('contentinfo')
     const nav = within(footer).getByRole('navigation', { name: 'Footer' })
     for (const column of FOOTER_NAVIGATION) {
@@ -44,29 +44,33 @@ describe('actual Arc site footer', () => {
     expect(within(footer).queryByText('Get the monthly release notes')).toBeNull()
   })
 
-  it('uses SPA navigation for app links and keeps machine links on full-document navigation', async () => {
-    const { router } = renderFooter(true)
+  it.each(FOOTER_NAVIGATION.flatMap<{ to: string; label: string; reloadDocument: boolean }>(column => column.links))('uses the correct navigation mode for $label', async link => {
+    const { router } = renderFooter()
     const nav = screen.getByRole('navigation', { name: 'Footer' })
-    let previousPath = router.state.location.pathname
-    for (const column of FOOTER_NAVIGATION) {
-      for (const link of column.links) {
-        let preventedByRouter: boolean | undefined
-        const observe = (event: MouseEvent) => {
-          preventedByRouter = event.defaultPrevented
-          event.preventDefault()
-        }
-        document.addEventListener('click', observe, { once: true })
-        fireEvent.click(within(nav).getByRole('link', { name: link.label }), { button: 0 })
-        if (link.reloadDocument) {
-          expect(preventedByRouter).toBe(false)
-          expect(router.state.location.pathname).toBe(previousPath)
-          continue
-        }
-        expect(preventedByRouter).toBe(true)
-        await waitFor(() => expect(router.state.location.pathname).toBe(link.to))
-        previousPath = link.to
-      }
-    }
+    let preventedByRouter: boolean | undefined
+    document.addEventListener('click', event => {
+      preventedByRouter = event.defaultPrevented
+      event.preventDefault()
+    }, { once: true })
+    fireEvent.click(within(nav).getByRole('link', { name: link.label }), { button: 0 })
+    expect(preventedByRouter).toBe(!link.reloadDocument)
+    if (link.reloadDocument) expect(router.state.location.pathname).toBe('/')
+    else await waitFor(() => expect(router.state.location.pathname).toBe(link.to))
+  })
+
+  it('keeps help, legal and business identity reachable in the compact footer without the introductory hierarchy', () => {
+    renderFooter(true)
+    const footer = screen.getByRole('contentinfo')
+    const nav = within(footer).getByRole('navigation', { name: 'Footer' })
+    for (const [label, href] of [
+      ['API reference', '/developers/api'],
+      ['Support', '/support'], ['Status', '/status'], ['Trust centre', '/trust'],
+      ['Privacy', '/privacy'], ['Terms', '/terms'], ['Remove a listing', '/privacy/remove-business'],
+      [AE_SITE_FOOTER.abn.label, AE_SITE_FOOTER.abn.href],
+    ] as const) expect(within(nav).getByRole('link', { name: label }).getAttribute('href')).toBe(href)
+    expect(within(nav).queryByRole('heading')).toBeNull()
+    expect(screen.queryByRole('region', { name: AE_SITE_FOOTER.closer.heading })).toBeNull()
+    expect(screen.getAllByRole('contentinfo')).toHaveLength(1)
   })
 
   it('keeps the existing closer and removes it when the caller hides it', () => {

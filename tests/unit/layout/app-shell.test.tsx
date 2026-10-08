@@ -1,8 +1,9 @@
+import { AeNavigationSafetyBoundary } from '@/components/ae/layout/AeNavigationSafetyBoundary'
 /**
  * @vitest-environment jsdom
  */
 import { getFunctionName, type FunctionReference } from 'convex/server'
-import type { ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import {
   RouterContextProvider,
@@ -16,16 +17,17 @@ import '../../setup/jsdom-platform'
 import '../../setup/jsdom-dialog'
 
 import type { OperatorSurface } from '@/lib/operator/operator-context'
+import { ChatHeader } from '@/components/ae/chat/chat-session/components/ChatHeader'
 import { AeAppShell } from '@/components/ae/layout/AeAppShell'
 
 vi.mock('@/lib/observability/funnel-client', () => ({
   emitFunnelEventOnce: vi.fn(),
 }))
 
-const clerkSignedIn = vi.hoisted(() => ({ value: false }))
+const clerkSignedIn = vi.hoisted(() => ({ value: false, isLoaded: true, userId: 'user-current', sessionId: 'session-current', orgId: null as string | null }))
 const entitlement = vi.hoisted<{
   isAuthenticated: boolean
-  result: { kind: 'authorized'; allowedSurfaces: readonly OperatorSurface[] } | { kind: 'denied' } | undefined
+  result: { kind: 'authorized'; allowedSurfaces: readonly OperatorSurface[]; userId: string; accountRef?: string; authScope: { organizationId: string | null; sessionId: string | null } } | { kind: 'denied' } | undefined
   throwOnRead: boolean
 }>(() => ({
   isAuthenticated: false,
@@ -45,7 +47,7 @@ vi.mock('convex/react', () => ({
 
 vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@clerk/tanstack-react-start')>()),
-  useAuth: () => ({ isSignedIn: clerkSignedIn.value, isLoaded: false, orgId: null }),
+  useAuth: () => ({ isSignedIn: clerkSignedIn.value, isLoaded: clerkSignedIn.isLoaded, userId: clerkSignedIn.value ? clerkSignedIn.userId : null, sessionId: clerkSignedIn.value ? clerkSignedIn.sessionId : null, orgId: clerkSignedIn.orgId }),
   useUser: () => ({ user: null }),
   Show: ({ when, children, fallback }: { when: string; children?: ReactNode; fallback?: ReactNode }) => {
     if (when === 'signed-out') return clerkSignedIn.value ? (fallback ?? null) : (children ?? null)
@@ -56,7 +58,12 @@ vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({
   OrganizationSwitcher: () => <div data-testid="org-switcher" />,
 }))
 
-beforeEach(() => vi.stubEnv('VITE_CONVEX_URL', 'http://127.0.0.1:3210'))
+beforeEach(() => {
+  clerkSignedIn.value = false
+  clerkSignedIn.isLoaded = true
+  clerkSignedIn.orgId = null
+  vi.stubEnv('VITE_CONVEX_URL', 'http://127.0.0.1:3210')
+})
 
 afterEach(() => {
   vi.unstubAllEnvs()
@@ -96,6 +103,30 @@ describe('AeAppShell', () => {
     expect(slot!.compareDocumentPosition(screen.getByRole('button', { name: 'Find Tools' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
+  it('keeps chat controls connected and the draft focused as authentication replaces the header slot', () => {
+    clerkSignedIn.value = false
+    clerkSignedIn.isLoaded = false // Unresolved anonymous Clerk hydration is not a logout.
+    const content = <><ChatHeader authenticated={false} threadId={null} threadTitle={null} busy={false}
+      sharePath={null} copied={false} mobileHistory={null} mobileOpen={false} onMobileOpenChange={() => undefined}
+      onToggleHistory={() => undefined} onNewChat={() => undefined} onIssueShare={() => undefined}
+      onRevokeShare={() => undefined} onCopyShare={() => undefined} /><textarea aria-label="Draft" defaultValue="Keep this draft" /></>
+    const view = renderAppShell('/t/new', content)
+    const field = screen.getByRole('textbox', { name: 'Draft' }) as HTMLTextAreaElement
+    const oldSlot = document.getElementById('ae-chat-actions')!
+    field.focus()
+    for (const signedIn of [true, false]) {
+      clerkSignedIn.value = signedIn
+      view.rerenderShell()
+      const liveSlot = document.getElementById('ae-chat-actions')!
+      expect(liveSlot.isConnected).toBe(true)
+      expect(liveSlot.contains(screen.getByRole('button', { name: 'New chat' }))).toBe(true)
+      expect(screen.getByRole('textbox', { name: 'Draft' })).toBe(field)
+      expect(field.value).toBe('Keep this draft')
+      expect(document.activeElement).toBe(field)
+    }
+    expect(oldSlot.isConnected).toBe(false)
+  })
+
   it('opens a named public drawer with exact destinations and restores trigger focus on close', async () => {
     clerkSignedIn.value = false
     renderAppShell()
@@ -118,116 +149,218 @@ describe('AeAppShell', () => {
     await waitFor(() => expect(document.activeElement).toBe(trigger))
   })
 
-  it('keeps workspace destinations in the gear dropdown when signed in', () => {
+  it('renders one persistent workspace sidebar with current Account Provider destinations', () => {
     clerkSignedIn.value = true
     entitlement.isAuthenticated = true
+    entitlement.result = authorized(['owner'])
     renderAppShell()
 
     expect(screen.queryByRole('navigation', { name: 'Primary' })).toBeNull()
     expect(screen.queryByRole('navigation', { name: 'App navigation' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Workspace menu' })).toBeNull()
     expect(screen.queryByRole('menu')).toBeNull()
-    const menu = openWorkspaceMenu()
-    expect(Array.from(menu.querySelectorAll('a')).map((link) => link.textContent)).toEqual([
-      'Market', 'Ask', 'Agents', 'Activity', 'Credit', 'Earnings', 'Tools', 'Settings', 'Support', 'Status',
+    const nav = workspaceNavigation()
+    expect(within(nav).getAllByRole('link').map(link => link.textContent)).toEqual([
+      'Market', 'Ask', 'Agents', 'Activity', 'Credit', 'Tools', 'Earnings', 'Settings', 'Support', 'Status',
     ])
-    const settings = within(menu).getByRole('menuitem', { name: 'Settings' })
-    expect(settings.getAttribute('href')).toBe('/owner/settings')
-    expect(settings.getAttribute('aria-current')).toBeNull()
-    expect(within(menu).getByRole('menuitem', { name: 'Market' }).getAttribute('aria-current')).toBe('page')
-    expect(screen.getAllByLabelText('Workspace: Workspace').length).toBeGreaterThan(0)
+    expect(within(nav).getByRole('link', { name: 'Settings' }).getAttribute('href')).toBe('/owner/settings')
+    expect(within(nav).getByRole('link', { name: 'Market' }).getAttribute('aria-current')).toBe('page')
+    expect(screen.getAllByTestId('org-switcher')).toHaveLength(1)
     expect(screen.queryByRole('link', { name: 'Sign in' })).toBeNull()
   })
 
-  it('marks Settings as the active dropdown destination on settings pages', () => {
+  it('marks Settings as the active workspace destination', () => {
     clerkSignedIn.value = true
     entitlement.isAuthenticated = true
     renderAppShell('/owner/settings')
-    const settings = within(openWorkspaceMenu()).getByRole('menuitem', { name: 'Settings' })
-    expect(settings.getAttribute('href')).toBe('/owner/settings')
-    expect(settings.getAttribute('aria-current')).toBe('page')
+    expect(within(workspaceNavigation()).getByRole('link', { name: 'Settings' }).getAttribute('aria-current')).toBe('page')
   })
 
-  it('shows one Admin group on an owner page for an active admin session', () => {
+  it('shows one Admin group on an owner page for the current authorized session', () => {
     clerkSignedIn.value = true
     entitlement.isAuthenticated = true
-    entitlement.result = { kind: 'authorized', allowedSurfaces: ['owner', 'admin'] }
+    entitlement.result = authorized(['owner', 'admin'])
     renderAppShell('/owner/operations')
-
-    const menu = openWorkspaceMenu()
-    expect(within(menu).getAllByText('Admin')).toHaveLength(1)
+    const nav = workspaceNavigation()
+    expect(within(nav).getAllByText('Admin')).toHaveLength(1)
     expect(['Overview', 'Search', 'Exceptions', 'Providers', 'Metrics', 'Audit'].map(label =>
-      within(menu).getByRole('menuitem', { name: label }).textContent
+      within(nav).getByRole('link', { name: label }).textContent
     )).toEqual(['Overview', 'Search', 'Exceptions', 'Providers', 'Metrics', 'Audit'])
-    expect(screen.getByRole('navigation', { name: 'Owner primary navigation' })).toBeTruthy()
+    expect(screen.queryByRole('navigation', { name: 'Owner primary navigation' })).toBeNull()
   })
 
-  it('keeps Admin destinations in the gear dropdown for an entitled session', () => {
+  it('uses one sidebar to mark the active Admin destination', () => {
     clerkSignedIn.value = true
     entitlement.isAuthenticated = true
-    entitlement.result = { kind: 'authorized', allowedSurfaces: ['owner', 'admin'] }
+    entitlement.result = authorized(['owner', 'admin'])
     renderAppShell('/admin/metrics')
-
     expect(screen.queryByRole('navigation', { name: 'Admin primary navigation' })).toBeNull()
-    const menu = openWorkspaceMenu()
-    expect(within(menu).getAllByText('Admin')).toHaveLength(1)
-    expect(within(menu).getByRole('menuitem', { name: 'Metrics' }).getAttribute('aria-current')).toBe('page')
-    expect(within(menu).getByRole('menuitem', { name: 'Overview' }).getAttribute('aria-current')).toBeNull()
+    const nav = workspaceNavigation()
+    expect(within(nav).getAllByText('Admin')).toHaveLength(1)
+    expect(within(nav).getByRole('link', { name: 'Metrics' }).getAttribute('aria-current')).toBe('page')
+    expect(within(nav).getByRole('link', { name: 'Overview' }).getAttribute('aria-current')).toBeNull()
   })
 
-  it('keeps Developer navigation alongside one Admin group for an entitled developer path', () => {
+  it('keeps contextual Developer navigation alongside one Admin group', () => {
     clerkSignedIn.value = true
     entitlement.isAuthenticated = true
-    entitlement.result = { kind: 'authorized', allowedSurfaces: ['owner', 'admin', 'developer'] }
+    entitlement.result = authorized(['owner', 'admin', 'developer'])
     renderAppShell('/developers/discovery')
-    fireEvent.click(screen.getByRole('button', { name: 'Workspace menu' }))
-    const menu = screen.getByRole('menu')
-    expect(within(menu).getAllByText('Admin')).toHaveLength(1)
-    expect(within(menu).getAllByText('Developer')).toHaveLength(1)
-    expect(within(menu).getByRole('menuitem', { name: 'Discovery' })).toBeTruthy()
+    const nav = workspaceNavigation()
+    expect(within(nav).getAllByText('Admin')).toHaveLength(1)
+    expect(within(nav).getAllByText('Developer')).toHaveLength(1)
+    expect(within(nav).getByRole('link', { name: 'Discovery' })).toBeTruthy()
   })
 
-  const deniedContexts: { pathname: string; result: typeof entitlement.result }[] = [
-    { pathname: '/admin/search', result: { kind: 'authorized', allowedSurfaces: ['owner'] } },
-    { pathname: '/admin/search', result: undefined },
+  const deniedContexts: { label: string; result: typeof entitlement.result }[] = [
+    { label: 'an owner without Admin entitlement', result: authorized(['owner']) },
+    { label: 'an unresolved entitlement', result: undefined },
+    { label: 'another user', result: { ...authorized(['owner', 'admin', 'developer']), userId: 'user-other' } },
+    { label: 'another Account', result: { ...authorized(['owner', 'admin', 'developer']), authScope: { organizationId: 'org-other', sessionId: 'session-current' } } },
+    { label: 'an earlier session', result: { ...authorized(['owner', 'admin', 'developer']), authScope: { organizationId: null, sessionId: 'session-old' } } },
   ]
-  it.each(deniedContexts)('does not disclose Admin navigation without a resolved admin entitlement at $pathname', ({ pathname, result }) => {
+  it.each(deniedContexts)('does not disclose Admin navigation for $label', ({ result }) => {
     clerkSignedIn.value = true
     entitlement.isAuthenticated = true
     entitlement.result = result
-    renderAppShell(pathname)
+    renderAppShell('/admin/search')
     expect(screen.queryByRole('navigation', { name: 'Admin primary navigation' })).toBeNull()
-    expect(within(openWorkspaceMenu()).queryByText('Admin')).toBeNull()
+    expect(within(workspaceNavigation()).queryByText('Admin')).toBeNull()
+    if (result?.kind === 'authorized' && result.allowedSurfaces.includes('admin')) {
+      expect(within(workspaceNavigation()).queryByText('Provider')).toBeNull()
+    }
   })
 
-  it('does not expose Admin while Convex authentication is unresolved', () => {
-    clerkSignedIn.value = true
-    entitlement.isAuthenticated = false
-    entitlement.result = { kind: 'authorized', allowedSurfaces: ['owner', 'admin'] }
-    renderAppShell('/market')
-
-    expect(within(openWorkspaceMenu()).queryByText('Admin')).toBeNull()
-  })
-
-  it('keeps a public routed page and its Arc navigation usable when the operator subscription fails', () => {
+  it('does not expose Provider destinations without an actual Account reference', () => {
     clerkSignedIn.value = true
     entitlement.isAuthenticated = true
-    entitlement.result = { kind: 'authorized', allowedSurfaces: ['owner', 'admin'] }
+    const { accountRef: _accountRef, ...withoutAccount } = authorized(['owner'])
+    entitlement.result = withoutAccount
+    renderAppShell()
+    const nav = workspaceNavigation()
+    expect(within(nav).queryByText('Provider')).toBeNull()
+    expect(within(nav).queryByRole('link', { name: 'Tools' })).toBeNull()
+    expect(within(nav).queryByRole('link', { name: 'Earnings' })).toBeNull()
+    expect(within(nav).getByRole('link', { name: 'Credit' })).toBeTruthy()
+  })
+
+  it.each(['Convex authentication', 'Clerk hydration'])('withholds privileged destinations during unresolved %s', state => {
+    clerkSignedIn.value = true
+    clerkSignedIn.isLoaded = state !== 'Clerk hydration'
+    entitlement.isAuthenticated = state !== 'Convex authentication'
+    entitlement.result = authorized(['owner', 'admin', 'developer'])
+    renderAppShell('/developers/discovery')
+    const nav = workspaceNavigation()
+    expect(within(nav).queryByText('Admin')).toBeNull()
+    expect(within(nav).queryByText('Provider')).toBeNull()
+    expect(within(nav).queryByText('Developer')).toBeNull()
+  })
+
+  it('keeps a public routed page and its workspace navigation usable when entitlement reading fails', () => {
+    clerkSignedIn.value = true
+    entitlement.isAuthenticated = true
+    entitlement.result = authorized(['owner', 'admin'])
     entitlement.throwOnRead = true
     renderAppShell('/market')
-
     expect(screen.getByText('Page content')).toBeTruthy()
-    const menu = openWorkspaceMenu()
-    expect(within(menu).getByRole('menuitem', { name: 'Market' })).toBeTruthy()
-    expect(within(menu).queryByText('Admin')).toBeNull()
+    const nav = workspaceNavigation()
+    expect(within(nav).getByRole('link', { name: 'Market' })).toBeTruthy()
+    expect(within(nav).queryByText('Admin')).toBeNull()
+    expect(within(nav).queryByText('Provider')).toBeNull()
   })
 })
 
-function openWorkspaceMenu() {
-  fireEvent.click(screen.getByRole('button', { name: 'Workspace menu' }))
-  return screen.getByRole('menu')
+
+it.each(['pending', 'unknown', 'dirty'] as const)('withholds the upstream Account selector while %s and restores it after the owner clears', async mode => {
+  clerkSignedIn.value = true
+  const view = renderAppShell('/owner/settings', <GuardedAccountChange mode={mode} />)
+  expect(screen.getByTestId('org-switcher')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Start guarded change' }))
+  expect(screen.queryByTestId('org-switcher')).toBeNull()
+  expect(screen.getByText(/Finish or recheck the current change/)).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Review active change' }))
+  expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Current change' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Clear guarded change' }))
+  expect(screen.getByTestId('org-switcher')).toBeTruthy()
+  view.rerenderShell()
+  expect(screen.getAllByTestId('org-switcher')).toHaveLength(1)
+})
+
+it('external session revocation immediately removes the previous protected content despite an unknown owner', () => {
+  clerkSignedIn.value = true
+  const view = renderAppShell('/owner/settings', <GuardedAccountChange mode="unknown" />)
+  fireEvent.click(screen.getByRole('button', { name: 'Start guarded change' }))
+  const previous = screen.getByRole('textbox', { name: 'Protected operation context' })
+  expect(screen.queryByTestId('org-switcher')).toBeNull()
+  clerkSignedIn.value = false
+  view.rerenderShell()
+  expect(previous.isConnected).toBe(false)
+  expect(screen.queryByRole('textbox', { name: 'Protected operation context' })).toBeNull()
+})
+
+
+it('continues to use the existing leave confirmation instead of switching Account directly', async () => {
+  clerkSignedIn.value = true
+  renderAppShell('/owner/settings', <GuardedAccountChange mode="unknown" />)
+  fireEvent.click(screen.getByRole('button', { name: 'Start guarded change' }))
+  fireEvent.click(within(workspaceNavigation()).getByRole('link', { name: 'Market' }))
+  expect(await screen.findByRole('alertdialog')).toBeTruthy()
+  expect(screen.queryByTestId('org-switcher')).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: 'Continue editing' }))
+  await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+  expect(screen.queryByTestId('org-switcher')).toBeNull()
+})
+
+it('retains another active owner and restores switching when the last owner unmounts', () => {
+  clerkSignedIn.value = true
+  renderAppShell('/owner/settings', <MultipleGuardOwners />)
+  expect(screen.queryByTestId('org-switcher')).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: 'Clear first owner' }))
+  expect(screen.queryByTestId('org-switcher')).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: 'Unmount last owner' }))
+  expect(screen.getByTestId('org-switcher')).toBeTruthy()
+})
+
+function MultipleGuardOwners() {
+  const [first, setFirst] = useState(true)
+  const [second, setSecond] = useState(true)
+  const heading = useRef<HTMLHeadingElement>(null)
+  const action = useRef<HTMLButtonElement>(null)
+  const boundaryProps = { title: 'Leave current change?', pendingTitle: 'Change pending', description: 'Review departure.', pendingDescription: 'Wait for completion.', headingRef: heading, saveActionRef: action }
+  return <>
+    <AeNavigationSafetyBoundary {...boundaryProps} state={{ dirty: first, pending: false, saveOutcome: 'idle' }}><h2 ref={heading}>First owner</h2></AeNavigationSafetyBoundary>
+    {second ? <AeNavigationSafetyBoundary {...boundaryProps} state={{ dirty: true, pending: false, saveOutcome: 'outcome_unknown' }}><p>Last owner</p></AeNavigationSafetyBoundary> : null}
+    <button type="button" onClick={() => setFirst(false)}>Clear first owner</button>
+    <button type="button" onClick={() => setSecond(false)}>Unmount last owner</button>
+  </>
 }
 
-function renderAppShell(pathname = clerkSignedIn.value ? '/market' : '/'): void {
+function GuardedAccountChange({ mode }: { mode: 'pending' | 'unknown' | 'dirty' }) {
+  const [active, setActive] = useState(false)
+  const headingRef = useRef<HTMLHeadingElement>(null)
+  const actionRef = useRef<HTMLButtonElement>(null)
+  return <AeNavigationSafetyBoundary state={{ dirty: active, pending: active && mode === 'pending', saveOutcome: active && mode === 'unknown' ? 'outcome_unknown' : 'idle' }}
+    title="Leave the current change?" pendingTitle="Waiting for the current change" description="Confirm departure." pendingDescription="Wait for completion."
+    headingRef={headingRef} saveActionRef={actionRef}>
+    <h2 ref={headingRef} tabIndex={-1}>Current change</h2>
+    <textarea aria-label="Protected operation context" defaultValue="Original Account operation" />
+    <button type="button" onClick={() => setActive(true)}>Start guarded change</button>
+    <button type="button" onClick={() => setActive(false)}>Clear guarded change</button>
+  </AeNavigationSafetyBoundary>
+}
+
+function workspaceNavigation() {
+  const navs = screen.getAllByRole('navigation', { name: 'Workspace navigation' })
+  expect(navs).toHaveLength(1)
+  return navs[0]!
+}
+
+function authorized(allowedSurfaces: readonly OperatorSurface[]) {
+  return { kind: 'authorized' as const, allowedSurfaces, accountRef: 'account-current', userId: 'user-current',
+    authScope: { organizationId: null, sessionId: 'session-current' } }
+}
+
+function renderAppShell(pathname = clerkSignedIn.value ? '/market' : '/', children: ReactNode = <p>Page content</p>) {
   const rootRoute = createRootRoute()
   const routeTree = rootRoute.addChildren([
     createRoute({ getParentRoute: () => rootRoute, path: '/' }),
@@ -277,9 +410,7 @@ function renderAppShell(pathname = clerkSignedIn.value ? '/market' : '/'): void 
     history: createMemoryHistory({ initialEntries: [pathname] }),
   })
 
-  render(
-    <RouterContextProvider router={router}>
-      <AeAppShell><p>Page content</p></AeAppShell>
-    </RouterContextProvider>,
-  )
+  const tree = () => <RouterContextProvider router={router}><AeAppShell>{children}</AeAppShell></RouterContextProvider>
+  const view = render(tree())
+  return { rerenderShell: () => view.rerender(tree()) }
 }

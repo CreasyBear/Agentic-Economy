@@ -1,5 +1,7 @@
 'use client'
 
+import type { AeRecordTableFeatures } from '@/components/ae/operator/AeOperatorDataTable'
+
 import type { ColumnDef } from '@tanstack/react-table'
 
 import { AeRecordTable } from '@/components/ae/operator/AeOperatorDataTable'
@@ -13,7 +15,7 @@ export type AdminCallActivityProps = Readonly<{
   rows: readonly AdminCallActivityRow[]
 }>
 
-const columns: ColumnDef<AdminCallActivityRow>[] = [
+const columns: ColumnDef<AeRecordTableFeatures, AdminCallActivityRow>[] = [
   {
     accessorKey: 'at',
     header: ADMIN_CALL_OBJECT_COPY.occurredAtColumn,

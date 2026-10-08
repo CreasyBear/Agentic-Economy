@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { relative } from 'node:path'
+import reui from '../../src/components/reui/upstream-manifest.json'
 
 import { scanTypeScriptStandards } from '@/lib/ui/contract-scans'
 
@@ -24,6 +26,11 @@ describe('TypeScript standards guardrail', () => {
       return
     }
 
-    expect(violations).toEqual([])
+    // Only reviewed upstream generic implementation patterns are excepted.
+    // Content hashes are independently checked by file-size-ceiling; all security rules stay active.
+    expect(violations.filter(violation => !reui.files.some(entry =>
+      entry.path === relative(process.cwd(), violation.file).split('\\').join('/')
+      && entry.permittedTypePatterns.some(pattern => pattern === violation.rule),
+    ))).toEqual([])
   })
 })

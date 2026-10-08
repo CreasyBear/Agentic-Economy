@@ -1,7 +1,7 @@
-// The installed Arc block owns the composer; AE owns draft admission and recovery.
+// The ReUI composer owns presentation; AE owns draft admission and recovery.
 
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
-import { ArcAiComposer } from '@/components/ae/shared/arc-pro/ai-composer/ai-composer'
+import { ReuiChatComposer } from '@/components/ae/shared/reui-pro/ai-chat/composer'
 import { AlphaLearningNotice } from '@/components/ae/shared/AlphaLearningNotice'
 import './ChatComposerFeedback.css'
 import { RecoveryNotice } from '../../recovery/RecoveryNotice'
@@ -15,12 +15,11 @@ export function ChatComposer({ prompt, busy, disabled, error, errorReference, br
   const promptLength = Array.from(prompt).length
   const invalid = error.length > 0
   const canSend = !busy && !disabled && prompt.trim().length > 0 && Array.from(prompt.trim()).length <= MAX_PROMPT_CHARACTERS
-  return <><ArcAiComposer value={prompt} onValueChange={onPromptChange} onSubmit={onSubmit}
+  return <><ReuiChatComposer value={prompt} onValueChange={onPromptChange} onSubmit={onSubmit}
     busy={busy} disabled={disabled} canSend={canSend} inputId="tool-chat-prompt"
     label={chatComposer.promptLabel} placeholder={chatComposer.placeholder}
     describedBy="tool-chat-limit tool-chat-error" invalid={invalid}
     hint={busy ? 'Response in progress' : 'Enter to send, Shift Enter for a new line'}
-    sendLabel={chatComposer.send} sendingLabel={chatComposer.sending} stopLabel={chatComposer.stop}
     sendAria={chatComposer.sendAria} sendingAria={chatComposer.sendingAria} stopAria={chatComposer.stopAria}
     {...(onStop === undefined ? {} : { onStop })} announcement={status}
     feedback={

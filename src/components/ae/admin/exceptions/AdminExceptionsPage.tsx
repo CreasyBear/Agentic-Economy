@@ -85,6 +85,8 @@ export function AdminExceptionsPage(props: AdminExceptionsPageProps) {
       ) : null}
       <ExceptionFeedTable
         rows={ready.rows}
+        {...(props.search.focus === undefined ? {} : { focusId: props.search.focus })}
+        restoreFocus={exceptions.selectedRow === null}
         observed={ready.observed}
         scanRequests={ready.scanRequests}
         complete={ready.complete}

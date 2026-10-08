@@ -39,6 +39,7 @@ vi.mock('@clerk/shared/authorization-errors', () => ({
 }))
 
 vi.mock('@tanstack/react-router', () => ({
+  useRouter: () => undefined,
   Link: ({
     to,
     children,

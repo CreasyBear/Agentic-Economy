@@ -1,3 +1,4 @@
+import type { AeRecordTableFeatures } from '@/components/ae/operator/AeOperatorDataTable'
 import { useMemo } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 import { BillingHistory } from '@/components/ae/shared/arc-pro/billing-overview/billing-overview'
@@ -7,7 +8,7 @@ import { formatUtcTimestamp } from '@/lib/ui/format-time'
 import type { CallAttemptEvidence as Evidence } from '@/modules/capability-execution/call-attempt-evidence'
 type Attempt = Extract<Evidence, {kind: 'available'}>['attempts'][number]
 export function CallAttemptEvidence({ evidence }: { evidence: Evidence }) {
-  const columns = useMemo<ColumnDef<Attempt, unknown>[]>(() => [
+  const columns = useMemo<ColumnDef<AeRecordTableFeatures, Attempt, unknown>[]>(() => [
     { accessorKey: 'attemptNumber', header: 'Attempt' }, { accessorKey: 'effectGeneration', header: 'Effect generation' },
     { accessorKey: 'release', header: 'Release evidence' }, { accessorKey: 'outcome', header: 'Outcome' },
     { id: 'time', header: 'Recorded (UTC)', cell: ({row}) => formatUtcTimestamp(row.original.recordedAt) },

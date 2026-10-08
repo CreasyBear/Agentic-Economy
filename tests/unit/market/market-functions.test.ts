@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type * as MarketRouteData from '@/modules/market/market-route-data'
 
 const projection = vi.hoisted(() => ({ read: vi.fn(), catalogue: vi.fn(), canonical: vi.fn(), discovery: vi.fn(), chat: vi.fn() }))
 
@@ -19,8 +18,7 @@ vi.mock('@tanstack/react-start', async (importOriginal) => ({
 }))
 
 vi.mock('@/modules/market/server', () => ({ readMarketRouteProjection: projection.read }))
-vi.mock('@/modules/market/market-route-data', async importOriginal => ({
-  ...(await importOriginal<typeof MarketRouteData>()),
+vi.mock('@/modules/market/market-route-data', () => ({
   loadMarketRouteData: projection.catalogue,
 }))
 vi.mock('@/lib/server/canonical-url.functions', () => ({ readCanonicalBaseUrlServer: projection.canonical }))

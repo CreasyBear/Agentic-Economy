@@ -366,12 +366,23 @@ export async function readSource(repo: string, relative: string): Promise<Buffer
   return readFile(current)
 }
 export async function snapshot(repo: string): Promise<{ head: string; sources: Record<string, string>; dirtySources: Record<string, string> }> {
-  const paths = execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard', '--', 'src', 'packages/cli/README.md', 'docs/glossary.md', 'docs/foundations.md', 'docs/operations/deployments.md', 'plugins/agentic-economy', 'tools/docs', 'package.json', 'package-lock.json', '.nvmrc', 'tsconfig.json', 'tsconfig.arc.json', 'packages/docs'], { cwd: repo }).toString().split('\0').filter(Boolean).filter((path, index, all) => all.indexOf(path) === index).sort()
+  const sourcePaths = ['src', 'packages/cli/README.md', 'docs/glossary.md', 'docs/foundations.md', 'docs/operations/deployments.md', 'plugins/agentic-economy', 'tools/docs', 'package.json', 'package-lock.json', '.nvmrc', 'tsconfig.json', 'tsconfig.arc.json', 'packages/docs']
+  const paths = execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard', '--', ...sourcePaths], { cwd: repo }).toString().split('\0').filter(Boolean).filter((path, index, all) => all.indexOf(path) === index).sort()
   const changed = new Set([...execFileSync('git', ['diff', '--name-only', '-z', 'HEAD'], { cwd: repo }).toString().split('\0'), ...execFileSync('git', ['ls-files', '-z', '--others', '--exclude-standard'], { cwd: repo }).toString().split('\0')])
-  const sources = Object.fromEntries(await Promise.all(paths.map(async path => [path, digest(await readSource(repo, path))] as const)))
+  const deleted = new Set(execFileSync('git', ['diff', '--diff-filter=D', '--name-only', '-z', 'HEAD', '--', ...sourcePaths], { cwd: repo }).toString().split('\0').filter(Boolean))
+  const reads = await Promise.all(paths.map(async path => {
+    try { return [path, digest(await readSource(repo, path))] as const }
+    catch (cause) {
+      // Tracked deletions are part of a dirty candidate, not missing publication inputs.
+      // An unexpected missing file or a source symlink still fails the snapshot.
+      if (deleted.has(path) && typeof cause === 'object' && cause !== null && 'code' in cause && cause.code === 'ENOENT') return undefined
+      throw cause
+    }
+  }))
+  const sources = Object.fromEntries(reads.filter((read): read is readonly [string, string] => read !== undefined))
   return {
     head: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo }).toString().trim(), sources,
-    dirtySources: Object.fromEntries(Object.entries(sources).filter(([path]) => changed.has(path))),
+    dirtySources: Object.fromEntries([...Object.entries(sources).filter(([path]) => changed.has(path)), ...[...deleted].filter(path => !Object.hasOwn(sources, path)).sort().map(path => [path, 'deleted'] as const)]),
   }
 }
 export async function filesUnder(directory: string): Promise<string[]> {

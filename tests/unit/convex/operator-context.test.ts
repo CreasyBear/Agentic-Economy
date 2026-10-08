@@ -20,6 +20,7 @@ describe('operator context', () => {
       principalRef: fixture.canonicalPrincipalRef,
       accountRef: fixture.canonicalAccountRef,
       allowedSurfaces: ['owner', 'developer'],
+      authScope: { organizationId: null, sessionId: null },
     })
   })
 
@@ -57,6 +58,7 @@ describe('operator context', () => {
       userId: 'user_operator-context-admin-only',
       principalRef: fixture.principalRef,
       allowedSurfaces: ['admin', 'developer'],
+      authScope: { organizationId: null, sessionId: null },
     })
   })
 })

@@ -32,7 +32,7 @@ const captureAdminQueueViewServer = createServerFn()
 export const Route = createFileRoute('/_operator/admin/exceptions')({
   ...operatorRouteOptions,
   validateSearch: (search: Record<string, unknown>): AdminExceptionsSearch => recoverableSearch(adminExceptionsSearchSchema, {
-    fieldLabels: { kind: 'Kind', partition: 'State', ref: 'Reference', loaded: 'Loaded page' },
+    fieldLabels: { kind: 'Kind', partition: 'State', ref: 'Reference', focus: 'Selected case', loaded: 'Loaded page' },
   })(search),
   loaderDeps: ({ search }) => ({ kind: search.kind ?? null, partition: search.partition ?? null }),
   loader: ({ deps }) => captureAdminQueueViewServer({ data: deps }),

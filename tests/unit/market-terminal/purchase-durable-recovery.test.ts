@@ -207,10 +207,18 @@ describe('durable exact procurement recovery', () => {
   })
   it('serializes concurrent fresh purchases and refuses caller fields on resume', async () => {
     const [left, right] = await Promise.all([procure(), procure()])
-    expect([left.status, right.status].sort()).toEqual([0, 1])
+    // A process that starts after acknowledgement may observe the retained Call.
+    // Both interleavings must retain one purchase and the same recovery identity.
+    expect([[0, 0], [0, 1]]).toContainEqual([left.status, right.status].sort())
     expect(purchases).toHaveLength(1)
     const accepted = left.status === 0 ? left : right
     const ref = JSON.parse(accepted.stdout).recoveryRef
+    for (const result of [left, right]) {
+      if (result.status === 0) expect(JSON.parse(result.stdout).recoveryRef).toBe(ref)
+      else expect(JSON.parse(result.stdout)).toMatchObject({
+        code: 'purchase-recovery-required', refs: { recoveryRef: ref, identityPreserved: true },
+      })
+    }
     const invalid = await run(['procure', 'resume', ref, '--input', JSON.stringify(exact)])
     expect(invalid.status).toBe(1)
     expect(purchases).toHaveLength(1)

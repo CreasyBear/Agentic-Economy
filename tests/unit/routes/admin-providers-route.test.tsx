@@ -28,6 +28,7 @@ const runtime = vi.hoisted((): {
 }))
 
 vi.mock('@tanstack/react-router', () => ({
+  useRouter: () => undefined,
   createFileRoute: (path: string) => (options: { component: ComponentType }) => {
     runtime.routes[path] = options.component
     return {

@@ -6,6 +6,7 @@ import { api } from '../../../../../convex/_generated/api'
 import { parseCallRef } from '@/modules/capability-execution/call-contracts'
 import { adminObjectHref, type AdminExceptionKind, type AdminExceptionPartition, type AdminResolutionRow } from '@/lib/operator/admin-console/contracts'
 import { getStatusPresentation } from '@/lib/ui/status-presentation'
+import { withAdminInvestigationReturn } from './admin-investigation-return'
 import { ADMIN_LIST_WINDOW, nextAdminListWindow } from '../admin-list-window'
 import { formatPerthTimestamp, formatRelativeTime, timestampIso } from '@/lib/ui/format-time'
 import {
@@ -39,9 +40,20 @@ export function useAdminExceptions({ search, onSearchChange }: AdminExceptionsPa
     allowed && search.ref !== undefined && (kind === 'removal_dispute' || kind === 'admission_case')
       ? { kind, ref: search.ref } : 'skip',
   )
-  const rows = pagination.results.map((exception) => toExceptionRowModel(exception, partition))
+  const sourceSearch = { ...search, kind, partition }
+  const scopedRow = (exception: AdminExceptionRecord) => {
+    const row = toExceptionRowModel(exception, partition)
+    return {
+      ...row,
+      href: row.kind === 'uncertain_call' || row.kind === 'source_authority_review'
+        ? withAdminInvestigationReturn(row.href, sourceSearch, row)
+        : `${row.href}${search.loaded === undefined ? '' : `&loaded=${search.loaded}`}&focus=${encodeURIComponent(row.id)}`,
+      businessHref: row.businessHref === null ? null : withAdminInvestigationReturn(row.businessHref, sourceSearch, row),
+    }
+  }
+  const rows = pagination.results.map(scopedRow)
   const selectedRow = exact !== undefined && exact !== null && !('code' in exact)
-    ? toExceptionRowModel(exact, partition)
+    ? scopedRow(exact)
     : rows.find((row) => row.kind === kind && row.ref === search.ref) ?? null
   const selectedOverview = allowed
     ? overview.find((entry) => entry.kind === kind && entry.partition === partition) : undefined
@@ -69,6 +81,7 @@ export function useAdminExceptions({ search, onSearchChange }: AdminExceptionsPa
               onSearchChange({
                 kind, partition, loaded,
                 ...(search.ref === undefined ? {} : { ref: search.ref }),
+                ...(search.focus === undefined ? {} : { focus: search.focus }),
                 ...(search.rejected === undefined ? {} : { rejected: search.rejected }),
               })
             }
@@ -90,10 +103,10 @@ export function useAdminExceptions({ search, onSearchChange }: AdminExceptionsPa
       if (row.kind === 'uncertain_call' || row.kind === 'source_authority_review') {
         void navigate({ href: row.href })
       } else {
-        onSearchChange({ kind, partition, ref: row.ref })
+        onSearchChange({ ...sourceSearch, ref: row.ref, focus: row.id })
       }
     },
-    onOpenChange: (open: boolean) => { if (!open) onSearchChange({ kind, partition }) },
+    onOpenChange: (open: boolean) => { if (!open) { const { ref: _ref, ...nextSearch } = sourceSearch; onSearchChange(nextSearch) } },
   }
 }
 

@@ -134,6 +134,7 @@ import type * as lib_adminConsole_reads_alphaLearning from "../lib/adminConsole/
 import type * as lib_adminConsole_reads_audit from "../lib/adminConsole/reads/audit.js";
 import type * as lib_adminConsole_reads_auditHandlers from "../lib/adminConsole/reads/auditHandlers.js";
 import type * as lib_adminConsole_reads_call from "../lib/adminConsole/reads/call.js";
+import type * as lib_adminConsole_reads_commandReceipt from "../lib/adminConsole/reads/commandReceipt.js";
 import type * as lib_adminConsole_reads_exceptions from "../lib/adminConsole/reads/exceptions.js";
 import type * as lib_adminConsole_reads_objectValues from "../lib/adminConsole/reads/objectValues.js";
 import type * as lib_adminConsole_reads_overview from "../lib/adminConsole/reads/overview.js";
@@ -704,6 +705,7 @@ import type * as lib_principalAccount_workspace_invitation from "../lib/principa
 import type * as lib_principalAccount_workspace_organizationBinding from "../lib/principalAccount/workspace/organizationBinding.js";
 import type * as lib_principalAccount_workspace_ownershipTransfer from "../lib/principalAccount/workspace/ownershipTransfer.js";
 import type * as lib_principalAccount_workspace_rename from "../lib/principalAccount/workspace/rename.js";
+import type * as lib_principalAccount_workspace_terminalReceipt from "../lib/principalAccount/workspace/terminalReceipt.js";
 import type * as lib_principalAccount_workspaceSecurity_contracts from "../lib/principalAccount/workspaceSecurity/contracts.js";
 import type * as lib_principalAccount_workspaceSecurity_factorVerification from "../lib/principalAccount/workspaceSecurity/factorVerification.js";
 import type * as lib_principalAccount_workspaceSecurity_identity from "../lib/principalAccount/workspaceSecurity/identity.js";
@@ -947,6 +949,7 @@ declare const fullApi: ApiFromModules<{
   "lib/adminConsole/reads/audit": typeof lib_adminConsole_reads_audit;
   "lib/adminConsole/reads/auditHandlers": typeof lib_adminConsole_reads_auditHandlers;
   "lib/adminConsole/reads/call": typeof lib_adminConsole_reads_call;
+  "lib/adminConsole/reads/commandReceipt": typeof lib_adminConsole_reads_commandReceipt;
   "lib/adminConsole/reads/exceptions": typeof lib_adminConsole_reads_exceptions;
   "lib/adminConsole/reads/objectValues": typeof lib_adminConsole_reads_objectValues;
   "lib/adminConsole/reads/overview": typeof lib_adminConsole_reads_overview;
@@ -1517,6 +1520,7 @@ declare const fullApi: ApiFromModules<{
   "lib/principalAccount/workspace/organizationBinding": typeof lib_principalAccount_workspace_organizationBinding;
   "lib/principalAccount/workspace/ownershipTransfer": typeof lib_principalAccount_workspace_ownershipTransfer;
   "lib/principalAccount/workspace/rename": typeof lib_principalAccount_workspace_rename;
+  "lib/principalAccount/workspace/terminalReceipt": typeof lib_principalAccount_workspace_terminalReceipt;
   "lib/principalAccount/workspaceSecurity/contracts": typeof lib_principalAccount_workspaceSecurity_contracts;
   "lib/principalAccount/workspaceSecurity/factorVerification": typeof lib_principalAccount_workspaceSecurity_factorVerification;
   "lib/principalAccount/workspaceSecurity/identity": typeof lib_principalAccount_workspaceSecurity_identity;

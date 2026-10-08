@@ -53,6 +53,8 @@ vi.mock('@clerk/shared/authorization-errors', () => ({
 
 const { useQuery, closeWorkspace, transferWorkspaceOwnership } = convexMocks
 
+vi.mock('@clerk/tanstack-react-start/errors', () => ({ isReverificationCancelledError: (cause: unknown) => cause instanceof Error && cause.message === 'reverification_cancelled' }))
+
 vi.mock('convex/react', () => ({
   useQuery: (...args: unknown[]) => convexMocks.useQuery(...args),
 
@@ -326,6 +328,86 @@ describe('useWorkspaceDangerZone', () => {
     await waitFor(() => {
       expect(result.current.closePanel?.closeDiagnostic).not.toBeNull()
     })
-    expect(toast.error).toHaveBeenCalledWith('Workspace was not closed')
+    expect(toast.error).toHaveBeenCalledWith('Workspace close could not be confirmed')
   })
+})
+
+
+it('retains confirmed closure and disables further account eligibility reads after completion', async () => {
+  closeWorkspace.mockResolvedValue({ kind: 'closed', accountRef: ownerEligible.accountRef })
+  useQuery.mockReturnValue(ownerEligible)
+  const { result, rerender } = renderHook(() => useWorkspaceDangerZone())
+  act(() => {
+    result.current.closePanel?.onConfirmationNameChange('Acme Corp')
+    result.current.closePanel?.onRequestClose()
+  })
+  await act(async () => { await result.current.closePanel?.onConfirmClose() })
+  useQuery.mockReturnValue(undefined)
+  rerender()
+  expect(result.current.completion).toMatchObject({ kind: 'closed', accountRef: ownerEligible.accountRef, displayName: 'Acme Corp' })
+  expect(result.current.loading).toBe(false)
+  expect(result.current.closePanel).toBeNull()
+  expect(result.current.transferPanel).toBeNull()
+  expect(useQuery).toHaveBeenLastCalledWith(expect.anything(), 'skip')
+})
+
+
+it('pauses ancestor reads before close can end access and freezes an uncertain attempt for exact recovery', async () => {
+  const paused = vi.fn()
+  const completed = vi.fn()
+  closeWorkspace.mockImplementationOnce(async () => {
+    expect(paused).toHaveBeenLastCalledWith(true)
+    throw new Error('response lost after closure may have applied')
+  }).mockResolvedValueOnce({ kind: 'replayed', accountRef: ownerEligible.accountRef })
+  useQuery.mockReturnValue(ownerEligible)
+  const { result, rerender } = renderHook(() => useWorkspaceDangerZone({ onReadPausedChange: paused, onCompletion: completed }))
+  act(() => {
+    result.current.closePanel?.onConfirmationNameChange('Acme Corp')
+    result.current.closePanel?.onRequestClose()
+  })
+  await act(async () => { await result.current.closePanel?.onConfirmClose() })
+  useQuery.mockReturnValue(undefined)
+  rerender()
+  expect(result.current.closePanel?.closeAttemptUnconfirmed).toBe(true)
+  expect(result.current.loading).toBe(false)
+  expect(result.current.transferPanel?.transferDisabled).toBe(true)
+  act(() => result.current.closePanel?.onRequestClose())
+  await act(async () => { await result.current.closePanel?.onConfirmClose() })
+  expect(closeWorkspace.mock.calls[1]).toEqual(closeWorkspace.mock.calls[0])
+  expect(completed).toHaveBeenCalledWith(expect.objectContaining({ kind: 'closed', accountRef: ownerEligible.accountRef }))
+  expect(paused).not.toHaveBeenCalledWith(false)
+})
+
+
+it('freezes the named transfer recipient after an unknown outcome and confirms only that original recipient', async () => {
+  transferWorkspaceOwnership.mockRejectedValueOnce(new Error('response lost')).mockResolvedValueOnce({ kind: 'replayed', accountRef: ownerEligible.accountRef })
+  useQuery.mockReturnValue({ ...ownerWithMember, transferCandidates: [...ownerWithMember.transferCandidates, { principalRef: 'other', displayName: 'Other member', membershipRef: 'other-member' }] })
+  const { result } = renderHook(() => useWorkspaceDangerZone())
+  const original = result.current.transferPanel?.successorName
+  act(() => result.current.transferPanel?.onRequestTransfer())
+  await act(async () => { await result.current.transferPanel?.onConfirmTransfer() })
+  expect(result.current.transferPanel?.transferDiagnostic?.whatHappened).toContain('may already have completed')
+  act(() => { result.current.transferPanel?.onSuccessorChange('other'); result.current.transferPanel?.onRequestTransfer() })
+  expect(result.current.transferPanel?.successorName).toBe(original)
+  await act(async () => { await result.current.transferPanel?.onConfirmTransfer() })
+  expect(transferWorkspaceOwnership.mock.calls[1]).toEqual(transferWorkspaceOwnership.mock.calls[0])
+  expect(result.current.completion?.successorName).toBe(original)
+})
+
+
+it.each(['cancelled', 'refused'] as const)('keeps an original unknown close frozen and ancestor reads skipped after a %s MFA recheck', async outcome => {
+  useQuery.mockReturnValue(ownerEligible)
+  const paused = vi.fn()
+  closeWorkspace.mockRejectedValueOnce(new Error('lost original response'))
+  const { result } = renderHook(() => useWorkspaceDangerZone({ onReadPausedChange: paused }))
+  act(() => { result.current.closePanel?.onConfirmationNameChange('Acme Corp'); result.current.closePanel?.onRequestClose() })
+  await act(async () => { await result.current.closePanel?.onConfirmClose() })
+  if (outcome === 'cancelled') closeWorkspace.mockRejectedValueOnce(new Error('reverification_cancelled'))
+  else closeWorkspace.mockResolvedValue({ kind: 'refused', code: 'mfa_reverification_required' })
+  act(() => result.current.closePanel?.onRequestClose())
+  await act(async () => { await result.current.closePanel?.onConfirmClose() })
+  expect(result.current.closePanel?.closeAttemptUnconfirmed).toBe(true)
+  expect(paused).not.toHaveBeenCalledWith(false)
+  expect(useQuery).toHaveBeenLastCalledWith(expect.anything(), 'skip')
+  expect(closeWorkspace.mock.calls[1]).toEqual(closeWorkspace.mock.calls[0])
 })

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AeSupplyEarningsCard } from '@/components/ae/supply/earnings-card/AeSupplyEarningsCard'
 
 afterEach(cleanup)
@@ -63,5 +63,20 @@ describe('owner earnings facts', () => {
     expect(screen.getByText('Record state: review')).toBeTruthy()
     expect(screen.queryByText(/Stripe transfer:/)).toBeNull()
     expect(screen.queryByText(/Stripe transfer status:/)).toBeNull()
+  })
+
+  it('offers structured-error retry and related-record support without a buyer-owned Call route', () => {
+    const retry = vi.fn()
+    const more = vi.fn()
+    const { rerender } = render(<AeSupplyEarningsCard readback={{ kind: 'error', code: 'source_unavailable' }} onRetry={retry} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Try earnings again' }))
+    expect(retry).toHaveBeenCalledOnce()
+    rerender(<AeSupplyEarningsCard readback={{ kind: 'available', businessId: 'business:one', obligations: [obligation], truncated: true, transfers: [], transfersTruncated: false, isDone: false, continueCursor: 'opaque:next' }} onLoadMore={more} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Load older obligations (up to 50)' }))
+    expect(more).toHaveBeenCalledOnce()
+    const href = screen.getByRole('link', { name: 'Ask about this Call (opens email app)' }).getAttribute('href') ?? ''
+    expect(decodeURIComponent(href)).toContain('Call reference: call:one')
+    expect(decodeURIComponent(href)).toContain('Obligation reference: provider-obligation:call:one')
+    expect(href).toMatch(/^mailto:/)
   })
 })

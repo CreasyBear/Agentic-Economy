@@ -17,7 +17,6 @@ function fillValidProfile(result: { current: ReturnType<typeof useSupplierOnboar
   act(() => {
     result.current.handleNameChange('Acme AI Systems')
     result.current.handleWebsiteChange('https://acme.example.com')
-    result.current.handleAbnChange('51824753556')
   })
 }
 
@@ -41,6 +40,15 @@ describe('useSupplierOnboardingWizard', () => {
 
     expect(result.current.view.step).toBe('first_tool')
     expect(toast.success).not.toHaveBeenCalled()
+  })
+
+  it('saves identity without collecting unsupported tax facts', async () => {
+    const onSaveProfile = vi.fn().mockResolvedValue({ kind: 'ok' })
+    const { result } = renderHook(() => useSupplierOnboardingWizard({ onSaveProfile }))
+    fillValidProfile(result)
+    await submitProfile(result)
+    expect(onSaveProfile).toHaveBeenCalledWith({ name: 'Acme AI Systems', website: 'https://acme.example.com' })
+    expect(result.current.view.step).toBe('first_tool')
   })
 
   it('maps save error result to Rule 4 diagnostic', async () => {

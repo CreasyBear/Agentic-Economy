@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link } from '@tanstack/react-router'
 
 import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
@@ -149,17 +149,7 @@ function RecoveryPrimaryActions({
             Cancel Call
           </Button>
         ) : null}
-        {canReconcile ? (
-          <Button
-            type="submit"
-            form={RECONCILIATION_FORM_ID}
-            variant="primary"
-            size="md"
-            disabled={availability.recoveryPending}
-          >
-            {actions?.reconcilePending === true ? 'Reconciling Call…' : 'Submit reconciliation evidence'}
-          </Button>
-        ) : null}
+
       </div>
       <AeConfirmDialog
         open={cancelDialogOpen}
@@ -183,6 +173,10 @@ function AdvancedReconciliation({
   actions,
   recoveryPending,
 }: Readonly<{ actions?: CallStatusPageActions; recoveryPending: boolean }>) {
+  const [open, setOpen] = useState(false)
+  const sourceRef = useRef<HTMLInputElement>(null)
+  const reviewRef = useRef<HTMLButtonElement>(null)
+  useEffect(() => { if (open) sourceRef.current?.focus() }, [open])
   const [resolution, setResolution] = useState<CallReconciliationForm['resolution']>(actions?.reconciliationDraft?.resolution ?? 'not_released')
   const [source, setSource] = useState(actions?.reconciliationDraft?.source ?? '')
   const [evidenceRef, setEvidenceRef] = useState(actions?.reconciliationDraft?.evidenceRef ?? '')
@@ -192,9 +186,15 @@ function AdvancedReconciliation({
   }
 
   return (
-    <form id={RECONCILIATION_FORM_ID} onSubmit={submitReconciliation}>
-      <details className="arc-call-disclosure">
-        <summary>Advanced evidence reconciliation</summary>
+    <div className="grid gap-3">
+      <Button ref={reviewRef} type="button" variant="secondary" size="md" disabled={recoveryPending}
+        aria-expanded={open} aria-controls={RECONCILIATION_FORM_ID}
+        onClick={() => { setOpen(value => !value); if (open) reviewRef.current?.focus() }}>
+        {open ? 'Hide reconciliation evidence' : 'Review reconciliation evidence'}
+      </Button>
+      {open ? <form id={RECONCILIATION_FORM_ID} onSubmit={submitReconciliation} className="arc-call-disclosure">
+        <h3 className="text-sm font-medium">Reconciliation evidence</h3>
+        <p className="text-sm text-muted-foreground">Record the observed Provider outcome and its evidence source before submitting. This reconciles the existing Call; it does not run the Tool again.</p>
         <FieldGroup className="max-w-xl pt-related">
           <Field data-disabled={actions?.reconcilePending || undefined}>
             <FieldLabel htmlFor="reconciliation-resolution">Observed Provider outcome</FieldLabel>
@@ -220,6 +220,7 @@ function AdvancedReconciliation({
             <FieldLabel htmlFor="reconciliation-source">Evidence source</FieldLabel>
             <input
               id="reconciliation-source"
+              ref={sourceRef}
               maxLength={300}
               value={source}
               onChange={(event) => setSource(event.target.value)}
@@ -243,7 +244,10 @@ function AdvancedReconciliation({
             />
           </Field>
         </FieldGroup>
-      </details>
-    </form>
+        <Button type="submit" variant="primary" size="md" disabled={recoveryPending}>
+          {actions?.reconcilePending === true ? 'Reconciling Call…' : 'Submit reconciliation evidence'}
+        </Button>
+      </form> : null}
+    </div>
   )
 }

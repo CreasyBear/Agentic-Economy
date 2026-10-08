@@ -1,3 +1,4 @@
+import { activityReturnScopeSchema } from '@/lib/call-recovery/activity-return-scope'
 import { Link } from '@tanstack/react-router'
 import type { ComponentProps } from 'react'
 
@@ -89,11 +90,12 @@ function firstUseCopy(firstUse: AgentFirstUseState): Readonly<{
   return { title, description, hasAccess, authenticated, observedCall, observedState, stepperCurrent, stepperSteps, currentAccess, callActionLabel, checkLabel, showConnect, showCheck, showBrowse: firstUse.kind === 'browse_only', instructionAgent }
 }
 
-function HomeResumeActions({ copy, onConnect, onCheck, checking, resumeTool }: Pick<HomeResumeToolSectionProps, 'onConnect' | 'onCheck' | 'checking' | 'resumeTool'> & Readonly<{
+function HomeResumeActions({ copy, search, onConnect, onCheck, checking, resumeTool }: Pick<HomeResumeToolSectionProps, 'onConnect' | 'onCheck' | 'checking' | 'resumeTool' | 'search'> & Readonly<{
   copy: ReturnType<typeof firstUseCopy>
 }>) {
   const { hasAccess, observedCall, callActionLabel, showConnect, showCheck, showBrowse, checkLabel } = copy
   const callAction = observedCall === undefined ? null : <Link to="/calls/$callRef" params={{ callRef: observedCall.callRef }}
+    search={activityReturnScopeSchema.parse({ returnTo: 'agent', returnCaller: search?.caller, returnTool: resumeTool })}
     className={`${actionLinkClassName('primary', 'md')} arc-agent-inline-action`}>{callActionLabel}</Link>
 
   return <>
@@ -132,7 +134,7 @@ function HomeResumeChoicesOrStepper({ firstUse, search, resumeTool, observedCall
 export function HomeResumeToolSection({ search, firstUse, liveUpdates, resumeTool, onConnect, onCheck, checking }: HomeResumeToolSectionProps) {
   const copy = firstUseCopy(firstUse)
   const { title, description, authenticated, observedCall, observedState, stepperCurrent, stepperSteps, currentAccess, instructionAgent } = copy
-  const homeResumeActions = <HomeResumeActions copy={copy} onConnect={onConnect} onCheck={onCheck} checking={checking}
+  const homeResumeActions = <HomeResumeActions copy={copy} {...(search === undefined ? {} : { search })} onConnect={onConnect} onCheck={onCheck} checking={checking}
     {...(resumeTool === undefined ? {} : { resumeTool })} />
 
   if (observedState !== undefined) {

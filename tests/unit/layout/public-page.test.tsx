@@ -23,6 +23,7 @@ vi.mock('@tanstack/react-router', () => ({
     reloadDocument?: boolean
   }) => <a href={to} data-reload-document={reloadDocument ? 'true' : undefined}>{children}</a>,
   useRouter: () => router,
+  useLocation: () => ({ pathname: '/' }),
 }))
 
 afterEach(() => {

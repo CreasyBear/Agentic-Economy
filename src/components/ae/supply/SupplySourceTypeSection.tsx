@@ -1,3 +1,4 @@
+import type { Ref } from 'react'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Button } from '@/components/arc/button/button'
 import { FieldGroup } from '@/components/ui/field'
@@ -6,10 +7,10 @@ import { SUPPLY_SOURCE_TYPE_COPY, type SupplySourceTypeSectionProps } from './su
 import { useSupplySourceType } from './supply-source-type/useSupplySourceType'
 import './SupplyPublicationComposition.css'
 
-export function SupplySourceTypeSection(props: SupplySourceTypeSectionProps & Readonly<{ askMethod?: boolean }>) {
+export function SupplySourceTypeSection(props: SupplySourceTypeSectionProps & Readonly<{ askMethod?: boolean; headingRef?: Ref<HTMLHeadingElement> }>) {
   const { discoverDiagnostic, handleDiscover } = useSupplySourceType(props)
   return (
-    <AeSection title="Add Tool" description="Paste the public HTTPS URL. Agentic Economy reads the payment challenge.">
+    <AeSection {...(props.headingRef === undefined ? {} : { headingRef: props.headingRef })} title="Add Tool" description="Paste the public HTTPS URL. Agentic Economy reads the payment challenge.">
       <FieldGroup className="arc-publication-fields">
         <SupplySourceFields
           {...props}

@@ -259,3 +259,88 @@ retain their existing behaviour. This prevents web from moving ahead of the
 additive trial backend. The coordinated release must verify backend compatibility
 and then remove these two entries before resuming automatic web releases. This
 uses [Vercel’s branch deployment setting](https://vercel.com/docs/project-configuration/git-configuration#git.deploymentenabled); it does not stop the current hosted release.
+
+## Platform UI candidate — 7 October
+
+Source baseline: `84abbda0bd892b7f9688e53d84001e970ba32ab1` plus the reviewed
+working candidate. This is source preparation, not a hosted release. The existing
+production/staging and accepted-release records above remain historical evidence.
+
+The matching release must include the new authenticated admin command-receipt
+read, workspace terminal-receipt read, explicit current-session scope on
+`operatorContext.readCurrent`, Team lifecycle operations, and Provider inventory
+query/projection changes before the corresponding web UI. These reuse the
+existing authorization, audit, command and identity owners. Exact purchase
+references, financial history, request keys and authorized recovery are unchanged.
+Table is pinned to 9.2.6; Router and Start retain their prior pinned versions.
+
+The public market recut also extends `x402DirectoryIndex:facets` with optional
+`providerPrefix`. Deploy this backend reader before the matching web Host page
+and picker. It uses the existing `by_generation_and_kind_and_key` index and
+eligible-listing counts. No schema migration or backfill is required for this
+reader. Prefix cursors bind the prefix and active generation, including bounded
+split-page cursors. An expired page offers a first-page restart. No hosted release
+of this market change has been performed.
+
+Provider inventory needs an explicit staged rollout on a populated deployment:
+
+1. Deploy optional `inventoryName`/`inventoryText` fields, projection maintenance,
+   and the internal `capabilityProviderTools:backfillInventoryPage` operation.
+   Stage `by_businessId_and_inventoryName` and `search_inventoryText`; retain
+   date-only reads while the indexes are staged.
+2. The authorized backend owner runs bounded pages with
+   `paginationOpts: { numItems: 50, cursor: null }`, then the returned opaque
+   cursor until `isDone`. Inspect `skipped` and repair missing or wrong-owner
+   source revisions; an incomplete owner inventory is not a complete search.
+3. Confirm index readiness, remove staged flags, then enable the final indexed
+   reads and matching web candidate. The bounded missing-projection probe remains
+   fail-closed as `index_pending`. No live backfill was performed in this work.
+
+`AE_PUBLIC_DOCS_URL` optionally selects a vetted docs root. Until configured,
+app help links use the existing local API reference. Fumadocs's optional
+`VITE_AE_DOCS_APP_URL` controls its return-to-app link. Neither setting provisions
+`docs.aecon.ai`, publishes content or grants Account authority.
+
+Record source gate results in the existing maturity execution record and the
+eventual PR. Before release, record the actual web/backend/source/docs/client
+tuple and repeat required authenticated qualification. Joel explicitly deferred
+that production journey to a later authorized action. The configured local
+test environment currently lacks `AE_E2E_OWNER_EMAIL` and `CONVEX_URL`; public
+loopback browser proof cannot qualify membership, Account switching or recovery
+against a live backend. Existing Vercel automatic-deployment protections remain.
+
+**8 October settings completion — coordinated candidate, not deployed.** Identity
+owns the additive `accountRef` returned by `workspaceTeam:invitationContext` and
+the required `expectedAccountRef` on `workspaceAccounts:renameUnboundWorkspace`.
+The matching web server handlers and UI send/check Account identity for invitations
+and bound/unbound renames. Deploy the matching backend/web candidate together;
+a stale rename caller missing the required Account must fail closed and reload,
+not be grandfathered into an unfenced write. The invitation projection must be
+present before its new web check can permit invitations. No data migration or
+historical purchase rewrite is involved. Live Clerk, webhook readback and Account
+switching remain in the deferred authenticated qualification.
+
+
+**8 October release authorization and preparation.** Joel authorized committing,
+integrating and deploying the coordinated candidate, then production testing.
+The verified pre-release web/backend revision is
+`1cfe08489f3f3d3dfc36d2a37619c509e4924034`; Vercel production deployment is
+`dpl_6QuZitnMGqaoLy8cyUESZVw5dWBF`. Production remains the existing
+`agentic-economy` Vercel project and `cautious-zebra-473` Convex deployment,
+with `clerk.aecon.ai` and the production Formance ledger/gateway above. The
+current payment audience was read back as `admins`; release work does not change it.
+
+An independently reviewed additive preparation preserves the pre-release Quote
+contract and date-only inventory reads, adding only optional inventory fields,
+projection maintenance, the bounded backfill and two staged indexes. Native
+production dry run passes and deletes no indexes. The sole current inventory
+projection has a matching owned source revision. Complete its backfill and enable
+the indexes before final reads. Build the matching production web deployment
+without assigning domains before the backend/web cutover. After backfill, code
+rollback must retain the additive schema; never restore a financial database.
+
+Pre-release readiness is already unavailable: Base RPC evidence fails and treasury
+requires reconciliation. Configuration and backend probes pass. Preserve that
+failure independently of UI release acceptance; paid production journeys and
+expanded Customer access are not qualified by this release. The release PR and
+subsequent readback record own the exact deployed tuple and outcomes.

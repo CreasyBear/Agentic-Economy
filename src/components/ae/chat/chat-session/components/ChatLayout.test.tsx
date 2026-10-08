@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@clerk/tanstack-react-start', () => ({
@@ -13,7 +13,7 @@ import { providerSafeActionToolName } from '@/modules/actions/tool-contract'
 
 import type { ChatRunResult, ChatSessionModel } from '../chat-session.contracts'
 import { ChatLayout } from './ChatLayout'
-afterEach(cleanup)
+afterEach(() => { cleanup(); document.cookie = 'chat_sidebar_state=; path=/; max-age=0' })
 
 function buildModel(overrides: Partial<ChatSessionModel> = {}): ChatSessionModel {
   return {
@@ -151,9 +151,34 @@ describe('ChatLayout', () => {
     expect(rail.textContent).toContain('Saved threads')
     const toggle = screen.getByRole('button', { name: 'Toggle conversation history' })
     fireEvent.click(toggle)
-    expect(rail.textContent).not.toContain('Saved threads')
+    expect(rail.textContent).toContain('Saved threads')
+    expect(rail.querySelector('[inert]')).not.toBeNull()
     expect(within(rail).getByRole('button', { name: chatHistory.newChat })).toBeTruthy()
     expect(document.cookie).toContain('chat_sidebar_state=false')
+  })
+
+  it('retains history search and loaded pages across collapse and reopen', () => {
+    function HistoryProbe() {
+      const [search, setSearch] = useState('')
+      const [pages, setPages] = useState(1)
+      return <div><input aria-label="Search saved chats" value={search} onChange={event => setSearch(event.target.value)} />
+        <button type="button" onClick={() => setPages(count => count + 1)}>Load more chats</button><p>{pages} pages loaded</p></div>
+    }
+    const model = buildModel()
+    render(<ChatLayout model={{ ...model, showHistoryRail: true,
+      header: { ...model.header, authenticated: true }, createHistoryPanel: () => <HistoryProbe /> }} />)
+    const rail = screen.getByRole('complementary', { name: 'Conversation history', hidden: true })
+    const search = within(rail).getByRole('textbox', { name: 'Search saved chats', hidden: true }) as HTMLInputElement
+    fireEvent.change(search, { target: { value: 'Sydney' } })
+    fireEvent.click(within(rail).getByRole('button', { name: 'Load more chats', hidden: true }))
+    const toggle = screen.getByRole('button', { name: 'Toggle conversation history' })
+    fireEvent.click(toggle)
+    expect(rail.querySelector('[inert]')).not.toBeNull()
+    fireEvent.click(toggle)
+    expect(rail.querySelector('[inert]')).toBeNull()
+    expect(within(rail).getByRole('textbox', { name: 'Search saved chats', hidden: true })).toBe(search)
+    expect(search.value).toBe('Sydney')
+    expect(within(rail).getByText('2 pages loaded')).toBeTruthy()
   })
 
   it('asks a signed-out visitor to sign in instead of opening a new chat', () => {
@@ -190,9 +215,10 @@ describe('ChatLayout', () => {
       onSuggest: vi.fn(),
     } })} />)
     expect(screen.queryByRole('region', { name: 'Related questions' })).toBeNull()
-    const marketAction = screen.getByRole('link', { name: 'Browse Market' })
-    expect(marketAction.getAttribute('href')).toBe('/market?query=non-existent%20Tool')
-    expect(marketAction.closest('details')).toBeNull()
+    expect(screen.getByText('No suitable Tool in the assessed catalogue.')).toBeTruthy()
+    expect(screen.queryByRole('link', { name: 'Browse Market' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Options' })).toBeNull()
   })
 
   it('shows one collapsed work line, answer, choices and compare actions without repeated search cards', () => {
@@ -223,7 +249,8 @@ describe('ChatLayout', () => {
     expect(screen.queryByRole('region', { name: 'Filter options' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Select' })).toBeNull()
     fireEvent.click(screen.getAllByRole('button', { name: 'Ask about this Tool' })[0]!)
-    expect(onSuggest).toHaveBeenCalledWith('Tell me more about Sydney Weather')
+    expect(onSuggest).toHaveBeenCalledOnce()
+    expect(onSuggest).toHaveBeenCalledWith(`Inspect Tool operation:v1:${'a'.repeat(64)} with this exact title: "Sydney Weather".`)
     expect(onRefine).not.toHaveBeenCalled()
     for (const button of screen.getAllByRole('button', { name: /^Compare$/ }).slice(0, 2)) fireEvent.click(button)
     const comparison = screen.getByRole('region', { name: 'Compare details' })

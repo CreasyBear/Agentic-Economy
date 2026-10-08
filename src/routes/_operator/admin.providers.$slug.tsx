@@ -1,3 +1,4 @@
+import { adminInvestigationSearchSchema } from '@/components/ae/admin/exceptions/admin-investigation-return'
 import { createFileRoute } from '@tanstack/react-router'
 
 import { AdminProviderObjectPage } from '@/components/ae/admin/provider-object/AdminProviderObjectPage'
@@ -8,6 +9,7 @@ import { operatorRouteOptions } from '@/lib/operator/route-options'
 
 export const Route = createFileRoute('/_operator/admin/providers/$slug')({
   ...operatorRouteOptions,
+  validateSearch: (search: Record<string, unknown>) => adminInvestigationSearchSchema.parse(search),
   head: () => ({
     meta: [
       { title: `${PROVIDER_OBJECT_COPY.title} | Admin | Agentic Economy` },
