@@ -14,10 +14,10 @@ import { parseOwnerToolsCompatibilitySearch } from '@/lib/operator/supply-compat
 export const Route = createFileRoute('/_operator/owner/operations')({
   ...operatorRouteOptions,
   validateSearch: parseOwnerToolsCompatibilitySearch,
-  loaderDeps: ({ search }) => ({ cursor: search.cursor }),
+  loaderDeps: ({ search }) => ({ ...(search.cursor === undefined ? {} : { cursor: search.cursor }), ...('q' in search && search.q !== undefined ? { q: search.q } : {}), ...('sort' in search && search.sort !== undefined ? { sort: search.sort } : {}) }),
   pendingComponent: AeProviderWorkspaceSkeleton,
   loader: async ({ deps }) => {
-    const page = await readProviderWorkspacePageServer({ data: deps.cursor === undefined ? {} : { cursor: deps.cursor } })
+    const page = await readProviderWorkspacePageServer({ data: deps })
     const inventory = page.inventory
     if (inventory.kind !== 'available') return { inventory }
     return {
@@ -35,7 +35,8 @@ export const Route = createFileRoute('/_operator/owner/operations')({
 function OwnerOfferingsRoute() {
   const location = useLocation()
   const data = Route.useLoaderData()
+  const inventoryQuery = Route.useLoaderDeps()
   if (location.pathname !== '/owner/operations') return <Outlet />
-  return <AeProviderWorkspace {...data} />
+  return <AeProviderWorkspace {...data} inventoryQuery={inventoryQuery} />
 }
 

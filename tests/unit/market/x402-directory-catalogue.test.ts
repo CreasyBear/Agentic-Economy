@@ -200,6 +200,17 @@ describe('indexed catalogue server boundary', () => {
 })
 
 describe('complete Provider facet pages', () => {
+  it('normalises a hostname prefix and forwards it without broadening to Tool search', async () => {
+    const { readX402DirectoryProviders } = await import('@/modules/market/x402-directory-index.server')
+    const page = { kind: 'ok', page: [{ key: 'api.example.com', label: 'api.example.com', count: 142 }], continueCursor: 'next', isDone: false }
+    query.mockResolvedValue(page)
+    expect(await readX402DirectoryProviders({ providerPrefix: ' API.', providerCursor: 'scoped-next' })).toEqual(page)
+    expect(query).toHaveBeenCalledWith('x402DirectoryIndex:facets', { kind: 'provider', providerPrefix: 'api.', paginationOpts: { numItems: 24, cursor: 'scoped-next' } })
+    query.mockClear()
+    expect(await readX402DirectoryProviders({ providerPrefix: 'https://example.com' })).toEqual({ kind: 'unavailable', reason: 'query_invalid' })
+    expect(query).not.toHaveBeenCalled()
+    expect(upstream).not.toHaveBeenCalled()
+  })
   it('validates a separate cursor and traverses exact indexed counts without SDK fallback', async () => {
     const { readX402DirectoryProviders } = await import('@/modules/market/x402-directory-index.server')
     const page = { kind: 'ok', page: [{ key: 'example.com', label: 'example.com', count: 142 }], continueCursor: 'next', isDone: false }

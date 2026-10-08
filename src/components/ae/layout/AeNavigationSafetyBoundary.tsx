@@ -1,5 +1,6 @@
+import { useNavigationSafetyPublisher } from './AeNavigationSafetyContext'
 import { useBlocker, useRouter } from '@tanstack/react-router'
-import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 
 import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
 
@@ -23,6 +24,7 @@ type AeNavigationSafetyBoundaryProps = Readonly<{
   confirmLabel?: string
   cancelLabel?: string
   pendingCancelLabel?: string
+  blockSearchChanges?: boolean
 }>
 
 /**
@@ -45,20 +47,22 @@ function AeNavigationSafetyBlocker({
   confirmLabel = 'Leave anyway',
   cancelLabel = 'Continue editing',
   pendingCancelLabel = 'Keep waiting',
+  blockSearchChanges = false,
 }: AeNavigationSafetyBoundaryProps) {
   const [dialogDismissed, setDialogDismissed] = useState(false)
   const departureTriggerRef = useRef<HTMLElement | null>(null)
   const navigationBlockedDuringSave = useRef(false)
   const shouldBlockNavigation = useCallback(({ current, next }: {
-    current: { pathname: string }
-    next: { pathname: string }
+    current: { pathname: string; search?: unknown }
+    next: { pathname: string; search?: unknown }
   }) => {
-    if (!state.dirty || current.pathname === next.pathname) return false
+    if (!state.dirty || (current.pathname === next.pathname
+      && (!blockSearchChanges || JSON.stringify(current.search ?? {}) === JSON.stringify(next.search ?? {})))) return false
     if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
       departureTriggerRef.current = document.activeElement
     }
     return true
-  }, [state.dirty])
+  }, [state.dirty, blockSearchChanges])
   const blocker = useBlocker({
     shouldBlockFn: shouldBlockNavigation,
     enableBeforeUnload: () => state.dirty,
@@ -115,6 +119,23 @@ function AeNavigationSafetyBlocker({
 }
 
 export function AeNavigationSafetyBoundary(props: AeNavigationSafetyBoundaryProps) {
+  const publish = useNavigationSafetyPublisher()
+  const [owner] = useState(() => Symbol('navigation-safety-owner'))
+  const focusOwner = useCallback(() => {
+    for (const target of [props.saveActionRef.current, props.headingRef.current]) {
+      if (!target?.isConnected || target.matches(':disabled')) continue
+      target.focus()
+      target.scrollIntoView?.({ block: 'center' })
+      return
+    }
+  }, [props.saveActionRef, props.headingRef])
+  // Layout publication withholds upstream Account switching before paint. The
+  // existing route blocker remains the sole owner of deliberate departure.
+  useLayoutEffect(() => {
+    const guarded = props.state.dirty || props.state.pending || props.state.saveOutcome === 'outcome_unknown'
+    publish?.(owner, guarded ? { pending: props.state.pending, unknown: props.state.saveOutcome === 'outcome_unknown', focus: focusOwner } : undefined)
+    return () => publish?.(owner, undefined)
+  }, [focusOwner, owner, props.state.dirty, props.state.pending, props.state.saveOutcome, publish])
   const router = useRouter({ warn: false })
   if (!router) return props.children
   return <AeNavigationSafetyBlocker {...props} />

@@ -1,6 +1,6 @@
 {
   "$schema": "https://ui.shadcn.com/schema.json",
-  "style": "new-york",
+  "style": "base-nova",
   "rsc": false,
   "tsx": true,
   "tailwind": {
@@ -25,6 +25,12 @@
       "url": "https://uiarc.dev/r/pro/{name}.json",
       "headers": {
         "Authorization": "Bearer ${ARC_PRO_TOKEN}"
+      }
+    },
+    "@reui": {
+      "url": "https://reui.io/r/{style}/{name}.json",
+      "headers": {
+        "Authorization": "Bearer ${REUI_LICENSE_KEY}"
       }
     }
   }

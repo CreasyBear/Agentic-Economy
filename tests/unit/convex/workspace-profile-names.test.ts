@@ -8,7 +8,7 @@ import {
 import { samIdentity } from '../../helpers/interactive-authority-provisioning'
 
 const rename = makeFunctionReference<'mutation', {
-  name: string; expectedRevision: number; correlationRef: string; idempotencyRef: string
+  name: string; expectedAccountRef: string; expectedRevision: number; correlationRef: string; idempotencyRef: string
 }, { kind: 'updated' | 'replayed' | 'unchanged'; name: string }>('workspaceAccounts:renameUnboundWorkspace')
 const read = makeFunctionReference<'query', Record<string, never>, {
   accountRef: string; displayName: string; accountRevision: number; callerIsOwner: boolean;
@@ -17,7 +17,7 @@ const read = makeFunctionReference<'query', Record<string, never>, {
 const identity = samIdentity(INTERACTIVE_TOKEN_IDENTIFIER, { fva: [1, 1] })
 
 function command(expectedRevision: number) {
-  return { name: 'Sam’s workspace', expectedRevision, correlationRef: 'test:rename', idempotencyRef: 'test:rename:one' }
+  return { expectedAccountRef: INTERACTIVE_ACCOUNT_REF, name: 'Sam’s workspace', expectedRevision, correlationRef: 'test:rename', idempotencyRef: 'test:rename:one' }
 }
 
 describe('personal workspace name authority', () => {
@@ -27,6 +27,7 @@ describe('personal workspace name authority', () => {
     const owner = backend.withIdentity(identity)
     const before = await owner.query(read, {})
     expect(before).toMatchObject({ clerkOrgId: null, ownerDisplayName: 'Sam canonical principal', callerIsOwner: true })
+    await expect(owner.mutation(rename, { ...command(before.accountRevision), expectedAccountRef: 'account:stale' })).rejects.toMatchObject({ code: 'ownership_mismatch' })
     expect(await owner.mutation(rename, command(before.accountRevision))).toMatchObject({ kind: 'updated', name: 'Sam’s workspace' })
     expect(await owner.mutation(rename, command(before.accountRevision))).toMatchObject({ kind: 'replayed' })
     expect(await owner.query(read, {})).toMatchObject({ displayName: 'Sam’s workspace', accountRevision: before.accountRevision + 1 })

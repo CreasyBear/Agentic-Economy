@@ -90,7 +90,7 @@
   display: inline-flex;
 }
 
-@media (min-width: 768px) {
+@media (min-width: 1024px) {
   .arc-market.arc-app-header .arc-app-header__desktop-sign-in {
     display: inline-flex;
   }

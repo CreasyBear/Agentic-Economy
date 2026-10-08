@@ -21,7 +21,9 @@ afterEach(cleanup)
 const CALL_REF = 'call:original-first-use'
 const TOOL_REF = `operation:v1:${'a'.repeat(64)}`
 const RECEIPT_REF = 'receipt:tool-result-123'
-const CALL_HREF = `/calls/${encodeURIComponent(CALL_REF)}`
+const CALL_HREF = `/calls/${encodeURIComponent(CALL_REF)}?${new URLSearchParams({
+  returnTo: 'agent', returnTool: TOOL_REF,
+})}`
 const TOOL_HREF = `/tools/${encodeURIComponent(TOOL_REF)}`
 
 const agent: AgentDirectoryItem = {

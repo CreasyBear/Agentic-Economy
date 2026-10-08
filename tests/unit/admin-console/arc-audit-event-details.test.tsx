@@ -162,7 +162,9 @@ describe('Arc audit event details', () => {
     renderTable(rows, { paginationStatus: 'CanLoadMore', onLoadMore })
 
     fireEvent.click(screen.getByRole('button', { name: 'Sort by Event type' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Sort by Event type, currently ascending' }))
+    expect(screen.getByRole('button', { name: 'Sort by Event type' }).closest('th')?.getAttribute('aria-sort')).toBe('ascending')
+    fireEvent.click(screen.getByRole('button', { name: 'Sort by Event type' }))
+    expect(screen.getByRole('button', { name: 'Sort by Event type' }).closest('th')?.getAttribute('aria-sort')).toBe('descending')
     const actions = screen.getAllByRole('button', { name: /^View /u })
     expect(actions[0]).toHaveAccessibleName(`View ${eventLabels.get(auditTwo.id)} at ${auditTwo.createdAtLabel}`)
     fireEvent.click(screen.getByRole('button', { name: `View ${eventLabels.get(auditTwo.id)} at ${auditTwo.createdAtLabel}` }))

@@ -86,13 +86,13 @@ describe('OwnerNotificationSettings', () => {
     await waitFor(() => {
       expect(toastError).toHaveBeenCalledWith(
         'Could not update notification preferences.',
-        { description: 'Please check your connection and try again.' },
+        { description: 'Check the saved preferences before trying again.' },
       )
     })
     expect(screen.getByText(/What happened:/u)).toBeTruthy()
     expect(screen.getByText(/Could not update notification preferences\./u)).toBeTruthy()
-    expect(screen.getByText(/A\$0\.00 affected — existing preferences remain active\./u)).toBeTruthy()
-    expect(screen.getByText(/Please check your connection and try again\./u)).toBeTruthy()
+    expect(screen.getByText(/No spending authority changed\./u)).toBeTruthy()
+    expect(screen.getByText(/Check the saved preferences before trying again\./u)).toBeTruthy()
   })
   it('requires an explicit enable action with valid thresholds and prevents duplicate pending changes', async () => {
     let finish: (()=>void)|undefined
@@ -112,4 +112,13 @@ describe('OwnerNotificationSettings', () => {
     fireEvent.click(screen.getByRole('button',{name:'Disable usage alerts'}))
     await waitFor(()=>expect(onUpdate).toHaveBeenCalledWith({expectedRevision:7,usageAlertPolicy:{enabled:false,failurePercent:35,minimumCalls:50,spendWarningPercent:90}}))
   })
+})
+
+it('retains threshold drafts when an independent email preference advances the revision', () => {
+  const onUpdate = vi.fn()
+  const view = render(<OwnerNotificationSettings preferences={basePreferences} onUpdate={onUpdate} />)
+  const field = screen.getByRole('textbox', { name: 'Minimum Calls for alert' })
+  fireEvent.change(field, { target: { value: '41' } })
+  view.rerender(<OwnerNotificationSettings preferences={{ ...basePreferences, revision: 1, agentApprovalRequested: false }} onUpdate={onUpdate} />)
+  expect(field).toHaveValue('41')
 })

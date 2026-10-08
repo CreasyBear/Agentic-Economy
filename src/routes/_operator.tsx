@@ -1,7 +1,6 @@
 import { Outlet, createFileRoute } from '@tanstack/react-router'
 
 import { OperatorRouteForbidden } from '@/components/ae/layout/AeRouteError'
-import { WorkspaceTransitionBoundary } from '@/components/ae/layout/WorkspaceTransitionBoundary'
 import { operatorLayoutRouteOptions } from '@/lib/operator/route-options'
 
 export const Route = createFileRoute('/_operator')({
@@ -17,8 +16,6 @@ function OperatorLayoutRoute() {
   }
 
   return (
-    <WorkspaceTransitionBoundary>
-      <Outlet />
-    </WorkspaceTransitionBoundary>
+    <Outlet />
   )
 }

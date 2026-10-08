@@ -63,7 +63,7 @@ vi.mock('@tanstack/react-router', async (importOriginal) => {
     Link: ({ children, to, ...rest }: { children: ReactNode; to: string }) => (
       <a href={to} {...rest}>{children}</a>
     ),
-    useRouter: () => ({ routesByPath: {} }),
+    useRouter: actual.useRouter,
   }
 })
 

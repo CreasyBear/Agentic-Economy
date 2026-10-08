@@ -1,3 +1,4 @@
+import type { ActivityReturnScope } from '@/lib/call-recovery/activity-return-scope'
 import { useCallback, useEffect, useReducer } from 'react'
 import { z } from 'zod'
 
@@ -10,6 +11,7 @@ import type {
 } from '@/modules/money/funding-return.view-model'
 
 export type AeFundingReturnPageProps = Readonly<{
+  returnScope?: ActivityReturnScope
   fundingSessionId: string
 }>
 
@@ -26,7 +28,7 @@ const publicFundingSchema = z.strictObject({
   }),
 })
 
-export function AeFundingReturnPage({ fundingSessionId }: AeFundingReturnPageProps) {
+export function AeFundingReturnPage({ fundingSessionId, returnScope }: AeFundingReturnPageProps) {
   const [pageState, dispatch] = useReducer(fundingPageReducer, { kind: 'checking' })
 
   const checkFunding = useCallback(async (signal?: AbortSignal) => {
@@ -49,7 +51,7 @@ export function AeFundingReturnPage({ fundingSessionId }: AeFundingReturnPagePro
     return () => controller.abort()
   }, [checkFunding])
 
-  return <AeFundingReturnState pageState={pageState} onCheck={checkFunding} fundingSessionId={fundingSessionId} />
+  return <AeFundingReturnState {...(returnScope === undefined ? {} : { returnScope })} pageState={pageState} onCheck={checkFunding} fundingSessionId={fundingSessionId} />
 }
 
 function fundingPageReducer(state: FundingReturnViewState, event: FundingPageEvent): FundingReturnViewState {

@@ -20,7 +20,7 @@ describe('AeConfirmDialog', () => {
     expect(dialog.getAttribute('data-slot')).toBe('alert-dialog-content')
     fireEvent.click(within(dialog).getByRole('button', { name: 'Keep connected' }))
 
-    expect(screen.queryByRole('alertdialog')).toBeNull()
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
     await waitFor(() => expect(document.activeElement).toBe(trigger))
   })
 

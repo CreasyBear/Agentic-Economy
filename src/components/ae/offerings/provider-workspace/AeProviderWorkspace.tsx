@@ -1,4 +1,4 @@
-import { useLocation } from '@tanstack/react-router'
+import { useLocation, useNavigate, useRouterState } from '@tanstack/react-router'
 
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeOwnerOfferingsList } from '@/components/ae/offerings/AeOwnerOfferings'
@@ -10,6 +10,7 @@ import { ProviderWorkspaceOffboardingSection } from '@/components/ae/offerings/P
 import { ProviderWorkspaceReadinessSection } from '@/components/ae/offerings/ProviderWorkspaceReadinessSection'
 import { ProviderWorkspaceToolsSection } from '@/components/ae/offerings/ProviderWorkspaceToolsSection'
 import { AddToolAction } from './components/AddToolAction'
+import { OwnerInventoryQueryControls } from './components/OwnerInventoryQueryControls'
 import { WorkspaceInventoryGate } from './components/WorkspaceInventoryGate'
 import type { AeProviderWorkspaceProps } from './provider-workspace.contracts'
 import { useProviderWorkspaceInventory } from './useProviderWorkspaceInventory'
@@ -23,7 +24,7 @@ export function AeProviderWorkspace(props: AeProviderWorkspaceProps) {
   const toolCount =
     props.inventory.kind === 'available' ? props.inventory.tools.length : 0
   const actions = inventoryAvailable
-    ? <AddToolAction variant={toolCount === 0 ? 'outline' : 'default'} />
+    ? <AddToolAction variant={toolCount === 0 ? 'outline' : 'default'} {...(props.inventoryQuery === undefined ? {} : { inventoryQuery: props.inventoryQuery })} />
     : undefined
   return (
     <AeOperatorPage
@@ -38,7 +39,7 @@ export function AeProviderWorkspace(props: AeProviderWorkspaceProps) {
       ) : props.inventory.kind === 'conflict' ? (
         <WorkspaceInventoryGate kind="conflict" />
       ) : props.inventory.kind === 'unavailable' ? (
-        <WorkspaceInventoryGate kind="unavailable" refreshPending={inventory.refreshPending} onRefresh={inventory.refresh} />
+        <WorkspaceInventoryGate kind="unavailable" {...(props.inventory.reason === undefined ? {} : { reason: props.inventory.reason })} refreshPending={inventory.refreshPending} onRefresh={inventory.refresh} />
       ) : (
         <AvailableWorkspaceBody {...props} inventory={props.inventory} inventoryHook={inventory} sheets={sheets} />
       )}
@@ -48,6 +49,7 @@ export function AeProviderWorkspace(props: AeProviderWorkspaceProps) {
 
 function AvailableWorkspaceBody({
   inventory,
+  inventoryQuery,
   lifecycle,
   connections,
   publicStatus,
@@ -60,20 +62,20 @@ function AvailableWorkspaceBody({
   sheets: ReturnType<typeof useProviderWorkspaceSheets>
 }>) {
   const location = useLocation()
+  const navigate = useNavigate()
+  const queryPending = useRouterState({ select: state => state.isLoading })
 
   const renderList = (rows: readonly ProviderWorkspaceProjectionRow[]) => (
     <AeOwnerOfferingsList
       offerings={rows.map(toOfferingSummary)}
+      serverControlled
+      {...(inventoryQuery === undefined ? {} : { inventoryQuery })}
+      toolbar={<OwnerInventoryQueryControls query={inventoryQuery ?? {}} pending={queryPending}
+        onApply={(query) => { void navigate({ to: '/owner/operations', search: query }) }} />}
+      emptyMessage={inventoryQuery?.q ? `No Tools matched “${inventoryQuery.q}”. Reset search or try different words.` : 'No Tools in this inventory page.'}
       projectionState={inventory.projection === 'current' ? 'current' : 'projection_pending'}
       onRetryProjection={inventoryHook.refresh}
-      hideEmptyState={inventory.tools.length === 0}
-      filterValue={inventoryHook.inventoryFilter}
-      onFilterChange={(value) => {
-        inventoryHook.setInventoryFilter(value)
-        inventoryHook.setActiveRowActionId(undefined)
-      }}
-      sorting={inventoryHook.inventorySorting}
-      onSortingChange={inventoryHook.setInventorySorting}
+      hideEmptyState={inventory.tools.length === 0 && !inventoryQuery?.q}
       {...(inventoryHook.activeRowActionId === undefined ? {} : { activeRowActionId: inventoryHook.activeRowActionId })}
       onActiveRowActionIdChange={inventoryHook.setActiveRowActionId}
       restoreRowActionFocus={inventoryHook.activeRowActionId !== undefined}
@@ -82,11 +84,12 @@ function AvailableWorkspaceBody({
 
   return (
     <div className="arc-market arc-provider-workspace">
-      {inventory.tools.length === 0 && (
+      {inventory.tools.length === 0 && !inventoryQuery?.q && (
         <AeSupplierOnboardingWizard currentStep="first_tool" providerName={inventory.provider.name} />
       )}
       <ProviderWorkspaceToolsSection
         inventory={inventory}
+        {...(inventoryQuery === undefined ? {} : { inventoryQuery })}
         {...(lifecycle === undefined ? {} : { lifecycle })}
         {...(sheets.compatibilityCursor === undefined ? {} : { compatibilityCursor: sheets.compatibilityCursor })}
         renderList={renderList}
@@ -105,7 +108,10 @@ function AvailableWorkspaceBody({
         {...(sheets.earningsDetail === undefined ? {} : { earningsDetail: sheets.earningsDetail })}
         onOpenEarnings={sheets.openEarnings}
         onCloseEarnings={sheets.closeEarnings}
-        onRetryEarnings={sheets.loadEarnings}
+        onRetryEarnings={sheets.retryEarnings}
+        onRefreshEarnings={sheets.loadEarnings}
+        onLoadMoreEarnings={sheets.loadMoreEarnings}
+        {...(sheets.earningsReadAt === undefined ? {} : { earningsReadAt: sheets.earningsReadAt })}
       />
       <details className="arc-provider-workspace-administration" open={location.hash === 'provider-identity' || undefined}>
         <summary>Provider settings and administration</summary>

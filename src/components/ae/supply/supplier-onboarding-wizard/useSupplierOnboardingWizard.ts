@@ -2,7 +2,6 @@ import { useEffect, useState, type FormEvent } from 'react'
 
 import { toast } from '@/lib/ui/toast'
 import type { Rule4Diagnostic } from '@/lib/ui/diagnostic'
-import { formatAbnDisplay, normalizeAbn } from '@/modules/money/public'
 
 import {
   type SupplierOnboardingWizardPorts,
@@ -23,7 +22,6 @@ export function useSupplierOnboardingWizard({
   const [step, setStep] = useState<NonNullable<SupplierOnboardingWizardPorts['currentStep']>>(currentStep)
   const [name, setName] = useState(providerName ?? '')
   const [website, setWebsite] = useState('')
-  const [abn, setAbn] = useState('')
   const [diagnostic, setDiagnostic] = useState<Rule4Diagnostic>()
   const [invalidField, setInvalidField] = useState<ProviderIdentityFieldId>()
   const [pending, setPending] = useState(false)
@@ -60,9 +58,8 @@ export function useSupplierOnboardingWizard({
     e.preventDefault()
     const trimmedName = name.trim()
     const trimmedWebsite = website.trim()
-    const cleanAbn = normalizeAbn(abn)
 
-    const validationIssue = profileValidationIssue(trimmedName, trimmedWebsite, cleanAbn)
+    const validationIssue = profileValidationIssue(trimmedName, trimmedWebsite)
     if (validationIssue !== undefined) {
       setDiagnostic(validationIssue.diagnostic)
       setInvalidField(validationIssue.field)
@@ -83,7 +80,6 @@ export function useSupplierOnboardingWizard({
       const result = await onSaveProfile({
         name: trimmedName,
         website: trimmedWebsite,
-        abn: cleanAbn,
       })
       if (result.kind === 'ok') {
         toast.success('Provider profile saved')
@@ -119,19 +115,10 @@ export function useSupplierOnboardingWizard({
     setInvalidField(undefined)
   }
 
-  const handleAbnChange = (value: string) => {
-    const formatted = formatAbnDisplay(value)
-    setAbn(formatted)
-    setDiagnostic(undefined)
-    setInvalidField(undefined)
-  }
-
-
   const view: SupplierOnboardingWizardViewState = {
     step,
     name,
     website,
-    abn,
     diagnostic,
     invalidField,
     pending,
@@ -145,6 +132,5 @@ export function useSupplierOnboardingWizard({
     handleProfileSubmit,
     handleNameChange,
     handleWebsiteChange,
-    handleAbnChange,
   }
 }

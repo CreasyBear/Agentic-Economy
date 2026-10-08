@@ -1,5 +1,5 @@
 import { type ReactNode } from 'react'
-import { ArcAiChatPage } from '@/components/ae/shared/arc-pro/ai-chat/ai-chat'
+import { ReuiChatPage } from '@/components/ae/shared/reui-pro/ai-chat/ai-chat'
 import './ChatPageComposition.css'
 
 type AeChatAskPageProps = {
@@ -22,6 +22,6 @@ type AeChatSharedPageProps = {
  */
 export function AeChatPage(props: AeChatAskPageProps | AeChatSharedPageProps) {
   return props.kind === 'shared'
-    ? <ArcAiChatPage kind="shared" header={props.header}>{props.children}</ArcAiChatPage>
-    : <ArcAiChatPage kind="ask" header={props.header} dock={props.dock} busy={props.busy === true}>{props.children}</ArcAiChatPage>
+    ? <ReuiChatPage kind="shared" header={props.header}>{props.children}</ReuiChatPage>
+    : <ReuiChatPage header={props.header} dock={props.dock} busy={props.busy === true}>{props.children}</ReuiChatPage>
 }

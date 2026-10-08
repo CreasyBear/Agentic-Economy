@@ -20,6 +20,7 @@ export function WorkspaceTransferPanel({
   transferDiagnostic,
   showTransferConfirmDialog,
   transferPending,
+  transferAttemptUnconfirmed = false,
   onSuccessorChange,
   onRequestTransfer,
   onTransferDialogOpenChange,
@@ -33,13 +34,14 @@ export function WorkspaceTransferPanel({
           <div className="arc-workspace-danger-body">
             {transferCandidates.length === 0 ? (
               <p className="arc-workspace-danger-description">
-                Nobody else can receive ownership. <Link to="/owner/team" className="underline underline-offset-4">Invite someone from Team.</Link>
+                Nobody else can receive ownership. <Link to="/owner/settings/team" search={{ purpose: 'transfer' }} className="underline underline-offset-4">Invite someone from Team.</Link>
               </p>
             ) : (
             <BaseField.Root className="arc-workspace-danger-field">
               <Label>New workspace owner</Label>
               <select
                 aria-label="New workspace owner"
+                disabled={transferPending || transferAttemptUnconfirmed}
                 value={selectedSuccessor}
                 onChange={(event) => {
                   onSuccessorChange(event.target.value)
@@ -63,16 +65,16 @@ export function WorkspaceTransferPanel({
               disabled={transferDisabled}
               onClick={onRequestTransfer}
             >
-              Transfer ownership
+              {transferAttemptUnconfirmed ? 'Check transfer attempt' : 'Transfer ownership'}
             </Button>
             )}
             <WorkspaceDangerDiagnosticSlot diagnostic={transferDiagnostic} />
             <AeConfirmDialog
               open={showTransferConfirmDialog}
               onOpenChange={onTransferDialogOpenChange}
-              title="Transfer workspace ownership?"
+              title={transferAttemptUnconfirmed ? 'Check this ownership transfer?' : 'Transfer workspace ownership?'}
               description={`Transfer ownership to ${successorName}. You stay a member. Balances and Calls stay on this workspace.`}
-              confirmLabel="Transfer ownership"
+              confirmLabel={transferAttemptUnconfirmed ? 'Check same transfer attempt' : 'Transfer ownership'}
               pending={transferPending}
               onConfirm={onConfirmTransfer}
             />

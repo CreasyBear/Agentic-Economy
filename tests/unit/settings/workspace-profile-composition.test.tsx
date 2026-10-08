@@ -11,7 +11,8 @@ const source = vi.hoisted(() => ({
 }))
 vi.mock('convex/react', () => ({ useQuery: () => source.workspacePending ? undefined : source.workspace, useMutation: () => source.rename }))
 vi.mock('@tanstack/react-router', () => ({
-  useRouter: () => ({ invalidate: vi.fn() }),
+  useRouter: () => ({ invalidate: vi.fn().mockResolvedValue(undefined) }),
+  useBlocker: () => ({ status: 'idle' }),
   Link: ({ to, ...props }: { to: string; children: ReactNode }) => <a href={to} {...props} />,
 }))
 // Offboarding is an independent guarded flow; this review tests its placement only.
@@ -64,7 +65,7 @@ describe('workspace settings composition', () => {
     render(<WorkspaceProfileSettings identity={{ kind: 'unavailable' }} status={{ kind: 'unavailable' }} defaultName={null} />)
     expect(screen.getByText('Buyer workspace')).toBeVisible()
     expect(screen.getByRole('heading', { name: 'Provider profile unavailable' })).toBeVisible()
-    expect(screen.getByRole('link', { name: 'Open Tools' })).toHaveAttribute('href', '/owner/operations')
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeEnabled()
     expect(screen.queryByRole('textbox', { name: 'Public Provider name' })).toBeNull()
   })
 })

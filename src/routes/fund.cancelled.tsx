@@ -1,3 +1,4 @@
+import { activityReturnScopeSchema, buyerReturnDestination } from '@/lib/call-recovery/activity-return-scope'
 import { Link, createFileRoute } from '@tanstack/react-router'
 
 import { fundingReturnCopy } from '@/components/ae/funding/funding-return.contracts'
@@ -6,6 +7,7 @@ import { RouteError, RoutePending } from '@/components/ae/layout/AeRouteStates'
 import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 
 export const Route = createFileRoute('/fund/cancelled')({
+  validateSearch: activityReturnScopeSchema,
   head: () => ({ meta: [
     { title: 'Check your payment | Agentic Economy' },
     { name: 'robots', content: 'noindex, noarchive' },
@@ -14,13 +16,19 @@ export const Route = createFileRoute('/fund/cancelled')({
   headers: () => ({ 'Cache-Control': 'private, no-store', 'Referrer-Policy': 'no-referrer' }),
   pendingComponent: RoutePending,
   errorComponent: RouteError,
-  component: () => (
+  component: FundingCancelledRoute,
+})
+
+function FundingCancelledRoute() {
+  const destination = buyerReturnDestination(Route.useSearch())
+  return (
     <AePageState
       tone="neutral"
       title={fundingReturnCopy.cancelled.title}
       description={fundingReturnCopy.cancelled.description}
       action={(
         <div className="arc-market arc-recovery-action-row">
+          {destination === undefined ? null : <a href={destination.href} className={actionLinkClassName('secondary', 'md')}>{destination.label}</a>}
           <Link to="/owner/credit" className={actionLinkClassName('primary', 'md')}>
             {fundingReturnCopy.cancelled.openCreditAction}
           </Link>
@@ -30,5 +38,5 @@ export const Route = createFileRoute('/fund/cancelled')({
         </div>
       )}
     />
-  ),
-})
+  )
+}

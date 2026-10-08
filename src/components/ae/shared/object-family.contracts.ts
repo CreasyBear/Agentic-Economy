@@ -1,5 +1,6 @@
 import type { ListingProjection } from '@/modules/registry/public'
 import type { ExactAmount } from '@/modules/money/public'
+import type { CallApprovalDecisionContext } from '@/modules/capability-execution/call-approval-contracts'
 
 /** Values must come from the owner-authenticated pending Call/Quote read, never model prose. */
 export type QuoteConfirmationView = Readonly<{
@@ -11,6 +12,12 @@ export type QuoteConfirmationView = Readonly<{
   expiresAt: number
   inputSummary: string
   remainingCap: Readonly<{ amount: ExactAmount; window: string }>
+  /** Older sources may omit these facts; missing material disables approval. */
+  decisionContext?: CallApprovalDecisionContext
+  acceptedIdentity?: Readonly<{
+    accountRef: string; toolRef: string; toolVersion: number
+    grantRef: string; grantGeneration: number; policyDigest: string
+  }>
   expired: boolean
   pending: boolean
 }>

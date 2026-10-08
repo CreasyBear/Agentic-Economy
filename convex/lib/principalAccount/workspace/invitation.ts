@@ -10,14 +10,14 @@ import { requireDirectoryInteractiveHumanPrincipal } from './identity'
 export const invitationContextArgs = v.object({})
 
 export const invitationContextResult = v.union(
-  v.object({ kind: v.literal('available'), organizationId: v.string() }),
+  v.object({ kind: v.literal('available'), accountRef: v.string(), organizationId: v.string() }),
   v.object({ kind: v.literal('role_restricted') }),
   v.object({ kind: v.literal('organization_unset') }),
   v.object({ kind: v.literal('binding_unavailable') }),
 )
 
 export const invitationContextHandler = async (ctx: QueryCtx): Promise<
-  | { kind: 'available'; organizationId: string }
+  | { kind: 'available'; accountRef: string; organizationId: string }
   | { kind: 'role_restricted' | 'organization_unset' | 'binding_unavailable' }
 > => {
   const identity = await ctx.auth.getUserIdentity()
@@ -34,5 +34,5 @@ export const invitationContextHandler = async (ctx: QueryCtx): Promise<
   if (bindings.length !== 1 || bindings[0]?.providerNamespace !== CLERK_ORGANIZATION_PROVIDER_NAMESPACE) {
     return { kind: 'binding_unavailable' }
   }
-  return { kind: 'available', organizationId: bindings[0].providerIdentifier }
+  return { kind: 'available', accountRef: activeAccountRef, organizationId: bindings[0].providerIdentifier }
 }

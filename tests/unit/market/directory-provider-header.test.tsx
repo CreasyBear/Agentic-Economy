@@ -15,7 +15,8 @@ it('scopes provider identity, counts, payment networks and activity to exact-hos
   expect(screen.getByText('Research papers')).toBeTruthy()
   expect(screen.queryByText('Other provider')).toBeNull()
   expect(screen.getByRole('link', { name: 'Visit api.example.com' }).getAttribute('href')).toBe('https://api.example.com/')
-  expect(screen.queryByText(/payers|verified|rating/i)).toBeNull()
+  expect(screen.getByText('Sourced directory listings; this hostname is not a verified Provider identity.')).toBeTruthy()
+  expect(screen.queryByText(/payers|rating/i)).toBeNull()
 })
 it('uses an explicitly supplied catalogue total but keeps activity limited to observed results', () => {
   render(<DirectoryProviderHeader provider="api.example.com" entries={[first]} totalTools={42} />)

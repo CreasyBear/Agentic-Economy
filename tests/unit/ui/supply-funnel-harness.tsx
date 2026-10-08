@@ -17,9 +17,7 @@ import type {
   OwnerSupplyReadbackSource,
   SupplyFunnelStep,
   SupplyFunnelStepState,
-  SupplyLandingTool,
 } from "@/modules/capability-supply/supply-funnel.functions";
-import type { ToolCardViewModel } from "@/modules/market/tool-view-model";
 import {
   pricingConfigDigest,
   type PricingConfig,
@@ -32,34 +30,6 @@ vi.mock("@tanstack/react-start", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-start")>()),
   useServerFn: <T extends (...args: never[]) => unknown>(callback: T) => callback,
 }));
-
-export const tool: SupplyLandingTool = {
-  id: "registry.services_list",
-  name: "List published services",
-  summary: "Read published services.",
-  boundaries: ["Read-only."],
-};
-export const publishedTool: ToolCardViewModel = {
-  toolRef: `operation:v1:${"a".repeat(64)}`,
-  title: "Quote API",
-  providerName: "Example Labs",
-  providerSlug: "example-labs",
-  providerInitials: "EL",
-  capabilityId: "demo.quote",
-  capability: "Quote API",
-  category: { id: "data-research", label: "Data", description: "Data tools" },
-  summary: "Returns a quote.",
-  readiness: "Routeable",
-  readinessLabel: "Ready now",
-  trustFact: "Ready to run through Agentic Economy",
-  price: "AUD 0.00",
-  authentication: "None",
-  lastVerifiedAt: 1,
-  callLabel: "Use capability",
-  rating: { kind: "unrated", count: 0, display: "No ratings yet", definition: "No rating" },
-  popularity: { kind: "no_activity", completedCalls: 0, display: "No completed calls yet", definition: "No calls" },
-  latency: { kind: "insufficient_sample", sampleSize: 0, minimumSampleSize: 5, display: "Not enough data", definition: "No sample" },
-};
 
 export const pricingConfig: PricingConfig = {
   version: "pricing:v3",

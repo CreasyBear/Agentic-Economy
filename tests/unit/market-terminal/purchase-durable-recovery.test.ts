@@ -205,14 +205,26 @@ describe('durable exact procurement recovery', () => {
     expect(JSON.parse((await procure()).stdout).code).toBe('purchase-recovery-storage-unavailable')
     expect(purchases).toHaveLength(0)
   })
-  it('serializes concurrent fresh purchases and refuses caller fields on resume', async () => {
+  it('retains one purchase identity across concurrent attempts and refuses caller fields on resume', async () => {
     const [left, right] = await Promise.all([procure(), procure()])
-    expect([left.status, right.status].sort()).toEqual([0, 1])
-    expect(purchases).toHaveLength(1)
+    // An overlapping process may replay the same command before acknowledgement,
+    // or observe the Call afterwards. HTTP submissions are not purchase effects.
+    expect([[0, 0], [0, 1]]).toContainEqual([left.status, right.status].sort())
+    expect([1, 2]).toContain(purchases.length)
+    for (const request of purchases) expect(request).toEqual({ path: '/api/v1/tools/procure', body: exact })
+    expect(files()).toHaveLength(1)
     const accepted = left.status === 0 ? left : right
     const ref = JSON.parse(accepted.stdout).recoveryRef
+    expect(stored(ref)).toMatchObject({ command: exact, quoteRef: 'quote:original', callRef: 'call:original' })
+    for (const result of [left, right]) {
+      if (result.status === 0) expect(JSON.parse(result.stdout)).toMatchObject({ recoveryRef: ref, callRef: 'call:original' })
+      else expect(JSON.parse(result.stdout)).toMatchObject({
+        code: 'purchase-recovery-required', refs: { recoveryRef: ref, identityPreserved: true },
+      })
+    }
+    const submitted = purchases.length
     const invalid = await run(['procure', 'resume', ref, '--input', JSON.stringify(exact)])
     expect(invalid.status).toBe(1)
-    expect(purchases).toHaveLength(1)
+    expect(purchases).toHaveLength(submitted)
   })
 })

@@ -1,5 +1,7 @@
 import { Link } from '@tanstack/react-router'
-import type { FormEvent, RefObject } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type RefObject } from 'react'
+import { Input } from '@/components/ui/input'
+import { ProviderConnectionReviewDialog } from './ProviderConnectionReviewDialog'
 
 import { SettingsEmptyState, SettingsRow } from '@/components/ae/settings/settings-shell/components/SettingsSections'
 import { Button } from '@/components/arc/button/button'
@@ -53,14 +55,25 @@ export function AeProviderConnectionForm({
   notice,
   onRefresh,
 }: AeProviderConnectionFormProps) {
+  const [reviewOpen, setReviewOpen] = useState(false)
+  const approvedSubmit = useRef(false)
+  const formRef = useRef<HTMLFormElement>(null)
+  const submittedRef = useRef(false)
+  useEffect(() => {
+    if (submittedRef.current && busy === undefined && inspection === undefined && !refreshRequired) { submittedRef.current = false; setReviewOpen(false) }
+  }, [busy, inspection, refreshRequired])
   const urlInvalid = resourceUrl.trim().length > 0 && !isAbsoluteHttpsResourceUrl(resourceUrl)
   return (
     <div className="arc-market arc-provider-connection-form-region">
       {canConnect ? (
-        <form className="arc-provider-connection-form" onSubmit={onSubmit}>
+        <form ref={formRef} className="arc-provider-connection-form" onSubmit={event => {
+          if (!approvedSubmit.current) { event.preventDefault(); setReviewOpen(true); return }
+          approvedSubmit.current = false
+          onSubmit(event)
+        }}>
           <div className="arc-provider-connection-field">
             <label htmlFor="provider-x402-resource-url" className="text-sm font-medium text-foreground">x402 resource URL</label>
-            <input
+            <Input
               ref={resourceUrlInputRef}
               id="provider-x402-resource-url"
               name="resourceUrl"
@@ -158,13 +171,22 @@ export function AeProviderConnectionForm({
           }
         />
       )}
+      <ProviderConnectionReviewDialog open={reviewOpen} onOpenChange={setReviewOpen} resourceUrl={resourceUrl} method={method} environment={environment}
+        {...(inspection === undefined ? {} : { inspection })} {...(notice === undefined ? {} : { notice })}
+        reauthorizing={reauthorizing} pending={busy !== undefined} refreshRequired={refreshRequired} onRefresh={onRefresh}
+        onConfirm={() => {
+          if (busy !== undefined || refreshRequired || inspection === undefined || claimSignature === undefined) return
+          submittedRef.current = true
+          approvedSubmit.current = true
+          formRef.current?.requestSubmit()
+        }} />
       <p
         role={notice?.kind === 'error' ? 'alert' : 'status'}
         className={notice?.kind === 'error' ? 'text-sm text-destructive' : 'text-sm text-muted-foreground'}
       >
-        {notice?.text ?? ''}
+        {reviewOpen ? '' : notice?.text ?? ''}
       </p>
-      {refreshRequired ? (
+      {refreshRequired && !reviewOpen ? (
         <Button
           type="button"
           variant="secondary"

@@ -6,10 +6,12 @@ import {
   readOwnerToolBySlugServer,
 } from '@/components/ae/offerings/provider-workspace.functions'
 import { AeOwnerToolDetailPage } from '@/components/ae/supply/AeOwnerToolDetailPage'
+import { ownerInventoryReturnSchema, inventoryQueryFromReturnSearch } from '@/lib/operator/owner-inventory-return'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 
 export const Route = createFileRoute('/_operator/owner/operations/$toolRef')({
   ...operatorRouteOptions,
+  validateSearch: ownerInventoryReturnSchema,
   loader: async ({ params }) => {
     const identity = await readProviderWorkspaceIdentityDetailServer()
     if (identity.kind !== 'available') {
@@ -53,5 +55,6 @@ export const Route = createFileRoute('/_operator/owner/operations/$toolRef')({
 function OwnerSupplyDetailRoute() {
   const { toolRef } = Route.useParams()
   const result = Route.useLoaderData()
-  return <AeOwnerToolDetailPage toolRef={toolRef} identity={result.identity} status={result.status} />
+  const inventoryQuery = inventoryQueryFromReturnSearch(Route.useSearch())
+  return <AeOwnerToolDetailPage toolRef={toolRef} identity={result.identity} status={result.status} {...(inventoryQuery === undefined ? {} : { inventoryQuery })} />
 }

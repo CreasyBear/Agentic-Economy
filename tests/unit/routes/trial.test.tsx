@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({ signedIn: true, current: undefined as Function
 vi.mock('convex/react', () => ({ useQuery: () => mocks.current }))
 vi.mock('@clerk/tanstack-react-start', () => ({ useAuth: () => ({ isLoaded: true, isSignedIn: mocks.signedIn }) }))
 vi.mock('@/components/ae/trial/claimTrial.functions', () => ({ claimTrialServer: (args: unknown) => mocks.claim(args) }))
-vi.mock('@tanstack/react-router', () => ({ Link: ({ children, to }: { children: ReactNode; to: string }) => <a href={to}>{children}</a>, useRouter: () => ({ routesByPath: {} }) }))
+vi.mock('@tanstack/react-router', () => ({ Link: ({ children, to }: { children: ReactNode; to: string }) => <a href={to}>{children}</a>, useRouter: () => ({ routesByPath: {} }), useLocation: () => ({ pathname: '/trial' }) }))
 
 import { AeTrialPage } from '@/components/ae/trial/AeTrialPage'
 
@@ -55,19 +55,20 @@ describe('trial activation page', () => {
     mocks.claim.mockResolvedValue({ kind: 'granted', grantRef: 'grant:1', accountRef: 'acc_1',
       expiresAt: 1_900_000_000_000, booking: 'booked' })
     const view = render(<AeTrialPage />)
-    fireEvent.click(screen.getByRole('button', { name: 'Activate approved trial' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Check trial status' }))
     expect(await screen.findByText('Trial credit granted')).toBeTruthy()
     mocks.current = { kind: 'refused', code: 'trial_authority_invalid' }
     view.rerender(<AeTrialPage />)
     expect(screen.getByText(/trial approval could not be verified/)).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Activate approved trial' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Contact private support' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Activate approved trial' })).toBeNull()
   })
 
   it('preserves the actionable claim refusal when the query only reports no approved offer', async () => {
     mocks.current = { kind: 'refused', code: 'trial_not_approved' }
     mocks.claim.mockResolvedValue({ kind: 'refused', code: 'verified_email_required' })
     const view = render(<AeTrialPage />)
-    fireEvent.click(screen.getByRole('button', { name: 'Activate approved trial' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Check trial status' }))
     expect(await screen.findByText(/Verify your primary email/)).toBeTruthy()
     mocks.current = { kind: 'refused', code: 'trial_not_approved' }
     view.rerender(<AeTrialPage />)

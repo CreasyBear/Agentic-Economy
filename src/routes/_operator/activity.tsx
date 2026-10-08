@@ -37,6 +37,7 @@ export const Route = createFileRoute('/_operator/activity')({
   ...operatorRouteOptions,
   validateSearch: z.object({
     draftRef: monthlyDraftRefSearchSchema,
+    status: z.enum(['all', 'completed', 'refused', 'outcome_unknown']).optional().catch(undefined),
     agent: z.string().trim().min(1).max(200).optional(),
     range: z.enum(['all', 'today', '7d', '30d', 'month']).optional().catch(undefined),
   }),
@@ -96,6 +97,6 @@ export const Route = createFileRoute('/_operator/activity')({
 
 function ActivityRoute() {
   const result = Route.useLoaderData()
-  const {draftRef} = Route.useSearch()
-  return <AeActivity result={result} {...(draftRef === undefined ? {} : {draftRef})} />
+  const { draftRef, status } = Route.useSearch()
+  return <AeActivity key={status ?? 'all'} initialStatus={status ?? 'all'} result={result} {...(draftRef === undefined ? {} : {draftRef})} />
 }

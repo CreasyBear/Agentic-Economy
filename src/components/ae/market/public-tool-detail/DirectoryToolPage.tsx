@@ -1,3 +1,4 @@
+import { MarketBackButton } from './MarketBackButton'
 import { Link } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 import { recordProductJourney } from '@/lib/observability/product-journey'
@@ -50,7 +51,7 @@ export function DirectoryToolPage({ metadata, providerHost, slug, referenceRate 
         title={view.title}
         {...(view.outcome === undefined ? {} : { summary: view.outcome })}
         surfaceLabel="Directory listing"
-        breadcrumb={<><Link to="/market">Market</Link><span aria-hidden="true"> / </span><span aria-current="page">Tool</span></>}
+        breadcrumb={<><MarketBackButton label="Back to results" className="min-h-touch" variant="ghost" /><span aria-hidden="true"> / </span><span aria-current="page">Tool</span></>}
         {...(view.price === undefined ? {} : { priceLabel: view.price.label })}
         facts={<>
           <ToolFacts view={{ title: view.title, listing, readiness: view.readiness }} />

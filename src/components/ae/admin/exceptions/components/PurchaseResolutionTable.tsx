@@ -1,3 +1,4 @@
+import type { AeRecordTableFeatures } from '@/components/ae/operator/AeOperatorDataTable'
 import type { ColumnDef } from '@tanstack/react-table'
 
 import '../../RecordWorkspaceComposition.css'
@@ -10,7 +11,7 @@ import {
   type PurchaseResolutionTableProps,
 } from '../exceptions.contracts'
 
-const columns: ColumnDef<AdminResolutionRowModel, unknown>[] = [
+const columns: ColumnDef<AeRecordTableFeatures, AdminResolutionRowModel, unknown>[] = [
   {
     accessorKey: 'callRef',
     header: ADMIN_EXCEPTIONS_COPY.columnLabels.call,

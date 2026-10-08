@@ -236,10 +236,10 @@ export function useAeActivity({
   const [usageReportRequest, setUsageReportRequest] = useState<{reportRef:string;format:'CSV'|'JSON'}>()
   const dateFilteredItems = pagination.items
 
-  function navigateScope(range: ActivityDateRangeFilter, agent: string | undefined) {
+  function navigateScope(range: ActivityDateRangeFilter, agent: string | undefined, status: ActivityStatusFilter = statusFilter) {
     if (datePending) return
     setDatePending(true)
-    void Promise.resolve(router.navigate({ to: '/activity', search: { range, ...(agent === undefined ? {} : { agent }) } }))
+    void Promise.resolve(router.navigate({ to: '/activity', search: { range, status, ...(agent === undefined ? {} : { agent }) } }))
       .catch((cause) => {
         captureClientExceptionOnClient(cause)
         toast.error('Could not change the Call filters.', { description: 'The previous period is still shown. Try selecting the period again.' })
@@ -366,7 +366,7 @@ export function useAeActivity({
 
   function resetFilters() {
     setStatusFilter('all')
-    if (dateRangeFilter !== '30d' || filteredAgent !== undefined) navigateScope('30d', undefined)
+    if (dateRangeFilter !== '30d' || filteredAgent !== undefined || statusFilter !== 'all') navigateScope('30d', undefined, 'all')
   }
 
   function exportCsv() {

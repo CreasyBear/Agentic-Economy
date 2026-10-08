@@ -655,7 +655,7 @@ describe('workspaceTeam:invitationContext', () => {
   const invitationRef = makeFunctionReference<
     'query',
     Record<string, never>,
-    | { kind: 'available'; organizationId: string }
+    | { kind: 'available'; accountRef: string; organizationId: string }
     | { kind: 'role_restricted' | 'organization_unset' | 'binding_unavailable' }
   >('workspaceTeam:invitationContext')
   const memberToken = 'https://clerk.example.test|user_team_invitee'
@@ -737,7 +737,7 @@ describe('workspaceTeam:invitationContext', () => {
     expect(await invitation(backend)).toEqual({ kind: 'organization_unset' })
 
     await bindOrganization(backend, 'aob_active', 'org_current')
-    expect(await invitation(backend)).toEqual({ kind: 'available', organizationId: 'org_current' })
+    expect(await invitation(backend)).toEqual({ kind: 'available', accountRef: ACCOUNT_REF, organizationId: 'org_current' })
 
     await bindOrganization(backend, 'aob_second', 'org_other')
     expect(await invitation(backend)).toEqual({ kind: 'binding_unavailable' })
@@ -749,7 +749,7 @@ describe('workspaceTeam:invitationContext', () => {
     await bindOrganization(adminBackend, 'aob_active', 'org_current')
     await bindMember(adminBackend, 'org:admin')
     expect(await invitation(adminBackend, samIdentity(memberToken))).toEqual({
-      kind: 'available', organizationId: 'org_current',
+      kind: 'available', accountRef: ACCOUNT_REF, organizationId: 'org_current',
     })
 
     const memberBackend = createBackend()
@@ -767,7 +767,7 @@ describe('workspaceTeam:invitationContext', () => {
     await bindOrganization(backend, 'aob_active', 'org_current')
     await bindMember(backend, 'org:admin')
     const admin = samIdentity(memberToken)
-    expect(await invitation(backend, admin)).toEqual({ kind: 'available', organizationId: 'org_current' })
+    expect(await invitation(backend, admin)).toEqual({ kind: 'available', accountRef: ACCOUNT_REF, organizationId: 'org_current' })
 
     await backend.run(async (ctx) => {
       const binding = await ctx.db.query('accountExternalOrganizationBindings')

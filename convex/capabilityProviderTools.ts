@@ -17,6 +17,9 @@ import {
   resolveOwnerToolSlugResult,
 } from './lib/capabilitySupply/providerTools/ownerSlug'
 import {
+  backfillInventoryPageArgs,
+  backfillInventoryPageHandler,
+  backfillInventoryPageResult,
   backfillDraftPageArgs,
   backfillDraftPageHandler,
   backfillDraftPageResult,
@@ -28,3 +31,5 @@ export const resolveOwnerToolSlug = query({ args: resolveOwnerToolSlugArgs, retu
 export const listAgent = query({ args: listAgentArgs, returns: listAgentResult, handler: listAgentHandler })
 export const readAgent = query({ args: readAgentArgs, returns: readAgentResult, handler: readAgentHandler })
 export const backfillDraftPage = internalMutation({ args: backfillDraftPageArgs, returns: backfillDraftPageResult, handler: backfillDraftPageHandler })
+
+export const backfillInventoryPage = internalMutation({ args: backfillInventoryPageArgs, returns: backfillInventoryPageResult, handler: backfillInventoryPageHandler })

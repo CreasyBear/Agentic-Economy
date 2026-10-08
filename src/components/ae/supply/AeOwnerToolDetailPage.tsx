@@ -2,6 +2,8 @@ import { Link, useRouter } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { useReverification } from '@clerk/tanstack-react-start'
 import { useState } from 'react'
+import { ownerInventoryHref, type OwnerInventoryQuery } from '@/lib/operator/owner-inventory-search'
+import { ownerToolSetupHref } from '@/lib/operator/owner-inventory-return'
 
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
@@ -30,12 +32,14 @@ import './ProviderToolComposition.css'
 
 type AeOwnerToolDetailPageProps = Readonly<{
   toolRef: string
+  inventoryQuery?: OwnerInventoryQuery
   identity: ProviderWorkspaceIdentityDetailResult
   status: ProviderToolStatusResult
 }>
 
-export function AeOwnerToolDetailPage({ toolRef, identity, status }: AeOwnerToolDetailPageProps) {
+export function AeOwnerToolDetailPage({ toolRef, identity, status, inventoryQuery }: AeOwnerToolDetailPageProps) {
   const router = useRouter()
+  const returnHref = ownerInventoryHref(inventoryQuery ?? {})
   const [toolKeys] = useState(() => new Map<string, string>())
   const recheck = useServerFn(recheckOwnerCapabilityServer)
   const withdraw = useServerFn(withdrawOwnerCapabilityServer)
@@ -43,18 +47,18 @@ export function AeOwnerToolDetailPage({ toolRef, identity, status }: AeOwnerTool
   const republish = useReverification(republishRequest)
 
   if (identity.kind !== 'available') {
-    return <UnavailableTool toolRef={toolRef} unavailable={status.kind === 'unavailable'} />
+    return <UnavailableTool toolRef={toolRef} {...(inventoryQuery === undefined ? {} : { inventoryQuery })} unavailable={status.kind === 'unavailable'} />
   }
   if (status.kind !== 'available') {
     if (status.kind === 'not_found') {
       return (
         <OperatorRouteNotFoundRecovery
-          recoveryHref="/owner/operations"
+          recoveryHref={returnHref}
           recoveryLabel={OWNER_TOOL_DETAIL_COPY.notFoundRecoveryLabel}
         />
       )
     }
-    return <UnavailableTool toolRef={toolRef} unavailable />
+    return <UnavailableTool toolRef={toolRef} {...(inventoryQuery === undefined ? {} : { inventoryQuery })} unavailable />
   }
   // Well 8 Lane C: the URL held either this Tool's slug (live reviewed-tier
   // publication) or its offeringRef (no publication yet) - only one matches
@@ -65,7 +69,7 @@ export function AeOwnerToolDetailPage({ toolRef, identity, status }: AeOwnerTool
   ) {
     return (
       <OperatorRouteNotFoundRecovery
-        recoveryHref="/owner/operations"
+        recoveryHref={returnHref}
         recoveryLabel={OWNER_TOOL_DETAIL_COPY.notFoundRecoveryLabel}
       />
     )
@@ -76,7 +80,7 @@ export function AeOwnerToolDetailPage({ toolRef, identity, status }: AeOwnerTool
   const name = status.tool.name
   const resumeHref = status.resumeCandidateRef === undefined
     ? undefined
-    : `/owner/operations/new?draft=${encodeURIComponent(status.resumeCandidateRef)}`
+    : ownerToolSetupHref({ draft: status.resumeCandidateRef }, inventoryQuery)
 
   function maintenanceAction(
     action: 'recheck' | 'withdraw' | 'republish',
@@ -107,7 +111,7 @@ export function AeOwnerToolDetailPage({ toolRef, identity, status }: AeOwnerTool
       title={name}
       description="Current publication, source health, delivery and Qualified Use."
       currentPath={`/owner/operations/${encodeURIComponent(toolRef)}`}
-      breadcrumbs={[{ label: 'Tools', href: '/owner/operations' }, { label: name }]}
+      breadcrumbs={[{ label: 'Tools', href: returnHref }, { label: name }]}
     >
       <AeSection title={OWNER_TOOL_DETAIL_COPY.overviewTitle} className="arc-owner-tool-overview">
         <AeFactList
@@ -158,7 +162,7 @@ export function AeOwnerToolDetailPage({ toolRef, identity, status }: AeOwnerTool
   )
 }
 
-function UnavailableTool({ toolRef, unavailable }: Readonly<{ toolRef: string; unavailable: boolean }>) {
+function UnavailableTool({ toolRef, unavailable, inventoryQuery }: Readonly<{ toolRef: string; unavailable: boolean; inventoryQuery?: OwnerInventoryQuery }>) {
   return (
     <AeOperatorPage
       operatorRole="owner"
@@ -174,6 +178,7 @@ function UnavailableTool({ toolRef, unavailable }: Readonly<{ toolRef: string; u
           </AeAlert>
         <Link
           to="/owner/operations"
+          search={inventoryQuery ?? {}}
           className={[actionLinkClassName('secondary', 'md'), 'arc-owner-tool-action'].join(' ')}
         >
           Return to Tools

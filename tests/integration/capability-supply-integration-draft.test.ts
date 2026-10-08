@@ -517,4 +517,48 @@ describe('Provider source integration draft', () => {
       name: 'Capacity Operation 9950',
     })
   })
+
+  it('queries the owner inventory before pagination and refuses unindexed legacy records', async () => {
+    const backend = convexTest(schema, modules)
+    const { businessId, owner } = await createPublishedBusinessOwner(backend, 'inventory-query-owner')
+    const foreign = await createPublishedBusinessOwner(backend, 'inventory-query-foreign')
+    const rows = await backend.run(async ({ db }) => {
+      const ids = []
+      for (let index = 0; index < 51; index += 1) {
+        const offeringRef = `offering:inventory-query:${index}`
+        const name = index === 0 ? 'Aardvark needleproof' : `Zulu ${String(index).padStart(2, '0')}`
+        await db.insert('businessOfferings', { offeringRef, businessId, currentRevision: 1, status: 'draft', createdAt: index, updatedAt: index })
+        await db.insert('businessOfferingRevisions', { offeringRef, businessId, revision: 1, name, category: 'Research', summary: 'Recorded source inventory.', sourceHash: `source:${index}`, createdAt: index })
+        ids.push(await db.insert('capabilityProviderToolProjections', { businessId, providerRef: String(businessId), toolRef: `tool:inventory-query:${index}`, offeringRef, offeringRevision: 1, inventoryName: name.toLowerCase(), inventoryText: `${name} Recorded source inventory. Research`, updatedAt: index }))
+      }
+      // A foreign text match must never enter this owner's result.
+      await db.insert('capabilityProviderToolProjections', { businessId: foreign.businessId, providerRef: String(foreign.businessId), toolRef: 'tool:foreign-needle', offeringRef: 'offering:foreign-needle', offeringRevision: 1, inventoryName: 'needleproof', inventoryText: 'needleproof', updatedAt: 999 })
+      return ids
+    })
+    const base = { businessId, now: 100, paginationOpts: { numItems: 50, cursor: null } }
+    const recent = await owner.query(api.capabilityProviderTools.listOwner, base)
+    expect(recent.kind === 'available' ? recent.page.map(row => row.offeringRef) : []).not.toContain('offering:inventory-query:0')
+    const textMatch = await owner.query(api.capabilityProviderTools.listOwner, { ...base, search: 'needleproof' })
+    expect(textMatch).toMatchObject({ kind: 'available', isDone: true, page: [{ offeringRef: 'offering:inventory-query:0' }] })
+    const alphabetical = await owner.query(api.capabilityProviderTools.listOwner, { ...base, sort: 'name_asc' })
+    expect(alphabetical.kind === 'available' ? alphabetical.page[0]?.offeringRef : null).toBe('offering:inventory-query:0')
+    expect(alphabetical).toMatchObject({ isDone: false })
+    if (alphabetical.kind !== 'available') throw new Error('inventory_not_available')
+    const next = await owner.query(api.capabilityProviderTools.listOwner, { ...base, sort: 'name_asc', paginationOpts: { numItems: 50, cursor: alphabetical.continueCursor } })
+    expect(next).toMatchObject({ kind: 'available', isDone: true, page: [{ offeringRef: 'offering:inventory-query:50' }] })
+    await expect(foreign.owner.query(api.capabilityProviderTools.listOwner, { ...base, search: 'needleproof' })).resolves.toEqual({ kind: 'not_found' })
+    await backend.run(async ({ db }) => {
+      const id = rows[0]
+      if (id === undefined) throw new Error('fixture_missing')
+      await db.patch(id, { inventoryName: undefined, inventoryText: undefined })
+    })
+    await expect(owner.query(api.capabilityProviderTools.listOwner, { ...base, search: 'needleproof' })).resolves.toEqual({ kind: 'index_pending' })
+    expect(await owner.query(api.capabilityProviderTools.listOwner, base)).toMatchObject({ kind: 'available' })
+    const backfill = await backend.mutation(internal.capabilityProviderTools.backfillInventoryPage, { paginationOpts: { numItems: 1, cursor: null } })
+    expect(backfill).toMatchObject({ processed: 1, skipped: 0, isDone: false })
+    await expect(owner.query(api.capabilityProviderTools.listOwner, { ...base, search: 'needleproof' })).resolves.toMatchObject({ kind: 'available', page: [{ offeringRef: 'offering:inventory-query:0' }] })
+    const preserved = await backend.run(async ({ db }) => rows[0] === undefined ? null : db.get(rows[0]))
+    expect(preserved).toMatchObject({ toolRef: 'tool:inventory-query:0', offeringRevision: 1, updatedAt: 0 })
+    await expect(owner.query(api.capabilityProviderTools.listOwner, { ...base, paginationOpts: { numItems: 51, cursor: null } })).rejects.toThrow('provider_inventory_page_size_invalid')
+  })
 })

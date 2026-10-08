@@ -650,6 +650,19 @@ describe('/tools/$providerHost/$slug', () => {
     expect(screen.queryByRole('link', { name: /Try in chat/ })).toBeNull()
   })
 
+  it('resolves an external compact identity to human detail and rejects a mismatched Host', async () => {
+    const id = `registry:${'b'.repeat(64)}`
+    const metadata = { kind: 'found_upstream' as const, item: { entry } }
+    const referenceRate = { source: 'coinbase' as const, base: 'USDC' as const, quote: 'AUD' as const, rate: '1.5', fetchedAt: Date.now() }
+    readDirectoryDetailMock.mockResolvedValue({ metadata, referenceRate })
+    const loader = DirectoryRoute.options.loader
+    if (typeof loader !== 'function') throw new Error('directory_loader_missing')
+    await expect(loader({ params: { providerHost: 'example.test', slug: id }, location: { state: {} } } as never)).resolves.toEqual({ metadata, referenceRate })
+    expect(readDirectoryDetailMock).toHaveBeenCalledWith({ data: { id } })
+    expect(readDirectoryDetailMock).toHaveBeenCalledTimes(1)
+    await expect(loader({ params: { providerHost: 'other.test', slug: id }, location: { state: {} } } as never)).resolves.toEqual({ metadata: { kind: 'unavailable', reason: 'query_invalid' } })
+  })
+
   it('passes fresh source rate to a directory-only detail and never claims an AE input recipient', async () => {
     const metadata = { kind: 'found_upstream' as const, item: { entry } }
     const referenceRate = { source: 'coinbase' as const, base: 'USDC' as const, quote: 'AUD' as const, rate: '1.5', fetchedAt: Date.now() }

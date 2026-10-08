@@ -112,8 +112,9 @@ describe('canonical search results', () => {
     renderResults(searchRows)
     const table = screen.getByRole('table', { name: 'Canonical search results' })
 
+    expect(table.closest('[data-mobile-layout]')?.getAttribute('data-mobile-layout')).toBe('scroll')
     expect(within(table).getAllByRole('columnheader').map(header => header.textContent?.trim())).toEqual([
-      'Tool', 'Provider', 'Access', 'Price', 'Freshness', 'Actions',
+      'Tool', 'Provider or Host', 'Access', 'Price', 'Freshness', 'Actions',
     ])
     const rows = within(table).getAllByRole('row').slice(1)
     expect(rows.map(row => within(row).getByRole('link').textContent?.trim())).toEqual([

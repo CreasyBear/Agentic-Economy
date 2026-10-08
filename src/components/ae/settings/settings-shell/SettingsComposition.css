@@ -1,8 +1,6 @@
 /* AE routed settings navigation and product-specific empty/danger states.
- * The licensed SettingsPage block owns the routed frame, panes, groups and rows.
+ * Licensed REUI Profile 2 owns the routed frame, section cards and field rows.
  */
-.ae-settings-toolbar { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin-bottom: var(--space-4); color: var(--text-secondary); font-size: var(--text-sm); }
-.ae-settings-toolbar > button { max-width: 100%; }
 .ae-settings-empty-copy > h3, .ae-settings-danger-header > h2 { margin: 0; font-size: var(--text-sm); font-weight: 500; line-height: 1.4; }
 .ae-settings-empty-copy > p, .ae-settings-danger-header > p { margin: 0; color: var(--text-secondary); font-size: var(--text-sm); line-height: var(--leading-body); }
 .ae-settings-empty-state {
@@ -62,9 +60,6 @@
 }
 
 
-@container settings-page (max-width: 719px) {
-  .ae-settings-back { display: inline-flex; min-height: 44px; align-items: center; gap: 8px; margin-bottom: 20px; border-radius: var(--radius-control); color: var(--text-secondary); font-size: var(--text-sm); text-decoration: none; }
-  .ae-settings-back > svg { width: 16px; height: 16px; flex: none; }
+@media (max-width: 719px) {
   .ae-settings-danger-zone { padding: var(--space-5); }
 }
-@media (prefers-reduced-motion: reduce) { .ae-settings-index-link { transition: none; } }

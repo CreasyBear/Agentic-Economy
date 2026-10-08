@@ -1,3 +1,4 @@
+import { directoryProviderKey } from '@/modules/market/x402-directory-index'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 
 import { AePageSkeleton, AePageState } from '@/components/ae/layout/AePageState'
@@ -10,13 +11,19 @@ import { buildPublicPageHead } from '@/modules/seo/public'
 const providerHostPattern = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/u
 
 export const Route = createFileRoute('/tools/$providerHost/$slug')({
-  loader: async ({ params }) => {
+  loader: async ({ params, location }) => {
     if (!providerHostPattern.test(params.providerHost) || params.slug.length === 0 || params.slug.length > 200) {
       return { metadata: { kind: 'unavailable' as const, reason: 'query_invalid' } }
     }
-    const { metadata, referenceRate } = await readDirectoryToolDetailRouteServer({ data: { providerKey: params.providerHost, slug: params.slug } })
+    const resolved = /^registry:[a-f0-9]{64}$/u.test(params.slug)
+      ? await readDirectoryToolDetailRouteServer({ data: { id: params.slug } })
+      : await readDirectoryToolDetailRouteServer({ data: { providerKey: params.providerHost, slug: params.slug } })
+    const { metadata, referenceRate } = resolved
+    if ((metadata.kind === 'found' || metadata.kind === 'found_upstream') && directoryProviderKey(metadata.item.entry.provider) !== params.providerHost) {
+      return { metadata: { kind: 'unavailable' as const, reason: 'query_invalid' } }
+    }
     if (metadata.kind === 'found' && metadata.item.toolRef !== undefined) {
-      throw redirect({ to: '/tools/$toolRef', params: { toolRef: metadata.item.toolRef }, replace: true })
+      throw redirect({ to: '/tools/$toolRef', params: { toolRef: metadata.item.toolRef }, replace: true, state: location.state.fromMarket === true ? { fromMarket: true } : {} })
     }
     return { metadata, referenceRate }
   },

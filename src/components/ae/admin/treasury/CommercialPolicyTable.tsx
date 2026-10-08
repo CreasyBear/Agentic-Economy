@@ -1,3 +1,4 @@
+import type { AeRecordTableFeatures } from '@/components/ae/operator/AeOperatorDataTable'
 import type { FunctionReturnType } from 'convex/server'
 import type { ColumnDef } from '@tanstack/react-table'
 import { Link } from '@tanstack/react-router'
@@ -32,7 +33,7 @@ export function CommercialPolicyTable({ summary, selectedFamily, locked, onSelec
   locked: boolean
   onSelect: (family: CommercialPolicyFamily) => void
 }) {
-  const columns: ColumnDef<PolicyRow, unknown>[] = [
+  const columns: ColumnDef<AeRecordTableFeatures, PolicyRow, unknown>[] = [
     { accessorKey: 'family', header: 'Policy family', enableSorting: false, cell: ({ row }) => POLICY_LABELS[row.original.family] },
     { id: 'status', header: 'Record and pending decision', enableSorting: false, cell: ({ row }) => {
       const policy = row.original

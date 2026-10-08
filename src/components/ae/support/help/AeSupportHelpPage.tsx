@@ -1,4 +1,4 @@
-import { useId, useState, type KeyboardEvent } from 'react'
+import { useEffect, useId, useState, type KeyboardEvent } from 'react'
 import { ActivityIcon, ArrowUpRightIcon, CableIcon, CodeIcon, MailIcon } from 'lucide-react'
 
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
@@ -11,6 +11,7 @@ import { ReferencedCallBanner } from './components/ReferencedCallBanner'
 import { SupportStatusSection } from './components/SupportStatusSection'
 import {
   ISSUE_URL,
+  SUPPORT_TOPIC_ANCHORS,
   SUPPORT_FAQ_HEADING,
   SUPPORT_FAQ_ITEMS,
   type AeSupportHelpPageProps,
@@ -19,10 +20,12 @@ import {
 import { useSupportHelpPage } from './useSupportHelpPage'
 import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import './SupportComposition.css'
-export function AeSupportHelpPage({ canonicalBaseUrl, callRef }: AeSupportHelpPageProps) {
+export function AeSupportHelpPage({ canonicalBaseUrl, callRef, documentation, initialTopic = 'status', onTopicChange }: AeSupportHelpPageProps) {
   const { supportEmailHref, diagnosticCommand } = useSupportHelpPage({ canonicalBaseUrl, callRef })
   const referencedCallRef = callRef.kind === 'valid' ? callRef.value : undefined
-  const [topic, setTopic] = useState<SupportHelpTopic>('status')
+  const [topic, setTopic] = useState<SupportHelpTopic>(initialTopic)
+  useEffect(() => { setTopic(initialTopic) }, [initialTopic])
+  function selectTopic(next: SupportHelpTopic) { setTopic(next); onTopicChange?.(next) }
   const channels = [
     { value: 'status', label: 'Current status', meta: 'Calls, setup and credit', icon: <ActivityIcon aria-hidden="true" />, detail: <SupportStatusSection callRef={callRef} /> },
     { value: 'connection', label: 'Agent connection', meta: 'Setup and diagnostics', icon: <CableIcon aria-hidden="true" />, detail: <AgentConnectionSection diagnosticCommand={diagnosticCommand} /> },
@@ -56,7 +59,7 @@ export function AeSupportHelpPage({ canonicalBaseUrl, callRef }: AeSupportHelpPa
     const nextIndex = edge >= 0 ? edge : (currentIndex + delta + channels.length) % channels.length
     tabs[nextIndex]?.focus()
     const next = channels[nextIndex]
-    if (next !== undefined) setTopic(next.value)
+    if (next !== undefined) selectTopic(next.value)
   }
 
   return (
@@ -75,7 +78,7 @@ export function AeSupportHelpPage({ canonicalBaseUrl, callRef }: AeSupportHelpPa
         {referencedCallRef === undefined ? null : <ReferencedCallBanner callRef={referencedCallRef} />}
         <p className="arc-support-privacy">Do not include credentials, raw inputs or private results.</p>
         <div className="arc-support-channels">
-          <Tabs value={topic} onValueChange={value => setTopic(value as SupportHelpTopic)} orientation="vertical" className="arc-support-channel-tabs">
+          <Tabs value={topic} onValueChange={value => selectTopic(value as SupportHelpTopic)} orientation="vertical" className="arc-support-channel-tabs">
             <TabsList aria-label="Help topics" className="arc-support-channel-list" onKeyDownCapture={onTopicKeyDown}>
               {channels.map(channel => (
                 <TabsTrigger
@@ -92,7 +95,13 @@ export function AeSupportHelpPage({ canonicalBaseUrl, callRef }: AeSupportHelpPa
               ))}
             </TabsList>
             <div key={active.value} id={`${id}-panel-${active.value}`} role="tabpanel" aria-labelledby={`${id}-tab-${active.value}`} tabIndex={0} className="arc-support-channel-panel">
-              {active.detail}
+              <div id={SUPPORT_TOPIC_ANCHORS[active.value]} className="scroll-mt-anchor">{active.detail}</div>
+              <p className="mt-5 text-sm"><a href={`#${SUPPORT_TOPIC_ANCHORS[active.value]}`} aria-label={`Link to ${active.label}`}>Link to this help topic</a></p>
+              {active.value === 'status' || active.value === 'connection' || active.value === 'developer' ? <p className="mt-4 text-sm">
+                {documentation === undefined ? <a href={`/developers/api#${active.value === 'status' ? 'api-errors-heading' : active.value === 'connection' ? 'api-setup-heading' : 'api-requests-heading'}`} target="_blank" rel="noreferrer">Read the API reference (opens in a new tab)</a>
+                  : <a href={active.value === 'status' ? documentation.recovery : active.value === 'connection' ? documentation.authority : documentation.api} target="_blank" rel="noreferrer">{active.value === 'status' ? 'Recover the same Call' : active.value === 'connection' ? 'Agent connection and authority guide' : 'Full API documentation'} (opens in a new tab)</a>}
+                {' '}Your current page and Call reference stay here.
+              </p> : null}
             </div>
           </Tabs>
         </div>

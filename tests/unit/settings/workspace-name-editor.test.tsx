@@ -15,6 +15,7 @@ import { WorkspaceNameEditor, type WorkspaceNameEditorProps } from '@/components
 
 const initialProps: WorkspaceNameEditorProps = {
   name: 'Buyer workspace',
+  accountRef: 'account:workspace',
   canonicalName: 'Buyer workspace',
   accountRevision: 17,
   clerkOrgId: 'org_workspace',
@@ -30,7 +31,7 @@ function getNameInput() {
 }
 
 function getSaveButton() {
-  return screen.getByRole('button', { name: /Save workspace name|Saving/ })
+  return screen.getByRole('button', { name: /Save workspace name|Saving|Retry same rename/ })
 }
 
 function changeName(value: string) {
@@ -178,7 +179,7 @@ describe('WorkspaceNameEditor', () => {
     expect(screen.getByRole('group', { name: 'Save status' })).toHaveTextContent('Workspace name saved and confirmed')
     expect(getNameInput()).toHaveValue('Renamed workspace')
     expect(getNameInput()).toBeEnabled()
-    expect(screen.queryByText('Name was not saved. Try again; the existing name is unchanged.')).toBeNull()
+    expect(screen.queryByText('Name update is unconfirmed. Retry the same name, or wait for the workspace to confirm it.')).toBeNull()
   })
 
   it('retains a rejected draft and permits retry after reporting failure', async () => {
@@ -190,7 +191,7 @@ describe('WorkspaceNameEditor', () => {
 
     fireEvent.click(getSaveButton())
 
-    expect(await screen.findByText('Name was not saved. Try again; the existing name is unchanged.')).toBeVisible()
+    expect(await screen.findByText('Name update is unconfirmed. Retry the same name, or wait for the workspace to confirm it.')).toBeVisible()
     expect(getNameInput()).toHaveValue('Renamed workspace')
     expect(getSaveButton()).toBeEnabled()
 
@@ -213,13 +214,14 @@ describe('WorkspaceNameEditor', () => {
     const expectedPayload = {
       name: 'Renamed workspace',
       expectedRevision: 42,
+      expectedAccountRef: 'account:workspace',
       correlationRef: 'ui:workspace-name:save',
       idempotencyRef: 'idem:workspace-name:11111111-1111-4111-8111-111111111111',
     }
     expect(source.renameUnbound).toHaveBeenLastCalledWith(expectedPayload)
 
     await act(async () => request.reject(new Error('temporary failure')))
-    expect(await screen.findByText('Name was not saved. Try again; the existing name is unchanged.')).toBeVisible()
+    expect(await screen.findByText('Name update is unconfirmed. Retry the same name, or wait for the workspace to confirm it.')).toBeVisible()
     expect(getNameInput()).toHaveValue('Renamed workspace')
     expect(getSaveButton()).toBeEnabled()
 
@@ -229,4 +231,12 @@ describe('WorkspaceNameEditor', () => {
     expect(source.renameUnbound).toHaveBeenLastCalledWith(expectedPayload)
     expect(await screen.findByText('Name saved. Waiting for the workspace to confirm it…')).toBeVisible()
   })
+})
+
+it('retains a workspace draft when another source update arrives', () => {
+  const view = renderEditor()
+  changeName('My pending name')
+  view.rerender(<WorkspaceNameEditor {...initialProps} name="External name" canonicalName="External name" accountRevision={18} />)
+  expect(getNameInput()).toHaveValue('My pending name')
+  expect(screen.getByRole('status')).toHaveTextContent('Your draft is retained')
 })

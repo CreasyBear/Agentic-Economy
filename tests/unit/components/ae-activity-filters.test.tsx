@@ -137,6 +137,17 @@ describe('ActivityPage & Filtering (W-38)', () => {
     vi.mocked(toast.error).mockClear()
   })
 
+  it('places current work before finance and makes Account Plan scope visible', () => {
+    renderActivity()
+    const recent = screen.getByRole('heading', { name: 'Recent Calls' })
+    const plans = screen.getByRole('heading', { name: 'Tool Plans' })
+    const totals = screen.getByRole('heading', { name: 'Period totals' })
+    expect(recent.compareDocumentPosition(plans) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(plans.compareDocumentPosition(totals) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.getByText('Call date and status filters do not filter this Account Plan history.')).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Loaded Call overview' }).textContent).toContain('full period totals are below')
+  })
+
   it('shows time to outcome and no charge for a released reservation', () => {
     renderActivity()
 
@@ -169,7 +180,7 @@ describe('ActivityPage & Filtering (W-38)', () => {
     expect(screen.getAllByText('Needs review').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Not confirmed').length).toBeGreaterThan(0)
     expect(screen.queryByText('A$0.00')).toBeNull()
-    expect(screen.getAllByRole('link', { name: 'Review Australian Tax Calculator' })[0]?.getAttribute('href')).toBe('/calls/call%3A1?returnRange=30d')
+    expect(screen.getAllByRole('link', { name: 'Review Australian Tax Calculator' })[0]?.getAttribute('href')).toBe('/calls/call%3A1?returnRange=30d&returnStatus=all')
     view.rerender(<AeActivity result={{ ...result, calls: { ...sampleCalls, page: [sampleCalls.page[0]!] } }} />)
     expect(screen.queryByText('Needs review')).toBeNull()
     expect(screen.getAllByRole('link', { name: 'View receipt for Australian Tax Calculator' })).toHaveLength(1)
@@ -224,7 +235,7 @@ describe('ActivityPage & Filtering (W-38)', () => {
     fireEvent.keyDown(thirtyDays, { key: 'Home' })
     const today = within(dates).getByRole('button', { name: 'Today (UTC)' })
     expect(document.activeElement).toBe(today)
-    expect(routerMocks.navigate).toHaveBeenCalledWith({ to: '/activity', search: { range: 'today' } })
+    expect(routerMocks.navigate).toHaveBeenCalledWith({ to: '/activity', search: { range: 'today', status: 'all' } })
   })
 
   it('filters loaded calls by status and requests a fresh server range for dates', async () => {
@@ -234,7 +245,7 @@ describe('ActivityPage & Filtering (W-38)', () => {
     expect(screen.queryByText('Postal Address Lookup')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: /All\s+2/u }))
     fireEvent.click(screen.getByRole('button', { name: 'Today (UTC)' }))
-    await waitFor(() => expect(routerMocks.navigate).toHaveBeenCalledWith({ to: '/activity', search: { range: 'today' } }))
+    await waitFor(() => expect(routerMocks.navigate).toHaveBeenCalledWith({ to: '/activity', search: { range: 'today', status: 'all' } }))
     expect(screen.getAllByText('Postal Address Lookup')).toHaveLength(1)
   })
 
@@ -465,7 +476,7 @@ describe('ActivityPage & Filtering (W-38)', () => {
     expect(screen.getByText(/Agent ·/u)).toBeTruthy()
     expect(within(screen.getByText(/Agent ·/u).parentElement as HTMLElement).getByText('agent:alpha')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Clear agent filter' }))
-    expect(routerMocks.navigate).toHaveBeenCalledWith({ to: '/activity', search: { range: '30d' } })
+    expect(routerMocks.navigate).toHaveBeenCalledWith({ to: '/activity', search: { range: '30d', status: 'all' } })
   })
 
   it('requests the full filtered period and never simulates a download after a source failure', async () => {
@@ -484,4 +495,15 @@ describe('ActivityPage & Filtering (W-38)', () => {
     expect(toast.success).not.toHaveBeenCalled()
     expect(screen.getByRole('button', { name: 'Full period JSON' })).not.toHaveProperty('disabled', true)
   })
+
+it('preserves selected status when changing date or clearing an Agent scope', async () => {
+  renderActivity({ filteredAgent: 'agent:alpha' })
+  fireEvent.click(screen.getByRole('button', { name: /Completed\s+1/u }))
+  fireEvent.click(screen.getByRole('button', { name: 'Today (UTC)' }))
+  expect(routerMocks.navigate).toHaveBeenCalledWith({ to: '/activity', search: { range: 'today', status: 'completed', agent: 'agent:alpha' } })
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Clear agent filter' })).toHaveProperty('disabled', false))
+  fireEvent.click(screen.getByRole('button', { name: 'Clear agent filter' }))
+  expect(routerMocks.navigate).toHaveBeenCalledWith({ to: '/activity', search: { range: '30d', status: 'completed' } })
+})
+
 })

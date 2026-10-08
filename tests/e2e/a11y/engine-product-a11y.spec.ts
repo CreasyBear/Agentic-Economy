@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test'
 
 test.describe('market product accessibility', () => {
   test('market skip link and primary actions are keyboard reachable', async ({ page }) => {
-    await gotoSettled(page, '/')
+    await gotoSettled(page, '/market?view=tools')
     await page.keyboard.press('Tab')
     const skip = page.getByRole('link', { name: 'Skip to content' })
     await expect(skip).toBeFocused()
@@ -13,6 +13,13 @@ test.describe('market product accessibility', () => {
     await expect(search).toBeVisible()
     await page.keyboard.press('Tab')
     await expect(search).toBeFocused()
+    await page.keyboard.press('Tab')
+    await expect(page.getByRole('button', { name: 'Search', exact: true })).toBeFocused()
+    await page.keyboard.press('Tab')
+    const agent = page.getByRole('link', { name: 'Ask an Agent', exact: true })
+    await expect(agent).toBeFocused()
+    await expect(agent).toHaveAttribute('aria-describedby', 'market-agent-recipient')
+    await expect(page.locator('#market-agent-recipient')).toBeVisible()
     const compact = (page.viewportSize()?.width ?? 1280) < 768
     const primary = compact
       ? page.getByRole('dialog', { name: 'Public navigation' }).getByRole('navigation', { name: 'Primary' })
@@ -44,7 +51,7 @@ test.describe('market product accessibility', () => {
   })
 
   test('about keeps public nav while the footer points at the marketing site', async ({ page }) => {
-    await gotoSettled(page, '/')
+    await gotoSettled(page, '/about')
     const footer = page.getByRole('contentinfo')
     const brand = footer.getByRole('link', { name: 'AECON', exact: true })
     await expect(brand).toBeVisible()
@@ -52,7 +59,6 @@ test.describe('market product accessibility', () => {
     const status = footer.getByRole('link', { name: 'Status', exact: true })
     await expect(status).toBeVisible()
     await expect(status).toHaveAttribute('href', '/status')
-    await gotoSettled(page, '/about')
     await expect(page.getByRole('heading', { level: 1, name: 'Tools agents can call.' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Joel Chan' })).toBeVisible()
     await expect(page.getByRole('main').getByRole('link', { name: 'Browse Tools' })).toBeVisible()

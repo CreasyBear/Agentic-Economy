@@ -1,3 +1,5 @@
+import { Link } from '@tanstack/react-router'
+import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import { useId, useState } from 'react'
 
 import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
@@ -20,7 +22,10 @@ export function DevelopersApiPage({ page }: DevelopersApiPageProps) {
   ]
 
   return (
-    <AePublicPage kind="document" eyebrow={DEVELOPERS_API_COPY.eyebrow} title={DEVELOPERS_API_COPY.title} description={DEVELOPERS_API_COPY.description}>
+    <AePublicPage kind="document" eyebrow={DEVELOPERS_API_COPY.eyebrow} title={DEVELOPERS_API_COPY.title} description={DEVELOPERS_API_COPY.description} actions={<div className="flex flex-wrap gap-3">
+        {page.documentation === undefined ? null : <a href={page.documentation.api} target="_blank" rel="noreferrer" className={actionLinkClassName('primary', 'md')}>Full documentation (opens in a new tab)</a>}
+        <Link to="/market" className={actionLinkClassName('secondary', 'md')}>Browse Tools</Link>
+      </div>}>
       <div className="arc-market arc-developer-reference">
         <div className="arc-reference-reading">
           <div className="arc-reference-outline">
@@ -35,6 +40,15 @@ export function DevelopersApiPage({ page }: DevelopersApiPageProps) {
             </div>
           </div>
           <div className="arc-reference-content">
+            {page.documentation === undefined ? null : <section className="arc-reference-region" aria-label="Guides">
+              <h2>Continue with a guide</h2>
+              <p>Keep this app page open while you read the documentation.</p>
+              <div className="flex flex-wrap gap-3">
+                <a href={page.documentation.customer} target="_blank" rel="noreferrer">Choose and use a Tool</a>
+                <a href={page.documentation.authority} target="_blank" rel="noreferrer">Connect an Agent and control authority</a>
+                <a href={page.documentation.recovery} target="_blank" rel="noreferrer">Recover the same Call</a>
+              </div>
+            </section>}
             <section className="arc-reference-region" aria-labelledby="api-requests-heading">
               <header>
                 <h2 id="api-requests-heading" tabIndex={-1}>{DEVELOPERS_API_COPY.operationsHeading}</h2>
@@ -45,7 +59,7 @@ export function DevelopersApiPage({ page }: DevelopersApiPageProps) {
                   <h3>{group.tag}</h3>
                   <div className="arc-reference-operations">
                     {group.operations.map((operation) => (
-                      <article key={operation.operationId} className="arc-reference-operation">
+                      <article key={operation.operationId} id={`operation-${operation.operationId}`} className="arc-reference-operation">
                         <header className="arc-reference-operation-head">
                           <div><Badge tone="neutral">{operation.method}</Badge><code>{operation.path}</code></div>
                           <h4>{operation.summary}</h4>

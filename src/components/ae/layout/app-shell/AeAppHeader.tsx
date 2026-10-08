@@ -1,9 +1,8 @@
 'use client'
 
-import { OrganizationSwitcher, UserButton, useAuth } from '@clerk/tanstack-react-start'
+import { UserButton } from '@clerk/tanstack-react-start'
 import { ArrowLeftIcon, MenuIcon } from 'lucide-react'
-import { Link, useRouter } from '@tanstack/react-router'
-import { useEffect, useRef } from 'react'
+import { Link } from '@tanstack/react-router'
 
 import { Button as ArcButton } from '@/components/arc/button/button'
 import { Drawer, DrawerContent, DrawerTrigger } from '@/components/ae/shared/base-ui/drawer/drawer'
@@ -12,19 +11,16 @@ import { AeNetworkHealthBanner, AeNetworkHealthIndicator } from '@/components/ae
 import { useOperatorFrameChrome } from '@/components/ae/layout/AeOperatorPage'
 import { ThemeToggle } from '@/components/ae/layout/ThemeToggle'
 import { AeSiteDrawerNav, AeSitePrimaryNav } from '@/components/ae/website/AeSiteNav'
-import { AECON_MARK_SRC, AECON_MOBILE_LOCKUP_SRC, aeconMarkClassName } from '@/content/brand-assets'
-import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
-import { chatHeaderActionsId } from '@/lib/public/chat-ia'
-import type { OperatorRole } from '@/lib/operator/roles'
+import { AECON_DARK_MARK_SRC, AECON_MARK_SRC, AECON_MOBILE_LOCKUP_SRC, aeconMarkClassName } from '@/content/brand-assets'
+import { SidebarTrigger } from '@/components/ui/sidebar'
+import { ChatHeaderSlot } from './ChatHeaderSlot'
 import { cn } from '@/lib/utils'
 
-import { OperatorWorkspaceMenu } from './OperatorWorkspaceMenu'
 import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import './AppHeaderComposition.css'
 
 export type AeAppHeaderProps = Readonly<{
   signedIn: boolean
-  operatorRole: OperatorRole
   minimal: boolean
   mobileNavOpen: boolean
   setMobileNavOpen: (open: boolean) => void
@@ -35,7 +31,7 @@ export type AeAppHeaderProps = Readonly<{
 
 function chatActionSlot(chatFrame: boolean) {
   if (!chatFrame) return null
-  return <div id={chatHeaderActionsId} className="flex min-w-0 flex-1 items-center gap-1" />
+  return <ChatHeaderSlot />
 }
 
 function BrandLink() {
@@ -45,7 +41,8 @@ function BrandLink() {
       aria-label="Agentic Economy home"
       className="arc-app-header__brand"
     >
-      <img src={AECON_MARK_SRC} alt="" aria-hidden="true" className={cn(aeconMarkClassName.light, 'max-sm:block')} />
+      <img src={AECON_MARK_SRC} alt="" aria-hidden="true" className={cn(aeconMarkClassName.light, 'dark:hidden')} />
+      <img src={AECON_DARK_MARK_SRC} alt="" aria-hidden="true" className={cn(aeconMarkClassName.dark, 'hidden dark:block')} />
       <img src={AECON_MOBILE_LOCKUP_SRC} alt="" aria-hidden="true" className="hidden h-5 w-auto max-w-24" />
     </Link>
   )
@@ -53,7 +50,6 @@ function BrandLink() {
 
 export function AeAppHeader({
   signedIn,
-  operatorRole,
   minimal,
   mobileNavOpen,
   setMobileNavOpen,
@@ -61,27 +57,10 @@ export function AeAppHeader({
   hydrated,
   chatFrame,
 }: AeAppHeaderProps) {
-  const { isLoaded, orgId } = useAuth()
-  const router = useRouter()
-  const previousOrgId = useRef<string | null | undefined>(undefined)
-
-  useEffect(() => {
-    if (!isLoaded) return
-    const activeOrgId = orgId ?? null
-    if (previousOrgId.current === undefined) {
-      previousOrgId.current = activeOrgId
-      return
-    }
-    if (previousOrgId.current === activeOrgId) return
-    previousOrgId.current = activeOrgId
-    void router.invalidate().catch((cause) => captureClientExceptionOnClient(cause))
-  }, [isLoaded, orgId, router])
-
   const frameChrome = useOperatorFrameChrome()
   const title = frameChrome?.title
   const pageTitle = typeof title === 'string' && title !== '' ? title : null
   const contentOwnsHeading = frameChrome?.contentOwnsHeading === true
-  const adminConsole = frameChrome?.operatorRole === 'admin'
 
   return (
     <header
@@ -109,7 +88,7 @@ export function AeAppHeader({
           data-elevated={elevated ? '' : undefined}
           className={cn('ae-nav arc-app-header__bar arc-app-header__bar--signed-in px-1 sm:px-2 shadow-none data-[elevated]:shadow-soft', chatFrame && 'max-sm:!h-11 max-sm:!min-h-11 max-sm:!px-4')}
         >
-          <div className={chatFrame ? 'hidden sm:block' : ''}><BrandLink /></div>
+          <SidebarTrigger aria-label="Toggle workspace navigation" />
           {chatActionSlot(chatFrame)}
           {pageTitle === null || chatFrame ? null : contentOwnsHeading ? (
             <p className="arc-app-header__lead arc-app-header__title" title={pageTitle}>
@@ -123,8 +102,6 @@ export function AeAppHeader({
           <div className="arc-app-header__actions ms-auto">
             <div className="hidden sm:block"><AeNetworkHealthIndicator /></div>
             <div className={chatFrame ? 'hidden sm:block' : 'block'}><AeCommandPanel /></div>
-            <div className={chatFrame || adminConsole ? 'hidden sm:block' : ''}><OrganizationSwitcher hidePersonal={false} /></div>
-            <div className={chatFrame ? 'hidden sm:block' : ''}><OperatorWorkspaceMenu operatorRole={operatorRole} /></div>
             <div className={chatFrame ? 'hidden sm:block' : 'block'}><ThemeToggle /></div>
             <UserButton userProfileMode="navigation" userProfileUrl="/owner/settings/account" />
           </div>

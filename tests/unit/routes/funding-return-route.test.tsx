@@ -22,6 +22,8 @@ const fetchMock = vi.fn<typeof fetch>()
 
 beforeEach(() => {
   vi.spyOn(FundingRoute, 'useParams').mockReturnValue({ fundingSessionId: 'cs_agent_one' })
+  vi.spyOn(FundingRoute, 'useSearch').mockReturnValue({})
+  vi.spyOn(CancelledRoute, 'useSearch').mockReturnValue({})
   vi.stubGlobal('fetch', fetchMock)
 })
 

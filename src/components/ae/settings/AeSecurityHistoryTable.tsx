@@ -1,3 +1,4 @@
+import type { AeRecordTableFeatures } from '@/components/ae/operator/AeOperatorDataTable'
 import { useEffect, useMemo, useState } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 
@@ -115,7 +116,7 @@ export function AeSecurityHistoryTable({
               <strong>What happened:</strong> Older security events could not be loaded.
             </p>
             <p className="font-mono text-xs tabular-nums">
-              <strong>Financial impact:</strong> A$0.00 affected — known security history remains visible.
+              <strong>Financial impact:</strong> Financial impact has not been assessed here. Known security history remains visible.
             </p>
             <p>
               <strong>Next step:</strong> Check your connection and retry older events.
@@ -144,7 +145,7 @@ export function AeSecurityHistoryTable({
 function historyColumns(
   showActorAndTarget: boolean,
   onSelectEvent: (eventRef: string) => void,
-): ColumnDef<AccountSecurityHistoryItem, unknown>[] {
+): ColumnDef<AeRecordTableFeatures, AccountSecurityHistoryItem, unknown>[] {
   return [
     {
       id: 'activity',

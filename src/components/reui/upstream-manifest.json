@@ -1,0 +1,103 @@
+{
+  "registry": "@reui",
+  "style": "base-nova",
+  "retrieved": "2026-10-07",
+  "tableVersion": "9.2.6",
+  "references": [
+    "https://reui.io/docs/components/base/data-grid",
+    "https://reui.io/preview/base/app-shell-2",
+    "https://reui.io/preview/base/wizard-1"
+  ],
+  "ownership": "Upstream source with recorded narrow adaptations; Aecon adapters stay strictly checked.",
+  "adaptations": [
+    "cn binds existing lib/utils; existing shared primitives retained.",
+    "Grid checkbox uses union-state compatibility bridge; disabled selection remains authoritative.",
+    "Grid includes existing presentation metadata and conditional optional-property spreads for strict typing.",
+    "SidebarInset is div to preserve route-owned sole main; safe keyboard shortcut, SameSite cookie, coarse touch and collapsed vertical scroll.",
+    "Stepper registers and unregisters mounted triggers, skips disabled steps, uses unique tab/panel IDs and forward-compatible ARIA.",
+    "Grid hygiene removes unused bindings and redundant expressions; stable columnOrder avoids unnecessary memo churn; resize controller retains its documented store-identity key.",
+    "Optional tableAriaLabel preserves short accessible name separately from full scope/disclosure captions."
+  ],
+  "files": [
+    {
+      "path": "src/components/reui/data-grid/data-grid-column-header.tsx",
+      "upstreamSha256": "00afcbc0d7dc5c66b3692f9974f8acec92e94c4f2005189488fd58c667688b9e",
+      "sha256": "76e27392cc311951c56040a93f64c02ab4cf7e439114af0ce9889a0a24e3e386",
+      "allowLargeSource": false,
+      "permittedTypePatterns": [
+        "explicit-any",
+        "unknown-double-cast",
+        "non-null-assertion"
+      ]
+    },
+    {
+      "path": "src/components/reui/data-grid/data-grid-column-visibility.tsx",
+      "upstreamSha256": "7e7ad7fd265b21a060609f1fcf7acda270645aa24ddf97ddd6ce73f275f262c0",
+      "sha256": "9617085eb8477e1a354e4e277886474e73e48c5326a0ef89a181123f9611a19a",
+      "allowLargeSource": false,
+      "permittedTypePatterns": [
+        "explicit-any",
+        "unknown-double-cast",
+        "non-null-assertion"
+      ]
+    },
+    {
+      "path": "src/components/reui/data-grid/data-grid-i18n.tsx",
+      "upstreamSha256": "26bd14c5f0e822f4cff8e13bf4c4990d2ad73c58d57f59fda34a9e69b7193eae",
+      "sha256": "e78195761f85e8d1911b4f0b96edfa2aee63ce9dccc53b264e8bc20cf4bbdcb0",
+      "allowLargeSource": false,
+      "permittedTypePatterns": [
+        "explicit-any",
+        "unknown-double-cast",
+        "non-null-assertion"
+      ]
+    },
+    {
+      "path": "src/components/reui/data-grid/data-grid-scroll-area.tsx",
+      "upstreamSha256": "3b99c03a7482bd29ef3f9fcd6097494782c5977b78c37621c3dc0765360dbd58",
+      "sha256": "7e1beb4719f589719af7919c8b20430e8519d729ae6b756d019dc574bbefd58b",
+      "allowLargeSource": false,
+      "permittedTypePatterns": [
+        "explicit-any",
+        "unknown-double-cast",
+        "non-null-assertion"
+      ]
+    },
+    {
+      "path": "src/components/reui/data-grid/data-grid-table.tsx",
+      "upstreamSha256": "e67c0bacda8d33ae0b08bd4817af944bf64e3dc0c6cfce6a2e702adce858f8eb",
+      "sha256": "3fd3a863e003536f89df300e47a06a40a99f030f5aa5a9bc51810fd88963bbe5",
+      "allowLargeSource": true,
+      "permittedTypePatterns": [
+        "explicit-any",
+        "unknown-double-cast",
+        "non-null-assertion"
+      ]
+    },
+    {
+      "path": "src/components/reui/data-grid/data-grid.tsx",
+      "upstreamSha256": "e4e796f037f96515d1bbb2c5b0725d5afd63c47c448800bab9c4209124efe362",
+      "sha256": "15a4fc1de8d57702b2ee25d9336411b2a7beaebe18ae9ef2133b1e9d4f486370",
+      "allowLargeSource": true,
+      "permittedTypePatterns": [
+        "explicit-any",
+        "unknown-double-cast",
+        "non-null-assertion"
+      ]
+    },
+    {
+      "path": "src/components/reui/stepper.tsx",
+      "upstreamSha256": "fbb74d86f71c1bfa247182a1ebdb1034f8c7397c8bd49a6abd872ee689911f96",
+      "sha256": "61a7e2871edc72db1ead981a775bcd30bee7a8f3fffe1f6e71664c08bb608cfc",
+      "allowLargeSource": false,
+      "permittedTypePatterns": []
+    },
+    {
+      "path": "src/components/ui/sidebar.tsx",
+      "upstreamSha256": "146860c1f88e07170830573bdb62e202de87d12942c3fabb751ebe606ce56344",
+      "sha256": "69142727cd6cf290ab9d7ffeda742a03e9b5d5db8f23273c0941a1d7b26d2d9e",
+      "allowLargeSource": false,
+      "permittedTypePatterns": []
+    }
+  ]
+}

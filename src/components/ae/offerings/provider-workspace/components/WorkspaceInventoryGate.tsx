@@ -19,6 +19,12 @@ export function WorkspaceInventoryGate(props: WorkspaceInventoryGateProps) {
       <AeAlert tone="danger" title="Provider identity needs attention">AE found conflicting provider ownership and will not select one automatically.</AeAlert>
     )
   }
+  if (props.reason === 'inventory_index_pending') return (
+    <AeAlert tone="info" title="Inventory search is being prepared">
+      <p>Older Tools are not indexed yet. Search and name order will be available after the Provider inventory migration is complete.</p>
+      <a href="/owner/operations" className="underline underline-offset-4">Use recent Tools</a>
+    </AeAlert>
+  )
   return (
     <AeAlert tone="danger" title="Tools could not be loaded" className="arc-market"><div className="flex flex-wrap items-center gap-3">
         <span>Nothing was charged.</span>

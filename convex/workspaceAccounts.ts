@@ -35,3 +35,11 @@ export const transferWorkspaceOwnership = mutation({
   returns: transferWorkspaceOwnershipResult,
   handler: transferWorkspaceOwnershipHandler,
 })
+
+import { readWorkspaceTerminalReceiptArgs, readWorkspaceTerminalReceiptResult, readWorkspaceTerminalReceiptHandler } from './lib/principalAccount/workspace/terminalReceipt'
+
+export const readWorkspaceTerminalReceipt = query({
+  args: readWorkspaceTerminalReceiptArgs,
+  returns: readWorkspaceTerminalReceiptResult,
+  handler: readWorkspaceTerminalReceiptHandler,
+})

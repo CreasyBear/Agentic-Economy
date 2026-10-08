@@ -89,6 +89,7 @@ export type ActivityMonthlySummaryView = Readonly<{
 }>
 
 export type AeActivityProps = Readonly<{
+  initialStatus?: ActivityStatusFilter
   draftRef?: string
   result: ActivityLoaderResult
 }>

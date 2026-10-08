@@ -36,5 +36,7 @@ export type OwnerProviderEarningsReadback = Readonly<
       transfers: readonly OwnerProviderRecordedTransfer[]
       transfersTruncated: boolean
       truncated: boolean
+      isDone?: boolean
+      continueCursor?: string
     }
 >

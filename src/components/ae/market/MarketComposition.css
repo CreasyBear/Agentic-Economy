@@ -58,3 +58,76 @@
   .arc-canonical-results .arc-canonical-search-table tbody td[data-primary] { font-weight: 400; }
   .arc-canonical-results .arc-canonical-search-table tbody td[data-column]::before { display: none; }
 }
+
+/* Search is a working surface: one query, one scope, and a deliberate Agent handoff. */
+.ae-market-workbench-intro { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, .42fr); gap: clamp(32px, 5vw, 80px); align-items: center; padding-block: 48px; }
+.ae-market-workbench-intro .arc-listing-header { display: block; margin: 0; }
+.ae-market-workbench-intro .arc-listing-heading :is(h1, h2) { font-size: clamp(32px, 4vw, 54px); letter-spacing: -.05em; line-height: 1.08; max-width: 18ch; }
+.ae-market-workbench-intro .arc-listing-heading p { max-width: 55ch; margin-top: 16px; line-height: 1.6; }
+.ae-market-workbench-intro .arc-listing-tools { margin-top: 28px; justify-content: start; }
+.ae-market-workbench-intro .arc-market-search-form { flex-wrap: nowrap; }
+.ae-market-scope { margin-top: 14px; color: var(--text-secondary); font-size: 12px; line-height: 1.6; }
+.ae-market-agent { display: grid; align-content: start; justify-items: start; gap: 12px; padding: 28px; border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--surface); }
+.ae-market-agent h2 { font-size: 24px; letter-spacing: -.035em; font-weight: 500; line-height: 1.15; }
+.ae-market-agent p { color: var(--text-secondary); font-size: 14px; line-height: 1.6; }
+.ae-market-agent a { width: 100%; min-height: 44px; white-space: normal; text-align: center; margin-top: 4px; }
+.ae-market-agent small { color: var(--text-secondary); font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; }
+.ae-market-result-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; list-style: none; padding: 0; margin: 0; }
+.ae-market-result-cards > li { display: flex; min-width: 0; }
+.ae-market-result-card { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 14px; padding: 28px; border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--surface); }
+.ae-market-result-provider { color: var(--text-secondary); font-size: 12px; overflow-wrap: anywhere; }
+.ae-market-result-card h3 { font-family: var(--font-display); font-size: 24px; font-weight: 500; letter-spacing: -.035em; line-height: 1.25; overflow-wrap: anywhere; }
+.ae-market-result-card h3 a { display: inline-flex; align-items: center; min-height: 44px; color: var(--foreground); }
+.ae-market-result-summary { color: var(--text-secondary); font-size: 14px; line-height: 1.7; }
+.ae-market-result-card dl { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; padding-top: 18px; margin-top: auto; border-top: 1px solid var(--border); }
+.ae-market-result-card dt { color: var(--text-secondary); font-size: 12px; margin-bottom: 6px; }
+.ae-market-result-card dd { font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+.ae-market-result-actions { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 12px; }
+.ae-market-result-actions :is(a, button) { min-height: 44px; }
+.ae-market-host-picker { display: grid; gap: 8px; }
+.ae-market-host-picker p { font-size: 12px; color: var(--text-secondary); }
+@media (max-width: 980px) {
+  .ae-market-workbench-intro { grid-template-columns: minmax(0, 1fr); gap: 24px; padding-block: 32px; }
+  .ae-market-agent { grid-template-columns: auto minmax(0, 1fr); gap: 10px 16px; }
+  .ae-market-agent > :is(p, a, small) { grid-column: 2; }
+}
+@media (max-width: 620px) {
+  .ae-market-workbench-intro .arc-market-search-form { flex-wrap: wrap; }
+  .ae-market-workbench-intro .arc-market-search-form > button { width: 100%; }
+  .ae-market-result-cards { grid-template-columns: minmax(0, 1fr); }
+  .ae-market-result-card, .ae-market-agent { padding: 20px; }
+  .ae-market-result-card dl { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+}
+
+.ae-market-hosts { padding-top: clamp(24px, 4vw, 48px); }
+.ae-market-hosts .arc-listing-heading h1 { font-size: clamp(32px, 3.5vw, 48px); letter-spacing: -.05em; line-height: 1.1; }
+
+.ae-market-workbench-intro .arc-market-search-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); }
+.ae-market-workbench-intro .arc-market-search-form > div { grid-column: 1; grid-row: 2; }
+.ae-market-workbench-intro .arc-market-search-form > button { grid-column: 2; grid-row: 2; width: auto; }
+.ae-market-workbench-intro #market-search-recipient { grid-column: 1 / -1; grid-row: 1; margin: 0; }
+.ae-market-workbench-intro #market-search-error { grid-column: 1 / -1; grid-row: 3; margin: 0; }
+.arc-market-category-options { display: grid; min-width: 0; gap: var(--space-2); }
+.arc-market-category-disclosure { display: none; }
+.arc-market-category-entry[data-viewport="unknown"] .arc-market-category-disclosure { display: inline-flex; }
+@media (max-width: 767px) {
+  .ae-market-workbench-intro { gap: 12px; padding-block: 20px; }
+  .ae-market-workbench-intro .arc-listing-heading :is(h1, h2) { font-size: 30px; max-width: none; }
+  .ae-market-workbench-intro .arc-listing-heading p { margin-top: 8px; line-height: 1.5; }
+  .ae-market-workbench-intro .arc-listing-tools { margin-top: 16px; }
+  .ae-market-agent { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 0; border: 0; background: transparent; }
+  .ae-market-agent > :is(svg, h2, p) { display: none; }
+  .ae-market-agent > :is(a, small) { grid-column: 1; }
+  .ae-market-agent small { font-size: 12px; line-height: 1.5; }
+  .ae-market-agent a { margin: 0; width: 100%; min-height: 44px; }
+  .ae-market-scope { margin-top: 8px; line-height: 1.5; }
+  .arc-market-category-disclosure { display: inline-flex; width: 100%; min-height: 44px; justify-content: space-between; white-space: normal; text-align: left; }
+  .arc-market-category-entry h2 { display: none; }
+  .arc-market-discovery-filters { gap: 8px; margin-bottom: 16px; }
+  .arc-market-navigation { padding-block: 8px; }
+}
+.arc-market-discovery-filters[data-empty="true"] { grid-template-columns: minmax(0, 1fr) auto; align-items: end; }
+/* Keep Arc mounted so removing the last chip still focuses its Filters trigger. */
+.arc-market-discovery-filters[data-empty="true"] > [role="group"] { grid-column: 2; min-height: 44px; padding: 0; border: 0; border-radius: 0; background: transparent; }
+.arc-market-discovery-filters[data-empty="true"] > [role="group"] > div:first-child { display: none; }
+.arc-market-discovery-filters[data-empty="true"] > [role="group"] > div:nth-child(2) { justify-content: flex-end; }

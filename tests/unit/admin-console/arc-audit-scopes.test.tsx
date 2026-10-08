@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
@@ -50,7 +50,7 @@ describe('Arc audit scopes', () => {
     fireEvent.click(await within(picker).findByRole('option', { name: /admin\.action_denied/u }))
     expect(callbacks.onDraftChange).toHaveBeenCalledWith('eventType', 'admin.action_denied')
     expect(callbacks.onApply).not.toHaveBeenCalled()
-    expect(screen.queryByRole('dialog', { name: 'Event type' })).toBeNull()
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Event type' })).toBeNull())
     fireEvent.click(screen.getByRole('button', { name: 'Apply filters' }))
     expect(callbacks.onApply).toHaveBeenCalledOnce()
   })

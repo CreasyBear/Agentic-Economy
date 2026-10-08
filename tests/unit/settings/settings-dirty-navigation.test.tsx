@@ -38,7 +38,7 @@ describe('dirty settings navigation', () => {
   it('prompts before leaving a typed workspace name and not before a clean form', async () => {
     await renderRoute(() => <>
       <Link to="/market">Open Tax</Link>
-      <WorkspaceNameEditor name="Acme" canonicalName="Acme" accountRevision={1} clerkOrgId="org_1" canEdit />
+      <WorkspaceNameEditor accountRef="account:workspace" name="Acme" canonicalName="Acme" accountRevision={1} clerkOrgId="org_1" canEdit />
     </>)
     fireEvent.click(screen.getByRole('link', { name: 'Open Tax' }))
     expect(screen.queryByRole('alertdialog')).toBeNull()
@@ -48,7 +48,7 @@ describe('dirty settings navigation', () => {
   it('keeps a typed workspace name on the page until the user leaves on purpose', async () => {
     await renderRoute(() => <>
       <Link to="/market">Open Tax</Link>
-      <WorkspaceNameEditor name="Acme" canonicalName="Acme" accountRevision={1} clerkOrgId="org_1" canEdit />
+      <WorkspaceNameEditor accountRef="account:workspace" name="Acme" canonicalName="Acme" accountRevision={1} clerkOrgId="org_1" canEdit />
     </>)
     fireEvent.change(screen.getByLabelText('Workspace name'), { target: { value: 'Renamed Acme' } })
     fireEvent.click(screen.getByRole('link', { name: 'Open Tax' }))
@@ -62,7 +62,7 @@ describe('dirty settings navigation', () => {
     vi.mocked(renameWorkspaceServer).mockImplementationOnce(() => new Promise(resolve => { finishSave = resolve }))
     await renderRoute(() => <>
       <Link to="/market">Open Tax</Link>
-      <WorkspaceNameEditor name="Acme" canonicalName="Acme" accountRevision={1} clerkOrgId="org_1" canEdit />
+      <WorkspaceNameEditor accountRef="account:workspace" name="Acme" canonicalName="Acme" accountRevision={1} clerkOrgId="org_1" canEdit />
     </>)
     fireEvent.change(screen.getByLabelText('Workspace name'), { target: { value: 'Renamed Acme' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save workspace name' }))

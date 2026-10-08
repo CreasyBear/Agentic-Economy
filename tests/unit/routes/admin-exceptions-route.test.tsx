@@ -58,7 +58,7 @@ describe('/admin/exceptions', () => {
     const refLink = screen.getByRole('link', { name: dispute.disputeRef })
     expect(refLink.getAttribute('href')).toContain('partition=contested&ref=dispute%3Aroute-test')
     fireEvent.click(screen.getByRole('button', { name: `View details: ${dispute.disputeRef}` }))
-    expect(navigate).toHaveBeenCalledWith({ kind: 'removal_dispute', partition: 'contested', ref: dispute.disputeRef })
+    expect(navigate).toHaveBeenCalledWith({ kind: 'removal_dispute', partition: 'contested', ref: dispute.disputeRef, focus: `removal_dispute:${dispute.disputeRef}` })
   })
 
   it.each([
@@ -70,7 +70,7 @@ describe('/admin/exceptions', () => {
       : [])
     mocks.paginated.mockReturnValue({ status: 'Exhausted', results: [row], loadMore: mocks.loadMore })
     const { navigate, router } = renderPage({ kind, partition })
-    expect(screen.getByRole('link', { name: ref }).getAttribute('href')).toBe(href)
+    expect(screen.getByRole('link', { name: ref }).getAttribute('href')).toContain(`${href}?returnKind=${kind}&returnPartition=${partition}`)
     fireEvent.click(screen.getByRole('button', { name: `View details: ${ref}` }))
     await waitFor(() => expect(router.state.location.pathname).toBe(href))
     expect(navigate).not.toHaveBeenCalled()
@@ -86,7 +86,7 @@ describe('/admin/exceptions', () => {
     renderPage({ kind: 'admission_case', ref: admission.caseRef })
     expect(screen.getByText(admission.caseRef)).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Open object record' }).getAttribute('href'))
-      .toBe('/admin/providers/exception-provider')
+      .toContain('/admin/providers/exception-provider?returnKind=admission_case&returnPartition=submitted')
   })
 
   it('counts the selected partition separately from the kind total', () => {

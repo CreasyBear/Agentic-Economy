@@ -1,3 +1,4 @@
+import type { OwnerInventoryQuery } from '@/lib/operator/owner-inventory-search'
 import type { OwnerSupplySourceAssessmentInput } from '@/modules/capability-supply/source-first-owner'
 import type { SupplyIntegrationDraftTerms } from '@/modules/capability-supply/integration-draft'
 import type { SupplySourceAssessment } from '@/modules/capability-supply/source-first-owner'
@@ -69,6 +70,7 @@ export function publicationInvalidFieldForMessage(
 }
 
 export type SupplyNativeStartProps = Readonly<{
+  returnInventoryQuery?: OwnerInventoryQuery
   businessRef: string
   connections?: readonly ProviderConnectionOwnerProjection[]
   initial?: Readonly<{

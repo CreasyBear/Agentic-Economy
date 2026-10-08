@@ -31,3 +31,21 @@ export async function backfillDraftPageHandler(ctx: MutationCtx, args: { paginat
     }
     return { processed, isDone: rows.isDone, continueCursor: rows.continueCursor }
 }
+
+/** Deployment prerequisite: run bounded pages until isDone, then enable indexed name/text reads. */
+export const backfillInventoryPageArgs = { paginationOpts: paginationOptsValidator }
+export const backfillInventoryPageResult = v.object({ processed: v.number(), skipped: v.number(), isDone: v.boolean(), continueCursor: v.string() })
+export async function backfillInventoryPageHandler(ctx: MutationCtx, args: { paginationOpts: Infer<typeof paginationOptsValidator> }) {
+  if (args.paginationOpts.numItems < 1 || args.paginationOpts.numItems > 50) throw new Error('provider_inventory_backfill_page_size_invalid')
+  const page = await ctx.db.query('capabilityProviderToolProjections').paginate(args.paginationOpts)
+  let processed = 0
+  let skipped = 0
+  for (const row of page.page) {
+    const revision = await ctx.db.query('businessOfferingRevisions')
+      .withIndex('by_offeringRef_and_revision', query => query.eq('offeringRef', row.offeringRef).eq('revision', row.offeringRevision)).unique()
+    if (revision === null || revision.businessId !== row.businessId) { skipped += 1; continue }
+    await ctx.db.patch(row._id, { inventoryName: revision.name.trim().toLowerCase(), inventoryText: `${revision.name} ${revision.summary} ${revision.category}` })
+    processed += 1
+  }
+  return { processed, skipped, isDone: page.isDone, continueCursor: page.continueCursor }
+}

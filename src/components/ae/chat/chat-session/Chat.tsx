@@ -1,3 +1,4 @@
+import { ChatBuyerReturnProvider } from './buyer-return-context'
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import { useServerFn } from '@tanstack/react-start'
 import { useQuery } from 'convex/react'
@@ -149,7 +150,7 @@ export function Chat({ onNewChat: onStartNewChat, ...props }: ChatProps) {
   }
 
   return (
-    <ChatNeedActionsContext.Provider value={needActions}>
+    <ChatBuyerReturnProvider {...(model.header.threadId == null ? {} : { threadId: model.header.threadId })}><ChatNeedActionsContext.Provider value={needActions}>
       <PaidCallReportOwnerContext.Provider value={reportOwner}>
       <>
         <ChatLayout
@@ -197,6 +198,6 @@ export function Chat({ onNewChat: onStartNewChat, ...props }: ChatProps) {
         />
       </>
       </PaidCallReportOwnerContext.Provider>
-    </ChatNeedActionsContext.Provider>
+    </ChatNeedActionsContext.Provider></ChatBuyerReturnProvider>
   )
 }

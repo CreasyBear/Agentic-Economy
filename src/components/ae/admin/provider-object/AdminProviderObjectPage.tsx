@@ -1,3 +1,4 @@
+import { AdminInvestigationReturn } from '../exceptions/AdminInvestigationReturn'
 import { useQuery } from 'convex/react'
 import { Link } from '@tanstack/react-router'
 import { useState } from 'react'
@@ -85,6 +86,7 @@ export function AdminProviderObjectPage(props: AdminProviderObjectPageProps) {
         ]}
         actions={(
           <>
+            <AdminInvestigationReturn />
             <Badge tone={status === null ? 'neutral' : status.tone}>
               {status === null ? providerStatusLabel(view.publicStatus) : status.label}
             </Badge>

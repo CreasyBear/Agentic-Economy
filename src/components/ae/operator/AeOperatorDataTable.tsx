@@ -5,11 +5,12 @@
  * On violation: existing loading, empty and non-selectable states remain explicit. */
 
 import {
-  flexRender,
-  getCoreRowModel,
-  getFilteredRowModel,
-  getSortedRowModel,
-  useReactTable,
+  filterFn_includesString,
+  useTable,
+  Subscribe,
+  type CellContext,
+  type HeaderContext,
+  type Column,
   type ColumnDef,
   type FilterFn,
   type OnChangeFn,
@@ -20,28 +21,58 @@ import {
 } from '@tanstack/react-table'
 import * as RovingFocusGroup from '@/components/ui/roving-focus'
 import { Link } from '@tanstack/react-router'
-import { type ReactElement, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type ReactNode, createContext, useContext, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { AeViewBar } from '@/components/ae/data/AeViewBar'
 import { Button } from '@/components/arc/button/button'
-import { AeSortableDataTable, AeSortableDataTableHeader } from '@/components/ae/shared/sortable-data-table/AeSortableDataTable'
-import type { AeDataColumn } from '@/components/ae/shared/sortable-data-table/sortable-data-table.contracts'
+import { DataGridColumnHeader } from '@/components/reui/data-grid/data-grid-column-header'
+import { DataGridColumnVisibility } from '@/components/reui/data-grid/data-grid-column-visibility'
+import { DataGrid, DataGridContainer, dataGridFeatures, type DataGridFeatures } from '@/components/reui/data-grid/data-grid'
+import { DataGridTable } from '@/components/reui/data-grid/data-grid-table'
+import { DataGridScrollArea } from '@/components/reui/data-grid/data-grid-scroll-area'
 import './RecordTable.css'
+import { useAeTablePreferences } from './AeTablePreferencesContext'
+import { AeTableLayoutMenu } from './AeTableLayoutMenu'
 import { Checkbox } from '@/components/ae/shared/base-ui/checkbox/checkbox'
 import { useFirstLoadPending } from '@/components/ui/data-state'
 import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 
 
-export type AeRecordTableSelection<TData> = Readonly<{
+export type AeRecordTableFeatures = DataGridFeatures
+
+type SelectionControls = {
+  caption: string
+  showSelectAll: boolean | undefined
+  getLabel: (id: string) => string
+  toggle: (id: string, checked: boolean) => void
+}
+const RecordSelectionControls = createContext<SelectionControls | undefined>(undefined)
+function RecordSelectionCell<TData extends object>({ row }: CellContext<AeRecordTableFeatures, TData, unknown>) {
+  const controls = useContext(RecordSelectionControls)
+  if (controls === undefined) return null
+  return <Subscribe source={row.table.atoms.rowSelection}>{() => <SelectionCheckbox
+    checked={row.getIsSelected()} disabled={!row.getCanSelect()}
+    onCheckedChange={checked => controls.toggle(row.id, checked)}
+    aria-label={`Select ${controls.getLabel(row.id)}`} />}</Subscribe>
+}
+function RecordSelectionHeader<TData extends object>({ table }: HeaderContext<AeRecordTableFeatures, TData, unknown>) {
+  const controls = useContext(RecordSelectionControls)
+  return controls === undefined ? null : <TableSelectionHeader table={table} caption={controls.caption}
+    {...(controls.showSelectAll === undefined ? {} : { showSelectAll: controls.showSelectAll })} />
+}
+
+export type AeRecordTableSelection<TData extends object> = Readonly<{
   state: RowSelectionState
   onChange: OnChangeFn<RowSelectionState>
   getRowLabel: (row: TData) => string
   canSelectRow?: (row: TData) => boolean
   showSelectAll?: boolean
   showStatus?: boolean
+  /** Opt into range selection and non-interactive row click; authority guards still apply. */
+  rowInteraction?: boolean
 }>
 
-export type AeRecordTableRowAction<TData> =
+export type AeRecordTableRowAction<TData extends object> =
   | Readonly<{
       kind: 'link'
       label: string
@@ -57,26 +88,36 @@ export type AeRecordTableRowAction<TData> =
       getAccessibleLabel: (row: TData) => string
     }>
 
-type AeRecordTableBaseProps<TData> = {
-  columns: ColumnDef<TData, unknown>[]
+type AeRecordTableBaseProps<TData extends object> = {
+  columns: ColumnDef<AeRecordTableFeatures, TData, unknown>[]
   data: readonly TData[]
   filterPlaceholder?: string
   emptyMessage?: string
   caption?: string
+  ariaLabel?: string
+  tableClassName?: string
+  getRowClassName?: (row: TData) => string
+  /** Controls are local even without an authenticated persistence scope. */
+  layoutControls?: boolean
+  keyboardNavigation?: boolean
+  announceChanges?: boolean
+  /** Stable identity for scoped presentation preferences; caption and column schema are the fallback. */
+  tableKey?: string
   maxHeight?: string
   hideFilter?: boolean
   countLabel?: string
   action?: ReactNode
-  rowAction?: AeRecordTableRowAction<TData>
   /**
    * True while a load is in flight. Skeletons render only before the first
    * settled result; refreshing an already-populated table keeps its rows.
    */
   loading?: boolean
+  /** The supplied page is already ordered/filtered by its server owner; no local data processing. */
+  serverControlled?: boolean
   filterValue?: string
   onFilterChange?: (value: string) => void
   /** Caller-owned matching over supplied facts, retained by the existing engine. */
-  globalFilterFn?: FilterFn<TData>
+  globalFilterFn?: FilterFn<AeRecordTableFeatures, TData>
   sorting?: SortingState
   onSortingChange?: OnChangeFn<SortingState>
   /**
@@ -96,24 +137,33 @@ type AeRecordTableBaseProps<TData> = {
   }>
 }
 
-type AeRecordTableProps<TData> = AeRecordTableBaseProps<TData> &
+type AeRecordTableProps<TData extends object> = AeRecordTableBaseProps<TData> &
   (
     | Readonly<{
-        selection: AeRecordTableSelection<TData>
-        getRowId: (row: TData, index: number, parent?: Row<TData>) => string
+        selection?: AeRecordTableSelection<TData>
+        rowAction?: AeRecordTableRowAction<TData>
+        getRowId: (row: TData, index: number, parent?: Row<AeRecordTableFeatures, TData>) => string
       }>
     | Readonly<{
         selection?: undefined
-        getRowId?: (row: TData, index: number, parent?: Row<TData>) => string
+        rowAction?: undefined
+        getRowId?: (row: TData, index: number, parent?: Row<AeRecordTableFeatures, TData>) => string
       }>
   )
 
-export function AeRecordTable<TData>({
+export function AeRecordTable<TData extends object>({
   columns,
   data,
   filterPlaceholder = 'Filter rows…',
   emptyMessage = 'No rows match this filter.',
   caption = 'Records',
+  ariaLabel,
+  tableClassName,
+  getRowClassName,
+  layoutControls = true,
+  keyboardNavigation = false,
+  announceChanges = false,
+  tableKey,
   maxHeight,
   hideFilter = false,
   countLabel = 'rows',
@@ -122,6 +172,7 @@ export function AeRecordTable<TData>({
   rowAction,
   selection,
   loading = false,
+  serverControlled = false,
   filterValue,
   onFilterChange,
   globalFilterFn,
@@ -133,48 +184,58 @@ export function AeRecordTable<TData>({
   const [internalSorting, setInternalSorting] = useState<SortingState>([])
   const [internalGlobalFilter, setInternalGlobalFilter] = useState('')
   const tableRootRef = useRef<HTMLDivElement>(null)
+  const selectionAnchor = useRef<string | undefined>(undefined)
+  const extendSelection = useRef(false)
+  const [announcement, setAnnouncement] = useState('')
   const sorting = controlledSorting ?? internalSorting
   const globalFilter = filterValue ?? internalGlobalFilter
   const updateSorting = onSortingChange ?? setInternalSorting
   const updateGlobalFilter = onFilterChange ?? setInternalGlobalFilter
   const onCurrentRowActionIdChange = rowActionFocus?.onCurrentIdChange
+  const hasServerSorting = onSortingChange !== undefined
 
-  const selectionColumn = useMemo<ColumnDef<TData, unknown> | undefined>(
+  const toggleSelectionRow = useCallback((row: Row<AeRecordTableFeatures, TData>, checked: boolean, extend: boolean) => {
+    if (selection === undefined || !row.getCanSelect()) return
+    const ordered = row.table.getRowModel().rows
+    const from = extend && selectionAnchor.current !== undefined ? ordered.findIndex(candidate => candidate.id === selectionAnchor.current) : -1
+    const to = ordered.findIndex(candidate => candidate.id === row.id)
+    const affected = from < 0 || to < 0 ? [row] : ordered.slice(Math.min(from, to), Math.max(from, to) + 1)
+    selection.onChange(previous => {
+      const next = { ...previous }
+      for (const candidate of affected) {
+        if (!candidate.getCanSelect()) continue
+        if (checked) next[candidate.id] = true
+        else delete next[candidate.id]
+      }
+      return next
+    })
+    selectionAnchor.current = row.id
+    setAnnouncement('')
+  }, [selection])
+
+  const selectionColumn = useMemo<ColumnDef<AeRecordTableFeatures, TData, unknown> | undefined>(
     () =>
       selection === undefined
         ? undefined
         : {
             id: '__ae_selection',
+            size: 44, minSize: 44, maxSize: 44, enableResizing: false,
             meta: { label: 'Select' },
             enableSorting: false,
             enableHiding: false,
-            header: ({ table }) => (
-              <TableSelectionHeader
-                table={table}
-                caption={caption}
-                {...(selection.showSelectAll === undefined
-                  ? {}
-                  : { showSelectAll: selection.showSelectAll })}
-              />
-            ),
-            cell: ({ row }) => (
-              <SelectionCheckbox
-                checked={row.getIsSelected()}
-                disabled={!row.getCanSelect()}
-                onCheckedChange={(checked) => row.toggleSelected(checked === true)}
-                aria-label={`Select ${selection.getRowLabel(row.original)}`}
-              />
-            ),
+            header: RecordSelectionHeader,
+            cell: RecordSelectionCell,
           },
-    [caption, selection],
+    [selection],
   )
 
-  const actionColumn = useMemo<ColumnDef<TData, unknown> | undefined>(
+  const actionColumn = useMemo<ColumnDef<AeRecordTableFeatures, TData, unknown> | undefined>(
     () =>
       rowAction === undefined
         ? undefined
         : {
             id: '__ae_action',
+            size: 104, minSize: 88, maxSize: 250, enableResizing: false,
             meta: { label: rowAction.label },
             enableSorting: false,
             enableHiding: false,
@@ -184,41 +245,62 @@ export function AeRecordTable<TData>({
     [rowAction],
   )
 
-  const resolvedColumns = useMemo(
-    () => [selectionColumn, ...columns, actionColumn].filter(
-      (column): column is ColumnDef<TData, unknown> => column !== undefined,
-    ),
-    [actionColumn, columns, selectionColumn],
-  )
+  const resolvedColumns = useMemo(() => [selectionColumn, ...columns, actionColumn]
+    .filter((column): column is ColumnDef<AeRecordTableFeatures, TData, unknown> => column !== undefined)
+    .map((column): ColumnDef<AeRecordTableFeatures, TData, unknown> => ({
+      ...column,
+      ...(serverControlled && !hasServerSorting ? { enableSorting: false } : {}),
+      id: column.id ?? ('accessorKey' in column ? String(column.accessorKey).replaceAll('.', '_') : typeof column.header === 'string' ? column.header : ''),
+      // Keep the native sortable header behavior for ordinary string headers.
+      ...(typeof column.header === 'string' ? {
+        header: ({ column: instance }) => instance.getCanSort()
+          ? <AeOperatorSortableHeader label={typeof column.header === 'string' ? column.header : instance.id} column={instance} />
+          : column.header,
+      } : {}),
+      meta: {
+        ...column.meta,
+        skeleton: column.meta?.skeleton ?? <span aria-hidden="true" className="block h-4 w-24 rounded bg-muted animate-pulse motion-reduce:animate-none" />,
+        ...(column.meta?.label === undefined && typeof column.header !== 'string' ? {} : { headerTitle: column.meta?.label ?? (typeof column.header === 'string' ? column.header : '') }),
+        ...(column.meta?.numeric ? { headerClassName: 'text-end' } : {}),
+        cellClassName: [column.meta?.cellClassName, column.meta?.numeric ? 'text-end tabular-nums' : undefined, column.meta?.truncate ? 'max-w-72 truncate' : undefined].filter(Boolean).join(' '),
+      },
+    })), [actionColumn, columns, selectionColumn, serverControlled, hasServerSorting])
+
+  const preferenceColumns = useMemo(() => resolvedColumns.map(column => ({ id: column.id ?? '', canHide: column.enableHiding !== false })), [resolvedColumns])
+  const preferences = useAeTablePreferences(tableKey ?? caption, preferenceColumns)
 
   const tableData = useMemo(() => [...data], [data])
-  const table = useReactTable({
+  const table = useTable({
+    features: dataGridFeatures,
     data: tableData,
     columns: resolvedColumns,
     state: {
       sorting,
       globalFilter,
+      columnVisibility: preferences.columnVisibility,
+      columnSizing: preferences.columnSizing,
       ...(selection === undefined ? {} : { rowSelection: selection.state }),
     },
-    onSortingChange: updateSorting,
+    onSortingChange: updater => { setAnnouncement(''); updateSorting(updater) },
+    onColumnVisibilityChange: preferences.onColumnVisibilityChange,
+    onColumnSizingChange: preferences.onColumnSizingChange,
     onGlobalFilterChange: updateGlobalFilter,
-    ...(globalFilterFn === undefined ? {} : { globalFilterFn }),
+    globalFilterFn: globalFilterFn ?? filterFn_includesString,
     ...(selection === undefined
       ? {}
       : {
           onRowSelectionChange: selection.onChange,
-          enableRowSelection: (row: Row<TData>) =>
+          enableRowSelection: (row: Row<AeRecordTableFeatures, TData>) =>
             selection.canSelectRow?.(row.original) ?? true,
         }),
     ...(getRowId === undefined ? {} : { getRowId }),
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
+    manualPagination: true,
+    manualSorting: serverControlled,
+    manualFiltering: serverControlled,
   })
 
   const showFilter = !hideFilter && (data.length > 1 || globalFilter.length > 0)
   const rowCount = table.getRowModel().rows.length
-  const leafColumns = table.getAllLeafColumns()
   const showSkeleton = useFirstLoadPending(loading)
   const hasActiveFilter = globalFilter.trim().length > 0
   const visibleRows = table.getRowModel().rows
@@ -246,102 +328,134 @@ export function AeRecordTable<TData>({
     return () => window.cancelAnimationFrame(frame)
   }, [rowActionFocus?.currentId, rowActionFocus?.restore, visibleRowKey])
 
-  // TanStack owns filtering, exact comparators and guarded selection.
-  // The shared AE renderer owns the table hierarchy and receives typed cell/header projections.
-  type OperatorTableRow = { id: string; record: Row<TData> }
-  const tableRows: OperatorTableRow[] = visibleRows.map(record => ({ id: record.id, record }))
-  const leafHeaders = table.getFlatHeaders().filter(header => header.subHeaders.length === 0)
-  const tableColumns: AeDataColumn<OperatorTableRow>[] = leafColumns.map(column => {
-    const header = leafHeaders.find(item => item.column.id === column.id)
-    const meta = column.columnDef.meta as { label?: string; numeric?: boolean; truncate?: boolean } | undefined
-    const values = visibleRows.map(row => row.getValue(column.id))
-    const numeric = meta?.numeric ?? (values.some(value => typeof value === 'number' || typeof value === 'bigint') && values.every(value => value == null || value === '' || typeof value === 'number' || typeof value === 'bigint'))
-    const width = column.id === '__ae_selection' ? 44 : column.id === '__ae_action' ? 104 : undefined
-    return {
-      key: column.id,
-      label: meta?.label ?? (typeof column.columnDef.header === 'string' ? column.columnDef.header : column.id),
-      sortable: column.getCanSort(),
-      sortDirection: column.getIsSorted(),
-      selection: column.id === '__ae_selection',
-      numeric,
-      truncate: meta?.truncate ?? false,
-      ...(width === undefined ? {} : { width }),
-      ...(typeof column.columnDef.header === 'function' ? {
-        renderHeader: () => header === undefined || header.isPlaceholder ? null : flexRender(column.columnDef.header, header.getContext()),
-      } : {}),
-      render: (_value, { record }) => {
-        const cell = record.getVisibleCells().find(item => item.column.id === column.id)
-        return cell === undefined ? null : flexRender(cell.column.columnDef.cell, cell.getContext())
-      },
-    }
-  })
+
+  const firstSort = sorting[0]
+  const sortedColumn = firstSort === undefined ? undefined : table.getColumn(firstSort.id)
+  const sortMessage = firstSort === undefined ? '' : `Sorted by ${sortedColumn?.columnDef.meta?.label ?? sortedColumn?.columnDef.meta?.headerTitle ?? firstSort.id}, ${firstSort.desc ? 'descending' : 'ascending'}`
+  const selectionMessage = selection?.rowInteraction && selectedVisibleCount > 0 ? `${selectedVisibleCount} of ${selectableVisibleRows.length} selected` : ''
+  const liveMessage = announcement || selectionMessage || sortMessage
+
+  const selectionControls: SelectionControls | undefined = selection === undefined ? undefined : {
+    caption, showSelectAll: selection.showSelectAll,
+    getLabel: id => {
+      const row = visibleRows.find(candidate => candidate.id === id)
+      return row === undefined ? id : selection.getRowLabel(row.original)
+    },
+    toggle: (id, checked) => {
+      const row = visibleRows.find(candidate => candidate.id === id)
+      if (row === undefined || !row.getCanSelect()) return
+      if (selection.rowInteraction) toggleSelectionRow(row, checked, extendSelection.current)
+      else row.toggleSelected(checked)
+    },
+  }
 
   return (
-    <div
+    <RecordSelectionControls.Provider value={selectionControls}><div
       ref={tableRootRef}
+      onClickCapture={event => { extendSelection.current = event.shiftKey }}
+      onClick={event => {
+        if (!selection?.rowInteraction || !(event.target instanceof Element) || !event.currentTarget.contains(event.target)) return
+        if (event.target.closest('a,button,input,label,select,textarea,[role="button"],[role="checkbox"],[contenteditable]') || window.getSelection()?.toString()) return
+        const node = event.target.closest<HTMLElement>('tr[data-row-id]')
+        const row = visibleRows.find(candidate => candidate.id === node?.dataset.rowId)
+        if (row === undefined || !row.getCanSelect()) return
+        toggleSelectionRow(row, !row.getIsSelected(), event.shiftKey)
+        node?.querySelector<HTMLElement>('[role="checkbox"]')?.focus({ preventScroll: true })
+      }}
+      onKeyDown={event => {
+        if (!keyboardNavigation || !(event.target instanceof HTMLElement) || !event.currentTarget.contains(event.target)) return
+        if (event.key === 'Escape' && selection?.rowInteraction && selectedVisibleCount > 0) {
+          event.preventDefault(); event.stopPropagation()
+          table.resetRowSelection(true)
+          setAnnouncement('Selection cleared')
+          return
+        }
+        const inHeader = event.target.closest('thead') !== null
+        const inSelection = event.target.matches('tbody [role="checkbox"]')
+        if (!inHeader && !inSelection) return
+        const selector = inHeader ? 'thead button[aria-label^="Sort by"],thead [role="checkbox"]' : 'tbody [role="checkbox"]'
+        const controls = Array.from(event.currentTarget.querySelectorAll<HTMLElement>(selector)).filter(control => !control.hasAttribute('disabled') && control.getAttribute('aria-disabled') !== 'true')
+        const index = controls.indexOf(event.target)
+        if (index < 0) return
+        const nextIndex = event.key === 'Home' ? 0 : event.key === 'End' ? controls.length - 1
+          : event.key === (inHeader ? 'ArrowRight' : 'ArrowDown') ? index + 1
+          : event.key === (inHeader ? 'ArrowLeft' : 'ArrowUp') ? index - 1 : undefined
+        const next = nextIndex === undefined ? undefined : controls[nextIndex]
+        if (next !== undefined) { event.preventDefault(); next.focus() }
+      }}
       {...(showSkeleton ? { 'aria-busy': true } : {})}
       className="arc-market arc-record-root"
     >
-      {showFilter || action !== undefined ? (
+      <div className="min-w-0">
+        <DataGrid className="grid gap-4" table={table} recordCount={rowCount} isLoading={showSkeleton} loadingMode="skeleton"
+          tableLayout={{ width: layoutControls ? 'fixed' : 'auto', columnsResizable: layoutControls, dense: preferences.density === 'compact', headerSticky: maxHeight !== undefined }}
+          {...(ariaLabel === undefined ? {} : { tableAriaLabel: ariaLabel })}
+          tableClassNames={{ base: ['arc-record-table', tableClassName].filter(Boolean).join(' '), bodyRow: 'has-[:focus-visible]:bg-muted/50' }}
+          getRowClassName={(record: TData) => {
+            const id = getRowId?.(record, tableData.indexOf(record))
+            const selectedClass = id !== undefined && selection?.state[id] === true ? selectedRowClassName : undefined
+            return [getRowClassName?.(record), selectedClass].filter(Boolean).join(' ')
+          }}
+          emptyMessage={<div className="flex flex-wrap items-center gap-related">
+            <span>{emptyMessage}</span>
+            {hasActiveFilter ? <Button type="button" variant="secondary" size="sm" onClick={() => updateGlobalFilter('')}>Clear filter</Button> : null}
+          </div>}
+        >
+      {showFilter || action !== undefined || layoutControls ? (
         <AeViewBar
           filterValue={globalFilter}
           {...(showFilter ? { onFilterChange: updateGlobalFilter } : {})}
           filterPlaceholder={filterPlaceholder}
           count={rowCount}
           countLabel={countLabel}
-          {...(action === undefined ? {} : { action })}
+          {...(action === undefined && !layoutControls ? {} : { action: <div className="flex flex-wrap items-center gap-2">
+            {action}
+            {layoutControls ? <><DataGridColumnVisibility table={table} trigger={<Button type="button" variant="secondary" size="sm">Columns</Button>} /><AeTableLayoutMenu density={preferences.density}
+              onDensityChange={preferences.setDensity} onReset={preferences.reset} /></> : null}
+          </div> })}
         />
       ) : null}
-      <div className="min-w-0">
-        <AeSortableDataTable
-          rows={tableRows}
-          columns={tableColumns}
-          rowKey="id"
-          caption={caption}
-          manualSorting
-          onSortChange={({ key, direction }) => table.getColumn(key)?.toggleSorting(direction === 'desc')}
-          animateRows={false}
-          loading={showSkeleton}
-          tableClassName="arc-record-table"
-          {...(maxHeight === undefined ? {} : { maxHeight })}
-          isRowSelected={({ record }) => record.getIsSelected()}
-          getRowClassName={({ record }) => `has-[:focus-visible]:bg-muted/50${record.getIsSelected() && selectedRowClassName !== undefined ? ` ${selectedRowClassName}` : ''}`}
-          renderBody={(body) => <RecordTableBody
-            body={body}
-            roving={rowAction !== undefined}
-            {...(visibleRows[0] === undefined ? {} : { defaultTabStopId: visibleRows[0].id })}
-            {...(onCurrentRowActionIdChange === undefined ? {} : {
-              onCurrentTabStopChange: (target: EventTarget | null) => {
-                const id = (target as HTMLElement | null)?.dataset.aeRowActionId ?? null
-                handleCurrentTabStopIdChange(id)
-              },
-            })}
-          />}
-          emptyContent={<div className="flex flex-wrap items-center gap-related">
-            <span>{emptyMessage}</span>
-            {hasActiveFilter ? <Button type="button" variant="secondary" size="sm" onClick={() => updateGlobalFilter('')}>Clear filter</Button> : null}
-          </div>}
-        />
+          <DataGridContainer>
+            <DataGridScrollArea className="arc-record-scroll" orientation={maxHeight === undefined ? 'horizontal' : 'both'}
+              {...(maxHeight === undefined ? {} : { style: { maxHeight } })}>
+              <RecordTableBody
+                body={<DataGridTable caption={caption} />}
+                roving={rowAction !== undefined}
+                {...(visibleRows[0] === undefined ? {} : { defaultTabStopId: visibleRows[0].id })}
+                {...(onCurrentRowActionIdChange === undefined ? {} : {
+                  onCurrentTabStopChange: (target: EventTarget | null) => {
+                    const id = (target as HTMLElement | null)?.dataset.aeRowActionId ?? null
+                    handleCurrentTabStopIdChange(id)
+                  },
+                })}
+              />
+            </DataGridScrollArea>
+          </DataGridContainer>
+        </DataGrid>
       </div>
       {selection === undefined || selection.showStatus === false ? null : (
         <p
-          role="status"
-          aria-live="polite"
+          {...(announceChanges ? {} : { role: 'status', 'aria-live': 'polite' })}
           className="arc-record-footer"
         >
           {selectedVisibleCount.toLocaleString()} of{' '}
           {selectableVisibleRows.length.toLocaleString()} selected
+          {selection.rowInteraction && selectedVisibleCount > 0 ? <Button type="button" variant="ghost" size="sm" className="ms-2" onClick={() => {
+            table.resetRowSelection(true); setAnnouncement('Selection cleared')
+            tableRootRef.current?.querySelector<HTMLElement>('thead [role="checkbox"]')?.focus()
+          }}>Clear selection</Button> : null}
         </p>
       )}
-    </div>
+      {announceChanges && liveMessage !== '' ? <p className="sr-only" role="status" aria-live="polite">{liveMessage}</p> : null}
+    </div></RecordSelectionControls.Provider>
   )
 }
 
-function RecordTableAction<TData>({
+function RecordTableAction<TData extends object>({
   row,
   action,
 }: {
-  row: Row<TData>
+  row: Row<AeRecordTableFeatures, TData>
   action: AeRecordTableRowAction<TData>
 }) {
   const accessibleLabel = action.getAccessibleLabel(row.original)
@@ -406,32 +520,31 @@ function RecordTableBody({
   defaultTabStopId,
   onCurrentTabStopChange,
 }: {
-  body: ReactElement
+  body: ReactNode
   roving: boolean
   defaultTabStopId?: string
   onCurrentTabStopChange?: (target: EventTarget | null) => void
 }) {
   return roving ? (
     <RovingFocusGroup.Root
-      render={body}
       orientation="vertical"
       loop={false}
       {...(onCurrentTabStopChange === undefined
         ? {}
         : { onCurrentTabStopChange })}
       {...(defaultTabStopId === undefined ? {} : { defaultTabStopId })}
-    />
+    >{body}</RovingFocusGroup.Root>
   ) : (
     body
   )
 }
 
-function TableSelectionHeader<TData>({
+function TableSelectionHeader<TData extends object>({
   table,
   caption,
   showSelectAll,
 }: {
-  table: TanStackTable<TData>
+  table: TanStackTable<AeRecordTableFeatures, TData>
   caption: string
   showSelectAll?: boolean
 }) {
@@ -454,12 +567,13 @@ function TableSelectionHeader<TData>({
 }
 
 
-export function AeOperatorSortableHeader({
+export function AeOperatorSortableHeader<TData extends object, TValue>({
   label,
   column,
 }: {
   label: string
-  column: { toggleSorting: (desc?: boolean) => void; getIsSorted: () => false | 'asc' | 'desc' }
+  column: Column<AeRecordTableFeatures, TData, TValue>
 }) {
-  return <AeSortableDataTableHeader label={label} direction={column.getIsSorted()} onSort={() => column.toggleSorting(column.getIsSorted() === 'asc')} />
+  if (!column.getCanSort()) return <span>{label}</span>
+  return <DataGridColumnHeader column={column} title={label} />
 }

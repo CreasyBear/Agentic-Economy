@@ -66,6 +66,7 @@ export const listOwnerResult = v.union(
     continueCursor: v.string(),
   }),
   v.object({ kind: v.literal('not_found') }),
+  v.object({ kind: v.literal('index_pending') }),
 )
 
 const agentReadArgs = {
@@ -79,4 +80,5 @@ const agentReadArgs = {
 export const listAgentArgs = v.object({ ...agentReadArgs, paginationOpts: paginationOptsValidator })
 export const readAgentArgs = v.object({ ...agentReadArgs, toolRef: v.string() })
 export const readOwnerArgs = v.object({ businessId: v.id('businesses'), offeringRef: v.string(), now: v.number() })
-export const listOwnerArgs = v.object({ businessId: v.id('businesses'), paginationOpts: paginationOptsValidator, now: v.number() })
+export const ownerInventorySortValue = v.union(v.literal('updated_desc'), v.literal('updated_asc'), v.literal('name_asc'), v.literal('name_desc'), v.literal('relevance'))
+export const listOwnerArgs = v.object({ businessId: v.id('businesses'), paginationOpts: paginationOptsValidator, now: v.number(), search: v.optional(v.string()), sort: v.optional(ownerInventorySortValue) })

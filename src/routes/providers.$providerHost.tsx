@@ -39,7 +39,7 @@ function HostPage() {
     return projectToolObject(listing, href)
   })
   const hostname = views[0]?.listing.identity.hostName ?? { kind: 'present' as const, value: providerHost, sourceRef: `Coinbase Bazaar:${providerHost}`, provenance: 'directory_reported' as const, scope: 'directory_resource' as const }
-  return <AePublicPage><article className="ae-rail arc-provider-catalogue"><nav aria-label="Breadcrumb"><Link to="/market" className="min-h-touch content-center text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2">Market</Link><span aria-hidden="true"> / </span>Directory Host</nav><HostGrouping hostname={hostname} listings={views} />{result.catalogue.isDone ? null : <p className="text-sm text-muted-foreground">Showing the first page of this Host’s directory listings. Browse Market for further results.</p>}</article></AePublicPage>
+  return <AePublicPage><article className="ae-rail arc-provider-catalogue"><nav aria-label="Breadcrumb"><Link to="/market" className="min-h-touch content-center text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2">Market</Link><span aria-hidden="true"> / </span>Directory Host</nav><HostGrouping hostname={hostname} listings={views} />{result.catalogue.isDone ? null : <p className="text-sm text-muted-foreground">Showing the first page of this Host’s directory listings. <Link to="/market" search={{ view: 'tools', provider: providerHost }}>Browse all listings from this Host</Link>.</p>}</article></AePublicPage>
 }
 
 function HostError() {

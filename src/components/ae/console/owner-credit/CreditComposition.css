@@ -1,5 +1,5 @@
-/* AE credit navigation and live state details around the licensed
- * billing-overview block. Source-backed panels live with the block. */
+/* Account credit composes licensed ReUI profile-8 sections and balance-card
+ * presentation around the existing source-backed funding and accounting panels. */
 .arc-credit-root {
   display: grid;
   min-width: 0;
@@ -48,7 +48,7 @@
 .arc-credit-fund {
   display: grid;
   min-width: 0;
-  gap: var(--space-4);
+  gap: var(--space-8);
 }
 
 .arc-credit-fund__intro {

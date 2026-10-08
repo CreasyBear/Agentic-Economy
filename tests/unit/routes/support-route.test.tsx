@@ -4,6 +4,7 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import type { ComponentType, ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { PublicDocumentationLinks } from '@/lib/documentation/public-documentation'
 import type { SupportSearch } from '@/components/ae/support/help/help.contracts'
 import '../../setup/jsdom-platform'
 
@@ -12,6 +13,9 @@ const validCallRef = `operation-invocation:v1:${'b'.repeat(64)}`
 const routeState = vi.hoisted(() => ({
   component: undefined as ComponentType | undefined,
   search: {} as SupportSearch,
+  hash: '',
+  documentation: undefined as PublicDocumentationLinks | undefined,
+  navigate: vi.fn(),
   validateSearch: undefined as ((search: Record<string, unknown>) => SupportSearch) | undefined,
 }))
 
@@ -25,10 +29,13 @@ vi.mock('@tanstack/react-router', () => ({
     return {
       ...options,
       options,
-      useLoaderData: () => 'https://ae.example',
+      useLoaderData: () => ({ canonicalBaseUrl: 'https://ae.example', ...(routeState.documentation === undefined ? {} : { documentation: routeState.documentation }) }),
+      useNavigate: () => routeState.navigate,
       useSearch: () => routeState.search,
     }
   },
+  useHydrated: () => true,
+  useLocation: () => routeState.hash,
   Link: ({
     children,
     to,
@@ -65,7 +72,7 @@ vi.mock('@/components/ae/layout/AePublicPage', () => ({
 
 import '@/routes/support'
 
-afterEach(cleanup)
+afterEach(() => { cleanup(); routeState.hash = ''; routeState.documentation = undefined; routeState.navigate.mockClear() })
 
 describe('/support', () => {
   it('returns people to authoritative records without inventing a retry', () => {
@@ -146,6 +153,29 @@ describe('/support', () => {
       expect(screen.getByRole('link', { name: /Email support \(opens email app\)/ }).getAttribute('href')).toBe(initialHref)
       expect(screen.getAllByRole('tabpanel')).toHaveLength(1)
     }
+  })
+
+  it('opens a stable help anchor and keeps the exact Call reference when topics change', () => {
+    routeState.hash = 'agent-connection'
+    renderRoute({ callRef: validCallRef })
+    expect(screen.getByRole('tab', { name: /^Agent connection/ }).getAttribute('aria-selected')).toBe('true')
+    expect(document.getElementById('agent-connection')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Link to Agent connection' }).getAttribute('href')).toBe('#agent-connection')
+    fireEvent.click(screen.getByRole('tab', { name: /^Current status/ }))
+    const navigation = routeState.navigate.mock.calls.at(-1)?.[0]
+    expect(navigation.hash).toBe('current-status')
+    expect(navigation.search({ callRef: validCallRef })).toEqual({ callRef: validCallRef })
+    expect(screen.getByRole('link', { name: 'Open this Call' }).getAttribute('href')).toContain(encodeURIComponent(validCallRef))
+  })
+
+  it('uses configured guide paths without sending the Call reference to docs', () => {
+    routeState.documentation = { home: 'https://guides.example/docs', customer: 'https://guides.example/docs/guides/customer', authority: 'https://guides.example/docs/concepts/authority', recovery: 'https://guides.example/docs/guides/recovery', api: 'https://guides.example/docs/reference' }
+    renderRoute({ callRef: validCallRef })
+    const guide = screen.getByRole('link', { name: /Recover the same Call/ })
+    expect(guide.getAttribute('href')).toBe(routeState.documentation.recovery)
+    expect(guide.getAttribute('target')).toBe('_blank')
+    expect(guide.getAttribute('href')).not.toContain(validCallRef)
+    expect(screen.getByText(`Referenced Call: ${validCallRef}`)).toBeTruthy()
   })
 
   it('renders an absent Call reference with the general Calls handoff', () => {

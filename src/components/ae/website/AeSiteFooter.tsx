@@ -1,4 +1,4 @@
-import { Link } from '@tanstack/react-router'
+import { Link, useLocation, useRouter } from '@tanstack/react-router'
 
 import { SiteFooter } from '@/components/arc/blocks/site-footer/site-footer'
 import { RouterLinkBoundary } from '@/components/ae/shared/router-link-boundary/RouterLinkBoundary'
@@ -18,14 +18,26 @@ export type AeSiteFooterProps = Readonly<{
   hideCloser?: boolean
 }>
 
-export function AeSiteFooter({ hideCloser = false }: AeSiteFooterProps = {}) {
+export function AeSiteFooter(props: AeSiteFooterProps = {}) {
+  const router = useRouter({ warn: false })
+  return router ? <RoutedSiteFooter {...props} /> : <SiteFooterBody {...props} />
+}
+
+function RoutedSiteFooter({ hideCloser = false }: AeSiteFooterProps) {
+  const { pathname } = useLocation()
+  const workingPage = /^\/(support|status|tools|market|calls|plans|fund|setup|owner|developers|sign-in|sign-up)(?:\/|$)/.test(pathname)
+  return <SiteFooterBody hideCloser={hideCloser || workingPage} />
+}
+
+function SiteFooterBody({ hideCloser = false }: AeSiteFooterProps) {
+  const compact = hideCloser
   const documentLinks = FOOTER_NAVIGATION.flatMap(column =>
     column.links.filter(link => link.reloadDocument).map(link => link.to),
   )
 
   return (
     <div className="arc-market arc-site-footer">
-      {hideCloser ? null : (
+      {compact ? null : (
         <section className="arc-site-footer-closer" aria-labelledby="footer-closer-title">
           <div className="arc-site-footer-closer-copy">
             <h2 id="footer-closer-title">{AE_SITE_FOOTER.closer.heading}</h2>
@@ -60,7 +72,7 @@ export function AeSiteFooter({ hideCloser = false }: AeSiteFooterProps = {}) {
       <RouterLinkBoundary shouldReloadDocument={url => documentLinks.some(path => path === url.pathname)}>
         <SiteFooter
           className="arc-site-footer-content"
-          variant="columns"
+          variant={compact ? "minimal" : "columns"}
           brand={{
             name: 'AECON',
             href: AECON_MARKETING_URL,
@@ -73,6 +85,11 @@ export function AeSiteFooter({ hideCloser = false }: AeSiteFooterProps = {}) {
           }}
           tagline={FOOTER.tagline}
           year={new Date().getUTCFullYear()}
+          {...(compact ? { links: [
+            ...FOOTER_NAVIGATION.filter(column => column.id !== 'footer-machines')
+              .flatMap(column => column.links.map(link => ({ label: link.label, href: link.to }))),
+            { label: AE_SITE_FOOTER.abn.label, href: AE_SITE_FOOTER.abn.href },
+          ] } : {})}
           columns={FOOTER_NAVIGATION.map(column => ({
             title: column.title,
             links: column.links.map(link => ({ label: link.label, href: link.to })),

@@ -1,5 +1,7 @@
 'use client'
 
+import type { AeRecordTableFeatures } from '@/components/ae/operator/AeOperatorDataTable'
+
 import { useMemo } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 import { ArrowUpRightIcon } from 'lucide-react'
@@ -49,7 +51,7 @@ export function AeAgentCallHistoryTable({
   usage,
   showStats = false,
 }: AeAgentCallHistoryTableProps) {
-  const columns = useMemo<ColumnDef<AgentActivityView, unknown>[]>(
+  const columns = useMemo<ColumnDef<AeRecordTableFeatures, AgentActivityView, unknown>[]>(
     () => [
       {
         id: 'task',
@@ -86,7 +88,7 @@ export function AeAgentCallHistoryTable({
           : item.paymentState === 'settled' && item.audAmountUnits !== undefined
             && /^(?:0|[1-9]\d*)$/u.test(item.audAmountUnits) ? item.audAmountUnits : undefined,
         sortUndefined: 'last',
-        sortingFn: (left, right) => {
+        sortFn: (left, right) => {
           const a = BigInt(left.getValue<string | undefined>('amount') ?? '0')
           const b = BigInt(right.getValue<string | undefined>('amount') ?? '0')
           return a < b ? -1 : a > b ? 1 : 0

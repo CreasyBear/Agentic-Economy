@@ -1,5 +1,7 @@
 'use client'
 
+import type { AeRecordTableFeatures } from '@/components/ae/operator/AeOperatorDataTable'
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ColumnDef, ColumnMeta } from '@tanstack/react-table'
 
@@ -273,7 +275,7 @@ export function CreditAccountingPanel({
   useEffect(() => {
     if (selectedDocumentRef !== null) lastSelectedDocumentRef.current = selectedDocumentRef
   }, [selectedDocumentRef])
-  const documentColumns = useMemo<ColumnDef<MoneyDocumentView, unknown>[]>(() => [
+  const documentColumns = useMemo<ColumnDef<AeRecordTableFeatures, MoneyDocumentView, unknown>[]>(() => [
     {
       id: 'document',
       accessorFn: (document) => documentKindLabel(document.kind),
@@ -292,13 +294,13 @@ export function CreditAccountingPanel({
     {
       id: 'amount',
       accessorFn: (document) => BigInt(document.amountUnits),
-      sortingFn: (left, right, columnId) => {
+      sortFn: (left, right, columnId) => {
         const leftUnits = left.getValue<bigint>(columnId)
         const rightUnits = right.getValue<bigint>(columnId)
         return leftUnits < rightUnits ? -1 : leftUnits > rightUnits ? 1 : 0
       },
       header: ({ column }) => <AeOperatorSortableHeader label="Amount" column={column} />,
-      meta: { numeric: true } as ColumnMeta<MoneyDocumentView, unknown>,
+      meta: { numeric: true } as ColumnMeta<AeRecordTableFeatures, MoneyDocumentView, unknown>,
       cell: ({ row }) => (
         <span className="arc-credit-document-amount">
           {formatCreditAmount({ currency: 'AUD', exponent: 6, units: row.original.amountUnits })}

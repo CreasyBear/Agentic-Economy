@@ -22,7 +22,15 @@ export async function upsertProviderToolIdentity(
       query.eq('businessId', input.businessId).eq('offeringRef', input.offeringRef),
     )
     .unique()
+  const revision = await ctx.db.query('businessOfferingRevisions')
+    .withIndex('by_offeringRef_and_revision', query => query.eq('offeringRef', input.offeringRef).eq('revision', input.offeringRevision))
+    .unique()
+  const inventory = revision?.businessId === input.businessId ? {
+    inventoryName: revision.name.trim().toLowerCase(),
+    inventoryText: `${revision.name} ${revision.summary} ${revision.category}`,
+  } : {}
   const value = {
+    ...inventory,
     businessId: input.businessId,
     providerRef: input.providerRef,
     toolRef: input.toolRef,

@@ -1,3 +1,4 @@
+import type { AeRecordTableFeatures } from '@/components/ae/operator/AeOperatorDataTable'
 import { useMemo, useState } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 
@@ -57,7 +58,7 @@ export function AeAgentDirectoryTable({
     return directoryItems.filter((item) => item.status === statusFilter)
   }, [directoryItems, statusFilter])
 
-  const columns = useMemo<ColumnDef<AgentDirectoryItem, unknown>[]>(
+  const columns = useMemo<ColumnDef<AeRecordTableFeatures, AgentDirectoryItem, unknown>[]>(
     () => [
       {
         id: 'agent',
@@ -134,7 +135,7 @@ export function AeAgentDirectoryTable({
         accessorFn: (item) => item.monthlySpendCoverage === 'complete' ? item.monthlySettledSpend?.units : undefined,
         meta: { label: 'Charges / UTC month limit', numeric: true },
         sortUndefined: 'last',
-        sortingFn: (left, right) => {
+        sortFn: (left, right) => {
           const a = BigInt(left.getValue<string | undefined>('monthlySpend') ?? '0')
           const b = BigInt(right.getValue<string | undefined>('monthlySpend') ?? '0')
           return a < b ? -1 : a > b ? 1 : 0

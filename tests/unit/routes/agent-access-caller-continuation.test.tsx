@@ -36,7 +36,8 @@ const routeHarness = vi.hoisted(() => ({
 vi.mock('@tanstack/react-router', () => ({
   Link: ({ to, params, search, children }: { to: string; params?: Record<string, string>; search?: Record<string, string>; children?: ReactNode }) => {
     const path = Object.entries(params ?? {}).reduce((value, [name, parameter]) => value.replace(`$${name}`, encodeURIComponent(parameter)), to)
-    const query = new URLSearchParams(search).toString()
+    const query = new URLSearchParams(Object.entries(search ?? {})
+      .filter((entry): entry is [string, string] => typeof entry[1] === 'string')).toString()
     return <a href={`${path}${query ? `?${query}` : ''}`}>{children}</a>
   },
   Outlet: () => null,
@@ -302,7 +303,9 @@ describe('agent-access caller route continuation', () => {
     expect(screen.getByRole('heading', { name: 'Access approved; waiting for your Agent' })).toBeTruthy()
     await act(async () => { await vi.advanceTimersByTimeAsync(5_000) })
     expect(screen.getByRole('heading', { name: 'The Tool is running' })).toBeTruthy()
-    const callHref = `/calls/${encodeURIComponent(identity.callRef)}`
+    const callHref = `/calls/${encodeURIComponent(identity.callRef)}?${new URLSearchParams({
+      returnTo: 'agent', returnCaller: PRINCIPAL_ID, returnTool: TOOL_REF,
+    })}`
     expect(screen.getByRole('link', { name: 'View live Call' }).getAttribute('href')).toBe(callHref)
     await act(async () => { await vi.advanceTimersByTimeAsync(5_000) })
     expect(screen.getByRole('heading', { name: 'A Tool result is recorded' })).toBeTruthy()
@@ -644,7 +647,7 @@ describe('agent-access caller route continuation', () => {
     expect(await screen.findByRole('heading', { name: 'Resolve the existing Call' })).toBeTruthy()
     expect(screen.getByText('Needs recovery')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Check existing Call' }).getAttribute('href'))
-      .toBe(`/calls/${encodeURIComponent(callRef)}`)
+      .toBe(`/calls/${encodeURIComponent(callRef)}?returnTo=agent`)
     expect(screen.queryByTestId('agent-install')).toBeNull()
     expect(screen.queryByRole('region', { name: 'Add another Agent' })).toBeNull()
   })

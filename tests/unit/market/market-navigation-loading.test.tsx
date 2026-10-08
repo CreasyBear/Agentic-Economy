@@ -14,6 +14,7 @@ import { validateMarketSearch } from '@/modules/market/market-route-data'
 // Its actual pending-panel and keyboard behavior has separate directory tests.
 vi.mock('@/components/ae/market/AeX402Directory', () => ({
   AeX402Directory: ({ activeView, pendingView, page }: ComponentProps<typeof AeX402Directory>) => <div>
+    <h1>Tool market</h1>
     <p>Selected: {pendingView ?? activeView}</p>
     {pendingView === undefined
       ? <p>Committed: {activeView} · {page.kind === 'ok' ? page.items.length : 'unavailable'}</p>
@@ -40,7 +41,7 @@ function deferred<T>() {
   const promise = new Promise<T>(done => { resolve = done })
   return { promise, resolve }
 }
-async function market(loader: (view: View) => Promise<Data>) {
+async function market(loader: (view: View) => Promise<Data>, initial = '/market?view=tools') {
   const pendingMs = ProductionMarketRoute.options.pendingMs
   if (pendingMs === undefined) throw new Error('market_pending_policy_missing')
   const root = createRootRoute()
@@ -52,7 +53,7 @@ async function market(loader: (view: View) => Promise<Data>) {
     pendingComponent: () => <p>Whole page pending</p>,
     component: () => <AeMarketPage data={route.useLoaderData()} search={route.useSearch()} />,
   })
-  const router = createRouter({ routeTree: root.addChildren([route]), history: createMemoryHistory({ initialEntries: ['/market?view=tools'] }) })
+  const router = createRouter({ routeTree: root.addChildren([route]), history: createMemoryHistory({ initialEntries: [initial] }) })
   await router.load()
   render(<RouterProvider router={router} />)
   return router
@@ -79,9 +80,9 @@ describe('market navigation loading boundary', () => {
     expect(screen.getByText('Loading discover')).toBeTruthy()
     expect(screen.queryByText('Committed: providers · 0')).toBeNull()
     await act(async () => { collections.resolve(data('discover')) })
-    await screen.findByText('Committed: discover · 0')
+    await screen.findByRole('heading', { name: 'Intelligence, put to work.' })
     expect(screen.queryByRole('status')).toBeNull()
-    expect(screen.getByRole('textbox', { name: 'Retained market input' })).toBe(input)
+    expect(screen.queryByRole('textbox', { name: 'Retained market input' })).toBeNull()
   })
 
   it('returns to the previous source with explicit recovery when the requested catalogue is unavailable', async () => {
@@ -95,4 +96,26 @@ describe('market navigation loading boundary', () => {
     expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy()
     await waitFor(() => expect(screen.queryByText('Loading providers')).toBeNull())
   })
+
+  it('shows the requested unavailable catalogue instead of retaining the synthetic landing', async () => {
+    const router = await market(view => Promise.resolve(view === 'tools'
+      ? { ...data('tools'), page: { kind: 'unavailable', reason: 'source_unavailable' }, catalogue: { kind: 'unavailable', reason: 'source_unavailable' } }
+      : data(view)), '/market')
+    await screen.findByRole('heading', { name: 'Intelligence, put to work.' })
+    await act(async () => { await router.navigate({ to: '/market', search: { view: 'tools' } }) })
+    expect(screen.getByText('Committed: tools · unavailable')).toBeTruthy()
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'Intelligence, put to work.' })).toBeNull()
+  })
+
+  it('opens a category with existing constraints and transfers keyboard focus to the results', async () => {
+    const router = await market(view => Promise.resolve(data(view)), '/market?view=discover&maxUsdPrice=2&layout=grid')
+    const category = await screen.findByRole('link', { name: /Finance.*Pricing/ })
+    category.focus()
+    fireEvent.click(category)
+    await screen.findByText('Committed: tools · 0')
+    expect(router.state.location.search).toMatchObject({ view: 'tools', query: 'Finance', sort: 'relevance', maxUsdPrice: 2, layout: 'grid' })
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Tool market' })))
+  })
+
 })

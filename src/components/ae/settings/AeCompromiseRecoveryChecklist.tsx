@@ -42,7 +42,7 @@ export function AeCompromiseRecoveryChecklist() {
             Resetting MFA alone does not revoke existing sessions, Agent credentials,
             Provider connection authority.
             <p className="arc-security-financial-impact">
-              A$0.00 affected. Opening this list does not revoke sessions or Agents.
+              Viewing this checklist changes no access or funds. Financial impact has not been assessed here.
             </p>
           </AeAlert>
         {recoveryChecks.map((check) => (

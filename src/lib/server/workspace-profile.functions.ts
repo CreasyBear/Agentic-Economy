@@ -1,3 +1,4 @@
+import { readWorkspaceTerminalReceipt } from './workspace-terminal-receipt'
 import { auth, clerkClient } from '@clerk/tanstack-react-start/server'
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
@@ -24,6 +25,7 @@ const readWorkspaceOrganizationBinding = sourceQuery<Record<string, never>, Work
 )
 
 const renameSchema = z.strictObject({
+  expectedAccountRef: z.string().min(1).max(200),
   name: z.string().trim().min(1).max(200).regex(/^[\p{L}\p{N}\p{P}\p{S}\p{Zs}]+$/u),
 })
 export const readPersonalWorkspaceDefaultNameServer = createServerFn().handler(async (): Promise<string | null> => {
@@ -58,13 +60,14 @@ type RenameWorkspaceResult =
 /** A Clerk rename is the sole writer; its webhook advances the AE account name. */
 export async function renameWorkspaceThroughClerk(
   name: string,
+  expectedAccountRef: string,
   activeOrgId: string | null | undefined,
   readBinding: () => Promise<WorkspaceOrganizationBinding>,
   updateOrganization: (organizationId: string, name: string) => Promise<void>,
 ): Promise<RenameWorkspaceResult> {
   if (!activeOrgId) return { kind: 'refused', code: 'forbidden' }
   const binding = await readBinding()
-  if (!binding.callerIsOwner || binding.clerkOrgId !== activeOrgId) {
+  if (binding.accountRef !== expectedAccountRef || !binding.callerIsOwner || binding.clerkOrgId !== activeOrgId) {
     return { kind: 'refused', code: 'forbidden' }
   }
   if (binding.displayName !== name) await updateOrganization(activeOrgId, name)
@@ -79,6 +82,7 @@ export const renameWorkspaceServer = createServerFn({ method: 'POST' })
     try {
       return await renameWorkspaceThroughClerk(
         data.name,
+        data.expectedAccountRef,
         session.orgId,
         () => callSourceQuery(readWorkspaceOrganizationBinding, {}),
         async (organizationId, name) => { await clerkClient().organizations.updateOrganization(organizationId, { name }) },
@@ -114,10 +118,16 @@ async function workspaceActionWire<T extends WorkspaceCloseCommand | WorkspaceTr
 
 export const closeWorkspaceServer = createServerFn({ method: 'POST' })
   .validator((data) => z.strictObject({ ...workspaceActionFields, confirmationName: z.string().min(1).max(200) }).parse(data))
-  .handler(async ({ data, context }): Promise<WorkspaceCloseResult> =>
-    await callSourceMutation(closeWorkspaceMutation, await workspaceActionWire(data, context)))
+  .handler(async ({ data, context }): Promise<WorkspaceCloseResult> => {
+    const receipt = await readWorkspaceTerminalReceipt({ action: 'close', ...data })
+    if (receipt?.action === 'close') return { kind: receipt.kind, accountRef: receipt.accountRef, accountRevision: receipt.accountRevision }
+    return await callSourceMutation(closeWorkspaceMutation, await workspaceActionWire(data, context))
+  })
 
 export const transferWorkspaceOwnershipServer = createServerFn({ method: 'POST' })
   .validator((data) => z.strictObject({ ...workspaceActionFields, successorPrincipalRef: z.string().min(1).max(200) }).parse(data))
-  .handler(async ({ data, context }): Promise<WorkspaceTransferResult> =>
-    await callSourceMutation(transferWorkspaceMutation, await workspaceActionWire(data, context)))
+  .handler(async ({ data, context }): Promise<WorkspaceTransferResult> => {
+    const receipt = await readWorkspaceTerminalReceipt({ action: 'transfer', ...data })
+    if (receipt?.action === 'transfer') return { kind: receipt.kind, accountRef: receipt.accountRef, accountRevision: receipt.accountRevision, currentOwnershipRef: receipt.currentOwnershipRef }
+    return await callSourceMutation(transferWorkspaceMutation, await workspaceActionWire(data, context))
+  })

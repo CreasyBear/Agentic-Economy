@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { ClerkRuntimeError } from '@clerk/shared/error'
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
@@ -19,6 +19,8 @@ vi.mock('@/components/ae/layout/AeRecordSheet', () => ({
     open ? <section aria-label={title}>{children}{action}<button type="button" onClick={() => onOpenChange(false)}>Close</button></section> : null,
 }))
 
+import { adminCommandRecoveryScope, readAdminCommandRecovery } from '@/components/ae/admin/actions/admin-command-recovery'
+import { useAdminActionSheet } from '@/components/ae/admin/actions/useAdminActionSheet'
 import { AdminActionSheet } from '@/components/ae/admin/actions/AdminActionSheet'
 mocks.query.mockImplementation(() => mocks.access())
 
@@ -33,6 +35,8 @@ const props = {
 
 afterEach(() => {
   cleanup()
+  vi.restoreAllMocks()
+  window.localStorage.clear()
   mocks.access.mockReset()
   mocks.execute.mockReset()
   props.onOpenChange.mockReset()
@@ -56,7 +60,7 @@ describe('Admin action sheet', () => {
   })
 
   it('keeps evidence and the operation key through MFA recovery, without submitting a proposal', async () => {
-    mocks.access.mockReturnValue({ kind: 'allowed', role: 'owner_admin' })
+    mocks.access.mockReturnValue({ kind: 'allowed', actorRef: 'actor:test', role: 'owner_admin' })
     mocks.execute.mockResolvedValueOnce({ kind: 'refused', action: props.action, code: 'mfa_reverification_required', correlationId: 'correlation:1' })
       .mockResolvedValueOnce({ kind: 'completed', action: props.action, code: 'source_authority_verified', effectRefs: [], auditEventRef: 'audit:1', correlationId: 'correlation:1' })
     render(<AdminActionSheet {...props} />)
@@ -70,7 +74,7 @@ describe('Admin action sheet', () => {
   })
 
   it('shows MFA guidance only after the server refuses, preserving the command', async () => {
-    mocks.access.mockReturnValue({ kind: 'allowed', role: 'owner_admin' })
+    mocks.access.mockReturnValue({ kind: 'allowed', actorRef: 'actor:test', role: 'owner_admin' })
     mocks.execute.mockResolvedValue({ kind: 'refused', action: props.action, code: 'mfa_reverification_required', correlationId: 'correlation:1' })
     render(<AdminActionSheet {...props} />)
     toPreview()
@@ -84,7 +88,7 @@ describe('Admin action sheet', () => {
   })
 
   it('renders a proposed receipt with the Perth expiry', async () => {
-    mocks.access.mockReturnValue({ kind: 'allowed', role: 'owner_admin' })
+    mocks.access.mockReturnValue({ kind: 'allowed', actorRef: 'actor:test', role: 'owner_admin' })
     mocks.execute.mockResolvedValue({ kind: 'proposed', action: props.action, proposalRef: 'admin-proposal:1', expiresAt: 1_800_000_000_000, correlationId: 'correlation:1' })
     render(<AdminActionSheet {...props} />)
     toPreview()
@@ -94,7 +98,7 @@ describe('Admin action sheet', () => {
   })
 
   it('offers proposal submission when a second approval is required', async () => {
-    mocks.access.mockReturnValue({ kind: 'allowed', role: 'owner_admin' })
+    mocks.access.mockReturnValue({ kind: 'allowed', actorRef: 'actor:test', role: 'owner_admin' })
     mocks.execute.mockResolvedValueOnce({ kind: 'refused', action: props.action, code: 'approval_required', correlationId: 'correlation:1' })
       .mockResolvedValueOnce({ kind: 'proposed', action: props.action, proposalRef: 'admin-proposal:1', expiresAt: 1_800_000_000_000, correlationId: 'correlation:2' })
     render(<AdminActionSheet {...props} />)
@@ -107,7 +111,7 @@ describe('Admin action sheet', () => {
   })
 
   it('returns a cancelled MFA check to the unchanged preview and does not submit again', async () => {
-    mocks.access.mockReturnValue({ kind: 'allowed', role: 'owner_admin' })
+    mocks.access.mockReturnValue({ kind: 'allowed', actorRef: 'actor:test', role: 'owner_admin' })
     mocks.execute.mockRejectedValueOnce(new ClerkRuntimeError('Verification cancelled', { code: 'reverification_cancelled' }))
       .mockResolvedValueOnce({ kind: 'completed', action: props.action, code: 'source_authority_verified', effectRefs: [], auditEventRef: 'audit:1', correlationId: 'correlation:1' })
     render(<AdminActionSheet {...props} />)
@@ -122,9 +126,9 @@ describe('Admin action sheet', () => {
   })
 
   it('checks a pending grant using the same operation, payload and evidence', async () => {
-    mocks.access.mockReturnValue({ kind: 'allowed', role: 'owner_admin' })
+    mocks.access.mockReturnValue({ kind: 'allowed', actorRef: 'actor:test', role: 'owner_admin' })
     mocks.execute.mockResolvedValueOnce({ kind: 'pending', action: 'grant_promotional_credit', effectRefs: ['grant:one'], auditEventRef: 'audit:pending', correlationId: 'correlation:1' })
-      .mockResolvedValueOnce({ kind: 'completed', action: 'grant_promotional_credit', code: 'promotional_credit_granted', effectRefs: ['grant:one'], auditEventRef: 'audit:booked', correlationId: 'correlation:1' })
+      .mockImplementationOnce(async request => ({ kind: 'completed', action: 'grant_promotional_credit', code: 'promotional_credit_granted', effectRefs: ['grant:one'], auditEventRef: 'audit:booked', correlationId: request.correlationId }))
     render(<AdminActionSheet action="grant_promotional_credit"
       input={{ accountRef: 'account:one', environment: 'sandbox', amountUnits: '10000000', expiresAt: 2_000_000_000_000 }}
       targetRefs={[{ label: 'Workspace', value: 'account:one' }]} initialReasonCode="onboarding" open onOpenChange={() => undefined} />)
@@ -138,7 +142,7 @@ describe('Admin action sheet', () => {
   })
 
   it('leaves a stalled submission without starting a second command', async () => {
-    mocks.access.mockReturnValue({ kind: 'allowed', role: 'owner_admin' })
+    mocks.access.mockReturnValue({ kind: 'allowed', actorRef: 'actor:test', role: 'owner_admin' })
     mocks.execute.mockReturnValue(new Promise(() => {}))
     render(<AdminActionSheet {...props} />)
     toPreview()
@@ -158,9 +162,9 @@ describe('Admin action sheet', () => {
   })
 
   it('minimizes an unknown outcome and resumes the entire unchanged request', async () => {
-    mocks.access.mockReturnValue({ kind: 'allowed', role: 'owner_admin' })
+    mocks.access.mockReturnValue({ kind: 'allowed', actorRef: 'actor:test', role: 'owner_admin' })
     mocks.execute.mockRejectedValueOnce(new Error('response lost'))
-      .mockResolvedValueOnce({ kind: 'completed', action: props.action, code: 'source_authority_verified', effectRefs: [], auditEventRef: 'audit:1', correlationId: 'correlation:1' })
+      .mockImplementationOnce(async request => ({ kind: 'completed', action: props.action, code: 'source_authority_verified', effectRefs: [], auditEventRef: 'audit:1', correlationId: request.correlationId }))
     const rendered = render(<AdminActionSheet {...props} />)
     toPreview()
     fireEvent.click(screen.getByRole('button', { name: 'Submit command' }))
@@ -179,7 +183,7 @@ describe('Admin action sheet', () => {
   })
 
   it('receives a completed command while minimized and resumes its receipt without resubmission', async () => {
-    mocks.access.mockReturnValue({ kind: 'allowed', role: 'owner_admin' })
+    mocks.access.mockReturnValue({ kind: 'allowed', actorRef: 'actor:test', role: 'owner_admin' })
     let finish: ((receipt: unknown) => void) | undefined
     mocks.execute.mockImplementation(() => new Promise(resolve => { finish = resolve }))
     render(<AdminActionSheet {...props} />)
@@ -199,4 +203,100 @@ describe('Admin action sheet', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
     expect(props.onOpenChange).toHaveBeenCalledWith(false)
   })
+  it('retains only identity before dispatch and restores an uncertain command entry after remount', async () => {
+    mocks.access.mockReturnValue({ kind: 'allowed', actorRef: 'actor:test', role: 'owner_admin' })
+    const scope = adminCommandRecoveryScope('actor:test')
+    mocks.execute.mockImplementation((request) => {
+      expect(readAdminCommandRecovery(scope)).toEqual([{ action: request.action, operationKey: request.operationKey, correlationId: request.correlationId }])
+      return Promise.reject(new Error('acknowledgement lost'))
+    })
+    const rendered = render(<AdminActionSheet {...props} />)
+    toPreview()
+    fireEvent.click(screen.getByRole('button', { name: 'Submit command' }))
+    await screen.findByText(/Command outcome could not be confirmed/)
+    const original = mocks.execute.mock.calls[0]?.[0]
+    rendered.unmount()
+    expect(readAdminCommandRecovery(scope)).toEqual([{ action: original.action, operationKey: original.operationKey, correlationId: original.correlationId }])
+    render(<AdminActionSheet {...props} />)
+    toPreview()
+    fireEvent.click(screen.getByRole('button', { name: 'Submit command' }))
+    expect(await screen.findByText(/Check the previous command in Command recovery/)).toBeTruthy()
+    expect(mocks.execute).toHaveBeenCalledOnce()
+  })
+
+  it('keeps an unobserved terminal acknowledgement in recovery when the submitting page unmounts', async () => {
+    mocks.access.mockReturnValue({ kind: 'allowed', actorRef: 'actor:test', role: 'owner_admin' })
+    let finish: ((receipt: unknown) => void) | undefined
+    mocks.execute.mockImplementation(() => new Promise(resolve => { finish = resolve }))
+    const rendered = render(<AdminActionSheet {...props} />)
+    toPreview()
+    fireEvent.click(screen.getByRole('button', { name: 'Submit command' }))
+    const original = mocks.execute.mock.calls[0]?.[0]
+    rendered.unmount()
+    await act(async () => {
+      if (finish === undefined) throw new Error('submission_not_started')
+      finish({ kind: 'completed', action: props.action, code: 'source_authority_verified', effectRefs: [], auditEventRef: 'audit:1', correlationId: original.correlationId })
+    })
+    expect(readAdminCommandRecovery(adminCommandRecoveryScope('actor:test'))).toHaveLength(1)
+  })
+
+  it.each(['mfa_cancelled', 'authority_refused', 'mfa_refused', 'mismatched_terminal'] as const)('retains an earlier unknown request after a %s recheck until its terminal receipt', async (recheck) => {
+    mocks.access.mockReturnValue({ kind: 'allowed', actorRef: 'actor:test', role: 'owner_admin' })
+    mocks.execute.mockRejectedValueOnce(new Error('acknowledgement lost'))
+    if (recheck === 'mfa_cancelled') mocks.execute.mockRejectedValueOnce(new ClerkRuntimeError('Verification cancelled', { code: 'reverification_cancelled' }))
+    else if (recheck === 'mismatched_terminal') mocks.execute.mockImplementationOnce(async request => ({ kind: 'completed', action: request.action,
+      code: 'source_authority_verified', effectRefs: [], auditEventRef: 'audit:other', correlationId: 'correlation:other' }))
+    else mocks.execute.mockImplementationOnce(async request => ({ kind: 'refused', action: request.action,
+      code: recheck === 'authority_refused' ? 'missing_membership' : 'mfa_reverification_required', correlationId: request.correlationId }))
+    mocks.execute.mockImplementationOnce(async request => ({ kind: 'completed', action: request.action,
+      code: 'source_authority_verified', effectRefs: [], auditEventRef: 'audit:original', correlationId: request.correlationId }))
+    const hook = renderHook(() => useAdminActionSheet({ ...props, initialEvidenceRefs: ['review:ticket-123'] }))
+    await act(async () => { await hook.result.current.submit() })
+    const original = hook.result.current.submittedRequest
+    await act(async () => { await hook.result.current.submit() })
+    expect(hook.result.current.phase).toBe('preview')
+    expect(hook.result.current.receipt).toBeNull()
+    expect(hook.result.current.error).toMatch(/could not be confirmed/u)
+    expect(hook.result.current.submittedRequest).toEqual(original)
+    expect(readAdminCommandRecovery(adminCommandRecoveryScope('actor:test'))).toEqual([{
+      action: original?.action, operationKey: original?.operationKey, correlationId: original?.correlationId,
+    }])
+    await act(async () => { hook.result.current.edit(); await hook.result.current.retry(true); await hook.result.current.submit({ kind: 'propose' }) })
+    expect(mocks.execute).toHaveBeenCalledTimes(2)
+    expect(hook.result.current.submittedRequest).toEqual(original)
+    await act(async () => { await hook.result.current.submit() })
+    expect(mocks.execute.mock.calls[2]?.[0]).toEqual(original)
+    expect(hook.result.current.receipt?.kind).toBe('completed')
+    expect(readAdminCommandRecovery(adminCommandRecoveryScope('actor:test'))).toEqual([])
+  })
+
+  it('guards navigation only when the unresolved recovery identity could not be persisted', async () => {
+    mocks.access.mockReturnValue({ kind: 'allowed', actorRef: 'actor:test', role: 'owner_admin' })
+    vi.spyOn(Object.getPrototypeOf(window.localStorage), 'setItem').mockImplementation(() => { throw new Error('storage unavailable') })
+    mocks.execute.mockRejectedValue(new Error('acknowledgement lost'))
+    const hook = renderHook(() => useAdminActionSheet({ ...props, initialEvidenceRefs: ['review:ticket-123'] }))
+    await act(async () => { await hook.result.current.submit() })
+    expect(hook.result.current.durableRecovery).toBe(false)
+    expect(hook.result.current.navigationRisk).toBe(true)
+    expect(hook.result.current.submittedRequest?.input).toEqual(props.input)
+  })
+
+  it('hides but retains unresolved terms through access loss and clears visible state for a different actor', async () => {
+    mocks.access.mockReturnValue({ kind: 'allowed', actorRef: 'actor:test', role: 'owner_admin' })
+    mocks.execute.mockRejectedValue(new Error('acknowledgement lost'))
+    const hook = renderHook(() => useAdminActionSheet({ ...props, initialEvidenceRefs: ['review:ticket-123'] }))
+    await act(async () => { await hook.result.current.submit() })
+    const original = hook.result.current.submittedRequest
+    expect(original).not.toBeNull()
+    act(() => { mocks.access.mockReturnValue({ kind: 'refused', code: 'missing_membership' }); hook.rerender() })
+    expect(hook.result.current.submittedRequest).toBeNull()
+    expect(readAdminCommandRecovery(adminCommandRecoveryScope('actor:test'))).toHaveLength(1)
+    act(() => { mocks.access.mockReturnValue({ kind: 'allowed', actorRef: 'actor:test', role: 'owner_admin' }); hook.rerender() })
+    expect(hook.result.current.submittedRequest).toEqual(original)
+    act(() => { mocks.access.mockReturnValue({ kind: 'allowed', actorRef: 'actor:other', role: 'owner_admin' }); hook.rerender() })
+    expect(hook.result.current.submittedRequest).toBeNull()
+    expect(readAdminCommandRecovery(adminCommandRecoveryScope('actor:test'))).toHaveLength(1)
+    expect(mocks.execute).toHaveBeenCalledOnce()
+  })
+
 })

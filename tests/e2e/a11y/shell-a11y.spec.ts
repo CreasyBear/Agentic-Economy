@@ -59,8 +59,8 @@ test.describe('app shell accessibility (S-19)', () => {
     await expect(searchTrigger).toBeFocused()
   })
 
-  test('exposes header, navigation, main, and footer landmarks', async ({ page }) => {
-    await gotoSettledShell(page, '/market')
+  test('exposes header, navigation, main, and footer landmarks on an editorial page', async ({ page }) => {
+    await gotoSettledShell(page, '/about')
 
     await expect(page.locator('header[data-shell="app-header"]')).toBeVisible()
     const viewport = page.viewportSize()
@@ -78,6 +78,24 @@ test.describe('app shell accessibility (S-19)', () => {
     await expect(page.getByRole('main')).toBeVisible()
     await expect(page.locator('#main-content')).toBeVisible()
     await expect(page.getByRole('contentinfo')).toBeVisible()
+  })
+  test('market help and legal links remain keyboard reachable without the site footer', async ({ page }) => {
+    await gotoSettledShell(page, '/market')
+    await expect(page.getByRole('contentinfo')).toHaveCount(0)
+    const utility = page.getByRole('navigation', { name: 'Market help and legal' })
+    await expect(utility).toBeVisible()
+    const help = utility.getByRole('link', { name: 'Help', exact: true })
+    await expect(help).toHaveAttribute('href', '/support')
+    await help.focus()
+    await expect(help).toBeFocused()
+    await page.keyboard.press('Tab')
+    const privacy = utility.getByRole('link', { name: 'Privacy', exact: true })
+    await expect(privacy).toBeFocused()
+    await expect(privacy).toHaveAttribute('href', '/privacy')
+    await page.keyboard.press('Tab')
+    const terms = utility.getByRole('link', { name: 'Terms', exact: true })
+    await expect(terms).toBeFocused()
+    await expect(terms).toHaveAttribute('href', '/terms')
   })
 })
 

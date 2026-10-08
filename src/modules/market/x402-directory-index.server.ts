@@ -358,11 +358,11 @@ export async function readX402DirectoryCanonicalUrlForTool(input: { toolRef: str
   }
 }
 
-const providers = sourceQuery<{ kind: 'provider'; paginationOpts: { numItems: number; cursor: string | null } }, X402DirectoryProvidersPage>('x402DirectoryIndex:facets')
+const providers = sourceQuery<{ kind: 'provider'; providerPrefix?: string; paginationOpts: { numItems: number; cursor: string | null } }, X402DirectoryProvidersPage>('x402DirectoryIndex:facets')
 export async function readX402DirectoryProviders(input: X402DirectoryProvidersInput): Promise<X402DirectoryProvidersPage> {
   const parsed = x402DirectoryProvidersInputSchema.safeParse(input)
   if (!parsed.success) return { kind: 'unavailable', reason: 'query_invalid' }
-  try { return await callPublicSourceQuery(providers, { kind: 'provider', paginationOpts: { numItems: 24, cursor: parsed.data.providerCursor ?? null } }) }
+  try { return await callPublicSourceQuery(providers, { kind: 'provider', ...(parsed.data.providerPrefix === undefined ? {} : { providerPrefix: parsed.data.providerPrefix }), paginationOpts: { numItems: 24, cursor: parsed.data.providerCursor ?? null } }) }
   catch (cause) {
     return degrade(cause, { kind: 'unavailable', reason: 'source_unavailable' } as const, {
       site: 'readX402DirectoryProviders',

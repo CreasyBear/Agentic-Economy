@@ -42,8 +42,8 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferencesView = {
 
 export const UPDATE_FAILED_DIAGNOSTIC: NotificationUpdateDiagnostic = {
   whatHappened: 'Could not update notification preferences.',
-  financialImpact: 'A$0.00 affected — existing preferences remain active.',
-  nextStep: 'Please check your connection and try again.',
+  financialImpact: 'No spending authority changed. The preference update could not be confirmed.',
+  nextStep: 'Check the saved preferences before trying again.',
 }
 
 export const PREFERENCE_SWITCHES: ReadonlyArray<{

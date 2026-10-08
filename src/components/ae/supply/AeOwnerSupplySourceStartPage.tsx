@@ -1,7 +1,10 @@
+import { ownerInventoryHref } from '@/lib/operator/owner-inventory-search'
+import { inventoryQueryFromReturnSearch, ownerInventoryReturnSearch, ownerToolSetupHref, type OwnerInventoryReturnSearch } from '@/lib/operator/owner-inventory-return'
 import { Link } from '@tanstack/react-router'
 import { useRef, useState } from 'react'
 import { useServerFn } from '@tanstack/react-start'
 import { useReverification } from '@clerk/tanstack-react-start'
+import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { AeNavigationSafetyBoundary } from '@/components/ae/layout/AeNavigationSafetyBoundary'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
@@ -28,13 +31,13 @@ export type AeOwnerSupplySourceStartPageProps = Readonly<{
     resumeRequested: boolean
     sourceUnavailable: boolean
   }>
-  search: Readonly<{
+  search: OwnerInventoryReturnSearch & Readonly<{
     connection?: string
     environment?: 'sandbox' | 'production'
     draft?: string
   }>
   navigate: (opts: Readonly<{
-    search: Readonly<{
+    search: OwnerInventoryReturnSearch & Readonly<{
       draft: string
       connection?: string
       environment?: 'sandbox' | 'production'
@@ -45,6 +48,8 @@ export type AeOwnerSupplySourceStartPageProps = Readonly<{
 
 export function AeOwnerSupplySourceStartPage({ data, search, navigate }: AeOwnerSupplySourceStartPageProps) {
   const { identity, connections, resume, resumeRequested, sourceUnavailable } = data
+  const inventoryQuery = inventoryQueryFromReturnSearch(search)
+  const returnHref = ownerInventoryHref(inventoryQuery ?? {})
   const formRef = useRef<HTMLDivElement>(null)
   const [navigationSafety, setNavigationSafety] = useState<{
     dirty: boolean
@@ -59,12 +64,13 @@ export function AeOwnerSupplySourceStartPage({ data, search, navigate }: AeOwner
   const publish = useReverification(publishRequest)
 
   return (
-    <AeOperatorPage operatorRole="owner" title="Add Tool" description="Connect a Tool you already run. Agentic Economy checks what agents can buy." currentPath="/owner/operations/new" breadcrumbs={[{ label: 'Tools', href: '/owner/operations' }, { label: 'Add Tool' }]}>
+    <AeOperatorPage operatorRole="owner" title="Add Tool" description="Connect a Tool you already run. Agentic Economy checks what agents can buy." currentPath="/owner/operations/new" breadcrumbs={[{ label: 'Tools', href: returnHref }, { label: 'Add Tool' }]}>
       {identity.kind !== 'available' ? (
         <AeAlert tone="danger" title="Provider Workspace unavailable" className="arc-market arc-supply-owner-feedback"><div className="arc-supply-owner-feedback-description">
             <p>Agentic Economy could not confirm the current Business. Return to Tools and try again.</p>
             <Link
               to="/owner/operations"
+              search={inventoryQuery ?? {}}
               className={`arc-market ${actionLinkClassName('secondary', 'md')} arc-supply-feedback-action`}
             >
               Return to Tools
@@ -76,8 +82,15 @@ export function AeOwnerSupplySourceStartPage({ data, search, navigate }: AeOwner
         {resumeRequested && resume.kind !== 'available' ? (
           <AeAlert tone="danger" title="Saved source could not be resumed" className="arc-market arc-supply-owner-feedback mb-5"><div className="arc-supply-owner-feedback-description">The saved source is unavailable or changed. Review it from Add Tool before starting another connection.</div></AeAlert>
         ) : null}
+        {resume.kind === 'available' ? <div className="mb-4 grid gap-2 rounded-lg border p-4" role="status">
+          <p className="font-medium">Saved Tool setup restored</p>
+          <p className="text-sm text-muted-foreground">Source and saved terms were read for this Provider. Review them before submitting; publication authority must be confirmed again.</p>
+          <AeCopyReference label="Saved Tool setup reference" value={resume.candidateRef} />
+          <a href={ownerToolSetupHref({ draft: resume.candidateRef, ...(resume.connectionRef === undefined ? {} : { connection: resume.connectionRef }), ...(resume.source.environment === undefined ? {} : { environment: resume.source.environment }) }, inventoryQuery)} className="justify-self-start text-sm underline underline-offset-4">Reopen this saved setup</a>
+        </div> : null}
         <AeNavigationSafetyBoundary
           state={navigationSafety}
+          blockSearchChanges
           title="Leave without saving these terms?"
           pendingTitle="Saving these terms"
           description="The terms you entered are not saved. Leave this page and they will be discarded."
@@ -87,7 +100,9 @@ export function AeOwnerSupplySourceStartPage({ data, search, navigate }: AeOwner
         >
         <div ref={formRef} tabIndex={-1}>
         <AeSupplySourceNativeStart
+          key={JSON.stringify([identity.businessId, search.draft ?? null, search.connection ?? null, search.environment ?? null])}
           businessRef={identity.businessId}
+          {...(inventoryQuery === undefined ? {} : { returnInventoryQuery: inventoryQuery })}
           onNavigationSafetyChange={(next) => {
             setNavigationSafety((current) => (
               current.dirty === next.dirty && current.pending === next.pending && current.saveOutcome === next.saveOutcome
@@ -106,6 +121,7 @@ export function AeOwnerSupplySourceStartPage({ data, search, navigate }: AeOwner
             await navigate({
               search: {
                 draft: candidateRef,
+                ...ownerInventoryReturnSearch(inventoryQuery),
                 ...(connectionRef === undefined ? {} : { connection: connectionRef }),
                 ...(search.environment === undefined ? {} : { environment: search.environment }),
               },

@@ -77,7 +77,7 @@ Registrations live in `convex/*.ts`. Concern bodies live in `convex/lib/<domain>
 - Every `query`, `mutation` and `action` registration declares `returns`. A handler that calls `ctx.runQuery`, `ctx.runMutation` or `ctx.runAction` declares its return type.
 - Generated API module, method and kind stay aligned with string call sites.
 - No `index.ts` barrels under Convex. Import the concern file directly.
-- No maintained file under `src/` or `convex/` exceeds 1,000 lines. Generated files, tests and `convex/devSeed.ts` are outside that ceiling.
+- No maintained file under `src/` or `convex/` exceeds 1,000 lines. Generated files, tests and `convex/devSeed.ts` are outside that ceiling. The two exact, hash-verified REUI Data Grid source files listed in `src/components/reui/upstream-manifest.json` retain upstream structure and are the only vendor size exceptions. Aecon adapters remain under 1,000 lines; strict TypeScript and security/import checks still apply to imported source.
 
 Before changing Convex code, read `convex/_generated/ai/guidelines.md`. Its project-specific API rules take precedence over general guidance.
 

@@ -1,5 +1,8 @@
 'use client'
 
+import { WorkspaceFrameContext } from './app-shell/WorkspaceFrameContext'
+import { AdminCommandRecoveryPanel } from '@/components/ae/admin/actions/AdminCommandRecoveryPanel'
+
 import { createContext, use, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Link } from '@tanstack/react-router'
@@ -140,6 +143,7 @@ function RootOperatorPage(props: AeOperatorPageProps) {
   const resolvedMainContentId = mainContentId ?? 'main-content'
   const showDescriptionLine = description !== '' || actions !== undefined
 
+  const workspaceFrame = use(WorkspaceFrameContext)
   const adminPath = currentChrome.currentPath.startsWith('/admin/workspaces/') ? '/admin/accounts'
     : /^\/admin\/(calls|quotes)\//.test(currentChrome.currentPath) ? '/admin/activity' : currentChrome.currentPath
   const activeAdminHref = activeRoleNavigationHref(adminPath, ADMIN_NAVIGATION)
@@ -165,7 +169,7 @@ function RootOperatorPage(props: AeOperatorPageProps) {
           data-testid="operator-page-stack"
           className="arc-operator-page-stack"
         >
-          {currentChrome.operatorRole === 'admin' && !currentChrome.suppressSurfaceNavigation ? (
+          {currentChrome.operatorRole === 'admin' && !workspaceFrame && !currentChrome.suppressSurfaceNavigation ? (
             <nav aria-label="Admin navigation" className="flex flex-wrap gap-x-related gap-y-1 border-b border-border pb-intra">
               {ADMIN_NAVIGATION.map(item => (
                 <Link key={item.href} to={item.href} activeOptions={{ exact: true }} aria-current={item.href === activeAdminHref ? 'page' : undefined}
@@ -186,6 +190,7 @@ function RootOperatorPage(props: AeOperatorPageProps) {
             </div>
           ) : null}
           {secondaryBar === undefined ? null : secondaryBar}
+          {currentChrome.operatorRole === 'admin' ? <AdminCommandRecoveryPanel /> : null}
           {children}
         </div>
       </main>

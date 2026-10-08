@@ -319,8 +319,13 @@ export const capabilitySupplyTables = {
     publicationRevision: v.optional(v.number()),
     offeringId: v.optional(v.string()),
     bindingId: v.optional(v.string()),
+    // Optional during migration; indexed queries refuse incomplete owner inventories.
+    inventoryName: v.optional(v.string()),
+    inventoryText: v.optional(v.string()),
     updatedAt: v.number(),
   })
+    .index('by_businessId_and_inventoryName', ['businessId', 'inventoryName'])
+    .searchIndex('search_inventoryText', { searchField: 'inventoryText', filterFields: ['businessId'] })
     .index('by_businessId_and_updatedAt', ['businessId', 'updatedAt'])
     .index('by_businessId_and_toolRef', ['businessId', 'toolRef'])
     .index('by_businessId_and_offeringRef', ['businessId', 'offeringRef']),

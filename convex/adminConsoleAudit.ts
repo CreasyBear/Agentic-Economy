@@ -1,3 +1,4 @@
+import { readAdminCommandReceiptArgs, readAdminCommandReceiptResult, readAdminCommandReceiptHandler } from './lib/adminConsole/reads/commandReceipt'
 import { query } from './_generated/server'
 import { defineAdminQuery } from './lib/adminConsole/reads/registrars'
 import {
@@ -23,4 +24,10 @@ export const listAdminApprovalProposals = query({
   args: listAdminApprovalProposalsArgs,
   returns: listAdminApprovalProposalsResult,
   handler: listAdminApprovalProposalsHandler,
+})
+
+export const readAdminCommandReceipt = query({
+  args: readAdminCommandReceiptArgs,
+  returns: readAdminCommandReceiptResult,
+  handler: readAdminCommandReceiptHandler,
 })

@@ -14,6 +14,7 @@ import {
   type AeActivityProps,
   type ActivityStatusFilter,
 } from './activity.contracts'
+import { ActivityTriageOverview } from './components/ActivityTriageOverview'
 import { ActivityCallQueue } from './components/ActivityCallQueue'
 import { ActivityFilterBar } from './components/ActivityFilterBar'
 import { ActivityReconciliation } from './components/ActivityReconciliation'
@@ -34,10 +35,10 @@ function activityStatus(vm: ReturnType<typeof useAeActivity>): string {
   return `${vm.attentionRows.length} Calls need attention. ${vm.recentRows.length} recent Calls shown.`
 }
 
-export function AeActivity({ result, draftRef }: AeActivityProps) {
+export function AeActivity({ result, draftRef, initialStatus = 'all' }: AeActivityProps) {
   const router = useRouter()
   const [retryPending, setRetryPending] = useState(false)
-  const [statusFilter, setStatusFilter] = useState<ActivityStatusFilter>('all')
+  const [statusFilter, setStatusFilter] = useState<ActivityStatusFilter>(initialStatus)
 
   if (result.kind === 'unavailable') {
     return (
@@ -89,7 +90,7 @@ function AeActivityAvailable({
     ...(result.filteredAgent === undefined ? {} : { filteredAgent: result.filteredAgent }),
   })
 
-  const returnScope = { returnRange: result.dateRangeFilter, ...(result.filteredAgent === undefined ? {} : { returnAgent: result.filteredAgent }) }
+  const returnScope = { returnStatus: statusFilter, returnRange: result.dateRangeFilter, ...(result.filteredAgent === undefined ? {} : { returnAgent: result.filteredAgent }) }
   return (
     <AeOperatorPage
       operatorRole="owner"
@@ -118,7 +119,48 @@ function AeActivityAvailable({
             onResetFilters={vm.resetFilters}
           />
         ) : null}
-        {result.filteredAgent === undefined ? <PlanActivity plans={result.plans} /> : null}
+        <ActivityTriageOverview attentionCount={vm.attentionRows.length} recentCount={vm.recentRows.length}
+          loadedCount={vm.pagination.items.length} filtered={vm.filtersActive} />
+        {vm.showEmptyNoCalls ? (
+          <AeEmptyState
+            title="No Calls in this period"
+            description="No Calls were recorded for the selected Account or Agent and date range. Change the filters or find a Tool."
+            action={<Link to="/market" className={actionLinkClassName('primary', 'md')}>Find Tools</Link>}
+          />
+        ) : vm.showEmptyNoMatch ? (
+          <AeEmptyState
+            title="No Calls match these filters"
+            description={vm.pagination.cursor === undefined ? 'No Calls in this period have the selected status.' : 'No loaded Calls have the selected status. Load more to check the remaining history.'}
+            action={
+              <Button type="button" className="min-h-touch" onClick={vm.resetFilters}>
+                Reset filters
+              </Button>
+            }
+          />
+        ) : vm.showQueues ? (
+          <>
+            <ActivityCallQueue returnScope={returnScope}
+              title="Needs attention"
+              description={vm.attentionDescription}
+              rows={vm.attentionRows}
+              emptyMessage={vm.attentionEmptyMessage}
+              attention
+            />
+            <ActivityCallQueue returnScope={returnScope}
+              title="Recent Calls"
+              description="Completed and refused Calls, separate from work that still needs a decision."
+              rows={vm.recentRows}
+              emptyMessage="No routine Calls in the loaded history."
+            />
+          </>
+        ) : null}
+        <ActivityPaginationControl pagination={vm.pagination} onLoadMore={vm.loadNextPage} />
+        <PlanActivity plans={result.plans} returnScope={returnScope} agentFiltered={result.filteredAgent !== undefined}
+          onShowAccountPlans={vm.clearAgent} pending={vm.datePending} />
+        <p className="text-xs text-muted-foreground">{vm.pagination.items.length} Calls loaded. Table status filters, sorting and loaded exports apply to loaded rows. Saved full-period reports read every page for the selected period, Agent and status, up to 366 days. Changed source records require a new report; incomplete reports cannot be downloaded.</p>
+        <section aria-labelledby="activity-finance-title" className="grid min-w-0 gap-8 border-t border-border pt-8">
+          <div className="grid gap-1"><h2 id="activity-finance-title" className="text-lg font-semibold">Finance and reporting</h2>
+            <p className="text-sm text-muted-foreground">Recorded totals, reconciliation, and exports for the selected Account or Agent scope.</p></div>
         <ActivityMonthlySummary
           periodStart={vm.periodStart}
           monthly={vm.monthly}
@@ -165,41 +207,7 @@ function AeActivityAvailable({
           </div>
         ) : null}
         <ActivityUsageReports {...(vm.usageReportRequest === undefined ? {} : {request:vm.usageReportRequest})} />
-        {vm.showEmptyNoCalls ? (
-          <AeEmptyState
-            title="No Calls in this period"
-            description="No Calls were recorded for the selected Account or Agent and date range. Change the filters or find a Tool."
-            action={<Link to="/market" className={actionLinkClassName('primary', 'md')}>Find Tools</Link>}
-          />
-        ) : vm.showEmptyNoMatch ? (
-          <AeEmptyState
-            title="No Calls match these filters"
-            description={vm.pagination.cursor === undefined ? 'No Calls in this period have the selected status.' : 'No loaded Calls have the selected status. Load more to check the remaining history.'}
-            action={
-              <Button type="button" className="min-h-touch" onClick={vm.resetFilters}>
-                Reset filters
-              </Button>
-            }
-          />
-        ) : vm.showQueues ? (
-          <>
-            <ActivityCallQueue returnScope={returnScope}
-              title="Needs attention"
-              description={vm.attentionDescription}
-              rows={vm.attentionRows}
-              emptyMessage={vm.attentionEmptyMessage}
-              attention
-            />
-            <ActivityCallQueue returnScope={returnScope}
-              title="Recent Calls"
-              description="Completed and refused Calls, separate from work that still needs a decision."
-              rows={vm.recentRows}
-              emptyMessage="No routine Calls in the loaded history."
-            />
-          </>
-        ) : null}
-        <ActivityPaginationControl pagination={vm.pagination} onLoadMore={vm.loadNextPage} />
-        <p className="text-xs text-muted-foreground">{vm.pagination.items.length} Calls loaded. Table status filters, sorting and loaded exports apply to loaded rows. Saved full-period reports read every page for the selected period, Agent and status, up to 366 days. Changed source records require a new report; incomplete reports cannot be downloaded.</p>
+        </section>
       </div>
     </AeOperatorPage>
   )

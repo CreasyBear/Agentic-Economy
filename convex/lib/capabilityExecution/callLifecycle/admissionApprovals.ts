@@ -84,6 +84,11 @@ export async function listPendingCallApprovalsHandler(
   return approvals.flat()
 }
 
+/** Owner-scoped callers reuse the same accepted material; this helper grants no authority. */
+export async function readCallApprovalDecisionContext(ctx: QueryCtx, row: CallRow): Promise<CallApprovalDecisionContext | undefined> {
+  return pendingApprovalRow(row) ? approvalDecisionContext(ctx, row) : undefined
+}
+
 async function approvalDecisionContext(ctx: QueryCtx, row: PendingApprovalRow): Promise<CallApprovalDecisionContext> {
   const [currentDisplayName, acceptedQuote] = await Promise.all([
     approvalAgentName(ctx, row),

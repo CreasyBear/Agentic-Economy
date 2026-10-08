@@ -14,12 +14,14 @@ export function WorkspaceClosePanel({
   callerIsOwner,
   fencesPresent,
   fenceMessages,
+  fenceDestinations,
   displayName,
   confirmationName,
   closeDisabled,
   closeDiagnostic,
   showCloseConfirmDialog,
   closePending,
+  closeAttemptUnconfirmed = false,
   onConfirmationNameChange,
   onRequestClose,
   onCloseDialogOpenChange,
@@ -32,7 +34,7 @@ export function WorkspaceClosePanel({
         {callerIsOwner ? (
           <div className="arc-workspace-danger-body">
             {fencesPresent ? (
-              <DecommissionFenceList fenceMessages={fenceMessages} />
+              <DecommissionFenceList fenceMessages={fenceMessages} {...(fenceDestinations === undefined ? {} : { fenceDestinations })} />
             ) : (
               <p className="arc-workspace-danger-description">
                 Close is allowed. Confirming it ends this workspace.
@@ -45,6 +47,7 @@ export function WorkspaceClosePanel({
                   className="arc-workspace-danger-input"
                   type="text"
                   aria-label="Type workspace name to confirm"
+                  disabled={closePending || closeAttemptUnconfirmed}
                   value={confirmationName}
                   onChange={(event) => {
                     onConfirmationNameChange(event.target.value)
@@ -61,14 +64,14 @@ export function WorkspaceClosePanel({
               className="arc-workspace-danger-action"
               onClick={onRequestClose}
             >
-              Close workspace
+              {closeAttemptUnconfirmed ? 'Check close attempt' : 'Close workspace'}
             </Button>
             <AeConfirmDialog
               open={showCloseConfirmDialog}
               onOpenChange={onCloseDialogOpenChange}
-              title="Close workspace?"
+              title={closeAttemptUnconfirmed ? 'Check this close attempt?' : 'Close workspace?'}
               description={`Permanently close ${displayName}. Tools, access keys, and delegations on this workspace stop.`}
-              confirmLabel="Permanently close workspace"
+              confirmLabel={closeAttemptUnconfirmed ? 'Check same close attempt' : 'Permanently close workspace'}
               confirmVariant="destructive"
               pending={closePending}
               diagnostic={closeDiagnostic}

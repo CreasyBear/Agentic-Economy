@@ -62,6 +62,11 @@ function renderWithRouter(result: CallStatusPageResult, actions?: CallStatusPage
   )
 }
 
+function reviewReconciliationEvidence() {
+  const review = screen.queryByRole('button', { name: 'Review reconciliation evidence' })
+  if (review !== null) fireEvent.click(review)
+}
+
 function renderRouteComponent(result: CallStatusPageResult) {
   vi.spyOn(Route, 'useSearch').mockReturnValue({} as never)
   vi.spyOn(Route, 'useLoaderData').mockReturnValue(result as never)
@@ -310,8 +315,12 @@ describe('/calls/$callRef', () => {
       ownerContext,
     }, { onReconcile })
 
+    expect(screen.queryByRole('button', { name: 'Submit reconciliation evidence' })).toBeNull()
+    reviewReconciliationEvidence()
+    expect(document.activeElement).toBe(screen.getByLabelText('Evidence source'))
     fireEvent.click(screen.getByRole('combobox', { name: 'Observed Provider outcome' }))
     fireEvent.click(screen.getByRole('option', { name: 'Effect released' }))
+    reviewReconciliationEvidence()
     fireEvent.change(screen.getByLabelText('Evidence source'), { target: { value: 'Provider control plane' } })
     fireEvent.change(screen.getByLabelText('Evidence reference'), { target: { value: 'evt_123' } })
     fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation evidence' }))
@@ -464,6 +473,7 @@ describe('/calls/$callRef', () => {
     const keepButton = within(dialog).getByRole('button', { name: 'Keep Call' })
     await waitFor(() => expect(document.activeElement).toBe(keepButton))
     fireEvent.click(keepButton)
+    await waitFor(() => expect(screen.queryByRole('alertdialog', { name: 'Cancel this Call?' })).toBeNull())
     expect(onCancel).not.toHaveBeenCalled()
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel Call' }))
@@ -628,6 +638,7 @@ describe('/calls/$callRef', () => {
       ownerContext,
     })
 
+    reviewReconciliationEvidence()
     fireEvent.change(screen.getByLabelText('Evidence source'), { target: { value: 'Provider control plane' } })
     fireEvent.change(screen.getByLabelText('Evidence reference'), { target: { value: 'evt_123' } })
     fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation evidence' }))
@@ -660,8 +671,10 @@ describe('/calls/$callRef', () => {
     } as const
     const firstView = renderRouteComponent(result)
 
+    reviewReconciliationEvidence()
     fireEvent.click(screen.getByRole('combobox', { name: 'Observed Provider outcome' }))
     fireEvent.click(screen.getByRole('option', { name: 'Effect released' }))
+    reviewReconciliationEvidence()
     fireEvent.change(screen.getByLabelText('Evidence source'), { target: { value: 'Provider control plane' } })
     fireEvent.change(screen.getByLabelText('Evidence reference'), { target: { value: 'evt_123' } })
     fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation evidence' }))
@@ -669,6 +682,7 @@ describe('/calls/$callRef', () => {
     firstView.unmount()
 
     renderRouteComponent(result)
+    reviewReconciliationEvidence()
     expect((screen.getByLabelText('Evidence source') as HTMLInputElement).value).toBe('Provider control plane')
     expect((screen.getByLabelText('Evidence reference') as HTMLInputElement).value).toBe('evt_123')
     expect(screen.getByRole('combobox', { name: 'Observed Provider outcome' }).textContent).toContain('Effect released')
@@ -689,6 +703,7 @@ describe('/calls/$callRef', () => {
       attemptRef: 'attempt:uncertain', effectGeneration: 2, ownerContext,
     } as const
     const firstView = renderRouteComponent(result)
+    reviewReconciliationEvidence()
     fireEvent.change(screen.getByLabelText('Evidence source'), { target: { value: 'Provider control plane' } })
     fireEvent.change(screen.getByLabelText('Evidence reference'), { target: { value: 'evt_123' } })
     fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation evidence' }))
@@ -702,6 +717,7 @@ describe('/calls/$callRef', () => {
     firstView.unmount()
 
     renderRouteComponent(result)
+    reviewReconciliationEvidence()
     expect((screen.getByLabelText('Evidence source') as HTMLInputElement).value).toBe('')
     expect((screen.getByLabelText('Evidence reference') as HTMLInputElement).value).toBe('')
   })
@@ -714,6 +730,7 @@ describe('/calls/$callRef', () => {
       kind: 'found', version: 1, callRef, toolRef, state: 'reconciliation_required',
       attemptRef: 'attempt:uncertain', effectGeneration: 2, ownerContext,
     })
+    reviewReconciliationEvidence()
     fireEvent.change(screen.getByLabelText('Evidence source'), { target: { value: 'Provider control plane' } })
     fireEvent.change(screen.getByLabelText('Evidence reference'), { target: { value: 'evt_123' } })
     fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation evidence' }))
@@ -724,8 +741,10 @@ describe('/calls/$callRef', () => {
       kind: 'found', version: 2, callRef, toolRef, state: 'reconciliation_required',
       attemptRef: 'attempt:uncertain', effectGeneration: 3, ownerContext,
     })
+    reviewReconciliationEvidence()
     expect((screen.getByLabelText('Evidence source') as HTMLInputElement).value).toBe('')
     expect((screen.getByLabelText('Evidence reference') as HTMLInputElement).value).toBe('')
+    reviewReconciliationEvidence()
     fireEvent.change(screen.getByLabelText('Evidence source'), { target: { value: 'Provider control plane' } })
     fireEvent.change(screen.getByLabelText('Evidence reference'), { target: { value: 'evt_123' } })
     fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation evidence' }))
@@ -750,6 +769,7 @@ describe('/calls/$callRef', () => {
       kind: 'found', version: 1, callRef, toolRef, state: 'reconciliation_required',
       attemptRef: 'attempt:uncertain', effectGeneration: 2, ownerContext,
     })
+    reviewReconciliationEvidence()
     fireEvent.change(screen.getByLabelText('Evidence source'), { target: { value: 'Old provider source' } })
     fireEvent.change(screen.getByLabelText('Evidence reference'), { target: { value: 'evt_old' } })
     fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation evidence' }))
@@ -757,11 +777,13 @@ describe('/calls/$callRef', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Check status' }))
     await screen.findByText('Current status refreshed. Purchase status: Open — outcome uncertain.')
+    reviewReconciliationEvidence()
     expect((screen.getByLabelText('Evidence source') as HTMLInputElement).value).toBe('')
     expect((screen.getByLabelText('Evidence reference') as HTMLInputElement).value).toBe('')
     fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation evidence' }))
     expect(reconcileMock).toHaveBeenCalledTimes(1)
 
+    reviewReconciliationEvidence()
     fireEvent.change(screen.getByLabelText('Evidence source'), { target: { value: 'Current provider source' } })
     fireEvent.change(screen.getByLabelText('Evidence reference'), { target: { value: 'evt_current' } })
     fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation evidence' }))
@@ -793,6 +815,7 @@ describe('/calls/$callRef', () => {
     const view = render(
       <RouterContextProvider router={router}>{createElement(Component)}</RouterContextProvider>,
     )
+    reviewReconciliationEvidence()
     fireEvent.change(screen.getByLabelText('Evidence source'), { target: { value: 'Old provider source' } })
     fireEvent.change(screen.getByLabelText('Evidence reference'), { target: { value: 'evt_old' } })
     fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation evidence' }))
@@ -801,6 +824,7 @@ describe('/calls/$callRef', () => {
     loader.mockReturnValue(next)
     view.rerender(<RouterContextProvider router={router}>{createElement(Component)}</RouterContextProvider>)
 
+    reviewReconciliationEvidence()
     expect((screen.getByLabelText('Evidence source') as HTMLInputElement).value).toBe('')
     expect((screen.getByLabelText('Evidence reference') as HTMLInputElement).value).toBe('')
     fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation evidence' }))
@@ -822,6 +846,7 @@ describe('/calls/$callRef', () => {
       ownerContext,
     })
 
+    reviewReconciliationEvidence()
     fireEvent.change(screen.getByLabelText('Evidence source'), { target: { value: 'Provider control plane' } })
     fireEvent.change(screen.getByLabelText('Evidence reference'), { target: { value: 'evt_123' } })
     fireEvent.click(screen.getByRole('button', { name: 'Submit reconciliation evidence' }))

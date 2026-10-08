@@ -1,6 +1,6 @@
 import { useLocation, useRouter } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { readProviderWorkspaceIdentityDetailServer, type ProviderWorkspaceIdentityDetailResult } from '@/components/ae/offerings/provider-workspace.functions'
 import { focusSection } from '@/components/ae/offerings/provider-workspace-projection'
@@ -28,6 +28,10 @@ export function useProviderWorkspaceSheets(input: UseProviderWorkspaceSheetsInpu
   const [earningsPending, setEarningsPending] = useState(false)
   const [earningsUnavailable, setEarningsUnavailable] = useState(false)
   const [earningsDetail, setEarningsDetail] = useState<OwnerProviderEarningsReadback>()
+  const [earningsReadAt, setEarningsReadAt] = useState<number>()
+  const earningsOpenRef = useRef(false)
+  const earningsRequestPending = useRef(false)
+  const lastEarningsRequest = useRef<Readonly<{ cursor?: string; append: boolean }>>({ append: false })
 
   const compatibilitySearch = location.search as Record<string, unknown>
   const validatedCompatibilitySearch = parseOwnerToolsCompatibilitySearch(compatibilitySearch)
@@ -36,26 +40,49 @@ export function useProviderWorkspaceSheets(input: UseProviderWorkspaceSheetsInpu
   const compatibilityRebind = validatedCompatibilitySearch.rebind
   const compatibilityCursor = validatedCompatibilitySearch.cursor
 
-  const loadEarnings = useCallback(() => {
-    if (!input.enabled || earningsPending) return
+  const requestEarnings = useCallback((request: Readonly<{ cursor?: string; append: boolean }>) => {
+    if (!input.enabled || earningsRequestPending.current) return
+    earningsRequestPending.current = true
+    lastEarningsRequest.current = request
     setEarningsPending(true)
     setEarningsUnavailable(false)
-    void readEarnings()
-      .then(setEarningsDetail)
+    void readEarnings({ data: request.cursor === undefined ? {} : { cursor: request.cursor } })
+      .then((next) => {
+        if (next.kind === 'error' || next.kind === 'conflict') {
+          // A failed continuation keeps previously observed records and retries this same cursor.
+          setEarningsUnavailable(true)
+          if (next.kind === 'error' && next.code === 'source_unavailable') setEarningsDetail(previous => previous ?? next)
+          else setEarningsDetail(next)
+          return
+        }
+        setEarningsDetail(previous => request.append && next.kind === 'available' && previous?.kind === 'available' && previous.businessId === next.businessId
+          ? { ...next, obligations: [...new Map([...previous.obligations, ...next.obligations].map(row => [row.obligationRef, row])).values()] }
+          : next)
+        setEarningsReadAt(Date.now())
+      })
       .catch((cause) => {
         captureClientExceptionOnClient(cause)
         setEarningsUnavailable(true)
       })
-      .finally(() => setEarningsPending(false))
-  }, [earningsPending, input.enabled, readEarnings])
+      .finally(() => { earningsRequestPending.current = false; setEarningsPending(false) })
+  }, [input.enabled, readEarnings])
+
+  const loadEarnings = useCallback(() => requestEarnings({ append: false }), [requestEarnings])
+  const retryEarnings = useCallback(() => requestEarnings(lastEarningsRequest.current), [requestEarnings])
+  const loadMoreEarnings = useCallback(() => {
+    if (earningsDetail?.kind === 'available' && earningsDetail.isDone === false && earningsDetail.continueCursor) {
+      requestEarnings({ cursor: earningsDetail.continueCursor, append: true })
+    }
+  }, [earningsDetail, requestEarnings])
 
   const openEarnings = useCallback(() => {
     if (!input.enabled) return
     setEarningsOpen(true)
-    if (earningsDetail === undefined && !earningsUnavailable) loadEarnings()
-  }, [earningsDetail, earningsUnavailable, input.enabled, loadEarnings])
+    if (!earningsOpenRef.current) { earningsOpenRef.current = true; loadEarnings() }
+  }, [input.enabled, loadEarnings])
 
   const closeEarnings = useCallback(() => {
+    earningsOpenRef.current = false
     setEarningsOpen(false)
   }, [])
 
@@ -106,6 +133,9 @@ export function useProviderWorkspaceSheets(input: UseProviderWorkspaceSheetsInpu
     earningsPending,
     earningsUnavailable,
     earningsDetail,
+    earningsReadAt,
+    retryEarnings,
+    loadMoreEarnings,
     openEarnings,
     closeEarnings,
     loadEarnings,

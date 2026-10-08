@@ -1,3 +1,4 @@
+import { AdminInvestigationLink } from '../../exceptions/AdminInvestigationReturn'
 import { SortableDataTable, type DataColumn } from '@/components/arc/sortable-data-table/sortable-data-table'
 
 import { Badge } from '@/components/arc/badge/badge'
@@ -17,12 +18,12 @@ const columns: DataColumn<ProviderPublicationRow>[] = [
     sortable: false,
     label: PROVIDER_OBJECT_COPY.columns.toolVersion,
     render: (_value, row) => (
-      <a
+      <AdminInvestigationLink
         className="arc-admin-record-link"
         href={`/admin/tools/${encodeURIComponent(row.ref)}`}
       >
         {row.ref}
-      </a>
+      </AdminInvestigationLink>
     ),
   },
   {

@@ -7,6 +7,7 @@ import { recordWorkspaceAuditEvent } from './audit'
 
 export const renameUnboundWorkspaceArgs = v.object({
     name: v.string(),
+    expectedAccountRef: v.string(),
     expectedRevision: v.number(),
     correlationRef: v.string(),
     idempotencyRef: v.string(),
@@ -22,6 +23,7 @@ export const renameUnboundWorkspaceHandler = async (ctx: MutationCtx, args: Infe
     if (identity === null) throw new InteractiveAuthorityError('identity_invalid')
     const { canonicalPrincipalRef, canonicalAccountRef, account } =
       await requireAuthenticatedAccountContext(ctx.db, identity)
+    if (canonicalAccountRef !== args.expectedAccountRef) throw new InteractiveAuthorityError('ownership_mismatch')
     const access = await requireAccessFactForAccount(ctx.db, canonicalPrincipalRef, canonicalAccountRef)
     if (access.kind !== 'ownership') throw new InteractiveAuthorityError('ownership_mismatch')
     const bindings = await ctx.db.query('accountExternalOrganizationBindings')

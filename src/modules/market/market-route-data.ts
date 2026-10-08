@@ -1,9 +1,15 @@
+import { parseMarketSaveIntent } from '@/components/ae/market/market-save-intent'
+import { isPublicToolRef } from '@/modules/common/tool-ref'
+import { readPublicToolDetailRouteServer } from './tool-detail-route.functions'
+import { readMarketExternalListingServer } from './market-comparison.functions'
+import type { PublicToolDescriptor } from '@/modules/capability-supply/public'
 import type { MarketReturnSearch } from '@/components/ae/market/market-return-context'
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
 import {
   readX402DirectoryCatalogueOverviewServer,
   readX402DirectoryCatalogueResourceServer,
   readX402DirectoryCatalogueServer,
+  readX402DirectoryProvidersServer,
 } from '@/modules/market/x402-directory-index.functions'
 import { x402DirectoryCatalogueInputSchema, type X402DirectoryCatalogue, type X402DirectoryCatalogueOverview } from '@/modules/market/x402-directory-catalogue'
 import { directoryBooleanSearchKeys, directoryCatalogueSearchKeys, directoryCatalogueSearchValues } from '@/modules/market/x402-directory-navigation'
@@ -50,18 +56,18 @@ export type MarketSearch = MarketReturnSearch
 export type MarketView = NonNullable<MarketSearch['view']>
 
 /** Reviewed-provider and alternative searches need the catalogue's filtering path. */
-export function marketUsesCanonicalSearch(search: Pick<MarketSearch, 'query' | 'alternativeTo' | 'reviewedProvidersOnly'>): boolean {
-  return search.query !== undefined && search.alternativeTo === undefined && search.reviewedProvidersOnly !== true
+export function marketUsesCanonicalSearch(search: MarketSearch): boolean {
+  return search.query !== undefined && search.alternativeTo === undefined && search.reviewedProvidersOnly !== true && !marketHasBrowseOnlyFilters(search)
 }
 
 export function marketDocumentTitle(view: MarketView | undefined): string {
   switch (view) {
     case 'discover':
-      return 'Collections | Agentic Economy'
+      return 'Market | Agentic Economy'
     case 'tools':
       return 'Tools | Agentic Economy'
     case 'providers':
-      return 'Providers | Agentic Economy'
+      return 'Directory Hosts | Agentic Economy'
     case 'saved':
       return 'Saved Tools | Agentic Economy'
     case undefined:
@@ -74,12 +80,18 @@ export function marketDocumentTitle(view: MarketView | undefined): string {
 }
 
 export type MarketCompareEntry =
-  | Readonly<{ resource: string; entry: X402DirectoryEntry; missing?: never }>
-  | Readonly<{ resource: string; missing: true; entry?: never }>
+  | Readonly<{ resource: string; entry: X402DirectoryEntry; tool?: never; missing?: never }>
+  | Readonly<{ resource: string; tool: PublicToolDescriptor; entry?: never; missing?: never }>
+  | Readonly<{ resource: string; missing: true; entry?: never; tool?: never }>
 
 export function parseMarketCompareRefs(value: unknown): readonly string[] | undefined {
   if (typeof value !== 'string' || value.length === 0 || value.length > 20_000) return undefined
-  const refs = [...new Set(value.split(',').map((part) => part.trim()).filter((part) => part.length > 0 && part.length <= 8_192))]
+  let parts: unknown = value.split(',')
+  if (value.startsWith('[')) {
+    try { parts = JSON.parse(value) } catch { return undefined }
+  }
+  if (!Array.isArray(parts) || !parts.every(part => typeof part === 'string')) return undefined
+  const refs = [...new Set(parts.map((part: string) => part.trim()).filter((part: string) => part.length > 0 && part.length <= 8_192))]
   if (refs.length === 0 || refs.length > 4) return undefined
   return refs
 }
@@ -93,7 +105,8 @@ export function toggleMarketCompareRef(current: readonly string[], ref: string):
 }
 
 export function marketCompareParam(refs: readonly string[]): string | undefined {
-  return parseMarketCompareRefs(refs.join(','))?.join(',')
+  const parsed = parseMarketCompareRefs(refs.some(ref => ref.includes(',')) ? JSON.stringify(refs) : refs.join(','))
+  return parsed === undefined ? undefined : parsed.some(ref => ref.includes(',')) ? JSON.stringify(parsed) : parsed.join(',')
 }
 
 /**
@@ -118,7 +131,7 @@ export function carryMarketCompare<const T extends Record<string, unknown>>(
       const { compare: _compare, ...rest } = to
       return rest as T
     }
-    return { ...to, compare: parsed.join(',') }
+    return { ...to, compare: marketCompareParam(parsed) }
   }
   if (from.compare === undefined) return to
   return { ...to, compare: from.compare }
@@ -200,7 +213,7 @@ function cataloguePage(value: unknown): number | undefined {
   return page
 }
 
-const MARKET_SEARCH_KEYS = ['providerCursor', 'view', 'layout', 'compare', 'resource', 'page', ...directoryCatalogueSearchKeys] as const
+const MARKET_SEARCH_KEYS = ['providerCursor', 'view', 'layout', 'compare', 'resource', 'page', 'save', ...directoryCatalogueSearchKeys] as const
 
 export function validateMarketSearch(search: Record<string, unknown>): MarketSearch {
   const directory = catalogueSearchFromUrl(search)
@@ -209,14 +222,16 @@ export function validateMarketSearch(search: Record<string, unknown>): MarketSea
     : undefined
   const compareRefs = parseMarketCompareRefs(search.compare)
   const page = cataloguePage(search.page)
+  const save = parseMarketSaveIntent(search.save)
   const accepted: Record<string, unknown> = {
     ...directory,
     ...(providerCursor === undefined ? {} : { providerCursor }),
     ...(search.view === 'discover' || search.view === 'tools' || search.view === 'providers' || search.view === 'saved' ? { view: search.view } : {}),
     ...(search.layout === 'table' || search.layout === 'grid' ? { layout: search.layout } : {}),
-    ...(compareRefs === undefined ? {} : { compare: compareRefs.join(',') }),
+    ...(compareRefs === undefined ? {} : { compare: marketCompareParam(compareRefs) }),
     ...(typeof search.resource === 'string' && search.resource.length > 0 && search.resource.length <= 8_192 ? { resource: search.resource } : {}),
     ...(page === undefined ? {} : { page }),
+    ...(save === undefined ? {} : { save: JSON.stringify(save) }),
   }
   // The router merges this object over the raw URL. An omitted key would keep the rejected value and the loader would throw.
   for (const key of MARKET_SEARCH_KEYS) {
@@ -229,6 +244,7 @@ export function marketLoaderDeps(search: MarketSearch) {
   return {
     ...directoryCatalogueSearchValues(search),
     ...(search.providerCursor === undefined ? {} : { providerCursor: search.providerCursor }),
+    ...(search.view === 'providers' && search.page !== undefined ? { page: search.page } : {}),
     ...(search.view === undefined ? {} : { view: search.view }),
     ...(search.compare === undefined ? {} : { compare: search.compare }),
   }
@@ -243,8 +259,21 @@ function resolveMarketView(search: MarketSearch): MarketView {
 
 async function resolveMarketCompareEntry(resource: string): Promise<MarketCompareEntry> {
   try {
-    const result = await readX402DirectoryCatalogueResourceServer({ data: { resource } })
+    if (isPublicToolRef(resource)) {
+      const result = await readPublicToolDetailRouteServer({ data: { toolRef: resource } })
+      return result.kind === 'found' ? { resource, tool: result.tool } : { resource, missing: true }
+    }
+    const result = /^registry:[a-f0-9]{64}$/u.test(resource)
+      ? await readMarketExternalListingServer({ data: { id: resource } })
+      : await readX402DirectoryCatalogueResourceServer({ data: { resource } })
     if (result.kind === 'found' || result.kind === 'found_upstream') {
+      const admitted = result.item.entry.choice
+      const toolRef = result.kind === 'found' && isPublicToolRef(result.item.toolRef) ? result.item.toolRef
+        : admitted?.access !== 'external_listing' && isPublicToolRef(admitted?.toolRef) ? admitted.toolRef : undefined
+      if (toolRef !== undefined) {
+        const detail = await readPublicToolDetailRouteServer({ data: { toolRef } })
+        return detail.kind === 'found' ? { resource, tool: detail.tool } : { resource, missing: true }
+      }
       return { resource, entry: result.item.entry }
     }
   } catch (cause) {
@@ -260,14 +289,20 @@ function paintedOverview(overview: X402DirectoryCatalogueOverview, view: MarketV
   return { kind: 'ok', coverage: overview.coverage, categories: [], providers: [], networks: [], popular: [], recentlyUpdated: [] }
 }
 
+/** Hostname lookup uses the Host index. Existing Tool-constrained URLs retain their Tool semantics. */
+export function marketUsesHostDirectory(search: MarketSearch): boolean {
+  return resolveMarketView(search) === 'providers' && search.page === undefined && Object.keys(directoryCatalogueSearchValues(search)).every(key => key === 'query')
+}
+
 export async function loadMarketRouteData(deps: MarketSearch) {
   const parsedCatalogue = x402DirectoryCatalogueInputSchema.safeParse(catalogueSearchFromUrl({ ...directoryCatalogueSearchValues(deps) }))
   const catalogueInput = parsedCatalogue.success ? parsedCatalogue.data : x402DirectoryCatalogueInputSchema.parse({})
   const view = resolveMarketView(deps)
   const showHome = view === 'discover'
+  const showHosts = marketUsesHostDirectory(deps)
   const compareRefs = parseMarketCompareRefs(deps.compare) ?? []
-  const [loadedCatalogue, home, loadedOverview, compareEntries] = await Promise.all([
-    showHome
+  const [loadedCatalogue, home, loadedOverview, compareEntries, providers] = await Promise.all([
+    showHome || showHosts
       ? Promise.resolve(undefined)
       : view === 'providers' || !marketUsesCanonicalSearch(catalogueInput)
       ? readX402DirectoryCatalogueServer({ data: { ...catalogueInput, ...(catalogueInput.sort || catalogueInput.query ? {} : { sort: 'adoption' as const }) } }).catch((cause: unknown) => {
@@ -281,6 +316,13 @@ export async function loadMarketRouteData(deps: MarketSearch) {
       return { kind: 'unavailable' as const, reason: 'source_unavailable' as const }
     }),
     Promise.all(compareRefs.map(resolveMarketCompareEntry)),
+    showHosts ? readX402DirectoryProvidersServer({ data: {
+      ...(deps.query === undefined ? {} : { providerPrefix: deps.query }),
+      ...(deps.providerCursor === undefined ? {} : { providerCursor: deps.providerCursor }),
+    } }).catch((cause: unknown) => {
+      console.error('[market] directory Hosts unavailable', { cause })
+      return { kind: 'unavailable' as const, reason: 'source_unavailable' as const }
+    }) : Promise.resolve(undefined),
   ])
   const overview = paintedOverview(loadedOverview, view)
   const catalogue = loadedCatalogue ?? {
@@ -294,7 +336,7 @@ export async function loadMarketRouteData(deps: MarketSearch) {
   const page = catalogue?.kind === 'ok'
     ? catalogue.page
     : { kind: 'unavailable' as const, reason: catalogue?.reason === 'query_invalid' ? 'query_invalid' as const : 'source_unavailable' as const }
-  return { page, catalogue, overview, home, providers: undefined, compareEntries, view }
+  return { page, catalogue, overview, home, providers, compareEntries, view }
 }
 
 /** A failed catalogue read keeps the last loaded view. Keyword search is not a failure. */

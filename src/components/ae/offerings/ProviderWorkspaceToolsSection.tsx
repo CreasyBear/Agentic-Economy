@@ -1,3 +1,5 @@
+import { ownerInventoryHref, type OwnerInventoryQuery } from '@/lib/operator/owner-inventory-search'
+import { appendOwnerInventoryReturnContext } from '@/lib/operator/owner-inventory-return'
 import { Await } from '@tanstack/react-router'
 import { Suspense, type ReactNode } from 'react'
 
@@ -11,8 +13,9 @@ import type {
   ProviderWorkspaceLifecycleResult,
 } from './provider-workspace.functions'
 
-export function ProviderWorkspaceToolsSection({ inventory, lifecycle, compatibilityCursor, renderList }: Readonly<{
+export function ProviderWorkspaceToolsSection({ inventory, inventoryQuery, lifecycle, compatibilityCursor, renderList }: Readonly<{
   inventory: Extract<ProviderWorkspaceInventoryResult, { kind: 'available' }>
+  inventoryQuery?: OwnerInventoryQuery
   lifecycle?: Promise<ProviderWorkspaceLifecycleResult>
   compatibilityCursor?: string
   renderList: (rows: readonly ProviderWorkspaceProjectionRow[]) => ReactNode
@@ -27,13 +30,15 @@ export function ProviderWorkspaceToolsSection({ inventory, lifecycle, compatibil
     // both, each for a different lifecycle phase.
     continuation: {
       kind: 'navigate', label: 'View status',
-      href: `/owner/operations/${encodeURIComponent(row.slug ?? row.offeringRef)}`,
+      href: appendOwnerInventoryReturnContext(`/owner/operations/${encodeURIComponent(row.slug ?? row.offeringRef)}`, inventoryQuery),
     },
     lifecyclePending: true,
   }))
 
   return (
     <AeSection title="Tools" description={`Tools supplied by ${inventory.provider.name}.`}>
+      <p className="text-sm text-muted-foreground">{inventoryQuery?.q ? 'Name, summary and category matches · relevance order' : 'All Tools · indexed inventory order'}. {inventory.tools.length} loaded{inventory.isDone ? ' · end of results' : ' · more results available'}.</p>
+      {inventoryQuery?.q && inventory.tools.length === 0 ? <p role="status">{inventory.isDone ? 'No Tools match this search.' : 'No verified Tools in this source page. Continue to the next page.'}</p> : null}
       {inventory.diagnostics?.map((diagnostic) => (
         <AeAlert role="alert" tone="info" title="Tool status needs repair" key={diagnostic.offeringRef}>{diagnostic.offeringRef}: lifecycle status could not be read. Other Tools remain available.</AeAlert>
       ))}
@@ -64,7 +69,7 @@ export function ProviderWorkspaceToolsSection({ inventory, lifecycle, compatibil
                 {projection.inconsistencyCount === 0 ? null : (
                   <AeAlert role="alert" tone="info" title="Lifecycle update in progress">Some lifecycle facts do not yet match the current inventory.</AeAlert>
                 )}
-                {renderList(projection.rows)}
+                {renderList(projection.rows.map(row => ({ ...row, continuation: { ...row.continuation, href: appendOwnerInventoryReturnContext(row.continuation.href, inventoryQuery) } })))}
               </div>
             )
           }}</Await>
@@ -74,18 +79,18 @@ export function ProviderWorkspaceToolsSection({ inventory, lifecycle, compatibil
         <nav aria-label="Tool pages" className="arc-provider-workspace-tool-pages">
           {compatibilityCursor === undefined ? null : (
             <a
-              href="/owner/operations"
+              href={ownerInventoryHref({ ...(inventoryQuery?.q === undefined ? {} : { q: inventoryQuery.q }), ...(inventoryQuery?.sort === undefined ? {} : { sort: inventoryQuery.sort }) })}
               className={actionLinkClassName('secondary', 'md')}
             >
-              First 50 Tools
+              First page
             </a>
           )}
           {inventory.isDone ? null : (
             <a
-              href={`/owner/operations?cursor=${encodeURIComponent(inventory.continueCursor)}`}
+              href={ownerInventoryHref({ ...inventoryQuery, cursor: inventory.continueCursor })}
               className={actionLinkClassName('secondary', 'md')}
             >
-              Next 50 Tools
+              Next page (up to 50 Tools)
             </a>
           )}
         </nav>

@@ -1,5 +1,7 @@
 'use client'
 
+import type { AeRecordTableFeatures } from '@/components/ae/operator/AeOperatorDataTable'
+
 import { useMemo } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 
@@ -16,7 +18,7 @@ type AeCapabilityListProps = {
 }
 
 export function AeCapabilityList({ catalog }: AeCapabilityListProps) {
-  const columns = useMemo<ColumnDef<PublicListingDto, unknown>[]>(
+  const columns = useMemo<ColumnDef<AeRecordTableFeatures, PublicListingDto, unknown>[]>(
     () => [
       {
         id: 'name',

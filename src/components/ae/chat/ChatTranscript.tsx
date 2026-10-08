@@ -1,10 +1,10 @@
 // Adapted from vercel/ai-chatbot, c2f8235e1f3ea903ad8b7f61447c4f74164b5c58, components/chat/messages.tsx and components/chat/message.tsx (Apache-2.0).
 import { ErrorBoundary } from '@sentry/react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import '@/components/ae/shared/arc-pro/chat/ChatComposition.css'
 import { ArcAiChatMessage } from '@/components/ae/shared/arc-pro/ai-chat/ai-chat-message'
 import messageStyles from '@/components/ae/shared/arc-pro/ai-chat/ai-chat-message.module.css'
-import { ArcAiChatEmptyStage } from '@/components/ae/shared/arc-pro/ai-chat/ai-chat'
+import { ReuiChatWelcome } from '@/components/ae/shared/reui-pro/ai-chat/welcome'
 import { Button } from '@/components/arc/button/button'
 import { ArrowDownIcon } from 'lucide-react'
 import { Marker, MarkerContent } from '@/components/ui/marker'
@@ -66,6 +66,7 @@ function readPersistedFailure(parts: readonly unknown[]): ChatPersistedFailure |
   return undefined
 }
 type ChatTranscriptProps = ChatTranscriptViewProps & Readonly<{
+  emptyState?: ReactNode
   onAddCredit?: (shortfall?: { units: string; exponent: number } | undefined, run?: RunIntent) => void
 }>
 
@@ -73,6 +74,7 @@ const TRANSCRIPT_COLUMN = messageStyles.transcript
 const PANEL_EXIT_DURATION_MS = 150
 
 export function ChatTranscript({
+  emptyState,
   messages,
   handoffAfter,
   onSuggest,
@@ -222,7 +224,7 @@ export function ChatTranscript({
   }
   if (turns.length === 0) {
     return (
-      <ArcAiChatEmptyStage><ChatGreeting /></ArcAiChatEmptyStage>
+      emptyState ?? <ReuiChatWelcome><ChatGreeting /></ReuiChatWelcome>
     )
   }
 

@@ -1,6 +1,7 @@
 import { ChevronDownIcon, SlidersHorizontalIcon } from 'lucide-react'
-import { useId, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import styles from './DirectoryExplorerFilters.module.css'
+import { ProviderFacetPicker } from './ProviderFacetPicker'
 import { Button } from '@/components/arc/button/button'
 import { ChipGroup, type ChipOption } from '@/components/arc/chip-group/chip-group'
 import { Combobox, type ComboboxOption } from '@/components/arc/combobox/combobox'
@@ -9,6 +10,7 @@ import { Input } from '@/components/arc/input/input'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Drawer, DrawerClose, DrawerContent, DrawerTrigger } from '@/components/ae/shared/base-ui/drawer/drawer'
 import { cn } from '@/lib/utils'
+import { useViewportKind } from '@/hooks/use-mobile'
 import { x402DirectoryFilterSchema } from '@/modules/market/x402-directory'
 import type { X402DirectoryCatalogueOverview, X402DirectoryFacet } from '@/modules/market/x402-directory-catalogue'
 import type { DirectoryExplorerFilterPatch, DirectoryExplorerFilterValues } from '@/modules/market/directory-filters.contracts'
@@ -54,7 +56,7 @@ function activeAdvancedFilterCount(search: DirectoryExplorerFilterValues) {
 function facetOptions(values: readonly X402DirectoryFacet[], selected: string | undefined, formatLabel?: (label: string) => string): ComboboxOption[] {
   const options = values.map(item => ({
     value: item.key,
-    label: `${formatLabel?.(item.label) ?? item.label} ${item.count.toLocaleString('en-AU')}`,
+    label: formatLabel?.(item.label) ?? item.label,
     keywords: [item.key, item.label],
   }))
   if (selected !== undefined && !options.some(option => option.value === selected)) options.push({ value: selected, label: selected, keywords: [selected] })
@@ -88,6 +90,11 @@ function ListedPriceFilter({ search, onChange }: Pick<DirectoryExplorerFiltersPr
   const [maximum, setMaximum] = useState(() => search.maxUsdPrice?.toString() ?? '')
   const minimumRef = useRef<HTMLInputElement>(null)
   const [priceError, setPriceError] = useState<string>()
+  useEffect(() => {
+    setMinimum(search.minUsdPrice?.toString() ?? '')
+    setMaximum(search.maxUsdPrice?.toString() ?? '')
+    setPriceError(undefined)
+  }, [search.minUsdPrice, search.maxUsdPrice, search.priceBand])
 
   return <form className="flex flex-col gap-3 border-t pt-5" onSubmit={event => {
     event.preventDefault()
@@ -115,20 +122,21 @@ function ProviderFilter({ search, onChange }: Pick<DirectoryExplorerFiltersProps
   const [provider, setProvider] = useState(search.provider ?? '')
   const providerRef = useRef<HTMLInputElement>(null)
   const [providerError, setProviderError] = useState<string>()
+  useEffect(() => { setProvider(search.provider ?? ''); setProviderError(undefined) }, [search.provider])
 
   return <form className="flex flex-col gap-3 border-t pt-5" onSubmit={event => {
     event.preventDefault()
     const parsed = x402DirectoryFilterSchema.safeParse(provider.trim() === '' ? {} : { provider })
     if (!parsed.success) {
-      setProviderError('Enter a Provider hostname, such as api.example.com.')
+      setProviderError('Enter a directory Host name, such as api.example.com.')
       providerRef.current?.focus()
       return
     }
     setProviderError(undefined)
     onChange({ provider: parsed.data.provider })
   }}>
-    <Input ref={providerRef} id={`${id}-provider`} label="Provider" value={provider} onChange={event => { setProvider(event.target.value); setProviderError(undefined) }} placeholder="api.example.com" autoCapitalize="none" autoCorrect="off" spellCheck={false} {...(providerError === undefined ? {} : { error: providerError })} />
-    <Button type="submit" variant="secondary" size="sm" className="w-full">Apply Provider</Button>
+    <Input ref={providerRef} id={`${id}-provider`} label="Directory Host" value={provider} onChange={event => { setProvider(event.target.value); setProviderError(undefined) }} placeholder="api.example.com" autoCapitalize="none" autoCorrect="off" spellCheck={false} {...(providerError === undefined ? {} : { error: providerError })} />
+    <Button type="submit" variant="secondary" size="sm" className="w-full">Apply Host</Button>
   </form>
 }
 
@@ -232,7 +240,7 @@ function MultipleFacets({ label, filterKey, values, selected, onChange }: Readon
   }))
   const options = values.map(item => ({
     value: item.key,
-    label: `${item.label} ${item.count.toLocaleString('en-AU')}`,
+    label: item.label,
     keywords: [item.key, item.label],
     disabled: selectedKeys.has(item.key),
   }))
@@ -299,11 +307,8 @@ function FilterBody({ search, overview, onChange }: DirectoryExplorerFiltersProp
 
   return <div className="flex flex-col gap-6">
     {facets !== undefined || search.directoryCategory !== undefined ? <Facets label="Provider category" allLabel="All categories" values={facets?.categories ?? []} selected={search.directoryCategory} onChange={directoryCategory => onChange({ directoryCategory })} /> : null}
-    {facets === undefined ? <p className="text-xs text-muted-foreground">Provider and network catalogue samples are unavailable.</p> : <>
-      <p className="text-xs leading-relaxed text-muted-foreground">Provider names and counts come from a bounded catalogue sample.</p>
-    </>}
     <ReviewedProvidersFilter search={search} onChange={onChange} />
-    {facets !== undefined || search.provider !== undefined ? <Facets label="Providers" allLabel="All providers" values={facets?.providers ?? []} selected={search.provider} onChange={provider => onChange({ provider })} {...(facets === undefined ? {} : { description: 'Select a Provider from the bounded catalogue sample.' })} /> : null}
+    <ProviderFacetPicker selected={search.provider} onChange={provider => onChange({ provider })} />
     <ChipGroup
       options={DIRECTORY_PRICE_BANDS.map(key => ({ value: key, label: priceBandLabels[key] }))}
       value={search.priceBand === undefined ? [] : [search.priceBand]}
@@ -324,10 +329,10 @@ function FilterBody({ search, overview, onChange }: DirectoryExplorerFiltersProp
 export function DirectoryExplorerFilters({ entity = 'tools', ...props }: DirectoryExplorerFiltersProps) {
   const count = explorerFilterKeys.filter(key => isActive(props.search, key)).length
   const [clearCount, setClearCount] = useState(0)
-  const title = entity === 'providers' ? 'Refine Providers' : 'Refine Tools'
+  const title = entity === 'providers' ? 'Refine Directory Hosts' : 'Refine Tools'
   const description = entity === 'providers'
-    ? 'Filter published Provider listings by category, Provider, price and published details.'
-    : 'Filter Tool listings by category, Provider, price and published details.'
+    ? 'Filter directory Host listings by category, Host, price and published details.'
+    : 'Filter Tool listings by category, directory Host, price and published details.'
 
   return <Drawer>
     <DrawerTrigger render={<button data-filter-trigger="" type="button" className={cn(styles.filterTrigger, 'w-40')} aria-label={count > 0 ? `Filters ${count}` : 'Filters'}>
@@ -348,13 +353,13 @@ function categoryOptions(overview: X402DirectoryCatalogueOverview | undefined, s
   const categories = overview?.kind === 'ok' ? overview.categories : []
   const options = categories.slice(0, 8).map(item => ({
     value: item.key,
-    label: `${item.label} ${item.count.toLocaleString('en-AU')}`,
+    label: item.label,
   }))
   if (selected !== undefined && !options.some(option => option.value === selected)) {
     const known = categories.find(item => item.key === selected)
     options.push(known === undefined
       ? { value: selected, label: selected }
-      : { value: known.key, label: `${known.label} ${known.count.toLocaleString('en-AU')}` })
+      : { value: known.key, label: known.label })
   }
   return options
 }
@@ -369,7 +374,7 @@ function appliedFilters(search: DirectoryExplorerFilterValues, overview: X402Dir
   const filters: FilterChip[] = []
   if (search.directoryCategory !== undefined) filters.push({ id: 'directoryCategory', label: 'Provider category', value: facetLabel(overview, 'categories', search.directoryCategory) })
   if (search.network !== undefined) filters.push({ id: 'network', label: 'Network', value: facetLabel(overview, 'networks', search.network, formatPaymentNetwork) })
-  if (search.provider !== undefined) filters.push({ id: 'provider', label: 'Providers', value: facetLabel(overview, 'providers', search.provider) })
+  if (search.provider !== undefined) filters.push({ id: 'provider', label: 'Directory Hosts', value: facetLabel(overview, 'providers', search.provider) })
   if (search.minUsdPrice !== undefined) filters.push({ id: 'minUsdPrice', label: 'Minimum Provider-listed price', value: `${String(search.minUsdPrice)} USDC` })
   if (search.maxUsdPrice !== undefined) filters.push({ id: 'maxUsdPrice', label: 'Maximum Provider-listed price', value: `${String(search.maxUsdPrice)} USDC` })
   if (search.minPayers30d !== undefined) filters.push({ id: 'minPayers30d', label: 'Minimum paying addresses', value: `${search.minPayers30d.toLocaleString('en-AU')} or more` })
@@ -401,12 +406,20 @@ export function DirectoryDiscoveryFilters(props: DirectoryExplorerFiltersProps) 
   const selectedCategory = props.search.directoryCategory
   const showCategory = categoriesAvailable || selectedCategory !== undefined
   const headingId = `${id}-category-heading`
+  const viewport = useViewportKind()
+  const [categoryOpen, setCategoryOpen] = useState(false)
   const filters = appliedFilters(props.search, props.overview)
 
-  return <div className="arc-market-discovery-filters">
-    {showCategory ? <section className="arc-market-category-entry" aria-labelledby={headingId}>
+  return <div className="arc-market-discovery-filters" data-empty={filters.length === 0}>
+    {showCategory ? <Collapsible open={viewport === 'desktop' || categoryOpen} onOpenChange={setCategoryOpen} className="arc-market-category-entry" data-viewport={viewport}>
+      <CollapsibleTrigger className="arc-market-category-disclosure" render={<Button type="button" variant="secondary" />}>
+        <span>Categories</span>
+        <ChevronDownIcon aria-hidden="true" />
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+      <section className="arc-market-category-options" aria-labelledby={headingId}>
       <h2 id={headingId}>Browse by Provider category</h2>
-      <p className="text-xs leading-relaxed text-muted-foreground">Category names and counts come from a bounded catalogue sample, not current search matches.</p>
+      <p className="text-xs leading-relaxed text-muted-foreground">Provider-declared categories. Selections filter the catalogue before pagination.</p>
       <ChipGroup
         className={styles.categoryChips ?? ''}
         options={categoryOptions(props.overview, selectedCategory)}
@@ -416,7 +429,9 @@ export function DirectoryDiscoveryFilters(props: DirectoryExplorerFiltersProps) 
         maxVisible={6}
         multiple={false}
       />
-    </section> : null}
+      </section>
+      </CollapsibleContent>
+    </Collapsible> : null}
     <FilterToolbar
       filters={filters}
       label="Applied catalogue filters"

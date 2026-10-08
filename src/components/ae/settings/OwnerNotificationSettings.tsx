@@ -56,19 +56,21 @@ export function OwnerNotificationSettings({
   const [updateDiagnostic, setUpdateDiagnostic] = useState<NotificationUpdateDiagnostic | undefined>()
 
   const applyPatch = async (patch: NotificationPreferencePatch) => {
-    if(inFlight.current)return
+    if(inFlight.current)return false
     inFlight.current=true
     setUpdateDiagnostic(undefined)
     setPending(true)
     try {
       await onUpdate(patch)
       toast.success('Notification preferences updated')
+      return true
     } catch (cause) {
       void cause
       setUpdateDiagnostic(UPDATE_FAILED_DIAGNOSTIC)
       toast.error('Could not update notification preferences.', {
-        description: 'Please check your connection and try again.',
+        description: 'Check the saved preferences before trying again.',
       })
+      return false
     } finally {
       inFlight.current=false
       setPending(false)
@@ -78,7 +80,7 @@ export function OwnerNotificationSettings({
   const controlsDisabled = disabled || pending
   return (
     <div className="arc-market arc-notification-settings">
-      <UsageAlertSettings key={`${preferences.revision}`} policy={preferences.usageAlertPolicy} disabled={controlsDisabled} revision={preferences.revision} onUpdate={applyPatch} />
+      <UsageAlertSettings policy={preferences.usageAlertPolicy} disabled={controlsDisabled} revision={preferences.revision} onUpdate={applyPatch} />
       {PREFERENCE_SWITCHES.length > 0 ? (
         <SettingsGroup title="Email alerts" description="Sent to the primary email verified in your Profile.">
           {PREFERENCE_SWITCHES.map(({ key, label, description }) => (

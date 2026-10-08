@@ -1,3 +1,5 @@
+import { x402DirectoryProvidersInputSchema } from '@/modules/market/x402-directory-catalogue'
+import { decodeOpaqueCursor, encodeOpaqueCursor } from '@/modules/registry/opaque-cursor'
 import { paginationOptsValidator, paginationResultValidator } from 'convex/server'
 import { v, type Infer } from 'convex/values'
 import type { QueryCtx } from '../../../_generated/server'
@@ -26,24 +28,49 @@ export async function readFacets(ctx: QueryCtx, generation: string, kind: 'categ
 }
 
 /** Cursor traversal of every declared facet; overview is only a bounded sample. */
-export const facetsArgs = v.object({ kind: v.union(v.literal('category'), v.literal('provider'), v.literal('network'), v.literal('tag'), v.literal('bundle')), paginationOpts: paginationOptsValidator })
+export const facetsArgs = v.object({ kind: v.union(v.literal('category'), v.literal('provider'), v.literal('network'), v.literal('tag'), v.literal('bundle')), providerPrefix: v.optional(v.string()), paginationOpts: paginationOptsValidator })
 export const facetsReturns = v.union(unavailableValue, v.object({ kind: v.literal('ok'), coverage: coverageValue, ...paginationResultValidator(facetValue).fields }))
 export const facetsHandler = async (ctx: QueryCtx, args: Infer<typeof facetsArgs>) => {
     if (!Number.isSafeInteger(args.paginationOpts.numItems) || args.paginationOpts.numItems < 1 || args.paginationOpts.numItems > 50) return { kind: 'unavailable' as const, reason: 'query_invalid' }
+    const parsedPrefix = x402DirectoryProvidersInputSchema.shape.providerPrefix.safeParse(args.providerPrefix)
+    if (!parsedPrefix.success || (parsedPrefix.data !== undefined && args.kind !== 'provider')) return { kind: 'unavailable' as const, reason: 'query_invalid' }
+    const providerPrefix = parsedPrefix.data
     const generation = await activeDirectoryGeneration(ctx)
     if (generation === null) return { kind: 'unavailable' as const, reason: 'index_unavailable' }
-    const paginationOpts = { ...args.paginationOpts, numItems: Math.min(args.paginationOpts.numItems, 24) }
+    const cursorScope = { kind: 'x402-directory' as const, scope: JSON.stringify(['provider-prefix', generation.generation, providerPrefix]) }
+    const nativeCursor = providerPrefix === undefined || args.paginationOpts.cursor === null
+      ? args.paginationOpts.cursor : decodeOpaqueCursor(args.paginationOpts.cursor, cursorScope)
+    if (nativeCursor === undefined) return { kind: 'unavailable' as const, reason: 'query_invalid' }
+    const nativeEndCursor = providerPrefix === undefined || typeof args.paginationOpts.endCursor !== 'string'
+      ? args.paginationOpts.endCursor : decodeOpaqueCursor(args.paginationOpts.endCursor, cursorScope)
+    if (typeof args.paginationOpts.endCursor === 'string' && nativeEndCursor === undefined) return { kind: 'unavailable' as const, reason: 'query_invalid' }
+    const paginationOpts = {
+      ...args.paginationOpts, cursor: nativeCursor,
+      ...(nativeEndCursor === undefined ? {} : { endCursor: nativeEndCursor }),
+      numItems: Math.min(args.paginationOpts.numItems, 24),
+    }
     const byKey = () => ctx.db.query('marketDirectoryFacets').withIndex('by_generation_and_kind_and_key', q => q.eq('generation', generation.generation).eq('kind', args.kind)).paginate(paginationOpts)
-    const ranked = args.kind === 'provider'
+    const ranked = args.kind === 'provider' && providerPrefix === undefined
       ? await ctx.db.query('marketDirectoryFacets').withIndex('by_generation_and_kind_and_leadCalls', q => q.eq('generation', generation.generation).eq('kind', 'provider')).order('desc').paginate(paginationOpts)
       : null
     // Until the lead is noted, the key order still lists every host.
-    const page = ranked !== null && (ranked.page.length > 0 || args.paginationOpts.cursor !== null) ? ranked : await byKey()
+    // Host keys are ASCII domain names. The successor of the final prefix
+    // character bounds every matching key without scanning unrelated hosts.
+    const prefixEnd = providerPrefix === undefined ? undefined
+      : providerPrefix.slice(0, -1) + String.fromCharCode(providerPrefix.charCodeAt(providerPrefix.length - 1) + 1)
+    const page = providerPrefix !== undefined && prefixEnd !== undefined
+      ? await ctx.db.query('marketDirectoryFacets').withIndex('by_generation_and_kind_and_key', q => q
+        .eq('generation', generation.generation).eq('kind', 'provider').gte('key', providerPrefix).lt('key', prefixEnd)).paginate(paginationOpts)
+      : ranked !== null && (ranked.page.length > 0 || args.paginationOpts.cursor !== null) ? ranked : await byKey()
     // No provider argument on this query: category/provider/network are always eligible-only.
     const namespace = args.kind === 'tag' || args.kind === 'bundle' ? analyticsNamespace(generation.generation) : eligibleFacetsNamespace(generation.generation)
     const counts = await directoryFacets.countBatch(ctx, page.page.map(row => ({ namespace, bounds: { prefix: [args.kind, row.key] } })))
     return {
       kind: 'ok' as const, coverage: directoryCoverage(generation), ...page,
+      ...(providerPrefix === undefined ? {} : {
+        continueCursor: encodeOpaqueCursor({ ...cursorScope, cursor: page.continueCursor }),
+        ...(typeof page.splitCursor !== 'string' ? {} : { splitCursor: encodeOpaqueCursor({ ...cursorScope, cursor: page.splitCursor }) }),
+      }),
       page: page.page.flatMap((row, index) => {
         const count = counts[index] ?? 0
         const leadCalls = row.kind === 'provider' ? row.leadCalls : undefined

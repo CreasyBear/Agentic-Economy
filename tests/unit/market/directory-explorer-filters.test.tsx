@@ -1,12 +1,19 @@
 /** @vitest-environment jsdom */
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import { afterEach, expect, it, vi } from 'vitest'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 import { DirectoryDiscoveryFilters } from '@/components/ae/market/DirectoryExplorerFilters'
 import type { DirectoryExplorerFilterValues } from '@/modules/market/directory-filters.contracts'
 import type { X402DirectoryCatalogueOverview } from '@/modules/market/x402-directory-catalogue'
 
 const overview: X402DirectoryCatalogueOverview = { kind: 'ok', coverage: { source: 'coinbase', generation: 'test', indexedTotal: 14000, reportedTotal: 14000, reportedTotalAtStart: 14000, sourceChangedDuringScan: false, duplicateObservations: 0, pagesFetched: 140, startedAt: 1, completedAt: 2, completeness: 'completed_observed_scan' }, categories: [{ key: 'search', label: 'Search', count: 500 }, { key: 'unclassified', label: 'Unclassified', count: 13000 }], networks: [{ key: 'eip155:8453', label: 'Base', count: 4000 }], providers: [{ key: 'api.example.com', label: 'api.example.com', count: 42 }], popular: [], recentlyUpdated: [] }
+const hostLookup = vi.hoisted(() => vi.fn())
+vi.mock('@/modules/market/x402-directory-index.functions', () => ({ readX402DirectoryProvidersServer: hostLookup }))
+beforeEach(() => {
+  hostLookup.mockReset()
+  hostLookup.mockResolvedValue({ kind: 'ok', page: overview.providers, coverage: overview.coverage, continueCursor: '', isDone: true })
+})
+
 const filterKeys = ['directoryCategory', 'network', 'provider', 'minUsdPrice', 'maxUsdPrice', 'minPayers30d', 'maxPayers30d', 'priceBand', 'adoptionBand', 'curatedOnly', 'reviewedProvidersOnly', 'hasInputFields', 'hasOutputExample', 'hasInputSchema', 'hasOutputFields', 'hasOutputSchema', 'tags', 'bundleSlugs'] as const
 afterEach(cleanup)
 
@@ -19,7 +26,7 @@ function show(search: DirectoryExplorerFilterValues = {}, catalogue: X402Directo
   const rendered = render(<DirectoryDiscoveryFilters search={search} overview={catalogue} onChange={change} onReset={reset} entity={entity} />)
   const filterCount = filterKeys.filter(key => isActive(search[key as keyof DirectoryExplorerFilterValues])).length
   fireEvent.click(screen.getByRole('button', { name: filterCount > 0 ? `Filters ${filterCount}` : 'Filters' }))
-  return { ...rendered, change, reset, filters: within(screen.getByRole('dialog', { name: entity === 'providers' ? 'Refine Providers' : 'Refine Tools' })) }
+  return { ...rendered, change, reset, filters: within(screen.getByRole('dialog', { name: entity === 'providers' ? 'Refine Directory Hosts' : 'Refine Tools' })) }
 }
 
 function openAdvanced(filters: ReturnType<typeof show>['filters']) {
@@ -29,16 +36,16 @@ function openAdvanced(filters: ReturnType<typeof show>['filters']) {
 
 it('searches category options from the catalogue without changing counts or filtering the supplied page', () => {
   const { filters, change } = show()
-  expect(screen.getByText('Category names and counts come from a bounded catalogue sample, not current search matches.')).toBeTruthy()
+  expect(filters.queryByText(/Category names and counts/)).toBeNull()
   const category = filters.getByRole('combobox', { name: 'Provider category' }) as HTMLInputElement
   expect(category.placeholder).toBe('All categories')
   fireEvent.change(category, { target: { value: 'search' } })
-  expect(filters.queryByRole('option', { name: 'Unclassified 13,000' })).toBeNull()
-  fireEvent.click(filters.getByRole('option', { name: 'Search 500' }))
+  expect(filters.queryByRole('option', { name: 'Unclassified' })).toBeNull()
+  fireEvent.click(filters.getByRole('option', { name: 'Search' }))
   expect(change).toHaveBeenCalledWith({ directoryCategory: 'search' })
 })
 
-it('keeps the committed category label through Clear filters and Drawer close/reopen', () => {
+it('keeps the committed category label through Clear filters and Drawer close/reopen', async () => {
   const change = vi.fn(), reset = vi.fn()
   const renderFilters = (search: DirectoryExplorerFilterValues) => <DirectoryDiscoveryFilters search={search} overview={overview} onChange={change} onReset={reset} />
   const { rerender } = render(renderFilters({}))
@@ -46,24 +53,25 @@ it('keeps the committed category label through Clear filters and Drawer close/re
   let filters = within(screen.getByRole('dialog', { name: 'Refine Tools' }))
   const category = filters.getByRole('combobox', { name: 'Provider category' }) as HTMLInputElement
   fireEvent.change(category, { target: { value: 'search' } })
-  fireEvent.click(filters.getByRole('option', { name: 'Search 500' }))
+  fireEvent.click(filters.getByRole('option', { name: 'Search' }))
   expect(change).toHaveBeenLastCalledWith({ directoryCategory: 'search' })
   rerender(renderFilters({ directoryCategory: 'search' }))
   filters = within(screen.getByRole('dialog', { name: 'Refine Tools' }))
   const selectedCategory = filters.getByRole('combobox', { name: 'Provider category' }) as HTMLInputElement
-  expect(selectedCategory.placeholder).toBe('Search 500')
+  expect(selectedCategory.placeholder).toBe('Search')
   fireEvent.click(filters.getByRole('button', { name: 'Clear filters' }))
   expect(reset).toHaveBeenCalledOnce()
   const resetCategory = filters.getByRole('combobox', { name: 'Provider category' }) as HTMLInputElement
-  expect(resetCategory.value).toBe('Search 500')
+  expect(resetCategory.value).toBe('Search')
   fireEvent.change(resetCategory, { target: { value: 'unclassified' } })
   fireEvent.click(filters.getByRole('button', { name: 'Show results' }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   fireEvent.click(screen.getByRole('button', { name: 'Filters 1' }))
   filters = within(screen.getByRole('dialog', { name: 'Refine Tools' }))
-  expect((filters.getByRole('combobox', { name: 'Provider category' }) as HTMLInputElement).value).toBe('Search 500')
+  expect((filters.getByRole('combobox', { name: 'Provider category' }) as HTMLInputElement).value).toBe('Search')
 })
 
-it('chooses a category by keyboard, then Escape closes the Combo before the Drawer', () => {
+it('chooses a category by keyboard, then Escape closes the Combo before the Drawer', async () => {
   const change = vi.fn(), reset = vi.fn()
   const renderFilters = (search: DirectoryExplorerFilterValues) => <DirectoryDiscoveryFilters search={search} overview={overview} onChange={change} onReset={reset} />
   const { rerender } = render(renderFilters({}))
@@ -77,29 +85,30 @@ it('chooses a category by keyboard, then Escape closes the Combo before the Draw
   rerender(renderFilters({ directoryCategory: 'search' }))
   filters = within(screen.getByRole('dialog', { name: 'Refine Tools' }))
   const selectedCategory = filters.getByRole('combobox', { name: 'Provider category' }) as HTMLInputElement
-  expect(selectedCategory.placeholder).toBe('Search 500')
+  expect(selectedCategory.placeholder).toBe('Search')
   fireEvent.keyDown(selectedCategory, { key: 'ArrowDown' })
   expect(selectedCategory.getAttribute('aria-expanded')).toBe('true')
   fireEvent.keyDown(selectedCategory, { key: 'Escape' })
   expect(selectedCategory.getAttribute('aria-expanded')).toBe('false')
-  expect(selectedCategory.value).toBe('Search 500')
+  expect(selectedCategory.value).toBe('Search')
   expect(document.activeElement).toBe(selectedCategory)
   expect(screen.getByRole('dialog', { name: 'Refine Tools' })).toBeTruthy()
   expect(change).toHaveBeenCalledOnce()
   fireEvent.keyDown(selectedCategory, { key: 'Escape' })
-  expect(screen.queryByRole('dialog')).toBeNull()
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   const visibleCategories = within(screen.getByRole('group', { name: 'Browse by Provider category' }))
-  expect(visibleCategories.getByRole('button', { name: 'Search 500' }).getAttribute('aria-pressed')).toBe('true')
+  expect(visibleCategories.getByRole('button', { name: 'Search' }).getAttribute('aria-pressed')).toBe('true')
 })
 
-it('picks a Provider from the catalogue index instead of typing a hostname', () => {
+it('picks a directory Host from the whole catalogue index instead of typing a hostname', async () => {
   const { filters, change } = show()
-  const providers = filters.getByRole('combobox', { name: 'Providers' }) as HTMLInputElement
-  expect(providers.placeholder).toBe('All providers')
-  expect(filters.getByText('Provider names and counts come from a bounded catalogue sample.')).toBeTruthy()
-  expect(filters.getByText('Select a Provider from the bounded catalogue sample.')).toBeTruthy()
-  fireEvent.change(providers, { target: { value: 'api' } })
-  fireEvent.click(filters.getByRole('option', { name: 'api.example.com 42' }))
+  const providers = filters.getByRole('combobox', { name: 'Directory Hosts' }) as HTMLInputElement
+  expect(providers.placeholder).toBe('Search all Hosts by name…')
+  expect(filters.getByText('Search the whole indexed directory by hostname prefix.')).toBeTruthy()
+  act(() => providers.focus())
+  fireEvent.input(providers, { target: { value: 'api' } })
+  await waitFor(() => expect(hostLookup).toHaveBeenLastCalledWith({ data: { providerPrefix: 'api' } }))
+  fireEvent.click(await filters.findByRole('option', { name: 'api.example.com' }))
   expect(change).toHaveBeenCalledWith({ provider: 'api.example.com' })
 })
 
@@ -149,17 +158,17 @@ it('keeps typed price bounds in Advanced, rejects inverted bounds and focuses th
   expect(change).toHaveBeenCalledWith({ minUsdPrice: 0.1, maxUsdPrice: 1, priceBand: undefined })
 })
 
-it('keeps typed Provider hostnames in Advanced and uses the safe hostname parser', () => {
+it('keeps typed directory Host names in Advanced and uses the safe hostname parser', () => {
   const { filters, change } = show({ provider: 'api.example.com', directoryCategory: 'search' })
   openAdvanced(filters)
-  const hostname = filters.getByLabelText('Provider') as HTMLInputElement
+  const hostname = filters.getByLabelText('Directory Host') as HTMLInputElement
   fireEvent.change(hostname, { target: { value: 'https://invalid.example.com/path' } })
-  fireEvent.click(filters.getByRole('button', { name: 'Apply Provider' }))
+  fireEvent.click(filters.getByRole('button', { name: 'Apply Host' }))
   expect(change).not.toHaveBeenCalled()
-  expect(filters.getByRole('alert').textContent).toContain('hostname')
+  expect(filters.getByRole('alert').textContent).toContain('Host name')
   expect(document.activeElement).toBe(hostname)
   fireEvent.change(hostname, { target: { value: 'API.EXAMPLE.COM' } })
-  fireEvent.click(filters.getByRole('button', { name: 'Apply Provider' }))
+  fireEvent.click(filters.getByRole('button', { name: 'Apply Host' }))
   expect(change).toHaveBeenLastCalledWith({ provider: 'api.example.com' })
 })
 
@@ -199,18 +208,19 @@ it('clears a selected network through the Combobox clear action', () => {
   const { filters, change } = show({ network: 'eip155:8453' })
   openAdvanced(filters)
   const network = filters.getByRole('combobox', { name: 'Network' }) as HTMLInputElement
-  expect(network.value).toBe('Base 4,000')
+  expect(network.value).toBe('Base')
   fireEvent.click(within(network.parentElement?.parentElement as HTMLElement).getByRole('button', { name: 'Clear selection' }))
   expect(change).toHaveBeenLastCalledWith({ network: undefined })
 })
 
-it('closes the filter Drawer after Show results', () => {
+it('closes the filter Drawer after Show results', async () => {
   const { filters, change } = show({ network: 'eip155:8453' })
   openAdvanced(filters)
   const network = filters.getByRole('combobox', { name: 'Network' })
   fireEvent.click(within(network.parentElement?.parentElement as HTMLElement).getByRole('button', { name: 'Clear selection' }))
   expect(change).toHaveBeenCalledWith({ network: undefined })
   fireEvent.click(filters.getByRole('button', { name: 'Show results' }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   expect(screen.queryByRole('dialog')).toBeNull()
 })
 
@@ -240,7 +250,7 @@ it('adds one tag or collection at a time and disables tag entry at the five-item
   expect(change).toHaveBeenLastCalledWith({ tags: ['one', 'two', 'four', 'five'] })
   const collections = filters.getByRole('combobox', { name: 'Collections' }) as HTMLInputElement
   fireEvent.change(collections, { target: { value: 'developer' } })
-  fireEvent.click(filters.getByRole('option', { name: 'Developer kit 3' }))
+  fireEvent.click(filters.getByRole('option', { name: 'Developer kit' }))
   expect(change).toHaveBeenLastCalledWith({ bundleSlugs: ['developer-kit'] })
 })
 
@@ -250,7 +260,7 @@ it('keeps selected multi-facet options disabled and lets an unlisted selection b
   openAdvanced(filters)
   const tags = filters.getByRole('combobox', { name: 'Tags' })
   fireEvent.focus(tags)
-  expect(filters.getByRole('option', { name: 'Listed tag 17' }).getAttribute('aria-disabled')).toBe('true')
+  expect(filters.getByRole('option', { name: 'Listed tag' }).getAttribute('aria-disabled')).toBe('true')
   expect(filters.getByRole('button', { name: 'Remove Tag: missing-key' })).toBeTruthy()
   fireEvent.click(filters.getByRole('button', { name: 'Remove Tag: missing-key' }))
   expect(change).toHaveBeenCalledWith({ tags: ['listed'] })
@@ -259,7 +269,7 @@ it('keeps selected multi-facet options disabled and lets an unlisted selection b
 it('preserves multi-facet insertion order and clears an array only when its last item is removed', () => {
   const catalogue = { ...overview, tags: [{ key: 'one', label: 'One', count: 1 }, { key: 'two', label: 'Two', count: 2 }, { key: 'three', label: 'Three', count: 3 }] }
   const change = vi.fn(), reset = vi.fn()
-  const renderFilters = (tags: string[] | undefined) => <DirectoryDiscoveryFilters search={{ ...(tags === undefined ? {} : { tags }) }} overview={catalogue} onChange={change} onReset={reset} />
+  const renderFilters = (tags: string[] | undefined) => <DirectoryDiscoveryFilters search={tags === undefined ? {} : { tags }} overview={catalogue} onChange={change} onReset={reset} />
   const { rerender } = render(renderFilters(['one', 'two', 'three']))
   fireEvent.click(screen.getByRole('button', { name: 'Filters 1' }))
   let filters = within(screen.getByRole('dialog', { name: 'Refine Tools' }))
@@ -282,19 +292,20 @@ it('shows six category chips initially, keeps the selected category visible and 
   const change = vi.fn()
   render(<DirectoryDiscoveryFilters search={{ directoryCategory: 'category-9' }} overview={catalogue} onChange={change} onReset={vi.fn()} />)
   const group = within(screen.getByRole('group', { name: 'Browse by Provider category' }))
-  expect(group.getByRole('button', { name: 'Category 9 9' }).getAttribute('aria-pressed')).toBe('true')
-  expect(group.queryByRole('button', { name: 'Category 8 8' })).toBeNull()
-  const first = group.getByRole('button', { name: 'Category 0 0' })
-  const second = group.getByRole('button', { name: 'Category 1 1' })
+  expect(group.getByRole('button', { name: 'Category 9' }).getAttribute('aria-pressed')).toBe('true')
+  expect(group.queryByRole('button', { name: 'Category 8' })).toBeNull()
+  const first = group.getByRole('button', { name: 'Category 0' })
+  const second = group.getByRole('button', { name: 'Category 1' })
   first.focus()
   fireEvent.keyDown(first, { key: 'ArrowRight' })
   expect(document.activeElement).toBe(second)
   expect(change).not.toHaveBeenCalled()
 })
 
-it('retains a selected category absent from the catalogue without inventing a count', () => {
+it('retains a selected category absent from the catalogue without inventing a count', async () => {
   const { change, filters } = show({ directoryCategory: 'future-category' }, { ...overview, categories: [] })
   fireEvent.click(filters.getByRole('button', { name: 'Show results' }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   const group = within(screen.getByRole('group', { name: 'Browse by Provider category' }))
   const option = group.getByRole('button', { name: 'future-category' })
   expect(option.getAttribute('aria-pressed')).toBe('true')
@@ -303,11 +314,13 @@ it('retains a selected category absent from the catalogue without inventing a co
   expect(change).toHaveBeenLastCalledWith({ directoryCategory: undefined })
 })
 
-it('omits the visible category entry when the sample is unavailable and no category is selected', () => {
+it('omits the visible category entry when the sample is unavailable and no category is selected', async () => {
   const unavailable: X402DirectoryCatalogueOverview = { kind: 'unavailable', reason: 'unavailable' }
   const { filters } = show({}, unavailable)
-  expect(filters.getByText('Provider and network catalogue samples are unavailable.')).toBeTruthy()
+  expect(filters.queryByRole('combobox', { name: 'Provider category' })).toBeNull()
+  expect(filters.getByRole('combobox', { name: 'Directory Hosts' })).toBeTruthy()
   fireEvent.click(filters.getByRole('button', { name: 'Show results' }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   expect(screen.queryByRole('group', { name: 'Browse by Provider category' })).toBeNull()
   expect(screen.getByRole('group', { name: 'Applied catalogue filters' })).toBeTruthy()
 })
@@ -321,10 +334,10 @@ it('keeps the applied toolbar mounted when there are no active facets and ignore
   expect(screen.queryByRole('group', { name: 'Browse by Provider category' })).toBeNull()
 })
 
-it('retains unlisted selected Provider and network values when the catalogue sample is unavailable', () => {
+it('retains unlisted selected directory Host and network values when the catalogue sample is unavailable', () => {
   const unavailable: X402DirectoryCatalogueOverview = { kind: 'unavailable', reason: 'unavailable' }
   const { filters, change } = show({ provider: 'outside.example', network: 'solana:mainnet' }, unavailable)
-  const providers = filters.getByRole('combobox', { name: 'Providers' }) as HTMLInputElement
+  const providers = filters.getByRole('combobox', { name: 'Directory Hosts' }) as HTMLInputElement
   const network = filters.getByRole('combobox', { name: 'Network' }) as HTMLInputElement
   expect(providers.value).toBe('outside.example')
   expect(network.value).toBe('solana:mainnet')
@@ -332,13 +345,14 @@ it('retains unlisted selected Provider and network values when the catalogue sam
   expect(change).toHaveBeenCalledWith({ provider: undefined })
 })
 
-it('removes only the selected key and clears all eighteen facet keys without touching query or sort', () => {
+it('removes only the selected key and clears all eighteen facet keys without touching query or sort', async () => {
   const search = { query: 'weather', sort: 'popular' as const, directoryCategory: 'search', tags: ['one'] }
   const { change, filters } = show(search)
   fireEvent.click(filters.getByRole('button', { name: 'Show results' }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   fireEvent.click(screen.getByRole('button', { name: 'Remove Provider category: Search' }))
   expect(change).toHaveBeenLastCalledWith({ directoryCategory: undefined })
-  fireEvent.click(screen.getByRole('button', { name: 'Clear all' }))
+  fireEvent.click(within(screen.getByRole('group', { name: 'Applied catalogue filters' })).getByRole('button', { name: 'Clear all' }))
   expect(change).toHaveBeenLastCalledWith({
     directoryCategory: undefined,
     network: undefined,
@@ -361,21 +375,40 @@ it('removes only the selected key and clears all eighteen facet keys without tou
   })
 })
 
-it('uses Provider terminology for the provider Drawer without claiming imported host verification', () => {
+it('names directory Hosts in the filter Drawer without claiming verified Provider identity', () => {
   const { filters } = show({}, overview, 'providers')
-  expect(filters.getByRole('heading', { name: 'Refine Providers' })).toBeTruthy()
-  expect(filters.getByRole('combobox', { name: 'Providers' })).toBeTruthy()
-  expect(filters.getByText('Provider names and counts come from a bounded catalogue sample.')).toBeTruthy()
+  expect(filters.getByRole('heading', { name: 'Refine Directory Hosts' })).toBeTruthy()
+  expect(filters.getByRole('combobox', { name: 'Directory Hosts' })).toBeTruthy()
+  expect(filters.getByText('Search the whole indexed directory by hostname prefix.')).toBeTruthy()
 })
 
 it('summarizes labels from the catalogue and preserves exact filter-bound meanings', () => {
   const catalogue = { ...overview, tags: [{ key: 'one', label: 'First tag', count: 120 }], bundleSlugs: [{ key: 'developer-kit', label: 'Developer kit', count: 99 }] }
   render(<DirectoryDiscoveryFilters search={{ directoryCategory: 'search', provider: 'api.example.com', network: 'eip155:8453', minUsdPrice: 0.000001, maxPayers30d: 0, tags: ['one', 'missing'], bundleSlugs: ['developer-kit'] }} overview={catalogue} onChange={vi.fn()} onReset={vi.fn()} />)
   expect(screen.getByRole('button', { name: 'Remove Provider category: Search' })).toBeTruthy()
-  expect(screen.getByRole('button', { name: 'Remove Providers: api.example.com' })).toBeTruthy()
+  expect(screen.getByRole('button', { name: 'Remove Directory Hosts: api.example.com' })).toBeTruthy()
   expect(screen.getByRole('button', { name: 'Remove Network: Base' })).toBeTruthy()
   expect(screen.getByRole('button', { name: 'Remove Minimum Provider-listed price: 0.000001 USDC' })).toBeTruthy()
   expect(screen.getByRole('button', { name: 'Remove Maximum paying addresses: At most 0' })).toBeTruthy()
   expect(screen.getByRole('button', { name: 'Remove Tags: First tag, missing' })).toBeTruthy()
   expect(screen.getByRole('button', { name: 'Remove Collections: Developer kit' })).toBeTruthy()
+})
+
+it('reconciles Advanced drafts only when their applied price or Host filters change', () => {
+  const { filters, change, reset, rerender } = show({ minUsdPrice: 0.01, maxUsdPrice: 0.1, provider: 'api.example.com' })
+  openAdvanced(filters)
+  const minimum = filters.getByLabelText('Min USDC') as HTMLInputElement
+  const maximum = filters.getByLabelText('Max USDC') as HTMLInputElement
+  const hostname = filters.getByLabelText('Directory Host') as HTMLInputElement
+  fireEvent.change(minimum, { target: { value: '0.05' } })
+  fireEvent.change(hostname, { target: { value: 'draft.example' } })
+  rerender(<DirectoryDiscoveryFilters search={{ minUsdPrice: 0.01, maxUsdPrice: 0.1, provider: 'api.example.com', network: 'eip155:8453' }} overview={overview} onChange={change} onReset={reset} />)
+  expect(minimum.value).toBe('0.05')
+  expect(hostname.value).toBe('draft.example')
+  rerender(<DirectoryDiscoveryFilters search={{ priceBand: 'lt_0_01', provider: 'selected.example' }} overview={overview} onChange={change} onReset={reset} />)
+  expect(minimum.value).toBe('')
+  expect(maximum.value).toBe('')
+  expect(hostname.value).toBe('selected.example')
+  rerender(<DirectoryDiscoveryFilters search={{}} overview={overview} onChange={change} onReset={reset} />)
+  expect(hostname.value).toBe('')
 })

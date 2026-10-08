@@ -1,3 +1,4 @@
+import { buyerReturnDestination, type ActivityReturnScope } from '@/lib/call-recovery/activity-return-scope'
 import { Link } from '@tanstack/react-router'
 
 import { AePageState } from '@/components/ae/layout/AePageState'
@@ -12,6 +13,7 @@ import type { FundingReturnViewState } from '@/modules/money/funding-return.view
 import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 
 export type AeFundingReturnStateProps = Readonly<{
+  returnScope?: ActivityReturnScope
   pageState: FundingReturnViewState
   fundingSessionId: string
   onCheck: () => Promise<void>
@@ -131,16 +133,18 @@ function deriveFundingReturnPageState(
 
 export function AeFundingReturnState({
   pageState,
+  returnScope,
   onCheck,
   fundingSessionId,
 }: AeFundingReturnStateProps) {
+  const destination = buyerReturnDestination(returnScope)
   const derived = deriveFundingReturnPageState(pageState, onCheck, fundingSessionId)
   return (
     <AePageState
       tone={derived.tone}
       title={derived.title}
       description={derived.description}
-      {...(derived.action === undefined ? {} : { action: derived.action })}
+      action={<div className="grid gap-4">{derived.action}{destination === undefined ? null : <a href={destination.href} className={actionLinkClassName('secondary', 'md')}>{destination.label}</a>}</div>}
       {...(derived.focusTitle === true ? { focusTitle: true } : {})}
     />
   )

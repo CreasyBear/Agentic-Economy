@@ -1,6 +1,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 
+import { callPublicSourceQuery, sourceQuery } from '@/lib/server/convex-source'
 import { degrade } from '@/lib/observability/degrade'
 import type { ToolDetailResult } from '@/modules/capability-supply/public'
 import type { ReferenceRate } from '@/modules/money/public'
@@ -50,11 +51,16 @@ export const readPublicToolDetailRouteServer = createServerFn()
     return { ...result, ...(evidence === undefined ? {} : { evidence }), ...(exactPublicBusiness ? { verifiedBusinessSlug: result.tool.business.slug } : {}), ...(referenceRate === undefined ? {} : { referenceRate }) }
   })
 
+const externalById = sourceQuery<{ id: string }, X402DirectoryCatalogueResource>('x402DirectoryIndex:detailById')
+
 /** Rate and external listing are fetched on the server; directory details are not AE admissions. */
 export const readDirectoryToolDetailRouteServer = createServerFn({ method: 'GET' })
-  .validator((data) => z.strictObject({ providerKey: z.string().min(1).max(253), slug: z.string().min(1).max(200) }).parse(data))
+  .validator((data) => z.union([
+    z.strictObject({ providerKey: z.string().min(1).max(253), slug: z.string().min(1).max(200) }),
+    z.strictObject({ id: z.string().regex(/^registry:[a-f0-9]{64}$/u) }),
+  ]).parse(data))
   .handler(async ({ data }): Promise<Readonly<{ metadata: X402DirectoryCatalogueResource; referenceRate?: ReferenceRate }>> => {
-    const metadata = await readX402DirectoryCatalogueBySlug(data)
+    const metadata = 'id' in data ? await callPublicSourceQuery(externalById, data) : await readX402DirectoryCatalogueBySlug(data)
     if (metadata.kind !== 'found' && metadata.kind !== 'found_upstream') return { metadata }
     if (metadata.kind === 'found' && metadata.item.toolRef !== undefined) return { metadata }
     const usdcPrice = metadata.item.entry.prices.some(price => price.scheme === 'exact' && price.symbol === 'USDC')

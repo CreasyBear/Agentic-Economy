@@ -4,6 +4,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { ChatHeaderSlot, ChatHeaderSlotProvider } from '@/components/ae/layout/app-shell/ChatHeaderSlot'
 import { ChatHeader } from '@/components/ae/chat/chat-session/components/ChatHeader'
 import { AECON_MARK_SRC } from '@/content/brand-assets'
 import { chatHeaderActionsId, chatHistory } from '@/lib/public/chat-ia'
@@ -43,8 +44,8 @@ describe('ChatHeader', () => {
 
   it('places thread controls in the app header slot instead of a second bar', () => {
     render(
-      <header data-shell="app-header">
-        <div id={chatHeaderActionsId} />
+      <ChatHeaderSlotProvider><header data-shell="app-header">
+        <ChatHeaderSlot />
         <ChatHeader
           authenticated={false}
           threadId={null}
@@ -61,7 +62,7 @@ describe('ChatHeader', () => {
           onRevokeShare={() => undefined}
           onCopyShare={() => undefined}
         />
-      </header>,
+      </header></ChatHeaderSlotProvider>,
     )
 
     expect(document.querySelectorAll('header')).toHaveLength(1)

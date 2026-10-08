@@ -6,6 +6,8 @@ import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
 
 export type MarketReturnSearch = Readonly<X402DirectoryCatalogueInput & {
   compare?: string
+  /** Selection hint only. It cannot authorize a write, Quote or Call. */
+  save?: string
   view?: "discover" | "tools" | "providers" | "saved"
   layout?: 'table' | 'grid'
   resource?: string

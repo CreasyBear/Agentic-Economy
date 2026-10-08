@@ -1,4 +1,6 @@
 import { useRef, useState } from 'react'
+import { ownerInventoryHref } from '@/lib/operator/owner-inventory-search'
+import { appendOwnerInventoryReturnContext } from '@/lib/operator/owner-inventory-return'
 
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { appDestination } from '@/lib/navigation/app-navigation'
@@ -30,6 +32,7 @@ const OPEN_TOOLS_CONTINUATION = {
 /** Owns every piece of native-start form state plus the discover/select/connect/publish calls. */
 export function useSupplyNativeStartState({
   businessRef,
+  returnInventoryQuery,
   connections = [],
   initial,
   onPreview,
@@ -67,7 +70,7 @@ export function useSupplyNativeStartState({
   const [invalidField, setInvalidField] = useState<SupplyPublicationInvalidField>()
   const [ownerHandoff, setOwnerHandoff] = useState<Extract<SupplySourcePreview, { kind: 'action_required' }>['ownerHandoff']>()
   const [success, setSuccess] = useState<string>()
-  const continuation = success === undefined ? undefined : OPEN_TOOLS_CONTINUATION
+  const continuation = success === undefined ? undefined : { ...OPEN_TOOLS_CONTINUATION, to: ownerInventoryHref(returnInventoryQuery ?? {}) }
   const [reviewing, setReviewing] = useState(false)
   const [publicationLocked, setPublicationLocked] = useState(false)
   const [termsSaveOutcome, setTermsSaveOutcome] = useState<'idle' | 'saved' | 'failed' | 'outcome_unknown'>('idle')
@@ -170,7 +173,7 @@ export function useSupplyNativeStartState({
       const result = await onPreview(source, previewIdempotencyKey.current)
       if (result.kind === 'action_required') {
         setPreview(undefined)
-        setOwnerHandoff(result.ownerHandoff)
+        setOwnerHandoff({ ...result.ownerHandoff, destination: appendOwnerInventoryReturnContext(result.ownerHandoff.destination, returnInventoryQuery) })
         return
       }
       setOwnerHandoff(undefined)
@@ -390,7 +393,7 @@ export function useSupplyNativeStartState({
         setError('This source no longer requires a connection. Find Tools again to continue with its current contract.')
         return
       }
-      setOwnerHandoff(result.ownerHandoff)
+      setOwnerHandoff({ ...result.ownerHandoff, destination: appendOwnerInventoryReturnContext(result.ownerHandoff.destination, returnInventoryQuery) })
     } catch (cause) {
       captureClientExceptionOnClient(cause)
       setError('Agentic Economy could not start this connection. Find Tools again, then retry the current source.')

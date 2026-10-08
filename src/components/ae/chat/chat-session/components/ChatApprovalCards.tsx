@@ -1,3 +1,4 @@
+import { useChatBuyerReturnScope } from '../buyer-return-context'
 import { useEffect, useRef } from 'react'
 
 import { CallOutcome } from '@/components/ae/shared/CallOutcome'
@@ -21,6 +22,7 @@ function cardKey(card: OwnerChatCard): string {
 }
 
 export function ChatApprovalCards({ cards, problem, onApprove, onDeny, onFreshQuote }: ChatApprovalCardsProps) {
+  const returnScope = useChatBuyerReturnScope()
   const previous = useRef(new Set<string>())
   useEffect(() => {
     const next = new Set(cards.map(cardKey))
@@ -46,7 +48,7 @@ export function ChatApprovalCards({ cards, problem, onApprove, onDeny, onFreshQu
         )
         if (card.kind === 'result') return (
           <div key={callRef} data-outcome-ref={callRef}>
-            <CallOutcome view={card.view} />
+            <CallOutcome view={card.view} {...(returnScope === undefined ? {} : { returnScope })} />
           </div>
         )
         return (

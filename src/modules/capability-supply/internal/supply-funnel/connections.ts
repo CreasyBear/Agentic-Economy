@@ -119,9 +119,9 @@ const retryOwnerProviderConnectionCleanupMutation = sourceMutation<
   OwnerProviderConnectionCommandResult
 >("capabilityProviderConnections:retryOwnerCleanup");
 const readOwnerProviderEarningsQuery = sourceQuery<
-  Record<string, never>,
+  { paginationOpts: { numItems: number; cursor: string | null } },
   OwnerProviderEarningsReadback
->("moneyLedger:readOwnerProviderEarnings");
+>("moneyLedger:readOwnerProviderEarningsPage");
 
 export const ownerConnectionCommandSchema = z.strictObject({
   connectionRef: z.string().min(1).max(300),
@@ -458,9 +458,9 @@ export async function retryOwnerProviderConnectionCleanup({
   }
 }
 
-export async function readOwnerProviderEarnings(): Promise<OwnerProviderEarningsReadback> {
+export async function readOwnerProviderEarnings(data: Readonly<{ cursor?: string }> = {}): Promise<OwnerProviderEarningsReadback> {
   try {
-    return await callSourceQuery(readOwnerProviderEarningsQuery, {});
+    return await callSourceQuery(readOwnerProviderEarningsQuery, { paginationOpts: { numItems: 50, cursor: data.cursor ?? null } });
   } catch (cause) {
     return degradeBackend(cause, { kind: "error", code: "source_unavailable" }, {
       site: "readOwnerProviderEarnings",

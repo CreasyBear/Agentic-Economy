@@ -24,7 +24,9 @@ export function ProviderWorkspaceReadinessSection({
   connectionHash?: string
 }>) {
   const search = x402Handoff ?? (rebindOfferingRef === undefined ? undefined : { rebind: rebindOfferingRef })
-  const connectionHref = `/owner/settings/integrations${search === undefined ? '' : `?${new URLSearchParams(Object.entries(search)).toString()}`}${connectionHash ?? ''}`
+  const query = new URLSearchParams()
+  for (const [key, value] of Object.entries(search ?? {})) if (value !== undefined) query.set(key, value)
+  const connectionHref = `/owner/settings/integrations${query.size === 0 ? '' : `?${query.toString()}`}${connectionHash ?? ''}`
   return (
     <AeSection id="provider-connections" title="Tool availability" description="The connection needed to operate your Tools and their current buyer availability.">
       <div className="arc-market arc-provider-workspace-readiness">

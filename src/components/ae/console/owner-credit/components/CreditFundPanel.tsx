@@ -1,7 +1,8 @@
 import { Link } from '@tanstack/react-router'
 import { AeAccountFundingPanel } from '@/components/ae/console/AeCreditTopUpPanel'
-import { BillingOverview } from '@/components/ae/shared/arc-pro/billing-overview/billing-overview'
-import { Button } from '@/components/arc/button/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { CreditBalanceCard } from './CreditBalanceCard'
+import { CreditProfileSection } from './CreditProfileSection'
 import { Skeleton } from '@/components/arc/skeleton/skeleton'
 import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { formatDisplayAmount } from '@/modules/money/public'
@@ -52,30 +53,25 @@ export function CreditFundPanel({
             : `Available credit ${formatDisplayAmount(balance)}.`
 
   return (
-    <div id="fund" className="arc-credit-fund">
+    <div id="fund" className="arc-credit-fund max-w-3xl">
       <p className="arc-credit-fund__intro">
         Browsing is free. Paid Calls reserve AUD from this Account and remain subject to each Agent’s spending policy.
       </p>
       <p className="sr-only" aria-live="polite">
         {creditStatus}
       </p>
-      <BillingOverview
-        balance={{
-          label: balanceLoading && accountBalance === undefined ? 'Loading credit' : 'Available credit',
-          value: balance === undefined ? undefined : formatDisplayAmount(balance),
-          busy: balanceLoading,
-          content: balanceLoading && accountBalance === undefined ? (
+      <CreditProfileSection title="Account credit" description="Read the recorded balance and any restrictions before adding funds.">
+        <CreditBalanceCard label={balanceLoading && accountBalance === undefined ? 'Loading credit' : 'Available credit'}
+          {...(balance === undefined ? {} : { value: formatDisplayAmount(balance) })} busy={balanceLoading} refreshLabel={balanceRefreshUnavailable ? 'Try balance again' : 'Refresh balance'}
+          {...(balanceUnavailable ? {} : { status: balanceLocked ? 'Locked' : balanceRefreshUnavailable ? 'Last confirmed balance' : 'Available' })}
+          {...(onCreditRefresh === undefined ? {} : { onRefresh: onCreditRefresh })}>
+          {balanceLoading && accountBalance === undefined ? (
             <div aria-hidden="true" className="grid gap-3">
               <Skeleton lines={3} />
             </div>
           ) : balanceUnavailable ? (
             <AeAlert role="alert" tone="info" title="Credit unavailable"><div className="arc-credit-alert__description">
                 <span>No balance is being inferred. Refresh to read the authoritative Account balance.</span>
-                {onCreditRefresh === undefined ? null : (
-                  <Button type="button" variant="secondary" disabled={balanceLoading} onClick={() => { void onCreditRefresh() }}>
-                    {balanceLoading ? 'Refreshing…' : 'Refresh balance'}
-                  </Button>
-                )}
               </div></AeAlert>
           ) : (
           <>
@@ -105,28 +101,23 @@ export function CreditFundPanel({
             {balanceRefreshUnavailable ? (
               <AeAlert role="alert" tone="info" title="Balance could not be refreshed" className="arc-credit-balance__refresh-alert"><div className="arc-credit-alert__description">
                   <span>The last authoritative balance remains visible; it has not been replaced with an inferred amount.</span>
-                  {onCreditRefresh === undefined ? null : (
-                    <Button type="button" variant="secondary" disabled={balanceLoading} onClick={() => { void onCreditRefresh() }}>
-                      {balanceLoading ? 'Refreshing…' : 'Try balance again'}
-                    </Button>
-                  )}
                 </div></AeAlert>
             ) : null}
           </>
-        ),
-        }}
-        funding={{
-          label: 'Add funds',
-          description: 'Review the exact credit, fee, and total before continuing to secure payment.',
-          content: <AeAccountFundingPanel
+        )}
+        </CreditBalanceCard>
+      </CreditProfileSection>
+      <CreditProfileSection title="Add funds" description="Review the exact credit, fee, and total before continuing to secure payment.">
+        <Card className="min-w-0 py-5"><CardContent className="px-5 sm:px-6">
+          <AeAccountFundingPanel
             {...(accountFundingPort === undefined ? {} : { port: accountFundingPort })}
             {...(fundingConstraints === undefined ? {} : { constraints: fundingConstraints })}
             constraintsLoading={constraintsLoading}
             {...(accountBalance === undefined ? {} : { accountBalance })}
             {...(onCreditRefresh === undefined ? {} : { onRefresh: onCreditRefresh })}
-          />,
-        }}
-      />
+          />
+        </CardContent></Card>
+      </CreditProfileSection>
       <div className="arc-credit-fund__links">
         <Link className="text-primary underline-offset-4 hover:underline" to="/owner/settings/spending">Configure spending defaults</Link>
         <Link className="text-primary underline-offset-4 hover:underline" to="/owner/settings/receipts">View receipts &amp; invoices</Link>

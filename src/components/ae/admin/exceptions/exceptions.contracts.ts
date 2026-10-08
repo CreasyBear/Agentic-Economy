@@ -20,6 +20,7 @@ export const adminExceptionsSearchSchema = z.object({
     'review_required', 'unset', 'submitted', 'under_review',
   ]).optional(),
   ref: z.string().trim().min(1).max(300).optional(),
+  focus: z.string().min(1).max(350).optional(),
   loaded: z.coerce.number().int().min(ADMIN_LIST_WINDOW).max(ADMIN_LIST_WINDOW_MAX).optional(),
 })
 
@@ -104,6 +105,8 @@ export type ExceptionFeedTableProps = Readonly<{
   onLoadMore: () => void
   paginationStatus: AdminExceptionsReadyState['paginationStatus']
   onOpen: (row: AdminExceptionRowModel) => void
+  focusId?: string
+  restoreFocus?: boolean
 }>
 
 export type ExceptionEvidenceSheetProps = Readonly<{

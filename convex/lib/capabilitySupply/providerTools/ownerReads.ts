@@ -86,10 +86,27 @@ export async function listOwnerHandler(ctx: QueryCtx, args: Infer<typeof listOwn
     if (business === null || business.owningAccountRef !== actor.canonicalAccountRef) {
       return { kind: 'not_found' as const }
     }
-    const rows = await ctx.db.query('capabilityProviderToolProjections')
-      .withIndex('by_businessId_and_updatedAt', (index) => index.eq('businessId', args.businessId))
-      .order('desc')
-      .paginate(args.paginationOpts)
+    if (args.paginationOpts.numItems < 1 || args.paginationOpts.numItems > 50) throw new Error('provider_inventory_page_size_invalid')
+    const search = args.search?.trim() ?? ''
+    if (search.length > 120) throw new Error('provider_inventory_search_too_long')
+    const sort = search.length > 0 ? 'relevance' : args.sort === 'relevance' ? 'updated_desc' : args.sort ?? 'updated_desc'
+    if (search.length > 0 || sort.startsWith('name_')) {
+      // Bounded readiness proof, never a full inventory scan or a false empty result.
+      const missing = await ctx.db.query('capabilityProviderToolProjections')
+        .withIndex('by_businessId_and_inventoryName', index => index.eq('businessId', args.businessId).eq('inventoryName', undefined)).take(1)
+      if (missing.length > 0) return { kind: 'index_pending' as const }
+    }
+    const rows = search.length > 0
+      ? await ctx.db.query('capabilityProviderToolProjections')
+        .withSearchIndex('search_inventoryText', index => index.search('inventoryText', search).eq('businessId', args.businessId))
+        .paginate(args.paginationOpts)
+      : sort.startsWith('name_')
+        ? await ctx.db.query('capabilityProviderToolProjections')
+          .withIndex('by_businessId_and_inventoryName', index => index.eq('businessId', args.businessId))
+          .order(sort === 'name_asc' ? 'asc' : 'desc').paginate(args.paginationOpts)
+        : await ctx.db.query('capabilityProviderToolProjections')
+          .withIndex('by_businessId_and_updatedAt', index => index.eq('businessId', args.businessId))
+          .order(sort === 'updated_asc' ? 'asc' : 'desc').paginate(args.paginationOpts)
     const page = await Promise.all(rows.page.map(async (identity) => {
       const [projected, offering, revision, paths, canonical] = await Promise.all([
         projectIdentity(ctx, identity, args.now, false),

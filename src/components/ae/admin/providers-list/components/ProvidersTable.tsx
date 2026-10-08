@@ -1,3 +1,4 @@
+import type { AeRecordTableFeatures } from '@/components/ae/operator/AeOperatorDataTable'
 import type { ColumnDef } from '@tanstack/react-table'
 
 import { AeSection } from '@/components/ae/layout/AeSection'
@@ -11,7 +12,7 @@ import {
   type ProvidersTableProps,
 } from '../providers-list.contracts'
 
-const columns: ColumnDef<AdminProviderRowModel, unknown>[] = [
+const columns: ColumnDef<AeRecordTableFeatures, AdminProviderRowModel, unknown>[] = [
   {
     accessorKey: 'slug',
     header: PROVIDERS_LIST_COPY.columns.provider,

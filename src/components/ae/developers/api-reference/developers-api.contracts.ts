@@ -1,3 +1,4 @@
+import type { PublicDocumentationLinks } from '@/lib/documentation/public-documentation'
 import type { ProblemKind } from '@/lib/errors'
 import type { ExactAmount } from '@/modules/money/public'
 
@@ -33,6 +34,7 @@ export type DevelopersApiProblem = Readonly<{
 }>
 
 export type DevelopersApiViewModel = Readonly<{
+  documentation?: PublicDocumentationLinks
   authDescription: string
   documentVersion: string
   versionPolicy: string

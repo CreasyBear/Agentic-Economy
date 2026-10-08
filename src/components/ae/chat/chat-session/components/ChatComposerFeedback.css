@@ -1,4 +1,4 @@
-/* Native session/recovery feedback outside the installed Arc composer. */
+/* Native session/recovery feedback outside the ReUI composer. */
 .arc-chat-feedback { display: flex; align-items: start; justify-content: space-between; gap: var(--space-3); min-width: 0; }
 .arc-chat-feedback-main { flex: 1; min-width: 0; }
 .arc-chat-feedback :where(p) { margin: 0; }

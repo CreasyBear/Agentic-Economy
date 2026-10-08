@@ -146,7 +146,7 @@ export function AeAssistantInstallFunnel({
           <AccordionContent className="arc-agent-install-help">
             <p>If Tools are missing, check the connection in your client settings and refresh its Tool list. Keep the selected Tool and input in your existing task.</p>
             <p>If a Call needs permission, follow the action shown for that Call. If its result is uncertain, check its status before trying again.</p>
-            <a href="/support" className="arc-agent-install-help-link">Get connection help</a>
+            <a href="/support#agent-connection" className="arc-agent-install-help-link">Get connection help</a>
           </AccordionContent>
         </AccordionItem>
       </Accordion>

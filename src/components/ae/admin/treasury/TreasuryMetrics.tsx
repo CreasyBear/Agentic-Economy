@@ -1,3 +1,4 @@
+import type { AeRecordTableFeatures } from '@/components/ae/operator/AeOperatorDataTable'
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeInlineState } from '@/components/ae/feedback/AeInlineState'
 import { AeOperatorSortableHeader, AeRecordTable } from '@/components/ae/operator/AeOperatorDataTable'
@@ -26,10 +27,10 @@ type InFlightCall = Extract<NonNullable<AdminTreasuryView['snapshot']>['inFlight
 const amountSort = (left: string, right: string) => new Decimal(left).comparedTo(right)
 
 function BookedRefills({ deposits, environment }: { deposits: readonly BookedRefill[]; environment: AdminTreasuryView['environment'] }) {
-  const columns: ColumnDef<BookedRefill, unknown>[] = [
+  const columns: ColumnDef<AeRecordTableFeatures, BookedRefill, unknown>[] = [
     { id: 'amount', accessorKey: 'amountUnits', meta: { label: 'Amount', numeric: true },
       header: ({ column }) => <AeOperatorSortableHeader label="Amount" column={column} />,
-      sortingFn: (left, right) => amountSort(left.original.amountUnits, right.original.amountUnits),
+      sortFn: (left, right) => amountSort(left.original.amountUnits, right.original.amountUnits),
       cell: ({ row }) => <span className="whitespace-nowrap tabular-nums">{row.original.chainTransactionHash === null ? 'Opening balance · ' : ''}{treasuryMoney(row.original.amountUnits)}</span> },
     { id: 'booked', accessorKey: 'bookedAt', meta: { label: 'Booked' },
       header: ({ column }) => <AeOperatorSortableHeader label="Booked" column={column} />,
@@ -53,14 +54,14 @@ function BookedRefills({ deposits, environment }: { deposits: readonly BookedRef
 }
 
 function InFlightCalls({ calls }: { calls: readonly InFlightCall[] }) {
-  const columns: ColumnDef<InFlightCall, unknown>[] = [
+  const columns: ColumnDef<AeRecordTableFeatures, InFlightCall, unknown>[] = [
     { id: 'call', accessorKey: 'callRef', meta: { label: 'Call', truncate: true },
       header: ({ column }) => <AeOperatorSortableHeader label="Call" column={column} />,
       cell: ({ row }) => <a className="block min-w-0 truncate underline underline-offset-4" title={row.original.callRef}
         href={`/admin/calls/${encodeURIComponent(row.original.callRef)}`}>{row.original.callRef}</a> },
     { id: 'amount', accessorKey: 'amountUnits', meta: { label: 'Amount', numeric: true },
       header: ({ column }) => <AeOperatorSortableHeader label="Amount" column={column} />,
-      sortingFn: (left, right) => amountSort(left.original.amountUnits, right.original.amountUnits),
+      sortFn: (left, right) => amountSort(left.original.amountUnits, right.original.amountUnits),
       cell: ({ row }) => <span className="whitespace-nowrap tabular-nums">{treasuryMoney(row.original.amountUnits)}</span> },
     { id: 'created', accessorKey: 'createdAt', meta: { label: 'Created' },
       header: ({ column }) => <AeOperatorSortableHeader label="Created" column={column} />,

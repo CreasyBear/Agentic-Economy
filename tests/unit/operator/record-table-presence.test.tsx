@@ -1,7 +1,8 @@
+import type { AeRecordTableFeatures } from '@/components/ae/operator/AeOperatorDataTable'
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ColumnDef, RowSelectionState } from '@tanstack/react-table'
 import { useState } from 'react'
 
@@ -10,11 +11,13 @@ import {
   AeRecordTable,
 } from '@/components/ae/operator/AeOperatorDataTable'
 
-afterEach(cleanup)
+import { AeTablePreferencesProvider } from '@/components/ae/operator/AeTablePreferencesContext'
+
+afterEach(() => { cleanup(); window.localStorage.clear() })
 
 type Row = Readonly<{ id: string; name: string }>
 
-const columns: ColumnDef<Row, unknown>[] = [
+const columns: ColumnDef<AeRecordTableFeatures, Row, unknown>[] = [
   {
     id: 'name',
     accessorFn: (row) => row.name,
@@ -126,7 +129,7 @@ describe('AeRecordTable filtered-empty recovery', () => {
   })
 
   it('clears a matched search while preserving rows, sort, selection, and focus', () => {
-    const sortableColumns: ColumnDef<Row, unknown>[] = [
+    const sortableColumns: ColumnDef<AeRecordTableFeatures, Row, unknown>[] = [
       {
         id: 'name',
         accessorFn: (row) => row.name,
@@ -191,12 +194,12 @@ describe('AeRecordTable interaction composition', () => {
     expect(screen.queryByRole('checkbox')).toBeNull()
     expect(container.querySelector('tbody tr[tabindex]')).toBeNull()
     expect(within(screen.getByRole('table')).getAllByRole('row')).toHaveLength(3)
-    expect(container.querySelector('[data-slot="table-container"]')).not.toBeNull()
+    expect(container.querySelector('[data-slot="data-grid"]')).not.toBeNull()
   })
 
   it('lets native roving focus follow row actions through Arrow and Home/End keys', async () => {
     const opened: string[] = []
-    const sortableColumns: ColumnDef<Row, unknown>[] = [
+    const sortableColumns: ColumnDef<AeRecordTableFeatures, Row, unknown>[] = [
       {
         id: 'name',
         accessorFn: (row) => row.name,
@@ -388,3 +391,63 @@ function SelectableRecordTable({
     </>
   )
 }
+
+
+describe('AeRecordTable server and scoped layout ownership', () => {
+  it('keeps the server page order and matching intact while reporting a controlled sort change', () => {
+    const onSort = vi.fn()
+    render(<AeRecordTable columns={[{
+      id: 'name', accessorFn: row => row.name,
+      header: ({ column }) => <AeOperatorSortableHeader label="Name" column={column} />,
+      cell: ({ row }) => row.original.name,
+    }]} data={rows} serverControlled sorting={[]} onSortingChange={onSort}
+      filterValue="does-not-match-this-page" getRowId={row => row.id} caption="Server page" />)
+    const table = screen.getByRole('table', { name: 'Server page' })
+    const names = () => within(table).getAllByRole('row').slice(1).map(row => row.textContent)
+    expect(names()).toEqual(['weather.lookup', 'fx.convert'])
+    fireEvent.click(screen.getByRole('button', { name: 'Sort by Name' }))
+    expect(onSort).toHaveBeenCalledTimes(1)
+    expect(names()).toEqual(['weather.lookup', 'fx.convert'])
+  })
+
+  it('stores only bounded layout facts and resets on Account change while retaining exact actions', async () => {
+    const layoutColumns: ColumnDef<AeRecordTableFeatures, Row, unknown>[] = [
+      ...columns,
+      { id: 'reference', accessorFn: row => row.id, header: 'Reference', cell: ({ row }) => row.original.id },
+    ]
+    const view = (accountRef: string) => <AeTablePreferencesProvider scope={{ actorRef: 'actor:one', accountRef }}>
+      <AeRecordTable columns={layoutColumns} data={rows} getRowId={row => row.id} caption="Scoped records"
+        rowAction={{ kind: 'button', label: 'Inspect', onOpen: () => undefined, getAccessibleLabel: row => `Inspect ${row.id}` }} />
+    </AeTablePreferencesProvider>
+    const { rerender } = render(view('account:one'))
+    fireEvent.click(screen.getByRole('button', { name: 'Columns' }))
+    fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Reference' }))
+    await waitFor(() => expect(screen.queryByRole('columnheader', { name: 'Reference' })).toBeNull())
+    const savedKey = Object.keys(window.localStorage).find(key => key.startsWith('ae:table-layout:'))
+    expect(savedKey).toContain('account:one')
+    const saved = JSON.parse(window.localStorage.getItem(savedKey!)!)
+    expect(saved).toEqual({ version: 1, columnVisibility: { reference: false }, columnSizing: {}, density: 'comfortable' })
+    expect(screen.getByRole('button', { name: 'Inspect row-1' })).toBeTruthy()
+    rerender(view('account:two'))
+    expect(screen.getByRole('columnheader', { name: 'Reference' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Inspect row-1' })).toBeTruthy()
+  })
+
+  it('drops unknown columns, invalid widths and protected action hiding from restored preferences', async () => {
+    const key = `ae:table-layout:${JSON.stringify(['actor:one', 'account:one', 'Restored', 1, 'h:name\u0000p:__ae_action'])}`
+    window.localStorage.setItem(key, JSON.stringify({ version: 1,
+      columnVisibility: { name: false, __ae_action: false, unknown: false },
+      columnSizing: { name: -1, __ae_action: 100, unknown: 9_999 }, density: 'invalid',
+      command: { operationKey: 'not-a-layout-fact' },
+    }))
+    render(<AeTablePreferencesProvider scope={{ actorRef: 'actor:one', accountRef: 'account:one' }}>
+      <AeRecordTable columns={columns} data={rows} getRowId={row => row.id} caption="Restored"
+        rowAction={{ kind: 'button', label: 'Inspect', onOpen: () => undefined, getAccessibleLabel: row => `Inspect ${row.id}` }} />
+    </AeTablePreferencesProvider>)
+    expect(screen.getByRole('columnheader', { name: 'Name' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Inspect row-1' })).toBeTruthy()
+    await waitFor(() => expect(JSON.parse(window.localStorage.getItem(key)!)).toEqual({
+      version: 1, columnVisibility: {}, columnSizing: { __ae_action: 100 }, density: 'comfortable',
+    }))
+  })
+})

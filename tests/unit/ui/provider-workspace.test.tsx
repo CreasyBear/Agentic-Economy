@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
 const calls = vi.hoisted(() => ({
-  earnings: vi.fn(), connect: vi.fn(), identity: vi.fn(), ensure: vi.fn(), rename: vi.fn(), invalidate: vi.fn(async () => undefined),
+  earnings: vi.fn(), connect: vi.fn(), identity: vi.fn(), ensure: vi.fn(), rename: vi.fn(), invalidate: vi.fn(async () => undefined), navigate: vi.fn(async () => undefined),
 }))
 const tokens = vi.hoisted(() => ({ earnings: Symbol('earnings'), connect: Symbol('connect'), identity: Symbol('identity'), ensure: Symbol('ensure'), rename: Symbol('rename') }))
 const routeState = vi.hoisted(() => ({ location: { pathname: '/owner/operations', hash: '', search: {} as Record<string, unknown> } }))
@@ -31,6 +31,8 @@ vi.mock('@tanstack/react-router', async () => {
       <a href={to} className={className} {...props}>{children}</a>
     ),
     useLocation: () => routeState.location,
+    useNavigate: () => calls.navigate,
+    useRouterState: ({ select }: { select: (state: { isLoading: boolean }) => unknown }) => select({ isLoading: false }),
     useRouter: () => ({ invalidate: calls.invalidate }),
   }
 })
@@ -73,8 +75,11 @@ describe('Tools management disclosure', () => {
     expect(screen.queryByText('Add a source, then choose a Tool to publish.')).toBeNull()
     const addTool = screen.getAllByRole('link', { name: 'Add Tool' })
     expect(addTool.every((link) => link.getAttribute('href') === '/owner/operations/new')).toBe(true)
-    const identityStep = screen.getByRole('button', { name: /Provider identity.*Completed/u })
-    expect(identityStep.getAttribute('aria-disabled')).toBe('true')
+    const identityStep = screen.getByRole('tab', { name: 'Provider identity' })
+    expect(identityStep).toHaveProperty('disabled', true)
+    expect(identityStep.getAttribute('data-state')).toBe('completed')
+    expect(identityStep.getAttribute('aria-selected')).toBe('false')
+    expect(screen.getByRole('tab', { name: '2 First Tool' }).getAttribute('aria-selected')).toBe('true')
     fireEvent.click(identityStep)
     expect(screen.queryByRole('textbox', { name: /provider or brand name/i })).toBeNull()
     expect(screen.queryByLabelText('Provider Website (HTTPS)')).toBeNull()

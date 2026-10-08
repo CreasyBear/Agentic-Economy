@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react'
+import { ownerInventoryHref } from '@/lib/operator/owner-inventory-search'
 
 import { AeInlineState } from '@/components/ae/feedback/AeInlineState'
-import { MultiStepForm, type CompletedFormStep } from '@/components/ae/shared/arc-pro/multi-step-form/multi-step-form'
+import { AeProviderSetupWizard, type ProviderSetupCompletedStep } from './AeProviderSetupWizard'
 import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { SupplyCandidateSection } from './SupplyCandidateSection'
 import { SupplySourceSuggestion } from './SupplySourceSuggestion'
@@ -33,7 +34,7 @@ export function AeSupplySourceNativeStart(props: SupplyNativeStartProps) {
   useReportSupplyNavigationSafety(props.onNavigationSafetyChange, vm)
 
   useEffect(() => {
-    if (stage === 'source') {
+    if (focusedStageRef.current === null) {
       focusedStageRef.current = stage
       return
     }
@@ -42,7 +43,7 @@ export function AeSupplySourceNativeStart(props: SupplyNativeStartProps) {
     stageHeadingRef.current?.focus()
   }, [stage])
 
-  const completedSteps: readonly CompletedFormStep[] = stage === 'source' ? [] : [
+  const completedSteps: readonly ProviderSetupCompletedStep[] = stage === 'source' ? [] : [
     { id: 'source', title: 'Source', detail: sourceSummary(vm.source), disabled: vm.pending !== undefined || vm.publicationLocked, onEdit: vm.editSource },
     ...(vm.selected === undefined ? [] : [
       { id: 'tool', title: 'Tool', detail: vm.selected.title, disabled: vm.pending !== undefined || vm.publicationLocked, onEdit: vm.editTool },
@@ -53,16 +54,18 @@ export function AeSupplySourceNativeStart(props: SupplyNativeStartProps) {
   ]
 
   return (
-    <MultiStepForm
+    <AeProviderSetupWizard
       steps={supplySteps}
       activeStep={stage}
+      busy={vm.pending !== undefined}
       completedSteps={completedSteps}
       progressLabel="Add Tool progress"
-      feedback={<SupplyFlowFeedback error={vm.error} ownerHandoff={vm.ownerHandoff} success={vm.success} continuation={vm.continuation} publicationLocked={vm.publicationLocked} />}
+      feedback={<SupplyFlowFeedback returnToolsHref={ownerInventoryHref(props.returnInventoryQuery ?? {})} error={vm.error} ownerHandoff={vm.ownerHandoff} success={vm.success} continuation={vm.continuation} publicationLocked={vm.publicationLocked} />}
     >
 
       {stage === 'source' ? (
         <SupplySourceTypeSection
+          headingRef={stageHeadingRef}
           resourceUrl={vm.resourceUrl}
           x402Method={vm.x402Method}
           askMethod={vm.ownerHandoff?.title === 'Choose the request method'}
@@ -159,7 +162,7 @@ export function AeSupplySourceNativeStart(props: SupplyNativeStartProps) {
         </div>
       )}
       {vm.pending === 'select' ? <div role="status" aria-live="polite"><AeInlineState state="saving" description="Saving the selected Tool so you can return later." /></div> : null}
-    </MultiStepForm>
+    </AeProviderSetupWizard>
   )
 }
 
@@ -170,7 +173,8 @@ const supplySteps = [
   { id: 'review', title: 'Review' },
 ] as const
 
-function SupplyFlowFeedback({ error, ownerHandoff, success, continuation, publicationLocked }: Readonly<{
+function SupplyFlowFeedback({ returnToolsHref, error, ownerHandoff, success, continuation, publicationLocked }: Readonly<{
+  returnToolsHref: string
   error: string | undefined
   ownerHandoff: ReturnType<typeof useSupplyNativeStartState>['ownerHandoff']
   success: string | undefined
@@ -179,7 +183,7 @@ function SupplyFlowFeedback({ error, ownerHandoff, success, continuation, public
 }>) {
   return (
     <>
-      {error === undefined ? null : <AeAlert tone="danger" title="Action required" id={SUPPLY_PUBLICATION_ERROR_ID} role="alert" className="arc-supply-feedback"><div className="arc-supply-feedback-description"><p>{error}</p>{publicationLocked ? <a href="/owner/operations" className={`${actionLinkClassName('secondary', 'md')} arc-supply-feedback-action`}>Open Tools</a> : null}</div></AeAlert>}
+      {error === undefined ? null : <AeAlert tone="danger" title="Action required" id={SUPPLY_PUBLICATION_ERROR_ID} role="alert" className="arc-supply-feedback"><div className="arc-supply-feedback-description"><p>{error}</p>{publicationLocked ? <a href={returnToolsHref} className={`${actionLinkClassName('secondary', 'md')} arc-supply-feedback-action`}>Open Tools</a> : null}</div></AeAlert>}
       {ownerHandoff === undefined ? null : (
         <AeAlert tone="info" title={ownerHandoff.title} role="status" className="arc-supply-feedback"><div className="arc-supply-feedback-description">
             <p>{ownerHandoff.description}</p>
