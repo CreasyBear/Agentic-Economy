@@ -748,5 +748,49 @@ CLI packaging, and 228 docs pages with 84 owner examples. Independent Sol
 reviews corrected pending disclosure and unbounded cache-key cardinality.
 Two existing assertions now wait for their lazy content; their failed gate
 runs remain in the execution evidence. No current source test was waived.
-Production qualification remains pending; source checks do not establish
-hosted performance, payment readiness or signed-in journey acceptance.
+Runtime source `e4d04a47ecb940d249f596a06d7b228892a500e0` was built from a
+clean Git archive as Vercel `dpl_EBpeFYykzMSFr8qUaJY6qg3ge512`,
+`agentic-economy-olujsdgde-creasybears-projects.vercel.app`, and promoted to
+`https://app.aecon.ai` through [PR #375](https://github.com/CreasyBear/Agentic-Economy/pull/375).
+Protected and public release probes both report that source. This is web-only;
+Convex remains on `c608833bd9b015d1b89600377d7aeb83b6edd2e9`. Rollback is
+`dpl_2AUthBPTg2eZPXZLjvqNLyfX1thR`; no backend or financial rollback is needed.
+
+Five interleaved anonymous SSR requests per immutable deployment returned valid
+Tools tables. Median response start fell from 1,182ms to 748ms; median complete
+response fell from 1,193ms to 766ms. The first candidate request still took
+1,810ms to complete. Five fresh desktop browser contexts reached hydrated header
+plus Tools table in 1,448–2,670ms (median 1,471ms), versus the earlier five-sample
+median of 1,923ms. The first Hosts transition used two server-function requests
+and took 901ms; repeated Tools/Hosts transitions took 66–89ms without Market
+loader fetches. Public marketing return medians remained 140–148ms, with first
+visits of 817ms and 830ms. No JavaScript errors were observed in these cohorts.
+These are diagnostic samples, not p95 acceptance or a controlled browser A/B:
+the local host had elevated unrelated load during candidate measurements.
+
+Independent Sol review exercised desktop/mobile reading, comparison facts,
+keyboard tabs, Tools pagination and return. It found two unresolved UI defects:
+Compare activation loses keyboard focus to the document body, and the long AX1
+selection chip expands a 390px viewport to 638px. UI/Registry owns their
+correction in `TODOS.md`; this release does not close whole-UI acceptance.
+The reviewer did not complete Host next/back traversal because its locator
+expected a button rather than the actual link. A separate parent-controlled
+Hosts-to-Tools test held destination GETs until the pending state appeared:
+search was inert and Agent handoff absent until recipient disclosure arrived.
+No search, chat submission or purchase was sent.
+
+The retained-browser promotion harness reached the old hydrated page, but its
+stdin control connection was closed and the post-promotion step could not run.
+That check is unverified. A prior entry-asset hash returned 404 on the new alias;
+current assets returned Vercel HIT with immutable headers. Existing stale-chunk
+recovery tests pass, but they do not establish hosted retained-browser recovery.
+The failed harness and all diagnostic results remain under
+`performance/read-reuse-release/` and `performance/read-reuse-*.json` in the
+execution workspace. Earlier threshold misses and failed gate attempts remain.
+
+Health returned 200. Readiness remained 503 (`payments_unavailable`), as on the
+baseline. The first protected candidate quoting probe was unavailable; later
+public probes were ready, with stale catalogue. No purchase budget was spent.
+Signed-in performance, controlled mobile/cold p95, retained-browser recovery and
+payment acceptance remain open. Alchemy, payment audience, provider agreement,
+credentials and infrastructure were unchanged.
