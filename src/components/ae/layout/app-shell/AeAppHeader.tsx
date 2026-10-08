@@ -10,6 +10,8 @@ import { AeCommandPanel } from '@/components/ae/command-panel'
 import { AeNetworkHealthBanner, AeNetworkHealthIndicator } from '@/components/ae/layout/AeNetworkHealthIndicator'
 import { useOperatorFrameChrome } from '@/components/ae/layout/AeOperatorPage'
 import { ThemeToggle } from '@/components/ae/layout/ThemeToggle'
+import { useAppearance } from '@/components/ae/theme/ThemeProvider'
+import { useIsMobile } from '@/hooks/use-mobile'
 import { AeSiteDrawerNav, AeSitePrimaryNav } from '@/components/ae/website/AeSiteNav'
 import { AECON_DARK_MARK_SRC, AECON_MARK_SRC, AECON_MOBILE_LOCKUP_SRC, aeconMarkClassName } from '@/content/brand-assets'
 import { SidebarTrigger } from '@/components/ui/sidebar'
@@ -58,6 +60,8 @@ export function AeAppHeader({
   chatFrame,
 }: AeAppHeaderProps) {
   const frameChrome = useOperatorFrameChrome()
+  const { sidebarVisible } = useAppearance()
+  const isMobile = useIsMobile()
   const title = frameChrome?.title
   const pageTitle = typeof title === 'string' && title !== '' ? title : null
   const contentOwnsHeading = frameChrome?.contentOwnsHeading === true
@@ -88,7 +92,7 @@ export function AeAppHeader({
           data-elevated={elevated ? '' : undefined}
           className={cn('ae-nav arc-app-header__bar arc-app-header__bar--signed-in px-1 sm:px-2 shadow-none data-[elevated]:shadow-soft', chatFrame && 'max-sm:!h-11 max-sm:!min-h-11 max-sm:!px-4')}
         >
-          <SidebarTrigger aria-label="Toggle workspace navigation" />
+          {isMobile || sidebarVisible ? <SidebarTrigger aria-label="Toggle workspace navigation" /> : <BrandLink />}
           {chatActionSlot(chatFrame)}
           {pageTitle === null || chatFrame ? null : contentOwnsHeading ? (
             <p className="arc-app-header__lead arc-app-header__title" title={pageTitle}>
@@ -102,7 +106,7 @@ export function AeAppHeader({
           <div className="arc-app-header__actions ms-auto">
             <div className="hidden sm:block"><AeNetworkHealthIndicator /></div>
             <div className={chatFrame ? 'hidden sm:block' : 'block'}><AeCommandPanel /></div>
-            <div className={chatFrame ? 'hidden sm:block' : 'block'}><ThemeToggle /></div>
+            <div className={chatFrame ? 'hidden sm:block' : 'block'}><ThemeToggle workspace /></div>
             <UserButton userProfileMode="navigation" userProfileUrl="/owner/settings/account" />
           </div>
         </div>

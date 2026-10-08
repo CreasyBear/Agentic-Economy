@@ -86,6 +86,14 @@ protected projections when identity changes and waits for committed route data;
 timers do not establish readiness. The existing command panel, theme provider,
 route focus owner and navigation safety boundary remain authoritative.
 
+The desktop sidebar is opt-in through **Display settings → Show sidebar** in the
+existing header dropdown. `ThemeProvider` owns this browser-local display preference,
+defaulting to hidden; it stores no Account records or authority. Hidden means no
+rail or layout gap. The controlled upstream sidebar, its toggle and keyboard
+shortcut share that preference; hiding a focused navigation control returns focus
+to Display settings. Mobile retains its existing menu. Routed content stays mounted
+when the preference changes.
+
 The 8 October settings recut replaces the Settings 7 rail with Profile 2's
 horizontal groups, bounded content and section cards. `settingsNavigation` remains
 the only destination catalogue: five groups reveal at most three native route

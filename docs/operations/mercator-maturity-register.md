@@ -1445,7 +1445,9 @@ Provider completion and MM-056 wider product parity remain independently open.
 
 ## 7 October platform UI upgrade
 
-**Disposition: source integration; final repository qualification pending.** Joel
+**Current disposition: source qualified and deployed on 8 October; authenticated
+journeys remain open.** See [production evidence](deployments.md#8-october-platform-ui-production-release).
+The following candidate observations preserve their original evidence limits. Joel
 authorized all 16 platform audit findings and the selected REUI compositions,
 including Table 9.2.6. Baseline is `84abbda0bd892b7f9688e53d84001e970ba32ab1`
 plus the pre-existing Chat 3 candidate; unrelated whitepaper and strategy drafts
@@ -1469,7 +1471,7 @@ writes, backfills, publishing, deployments or new worktrees were performed.
 | F07 discovery/comparison | Registry/UI: explain and enforce filter applicability, preserve exact admitted/external comparison identities, label failed reads as unavailable. | Market filter, comparison and real memory-router regression; public unavailable-state browser review. |
 | F08 task continuation | DX: validated bounded intent through sign-in, setup, funding, receipt/Plan and admin investigation. | Route/context fixtures; navigation does not grant authority or repeat a purchase. |
 | F09 Activity structure | UI/Execution: attention and recent outcomes lead; latest-50 Plan scope is separate from Call filters. | Activity/Plan scope fixtures and responsive composition review. |
-| F10 inventory/earnings | Supply: owner-filtered name/text/date queries before opaque 50-row pagination; pending index readiness, retained maintenance context, fresh/retry earnings. | Owner-query/backfill and cursor fixtures; actual deployed index/backfill remains a release prerequisite. |
+| F10 inventory/earnings | Supply: owner-filtered name/text/date queries before opaque 50-row pagination; pending index readiness, retained maintenance context, fresh/retry earnings. | Owner-query/backfill and cursor fixtures; 8 October rollout backfilled 1 projection with 0 skips and verified both enabled indexes. Full authenticated inventory/earnings journey remains open. |
 | F11 Account transitions | Identity/UI: current identity/session/organization evidence fences privileged destinations; committed route readiness replaces timer; active recovery guard also covers deliberate Account selection. | Workspace/shell and guard fixtures; external identity loss still removes stale protected content immediately. |
 | F12 reconciliation evidence | Execution/UI: show required evidence and permitted reconciliation before submission. | Existing receipt/reconciliation review fixtures. |
 | F13 completion/offboarding | Identity/Supply: authorized blocker handoffs, stable public completion after closure, original-operation observation, state-specific trial next action. | Workspace terminal-receipt, Provider offboarding race and trial fixtures. |
