@@ -13,7 +13,7 @@ import { jevDiscoveryRecipient } from "@/modules/decision-engine/public";
 import { callPublicSourceQuery, sourceQuery } from '@/lib/server/convex-source'
 
 import { marketWindowSchema } from "./contracts";
-import { loadMarketRouteData, type MarketSearch, type MarketRouteReadOptions } from './market-route-data'
+import { loadMarketRouteData, marketUsesHostDirectory, resolveMarketView, type MarketSearch, type MarketRouteReadOptions } from './market-route-data'
 import { readMarketRouteProjection } from "./server";
 
 const inputSchema = z.object({
@@ -50,11 +50,13 @@ export async function loadMarketPageRouteData(deps: MarketSearch, options: Marke
   const deadline = AbortSignal.timeout(MARKET_READ_TIMEOUT_MS)
   const signal = options.signal === undefined ? deadline : AbortSignal.any([options.signal, deadline])
   const read = <T>(fetch: () => Promise<T>) => awaitMarketRead(fetch, signal)
+  const showHosts = marketUsesHostDirectory(deps)
+  const showDirectory = resolveMarketView(deps) !== 'discover' && !showHosts
   const [data, canonicalBaseUrl, jevRecipient, chatRecipient] = await Promise.all([
     loadMarketRouteData(deps, options),
     read(() => readCanonicalBaseUrlServer({ signal })).catch(cause => { if (options.signal?.aborted) throw cause; return degrade(cause, undefined, { site: 'marketCanonicalUrl', reason: 'source_unavailable' }) }),
-    read(() => readMarketDiscoveryRecipientServer({ signal })).catch(cause => { if (options.signal?.aborted) throw cause; return degrade(cause, null, { site: 'marketDiscoveryRecipient', reason: 'source_unavailable' }) }),
-    read(() => readMarketChatRecipientServer({ signal })).catch(cause => { if (options.signal?.aborted) throw cause; return degrade(cause, null, { site: 'marketChatRecipient', reason: 'source_unavailable' }) }),
+    showHosts ? null : read(() => readMarketDiscoveryRecipientServer({ signal })).catch(cause => { if (options.signal?.aborted) throw cause; return degrade(cause, null, { site: 'marketDiscoveryRecipient', reason: 'source_unavailable' }) }),
+    showDirectory ? read(() => readMarketChatRecipientServer({ signal })).catch(cause => { if (options.signal?.aborted) throw cause; return degrade(cause, null, { site: 'marketChatRecipient', reason: 'source_unavailable' }) }) : null,
   ])
   options.signal?.throwIfAborted()
   return { ...data, canonicalBaseUrl, jevRecipient, chatRecipient }

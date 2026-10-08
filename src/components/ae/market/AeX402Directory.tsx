@@ -458,10 +458,11 @@ function DirectoryMarketplace({ canonicalSearch: routeSearch, page, compareEntri
 
   return (
     <div className="arc-market arc-market-page ae-rail pb-page">
-      <div className="ae-market-workbench-intro"><div className="ae-market-workbench-main">
+      <div className="ae-market-workbench-intro" inert={pendingView !== undefined}><div className="ae-market-workbench-main">
       <DirectoryHero compactTitle={displayView === 'saved' ? 'Your saved Tools' : displayView === 'providers' ? 'Hosts in matching Tool results' : 'Find a Tool for the job.'} description="Search by what you need to do. Inspect the input, price and access before choosing." {...(home === undefined ? {} : { home })} compact={workspace || view !== 'discover'} headingLevel={workspace ? 2 : 1}>
         <form aria-label="Search the Tool market" className="arc-market-search-form" onSubmit={event => {
           event.preventDefault()
+          if (pendingView !== undefined) return
           const query = draftQuery.trim()
           if (query.length > SEARCH_QUERY_MAX_LENGTH) {
             setQueryError(`Use ${SEARCH_QUERY_MAX_LENGTH} characters or fewer. Shorten your search and try again.`)
@@ -479,7 +480,7 @@ function DirectoryMarketplace({ canonicalSearch: routeSearch, page, compareEntri
         </form>
       </DirectoryHero>
       <p className="ae-market-scope">Search and filters apply before pagination, across the catalogue.</p>
-      </div><MarketAgentHandoff search={search} draftQuery={draftQuery} {...(chatRecipient === undefined ? {} : { recipient: chatRecipient })} /></div>
+      </div>{pendingView === undefined ? <MarketAgentHandoff search={search} draftQuery={draftQuery} {...(chatRecipient === undefined ? {} : { recipient: chatRecipient })} /> : null}</div>
       {search.query !== undefined && marketHasBrowseOnlyFilters(search) ? <p role="status" className="mb-4 text-sm text-muted-foreground">Detailed filters are applied to catalogue search before pagination. Results use published listing matches; natural-language search across admitted Tools and external listings resumes when these filters are cleared.</p> : null}
       {saveIntent !== undefined && authLoaded && isSignedIn ? <section aria-label="Selected save" className="flex flex-wrap items-center gap-3 border-b border-border py-4">
         <p className="text-sm">Finish saving the Tool you selected.</p>

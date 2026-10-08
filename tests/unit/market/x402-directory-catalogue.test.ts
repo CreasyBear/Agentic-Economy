@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { useStorage } from 'nitro/storage'
+import { REFERENCE_RATE_MAX_AGE_MS } from '@/modules/money/public'
 const { query, upstream } = vi.hoisted(() => ({ query: vi.fn(), upstream: vi.fn() }))
 vi.mock('@/lib/server/convex-source', () => ({ sourceQuery: (name: string) => name, callPublicSourceQuery: query }))
 vi.mock('@/modules/market/x402-directory.server', () => ({ readX402Directory: upstream }))
@@ -6,7 +8,7 @@ import { readX402DirectoryAnalytics, readX402DirectoryCatalogue, readX402Directo
 import { x402DirectoryCatalogueInputSchema } from '@/modules/market/x402-directory-catalogue'
 import { decodeOpaqueCursor, encodeOpaqueCursor } from '@/modules/registry/opaque-cursor'
 
-beforeEach(() => { query.mockReset(); upstream.mockReset(); vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production') })
+beforeEach(() => { query.mockReset(); upstream.mockReset(); vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production'); vi.stubEnv('CONVEX_URL', ''); vi.stubEnv('VITE_CONVEX_URL', '') })
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs() })
 describe('indexed catalogue server boundary', () => {
   it('stops a cancelled continuation before browse or reference-rate work', async () => {
@@ -356,4 +358,170 @@ it('accepts repeat sorting through the shared index schema and forwards it to th
   query.mockResolvedValueOnce({ kind: 'ok', coverage: {}, searchMethod: 'native_index', page: [], continueCursor: 'next', isDone: true })
   expect(await readX402DirectoryCatalogue({ sort: 'repeat' })).toMatchObject({ kind: 'ok', source: 'index', isDone: true })
   expect(query).toHaveBeenCalledWith('x402DirectoryIndex:browse', { sort: 'repeat', network: 'eip155:8453', paginationOpts: { numItems: 24, cursor: null, maximumRowsRead: 512 } })
+})
+
+describe('bounded public directory display snapshots', () => {
+  const displayUrl = 'https://directory-cache-test.convex.cloud'
+  const displayNow = 1_800_000_000_000
+  const rate = { source: 'coinbase', base: 'USDC', quote: 'AUD', rate: '1.239', fetchedAt: displayNow }
+  const priced = { resource: 'https://example.com/tool', title: 'Weather', description: 'Forecasts', protocol: 'http',
+    provider: 'example.com', metadataJson: '{}', prices: [{ network: 'eip155:8453', scheme: 'exact', amount: '1 USDC', decimalAmount: '1', symbol: 'USDC' }] }
+  const page = { kind: 'ok', coverage: { indexedTotal: 1, generation: 'gen-1' }, searchMethod: 'native_index',
+    page: [{ entry: priced, choice: { access: 'ae_callable', toolRef: `operation:v1:${'ab'.repeat(32)}` } }], continueCursor: 'next', isDone: false }
+  beforeEach(async () => {
+    await useStorage().clear()
+    vi.stubEnv('CONVEX_URL', displayUrl)
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(displayNow)
+    query.mockImplementation(async (name: string) => name === 'referenceRateRefresh:current' ? rate : page)
+  })
+  afterEach(async () => { await useStorage().clear(); vi.useRealTimers(); vi.restoreAllMocks() })
+  const callsTo = (name: string) => query.mock.calls.filter(call => call[0] === name)
+
+  it('reuses and coalesces first-page display reads while recomputing AUD from a raw observation', async () => {
+    const results = await Promise.all([readX402DirectoryCatalogue({}), readX402DirectoryCatalogue({})])
+    expect(results[0]).toEqual(results[1])
+    expect(results[0]).toMatchObject({ page: { items: [{ audEstimate: 'A$1.24', choice: { access: 'ae_callable' } }] } })
+    expect(await readX402DirectoryCatalogue({})).toEqual(results[0])
+    expect(callsTo('x402DirectoryIndex:browse')).toHaveLength(1)
+    expect(callsTo('referenceRateRefresh:current')).toHaveLength(1)
+  })
+
+  it('partitions finite browse presets by sort, deployment and payment network', async () => {
+    await readX402DirectoryCatalogue({ sort: 'repeat' })
+    await readX402DirectoryCatalogue({ sort: 'repeat' })
+    expect(callsTo('x402DirectoryIndex:browse')).toHaveLength(1)
+    await readX402DirectoryCatalogue({ sort: 'adoption' })
+    expect(callsTo('x402DirectoryIndex:browse')).toHaveLength(2)
+    vi.stubEnv('CONVEX_URL', 'https://another-display-test.convex.cloud')
+    await readX402DirectoryCatalogue({ sort: 'repeat' })
+    expect(callsTo('x402DirectoryIndex:browse')).toHaveLength(3)
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development')
+    await readX402DirectoryCatalogue({ sort: 'repeat' })
+    expect(callsTo('x402DirectoryIndex:browse')).toHaveLength(4)
+    expect(callsTo('x402DirectoryIndex:browse').at(-1)?.[1]).toMatchObject({ network: 'eip155:84532' })
+  })
+
+  it('does not accumulate catalogue snapshots under arbitrary filter or query keys', async () => {
+    for (let maxUsdPrice = 1; maxUsdPrice <= 8; maxUsdPrice += 1) {
+      await readX402DirectoryCatalogue({ maxUsdPrice })
+    }
+    await readX402DirectoryCatalogue({ maxUsdPrice: 1 })
+    expect(callsTo('x402DirectoryIndex:browse')).toHaveLength(9)
+    expect(await useStorage().getKeys()).toHaveLength(1)
+    query.mockImplementation(async (name: string) => name === 'referenceRateRefresh:current' ? rate : {
+      kind: 'ok', coverage: { generation: 'gen-1', completedAt: displayNow }, continueCursor: '', isDone: true,
+      page: [{ id: 'card', source: 'coinbase', resource: priced.resource, title: priced.title, summary: priced.description,
+        provider: priced.provider, network: 'eip155:8453', minimumUsdPrice: '1' }],
+    })
+    await readX402DirectoryCatalogue({ query: 'weather' })
+    await readX402DirectoryCatalogue({ query: 'weather' })
+    await readX402DirectoryCatalogue({ query: 'images' })
+    expect(callsTo('x402DirectoryIndex:searchCompact')).toHaveLength(3)
+    expect(await useStorage().getKeys()).toHaveLength(1)
+  })
+
+  it('waits for a fresh foreground resolution after thirty seconds', async () => {
+    await readX402DirectoryCatalogue({})
+    vi.setSystemTime(displayNow + 30_001)
+    const refresh = Promise.withResolvers<typeof page>()
+    query.mockImplementation(async (name: string) => name === 'referenceRateRefresh:current' ? rate : refresh.promise)
+    let finished = false
+    const waiting = readX402DirectoryCatalogue({}).then(value => { finished = true; return value })
+    await vi.waitFor(() => expect(callsTo('x402DirectoryIndex:browse')).toHaveLength(2))
+    expect(finished).toBe(false)
+    refresh.resolve({ ...page, coverage: { indexedTotal: 1, generation: 'gen-2' } })
+    expect(await waiting).toMatchObject({ coverage: { generation: 'gen-2' } })
+  })
+
+  it('keeps every continuation and its generation check live', async () => {
+    query.mockImplementation(async (name: string) => name === 'x402DirectoryIndex:status'
+      ? { kind: 'ready', coverage: { generation: 'gen-1', completedAt: displayNow } }
+      : name === 'referenceRateRefresh:current' ? rate : page)
+    const input = { indexCursor: encodeOpaqueCursor({ kind: 'x402-directory', scope: 'gen-1', cursor: 'previous' }) }
+    await readX402DirectoryCatalogue(input)
+    await readX402DirectoryCatalogue(input)
+    expect(callsTo('x402DirectoryIndex:status')).toHaveLength(2)
+    expect(callsTo('x402DirectoryIndex:browse')).toHaveLength(2)
+    query.mockImplementation(async () => ({ kind: 'ready', coverage: { generation: 'gen-2', completedAt: displayNow } }))
+    expect(await readX402DirectoryCatalogue(input)).toEqual({ kind: 'unavailable', reason: 'query_invalid' })
+    expect(callsTo('x402DirectoryIndex:browse')).toHaveLength(2)
+  })
+
+  it('never retains unavailable responses or rejected reads', async () => {
+    query.mockResolvedValueOnce({ kind: 'unavailable', reason: 'index_unavailable' }).mockRejectedValueOnce(new Error('offline'))
+    expect(await readX402DirectoryCatalogue({})).toEqual({ kind: 'unavailable', reason: 'index_unavailable' })
+    expect(await readX402DirectoryCatalogue({})).toEqual({ kind: 'unavailable', reason: 'source_unavailable' })
+    expect(await readX402DirectoryCatalogue({})).toMatchObject({ kind: 'ok' })
+    expect(callsTo('x402DirectoryIndex:browse')).toHaveLength(3)
+  })
+
+  it('drops an AUD estimate immediately when the cached observation reaches its own expiry', async () => {
+    const expiringRate = { ...rate, fetchedAt: displayNow - REFERENCE_RATE_MAX_AGE_MS + 1_000 }
+    query.mockImplementation(async (name: string) => name === 'referenceRateRefresh:current' ? expiringRate : page)
+    expect(await readX402DirectoryCatalogue({})).toMatchObject({ page: { items: [{ audEstimate: 'A$1.24' }] } })
+    vi.setSystemTime(displayNow + 1_000)
+    const result = await readX402DirectoryCatalogue({})
+    if (result.kind !== 'ok') throw new Error('Expected catalogue')
+    expect(result.page.items[0]).not.toHaveProperty('audEstimate')
+    expect(callsTo('x402DirectoryIndex:browse')).toHaveLength(1)
+    expect(callsTo('referenceRateRefresh:current')).toHaveLength(2)
+    expect(await readX402DirectoryCatalogue({})).toMatchObject({ kind: 'ok' })
+    expect(callsTo('referenceRateRefresh:current')).toHaveLength(3)
+  })
+
+  it('does not retain a missing display FX observation', async () => {
+    let observation: typeof rate | null = null
+    query.mockImplementation(async (name: string) => name === 'referenceRateRefresh:current' ? observation : page)
+    const first = await readX402DirectoryCatalogue({})
+    if (first.kind !== 'ok') throw new Error('Expected catalogue')
+    expect(first.page.items[0]).not.toHaveProperty('audEstimate')
+    observation = rate
+    expect(await readX402DirectoryCatalogue({})).toMatchObject({ page: { items: [{ audEstimate: 'A$1.24' }] } })
+    expect(callsTo('x402DirectoryIndex:browse')).toHaveLength(1)
+    expect(callsTo('referenceRateRefresh:current')).toHaveLength(2)
+  })
+
+  it('cancels one reader promptly without aborting a concurrent shared resolver', async () => {
+    const resolver = Promise.withResolvers<typeof page>()
+    query.mockImplementation(async (name: string) => name === 'referenceRateRefresh:current' ? rate : resolver.promise)
+    const controller = new AbortController()
+    const first = readX402DirectoryCatalogue({}, { signal: controller.signal })
+    const rejected = expect(first).rejects.toMatchObject({ name: 'AbortError' })
+    const second = readX402DirectoryCatalogue({})
+    await vi.waitFor(() => expect(callsTo('x402DirectoryIndex:browse')).toHaveLength(1))
+    controller.abort(new DOMException('Reader cancelled', 'AbortError'))
+    await rejected
+    const sharedOptions = callsTo('x402DirectoryIndex:browse')[0]?.[2] as { signal: AbortSignal }
+    expect(sharedOptions.signal.aborted).toBe(false)
+    expect(callsTo('referenceRateRefresh:current')).toHaveLength(0)
+    resolver.resolve(page)
+    expect(await second).toMatchObject({ kind: 'ok' })
+    expect(await readX402DirectoryCatalogue({})).toMatchObject({ kind: 'ok' })
+    expect(callsTo('x402DirectoryIndex:browse')).toHaveLength(1)
+  })
+
+  it('keeps injected transport and environment reads independent and cancellable', async () => {
+    const options = { env: { CONVEX_URL: displayUrl }, fetch: vi.fn(), signal: new AbortController().signal }
+    await readX402DirectoryCatalogue({}, options)
+    await readX402DirectoryCatalogue({}, options)
+    expect(callsTo('x402DirectoryIndex:browse')).toHaveLength(2)
+    expect(callsTo('referenceRateRefresh:current')).toHaveLength(2)
+    expect(callsTo('x402DirectoryIndex:browse')[0]?.[2]).toBe(options)
+  })
+
+  it('stores projected overview facts with no popular Tool rows and does not retain failures', async () => {
+    const overview = { kind: 'ok', coverage: { generation: 'gen-1' }, categories: [], providers: [], networks: [],
+      popular: [{ entry: priced }], recentlyUpdated: [{ entry: priced }] }
+    query.mockResolvedValue(overview)
+    const result = await readX402DirectoryCatalogueOverview()
+    expect(result).toMatchObject({ kind: 'ok', popular: [], recentlyUpdated: [] })
+    expect(await readX402DirectoryCatalogueOverview()).toEqual(result)
+    expect(callsTo('x402DirectoryIndex:overview')).toHaveLength(1)
+    vi.setSystemTime(displayNow + 30_001)
+    query.mockResolvedValueOnce({ kind: 'unavailable', reason: 'index_unavailable' }).mockResolvedValueOnce(overview)
+    expect(await readX402DirectoryCatalogueOverview()).toEqual({ kind: 'unavailable', reason: 'index_unavailable' })
+    expect(await readX402DirectoryCatalogueOverview()).toMatchObject({ kind: 'ok' })
+    expect(callsTo('x402DirectoryIndex:overview')).toHaveLength(3)
+  })
 })

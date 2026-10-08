@@ -290,7 +290,7 @@ export function marketLoaderDeps(search: MarketSearch) {
   }
 }
 
-function resolveMarketView(search: MarketSearch): MarketView {
+export function resolveMarketView(search: MarketSearch): MarketView {
   if (search.view !== undefined) return search.view
   if (search.providerCursor !== undefined) return 'providers'
   if (search.compare !== undefined || search.resource !== undefined || Object.keys(directoryCatalogueSearchValues(search)).length > 0) return 'tools'
@@ -353,7 +353,7 @@ export async function loadMarketRouteData(deps: MarketSearch, options: MarketRou
           return { kind: 'unavailable' as const, reason: 'source_unavailable' as const }
         })
       : Promise.resolve(undefined),
-    showHome ? Promise.resolve(undefined) : read(() => readX402DirectoryCatalogueOverviewServer({ signal })).catch(cause => {
+    showHome || showHosts ? Promise.resolve(undefined) : read(() => readX402DirectoryCatalogueOverviewServer({ signal })).catch(cause => {
       if (options.signal?.aborted) throw cause
       console.error('[market] directory overview unavailable', { cause })
       return { kind: 'unavailable' as const, reason: 'source_unavailable' as const }

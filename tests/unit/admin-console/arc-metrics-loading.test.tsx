@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import {
   RouterContextProvider,
   createMemoryHistory,
@@ -44,12 +44,12 @@ function expectDecorativeSkeleton(frame: Element) {
 }
 
 describe('Admin metrics loading composition', () => {
-  it('keeps the existing frames and exposes one named loading status without placeholder facts or controls', () => {
+  it('keeps the existing frames and exposes one named loading status without placeholder facts or controls', async () => {
     renderMetricsSkeleton()
 
     const loading = screen.getByRole('status', { name: 'Loading metrics' })
     expect(loading.getAttribute('aria-busy')).toBe('true')
-    expect(screen.getAllByRole('status')).toHaveLength(1)
+    await waitFor(() => expect(screen.getAllByRole('status')).toHaveLength(1))
 
     const kpis = loading.querySelectorAll('.arc-admin-loading-kpi')
     const charts = loading.querySelectorAll('.arc-admin-loading-chart')

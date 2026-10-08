@@ -48,6 +48,9 @@ vi.mock('@/components/ae/layout/AeOperatorPage', () => ({
       {children}
     </section>
   ),
+}))
+
+vi.mock('@/components/ae/layout/OperatorChromeContext', () => ({
   useOperatorShellChrome: () => routeStateMocks.parentShell,
 }))
 

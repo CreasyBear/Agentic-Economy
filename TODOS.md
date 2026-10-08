@@ -42,6 +42,13 @@ p95 improved from 310ms to 143.1ms; cold-browser p95 is 4.443s mobile and 1.207s
 desktop. The initial 6.607s server-start miss is retained. All 25 protected steps
 completed with fewer requests, but four journey medians still exceed 200ms.
 
+The 8 October follow-up removes unused Market reads, adds bounded native Nitro
+reuse for common public browse presets, and separates admin recovery from public
+startup. Independent review corrected pending disclosure and cache cardinality
+issues. The full source gate passes; hosted timing and payment readiness
+remain separate verdicts. The [follow-up record](docs/operations/deployments.md#8-october-public-read-reuse-investigation)
+records the confirmed Sydney web and Virginia Convex placement.
+
 Next work stays with these owners:
 
 - **Web/DX:** protected-screen latency, hosted hydration, two-Account isolation

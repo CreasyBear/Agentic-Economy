@@ -14,7 +14,7 @@ import { toolCatalogSearchInputSchema } from '@/modules/registry/tool-choice-con
 
 vi.mock('../../../convex/lib/capabilitySupply/tool/projection', () => ({ toolRecord: vi.fn() }))
 
-beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production'))
+beforeEach(() => { vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production'); vi.stubEnv('CONVEX_URL', ''); vi.stubEnv('VITE_CONVEX_URL', '') })
 afterEach(() => {
   setPublicSourceTransportForTests(undefined)
   vi.unstubAllGlobals()

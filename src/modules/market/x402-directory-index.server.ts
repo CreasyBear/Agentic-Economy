@@ -1,10 +1,13 @@
 import type { FunctionArgs, FunctionReference, FunctionReturnType } from 'convex/server'
+import { defineCachedFunction } from 'nitro/cache'
+import { awaitBoundedRead, SOURCE_READ_TIMEOUT_MS } from '@/lib/bounded-read'
+import { readTrimmedEnv } from '@/lib/server/read-trimmed-env'
 import { degrade } from '@/lib/observability/degrade'
 import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
 import { x402PaymentProfileForEnvironment } from '@/modules/capability-supply/public'
 import { callPublicSourceQuery, sourceQuery, type CreatePublicConvexClientOptions } from '@/lib/server/convex-source'
 import { CATALOGUE_STALE_AFTER_MS, sourceFreshnessState, type SourceFreshnessState } from '@/modules/common/freshness'
-import { REFERENCE_RATE_MAX_AGE_MS, formatDisplayPrice, parseDecimalExactAmount } from '@/modules/money/public'
+import { REFERENCE_RATE_MAX_AGE_MS, formatDisplayPrice, parseDecimalExactAmount, validReferenceRate } from '@/modules/money/public'
 import { readPersistedReferenceRate } from '@/modules/money/reference-rate.server'
 import { readX402Directory } from './x402-directory.server'
 import type { DirectoryChoice, X402DirectoryEntry } from './x402-directory'
@@ -64,6 +67,68 @@ const resource = sourceQuery<{ resource: string }, X402DirectoryCatalogueResourc
 const analytics = sourceQuery<{ network?: string }, X402DirectoryAnalytics>('x402DirectoryIndex:analytics')
 const bySlug = sourceQuery<{ providerKey: string; slug: string }, X402DirectoryCatalogueResource>('x402DirectoryIndex:bySlug')
 const canonicalUrlForTool = sourceQuery<{ toolRef: string }, { providerHost: string; slug: string } | null>('x402DirectoryIndex:canonicalUrlForTool')
+
+/** Public display snapshots only. Continuations, status, admission and purchases stay live. */
+type DisplayReadScope = readonly [convexUrl: string, paymentEnvironment: 'production' | 'sandbox', network: string]
+const displayCacheOptions = { maxAge: 30, swr: false, staleMaxAge: 0 } as const
+
+function displayReadScope(options?: CreatePublicConvexClientOptions): DisplayReadScope | undefined {
+  // An injected transport or environment must retain its own read semantics.
+  if (options?.env !== undefined || options?.fetch !== undefined || options?.skipConvexDeploymentUrlCheck !== undefined) return undefined
+  const convexUrl = readTrimmedEnv(process.env, 'CONVEX_URL') ?? readTrimmedEnv(process.env, 'VITE_CONVEX_URL')
+  const paymentEnvironment = deploymentPaymentEnvironment(process.env)
+  const network = x402PaymentProfileForEnvironment(paymentEnvironment)?.network
+  return convexUrl === undefined || paymentEnvironment === undefined || network === undefined
+    ? undefined : [convexUrl, paymentEnvironment, network]
+}
+
+function resolveDisplayRead<T>(scope: DisplayReadScope, read: (options: CreatePublicConvexClientOptions) => Promise<T>): Promise<T> {
+  // A reader's cancellation cannot cancel the resolver shared by other readers.
+  return awaitBoundedRead(signal => read({ env: { CONVEX_URL: scope[0] }, signal }), AbortSignal.timeout(SOURCE_READ_TIMEOUT_MS))
+}
+
+function waitForDisplayRead<T>(read: () => Promise<T>, options?: CreatePublicConvexClientOptions): Promise<T> {
+  return options?.signal === undefined ? read() : awaitBoundedRead(read, options.signal)
+}
+
+async function readDisplayQuery<Query extends FunctionReference<'query'>>(
+  query: Query, args: FunctionArgs<Query>,
+  cached: (scope: DisplayReadScope, args: FunctionArgs<Query>) => Promise<FunctionReturnType<Query>>,
+  options?: CreatePublicConvexClientOptions,
+): Promise<FunctionReturnType<Query>> {
+  const scope = displayReadScope(options)
+  return scope === undefined ? readDirectoryQuery(query, args, options)
+    : waitForDisplayRead(() => cached(scope, args), options)
+}
+
+const cachedBrowse = defineCachedFunction(
+  (scope: DisplayReadScope, args: FunctionArgs<typeof browse>) => resolveDisplayRead(scope, options => readDirectoryQuery(browse, args, options)),
+  { ...displayCacheOptions, name: 'x402DirectoryDisplayBrowse', validate: entry => entry.value?.kind === 'ok' },
+)
+function projectOverview(result: X402DirectoryCatalogueOverview): X402DirectoryCatalogueOverview {
+  if (result.kind !== 'ok') return result
+  const { popular: _popular, recentlyUpdated: _recent, ...rest } = result
+  const { rising: _rising, falling: _falling, ...kept } = rest as typeof rest & { rising?: unknown; falling?: unknown }
+  return { ...kept, popular: [], recentlyUpdated: [] }
+}
+const cachedOverview = defineCachedFunction(
+  async (scope: DisplayReadScope, _args: Record<string, never>) => projectOverview(await resolveDisplayRead(scope, options => readDirectoryQuery(overview, {}, options))),
+  { ...displayCacheOptions, name: 'x402DirectoryDisplayOverview', validate: entry => entry.value?.kind === 'ok' },
+)
+const cachedDisplayReferenceRate = defineCachedFunction(
+  (scope: DisplayReadScope) => resolveDisplayRead(scope, readPersistedReferenceRate),
+  { ...displayCacheOptions, name: 'x402DirectoryDisplayReferenceRate', validate: entry => {
+    const rate = entry.value
+    const now = Date.now()
+    return rate !== undefined && validReferenceRate(rate) && rate.fetchedAt <= now
+      && now < rate.fetchedAt + REFERENCE_RATE_MAX_AGE_MS
+  } },
+)
+async function readDisplayReferenceRate(options?: CreatePublicConvexClientOptions) {
+  const scope = displayReadScope(options)
+  return scope === undefined ? readPersistedReferenceRate(options)
+    : waitForDisplayRead(() => cachedDisplayReferenceRate(scope), options)
+}
 
 type DirectoryStatus = {
   kind: 'unavailable' | 'ready'
@@ -140,7 +205,7 @@ function cardFromCompact(row: CompactCardRow): X402DirectoryEntry | undefined {
 async function withAudEstimates(entries: readonly X402DirectoryEntry[], options?: CreatePublicConvexClientOptions): Promise<X402DirectoryEntry[]> {
   options?.signal?.throwIfAborted()
   const rate = entries.some(entry => minimumDirectoryUsdPrice(entry) !== undefined)
-    ? await readPersistedReferenceRate(options) : undefined
+    ? await readDisplayReferenceRate(options) : undefined
   options?.signal?.throwIfAborted()
   const now = Date.now()
   return entries.map(entry => {
@@ -257,11 +322,16 @@ export async function readX402DirectoryCatalogue(input: X402DirectoryCatalogueIn
       if (decoded === undefined) return { kind: 'unavailable', reason: 'query_invalid' }
       engineCursor = decoded
     }
-    const result = await readDirectoryQuery(browse, {
+    const args = {
       ...filters, network, ...(alternativeTo === undefined ? {} : { alternativeTo }),
       ...(directoryCategory === undefined ? {} : { category: directoryCategory }),
       paginationOpts: { numItems: 24, cursor: engineCursor, maximumRowsRead: 512 },
-    }, options)
+    }
+    // Cache only finite browse presets, never arbitrary user-input keys or continuations.
+    const reuseBrowse = indexCursor === undefined && directoryCategory === undefined && alternativeTo === undefined && offset === undefined
+      && Object.keys(filters).every(key => key === 'network' || key === 'sort')
+    const result = reuseBrowse ? await readDisplayQuery(browse, args, cachedBrowse, options)
+      : await readDirectoryQuery(browse, args, options)
     if (result.kind === 'unavailable') return result
     if (offset) return { kind: 'unavailable', reason: 'index_cursor_required' }
     const { provider, maxUsdPrice } = filters
@@ -290,11 +360,7 @@ export async function readX402DirectoryCatalogue(input: X402DirectoryCatalogueIn
 export async function readX402DirectoryCatalogueOverview(options?: CreatePublicConvexClientOptions): Promise<X402DirectoryCatalogueOverview> {
   options?.signal?.throwIfAborted()
   try {
-    const result = await readDirectoryQuery(overview, {}, options)
-    if (result.kind !== 'ok') return result
-    const { popular: _popular, recentlyUpdated: _recent, ...rest } = result
-    const { rising: _rising, falling: _falling, ...kept } = rest as typeof rest & { rising?: unknown; falling?: unknown }
-    return { ...kept, popular: [], recentlyUpdated: [] }
+    return projectOverview(await readDisplayQuery(overview, {}, cachedOverview, options))
   }
   catch (cause) {
     options?.signal?.throwIfAborted()

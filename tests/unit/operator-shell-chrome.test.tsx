@@ -70,7 +70,8 @@ vi.mock('@/components/ae/command-panel', () => ({
 
 import { AeAppShell } from '@/components/ae/layout/AeAppShell'
 import { ThemeProvider } from '@/components/ae/theme/ThemeProvider'
-import { AeOperatorPage, OperatorChromeProvider } from '@/components/ae/layout/AeOperatorPage'
+import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
+import { OperatorChromeProvider } from '@/components/ae/layout/OperatorChromeContext'
 import { OperatorRouteError, OperatorRouteNotFound, OperatorRoutePending } from '@/components/ae/layout/AeRouteStates'
 import {
   OPERATOR_SURFACE_FORBIDDEN_MESSAGE,
