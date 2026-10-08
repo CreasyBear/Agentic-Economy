@@ -34,6 +34,12 @@ integrated and deployed through [PR #370](https://github.com/CreasyBear/Agentic-
 Independent source review, `check` and the full `gate` passed at `ce7a0e57`.
 Preserve the pre-existing Chat 3 work and unrelated whitepaper/strategy drafts.
 
+[PR #372](https://github.com/CreasyBear/Agentic-Economy/pull/372) corrects the global
+navigation composition: destinations live in the header dropdown, with no global
+sidebar or visibility preference. Chat keeps its own conversation history.
+The PR/deployment receipt records release qualification. Verify the actual Clerk
+Account popup and guarded switching during Joel's signed-in acceptance.
+
 Next: Joel's signed-in production testing of the coordinated 8 October release.
 Joel explicitly deferred authenticated production journey qualification until
 after release; keep that separate acceptance

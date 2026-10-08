@@ -1447,6 +1447,14 @@ Provider completion and MM-056 wider product parity remain independently open.
 
 **Current disposition: source qualified and deployed on 8 October; authenticated
 journeys remain open.** See [production evidence](deployments.md#8-october-platform-ui-production-release).
+The [header navigation correction](https://github.com/CreasyBear/Agentic-Economy/pull/372)
+removes the global sidebar and moves its destinations to the existing maintained
+menu. Exact privileged scope checks and Account-change guards are retained; chat
+history is independent. Sixty-two affected checks and 390px/1440px actual header
+fixtures pass, with mocked Clerk identity visuals and chat-slot content. Full gate
+and exact release evidence belong to that PR; real Clerk popup/authenticated
+journeys remain outside these fixture claims.
+
 The following candidate observations preserve their original evidence limits. Joel
 authorized all 16 platform audit findings and the selected REUI compositions,
 including Table 9.2.6. Baseline is `84abbda0bd892b7f9688e53d84001e970ba32ab1`
