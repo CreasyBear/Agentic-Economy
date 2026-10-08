@@ -3,7 +3,7 @@ import { auth, clerkClient } from '@clerk/tanstack-react-start/server'
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 
-import { callSourceMutation, callSourceQuery, sourceMutation, sourceQuery } from '@/lib/server/convex-source'
+import { callSourceMutation, callSourceQuery, sourceMutation, sourceQuery, type ConvexSourceTransport } from '@/lib/server/convex-source'
 import { readClerkMfaConsequenceProof, type ClerkMfaConsequenceProofInput } from '@/lib/server/clerk-consequence-proof'
 import { sourceWriteAdmissionFromContext, sourceWriteRequestFromAdmission } from '@/lib/server/source-write-admission'
 import type { SourceWriteAdmission, SourceWriteAdmissionRequest } from '@/modules/security/source-write-admission'
@@ -28,8 +28,16 @@ const renameSchema = z.strictObject({
   expectedAccountRef: z.string().min(1).max(200),
   name: z.string().trim().min(1).max(200).regex(/^[\p{L}\p{N}\p{P}\p{S}\p{Zs}]+$/u),
 })
-export const readPersonalWorkspaceDefaultNameServer = createServerFn().handler(async (): Promise<string | null> => {
-  const binding = await callSourceQuery(readWorkspaceOrganizationBinding, {})
+export const readPersonalWorkspaceDefaultNameServer = createServerFn().handler(async (): Promise<string | null> =>
+  readPersonalWorkspaceDefaultNameThroughSource())
+
+export async function readPersonalWorkspaceDefaultNameThroughSource(
+  transport?: ConvexSourceTransport, signal?: AbortSignal,
+): Promise<string | null> {
+  signal?.throwIfAborted()
+  const binding = await (transport === undefined ? callSourceQuery(readWorkspaceOrganizationBinding, {})
+    : transport.query(readWorkspaceOrganizationBinding, {}))
+  signal?.throwIfAborted()
   const needsClerkName = binding.clerkOrgId === null
     && binding.displayName.startsWith('user_')
     && binding.ownerDisplayName.startsWith('user_')
@@ -43,7 +51,7 @@ export const readPersonalWorkspaceDefaultNameServer = createServerFn().handler(a
     ownerDisplayName: binding.ownerDisplayName,
     clerkPersonName,
   })
-})
+}
 
 async function clerkPersonLabel(userId: string | null): Promise<string | null> {
   if (userId === null) return null

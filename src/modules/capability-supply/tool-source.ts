@@ -1,4 +1,4 @@
-import { callPublicSourceQuery, sourceQuery, callPublicSourceAction, sourceAction } from '@/lib/server/convex-source'
+import { callPublicSourceQuery, sourceQuery, callPublicSourceAction, sourceAction, type CreatePublicSourceActionOptions } from '@/lib/server/convex-source'
 
 import {
   deserializeToolCompareResult,
@@ -21,12 +21,15 @@ const detailAction = sourceAction<ToolDetailInput, ToolDetailWireResult>('capabi
 const compareAction = sourceAction<ToolCompareInput, ToolCompareWireResult>('capabilityToolCatalog:compare')
 const offeringToolMapQuery = sourceQuery<{ businessIds: string[] }, CatalogOfferingToolMapEntry[]>('capabilitySupplyTools:offeringToolMap')
 
-export function readCapabilityToolSearch(input: ToolSearchInput): Promise<ToolSearchResult> {
-  return callPublicSourceAction(searchAction, input).then(deserializeToolSearchResult)
+export function readCapabilityToolSearch(input: ToolSearchInput, options?: CreatePublicSourceActionOptions): Promise<ToolSearchResult> {
+  return callPublicSourceAction(searchAction, input, options).then(deserializeToolSearchResult)
 }
 
-export function readCapabilityToolDetail(input: ToolDetailInput): Promise<ToolDetailResult> {
-  return callPublicSourceAction(detailAction, input).then(deserializeToolDetailResult)
+export async function readCapabilityToolDetail(input: ToolDetailInput, options?: CreatePublicSourceActionOptions): Promise<ToolDetailResult> {
+  options?.signal?.throwIfAborted()
+  const result = options === undefined ? await callPublicSourceAction(detailAction, input) : await callPublicSourceAction(detailAction, input, options)
+  options?.signal?.throwIfAborted()
+  return deserializeToolDetailResult(result)
 }
 
 export function readCapabilityToolCompare(input: ToolCompareInput): Promise<ToolCompareResult> {
@@ -40,8 +43,13 @@ export function readCapabilityToolCompare(input: ToolCompareInput): Promise<Tool
  * returned; an offering that maps to zero or multiple Tools is omitted so
  * the services surface never fabricates a link.
  */
-export function readCatalogOfferingToolMap(
+export async function readCatalogOfferingToolMap(
   businessIds: readonly string[],
+  options?: CreatePublicSourceActionOptions,
 ): Promise<CatalogOfferingToolMapEntry[]> {
-  return callPublicSourceQuery(offeringToolMapQuery, { businessIds: [...businessIds] })
+  options?.signal?.throwIfAborted()
+  const args = { businessIds: [...businessIds] }
+  const result = options === undefined ? await callPublicSourceQuery(offeringToolMapQuery, args) : await callPublicSourceQuery(offeringToolMapQuery, args, options)
+  options?.signal?.throwIfAborted()
+  return result
 }

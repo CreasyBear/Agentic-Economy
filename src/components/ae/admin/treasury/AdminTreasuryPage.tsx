@@ -5,7 +5,6 @@ import { AePageState } from '@/components/ae/layout/AePageState'
 import { AeInlineState } from '@/components/ae/feedback/AeInlineState'
 import { AeAlert as Alert } from '@/components/ae/shared/alert/AeAlert'
 import { Badge } from '@/components/arc/badge/badge'
-import { Skeleton } from '@/components/arc/skeleton/skeleton'
 import { ADMIN_ACCESS_REFUSED_COPY } from '@/lib/operator/admin-console/contracts'
 import { formatRelativeTime, formatTimestamp } from '@/lib/ui/format-time'
 import { api } from '../../../../../convex/_generated/api'
@@ -14,13 +13,10 @@ import { TreasuryMetrics } from './TreasuryMetrics'
 import { TreasuryActions } from './TreasuryActions'
 import { CommercialPolicyActions } from './CommercialPolicyActions'
 import { TREASURY_ALERT_LABELS } from './treasury-view-model'
+import { AdminTreasuryPageSkeleton, TREASURY_PAGE_CHROME } from './AdminTreasuryPageState'
 
-export const TREASURY_PAGE_DESCRIPTION = 'Company USDC float, customer credit coverage and payment controls.'
-const chrome = { operatorRole: 'admin' as const, title: 'Treasury', description: TREASURY_PAGE_DESCRIPTION,
-  currentPath: '/admin/treasury', breadcrumbs: [{ label: 'Admin', href: '/admin' }, { label: 'Treasury' }], stickyHeader: true }
-export function AdminTreasuryPageSkeleton() {
-  return <AeOperatorPage {...chrome} pending><div className="grid gap-section" aria-busy="true" aria-label="Loading treasury">{['Float', 'Runway', 'Coverage', 'In flight', 'Actions'].map(label => <Skeleton key={label} label={`Loading ${label}`} lines={4} />)}</div></AeOperatorPage>
-}
+export { AdminTreasuryPageSkeleton, TREASURY_PAGE_DESCRIPTION } from './AdminTreasuryPageState'
+
 export function AdminTreasuryPage() {
   const view = useQuery(api.adminConsoleTreasury.read, {})
   const [now, setNow] = useState(() => Date.now())
@@ -29,7 +25,7 @@ export function AdminTreasuryPage() {
     return () => window.clearInterval(timer)
   }, [])
   if (view === undefined) return <AdminTreasuryPageSkeleton />
-  return <AeOperatorPage {...chrome}>
+  return <AeOperatorPage {...TREASURY_PAGE_CHROME}>
     {view.kind === 'refused' ? <AePageState title="Admin access required" description={ADMIN_ACCESS_REFUSED_COPY} tone="danger" /> : <div className="grid gap-section pb-page">
       <div className="flex flex-wrap items-center gap-related">
         <Badge tone="neutral">{view.environment === 'production' ? 'Production · Base' : 'Sandbox · Base Sepolia'}</Badge>

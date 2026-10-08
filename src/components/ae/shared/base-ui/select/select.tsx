@@ -1,6 +1,7 @@
 /* Actual Arc registry source retrieved 2026-10-02; upstream file SHA-256: ce979731b099e9c7b4a5e40f051c4048f61c794b1ab6c4c57376a77d9801a99a. */
 "use client";
 
+import { useWorkspacePresentationVisible } from "@/lib/client/workspace-presentation";
 import { forwardRef, useId, useState } from "react";
 import { Select as SelectPrimitive } from "@base-ui/react/select";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
@@ -31,6 +32,7 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(function Select
   { label, description, placeholder = "Select an option", options, id, className, disabled, onValueChange, ...rootProps },
   ref,
 ) {
+  const visible = useWorkspacePresentationVisible();
   const generatedId = useId();
   const controlId = id ?? generatedId;
   const hintId = description ? `${controlId}-description` : undefined;
@@ -64,7 +66,7 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(function Select
             <ChevronDown size={16} strokeWidth={1.8} aria-hidden="true" />
           </span>
         </SelectPrimitive.Trigger>
-        <SelectPrimitive.Portal>
+        {visible ? <SelectPrimitive.Portal>
           <SelectPrimitive.Positioner className="arc-market" sideOffset={4} collisionPadding={12} alignItemWithTrigger={false}><SelectPrimitive.Popup className={styles.content}>
             <SelectPrimitive.ScrollUpArrow className={styles.scrollButton}>
               <ChevronUp size={15} strokeWidth={1.8} aria-hidden="true" />
@@ -83,7 +85,7 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(function Select
               <ChevronDown size={15} strokeWidth={1.8} aria-hidden="true" />
             </SelectPrimitive.ScrollDownArrow>
           </SelectPrimitive.Popup></SelectPrimitive.Positioner>
-        </SelectPrimitive.Portal>
+        </SelectPrimitive.Portal> : null}
       </SelectPrimitive.Root>
       {description && <span id={hintId} className={styles.hint}>{description}</span>}
     </div>

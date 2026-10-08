@@ -399,7 +399,8 @@
   ::view-transition-group(ae-app-header) { animation: none; }
 
 
-  ::view-transition-old(root), ::view-transition-new(root) { animation-duration: var(--motion-duration-base); animation-timing-function: var(--motion-ease-standard); }
+  /* Route readiness includes the transition: keep navigation briefer than in-page motion. */
+  ::view-transition-group(root), ::view-transition-old(root), ::view-transition-new(root) { animation-duration: 80ms; animation-timing-function: var(--motion-ease-standard); }
 }
 @media (prefers-reduced-motion: reduce) {
   ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }

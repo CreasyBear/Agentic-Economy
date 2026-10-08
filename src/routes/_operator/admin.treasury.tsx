@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { AdminTreasuryPage, AdminTreasuryPageSkeleton, TREASURY_PAGE_DESCRIPTION } from '@/components/ae/admin/treasury/AdminTreasuryPage'
+import { AdminTreasuryPage } from '@/components/ae/admin/treasury/AdminTreasuryPage'
+import { AdminTreasuryPageSkeleton, TREASURY_PAGE_DESCRIPTION } from '@/components/ae/admin/treasury/AdminTreasuryPageState'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 
 export const Route = createFileRoute('/_operator/admin/treasury')({

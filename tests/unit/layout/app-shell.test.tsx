@@ -4,9 +4,10 @@ import { AeNavigationSafetyBoundary } from '@/components/ae/layout/AeNavigationS
  */
 import { getFunctionName, type FunctionReference } from 'convex/server'
 import { useRef, useState, type ReactNode } from 'react'
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import {
   RouterContextProvider,
+  RouterProvider,
   createMemoryHistory,
   createRootRoute,
   createRoute,
@@ -18,6 +19,7 @@ import '../../setup/jsdom-dialog'
 
 import type { OperatorSurface } from '@/lib/operator/operator-context'
 import { ChatHeader } from '@/components/ae/chat/chat-session/components/ChatHeader'
+import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeAppShell } from '@/components/ae/layout/AeAppShell'
 import { ThemeProvider } from '@/components/ae/theme/ThemeProvider'
 
@@ -25,7 +27,7 @@ vi.mock('@/lib/observability/funnel-client', () => ({
   emitFunnelEventOnce: vi.fn(),
 }))
 
-const clerkSignedIn = vi.hoisted(() => ({ value: false, isLoaded: true, userId: 'user-current', sessionId: 'session-current', orgId: null as string | null }))
+const clerkSignedIn = vi.hoisted(() => ({ value: false, isLoaded: true, orgRole: 'org:admin', userId: 'user-current', sessionId: 'session-current', orgId: null as string | null }))
 const entitlement = vi.hoisted<{
   isAuthenticated: boolean
   result: { kind: 'authorized'; allowedSurfaces: readonly OperatorSurface[]; userId: string; accountRef?: string; authScope: { organizationId: string | null; sessionId: string | null } } | { kind: 'denied' } | undefined
@@ -48,7 +50,7 @@ vi.mock('convex/react', () => ({
 
 vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@clerk/tanstack-react-start')>()),
-  useAuth: () => ({ isSignedIn: clerkSignedIn.value, isLoaded: clerkSignedIn.isLoaded, userId: clerkSignedIn.value ? clerkSignedIn.userId : null, sessionId: clerkSignedIn.value ? clerkSignedIn.sessionId : null, orgId: clerkSignedIn.orgId }),
+  useAuth: () => ({ isSignedIn: clerkSignedIn.value, isLoaded: clerkSignedIn.isLoaded, userId: clerkSignedIn.value ? clerkSignedIn.userId : null, sessionId: clerkSignedIn.value ? clerkSignedIn.sessionId : null, orgId: clerkSignedIn.orgId, orgRole: clerkSignedIn.orgRole }),
   useUser: () => ({ user: null }),
   Show: ({ when, children, fallback }: { when: string; children?: ReactNode; fallback?: ReactNode }) => {
     if (when === 'signed-out') return clerkSignedIn.value ? (fallback ?? null) : (children ?? null)
@@ -62,6 +64,7 @@ vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({
 beforeEach(() => {
   clerkSignedIn.value = false
   clerkSignedIn.isLoaded = true
+  clerkSignedIn.orgRole = 'org:admin'
   clerkSignedIn.orgId = null
   vi.stubEnv('VITE_CONVEX_URL', 'http://127.0.0.1:3210')
 })
@@ -75,6 +78,63 @@ afterEach(() => {
 })
 
 describe('AeAppShell', () => {
+  it('withholds private chat header portal controls during refresh and preserves the composer draft', async () => {
+    clerkSignedIn.value = true
+    const current = Promise.withResolvers<void>()
+    const root = createRootRoute()
+    const router = createRouter({ routeTree: root.addChildren([createRoute({ getParentRoute: () => root, path: '/t/new' })]), history: createMemoryHistory({ initialEntries: ['/t/new'] }) })
+    await router.load()
+    vi.spyOn(router, 'invalidate').mockReturnValue(current.promise)
+    const fixture = () => <RouterContextProvider router={router}><ThemeProvider><AeAppShell>
+      <ChatHeader authenticated threadId="private-thread" threadTitle="Alpha private thread" busy={false}
+        shareState="active" sharePath={null} copied={false} balanceLabel="A$123.45" mobileHistory={null} mobileOpen={false}
+        onMobileOpenChange={() => {}} onToggleHistory={() => {}} onNewChat={() => {}} onIssueShare={() => {}}
+        onRevokeShare={() => {}} onCopyShare={() => {}} />
+      <textarea aria-label="Current chat draft" defaultValue="Preserve my current work" />
+    </AeAppShell></ThemeProvider></RouterContextProvider>
+    const view = render(fixture())
+    const draft = screen.getByRole('textbox', { name: 'Current chat draft' })
+    expect(document.getElementById('ae-chat-actions')?.contains(screen.getByText('Alpha private thread'))).toBe(true)
+    clerkSignedIn.orgRole = 'org:member'
+    view.rerender(fixture())
+    await waitFor(() => expect(router.invalidate).toHaveBeenCalledOnce())
+    expect(document.getElementById('ae-chat-actions')).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Available credit A$123.45' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'New chat' })).toBeNull()
+    expect(screen.getByRole('link', { name: 'Agentic Economy home' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Account menu' })).toBeTruthy()
+    await act(async () => { current.resolve(); await current.promise })
+    await waitFor(() => expect(screen.queryByTestId('workspace-transition-scrim')).toBeNull())
+    expect(screen.getByRole('textbox', { name: 'Current chat draft' })).toBe(draft)
+    expect((draft as HTMLTextAreaElement).value).toBe('Preserve my current work')
+    expect(document.getElementById('ae-chat-actions')?.contains(screen.getByText('Alpha private thread'))).toBe(true)
+  })
+
+  it('withholds a previous Account private Tool title in the persistent header during reload', async () => {
+    clerkSignedIn.value = true
+    clerkSignedIn.orgId = 'org_alpha'
+    const current = Promise.withResolvers<string>()
+    const read = vi.fn<() => Promise<string>>().mockResolvedValueOnce('Alpha private Tool').mockImplementation(() => current.promise)
+    const root = createRootRoute()
+    const privateRoute = createRoute({ getParentRoute: () => root, path: '/owner/settings', loader: read,
+      component: () => <AeOperatorPage operatorRole="owner" title={privateRoute.useLoaderData()} description="Private Tool" currentPath="/owner/settings"><p>Private record body</p></AeOperatorPage>,
+    })
+    const router = createRouter({ routeTree: root.addChildren([privateRoute]), history: createMemoryHistory({ initialEntries: ['/owner/settings'] }) })
+    await router.load()
+    const fixture = () => <RouterContextProvider router={router}><ThemeProvider><AeAppShell><RouterProvider router={router} /></AeAppShell></ThemeProvider></RouterContextProvider>
+    const view = render(fixture())
+    await screen.findByRole('heading', { name: 'Alpha private Tool' })
+    clerkSignedIn.orgId = 'org_beta'
+    view.rerender(fixture())
+    await waitFor(() => expect(read).toHaveBeenCalledTimes(2))
+    try {
+      expect(screen.getByTestId('workspace-transition-scrim')).toBeTruthy()
+      expect(screen.queryByRole('heading', { name: 'Alpha private Tool' })?.textContent ?? null).toBeNull()
+    } finally {
+      await act(async () => { current.resolve('Current private Tool'); await Promise.resolve() })
+    }
+  })
+
   it('opens destinations in the header dropdown without adding a sidebar or replacing page content', async () => {
     // A preference left by the superseded release cannot resurrect a global rail.
     localStorage.setItem('ae-show-sidebar', 'true')
@@ -88,7 +148,7 @@ describe('AeAppShell', () => {
     fireEvent.keyDown(trigger, { key: 'ArrowDown' })
     const menu = await screen.findByRole('menu', { name: 'Workspace menu' })
     expect(within(menu).getByRole('menuitem', { name: 'Market' }).tagName).toBe('A')
-    expect(within(menu).getByRole('menuitem', { name: 'Settings' }).getAttribute('href')).toBe('/owner/settings')
+    expect(within(menu).getByRole('menuitem', { name: 'Settings' }).getAttribute('href')).toBe('/owner/settings/workspace')
     expect(screen.queryByRole('menuitemcheckbox', { name: 'Show sidebar' })).toBeNull()
     expect(screen.getByRole('textbox', { name: 'Current draft' })).toBe(draft)
     fireEvent.keyDown(menu, { key: 'Escape' })
@@ -189,7 +249,7 @@ describe('AeAppShell', () => {
     expect(within(nav).getAllByRole('menuitem').map(link => link.textContent)).toEqual([
       'Market', 'Ask', 'Agents', 'Activity', 'Credit', 'Provider', 'Settings', 'Support', 'Status', 'Developer docs',
     ])
-    expect(within(nav).getByRole('menuitem', { name: 'Settings' }).getAttribute('href')).toBe('/owner/settings')
+    expect(within(nav).getByRole('menuitem', { name: 'Settings' }).getAttribute('href')).toBe('/owner/settings/workspace')
     expect(within(nav).getByRole('menuitem', { name: 'Market' }).getAttribute('aria-current')).toBe('page')
     expect(screen.getAllByTestId('org-switcher')).toHaveLength(1)
     expect(screen.queryByRole('link', { name: 'Sign in' })).toBeNull()

@@ -14,6 +14,7 @@ import { listOwnerUsageReportsServer, readOwnerUsageReportServer, readOwnerUsage
  * and durable report own state. A file is released only after verification. */
 export function ActivityUsageReports({request}:{request?:{reportRef:string;format:'CSV'|'JSON'}}){
   const [reports,setReports]=useState<UsageReportManifest[]>([]),[cursor,setCursor]=useState<string|null>(null)
+  const [historyLoaded,setHistoryLoaded]=useState(false)
   const [selected,setSelected]=useState<UsageReportManifest|null>(null),[message,setMessage]=useState('')
   const [pending,setPending]=useState(false),[failed,setFailed]=useState(false)
   const generation=useRef(0),inFlight=useRef(false)
@@ -24,8 +25,9 @@ export function ActivityUsageReports({request}:{request?:{reportRef:string;forma
     const current=++generation.current
     try{const page=await listOwnerUsageReportsServer({data:{cursor:nextCursor}})
       if(current!==generation.current)return
+      setHistoryLoaded(true)
       setReports(previous=>nextCursor===null?page.page:[...previous,...page.page]);setCursor(page.isDone?null:page.continueCursor)
-    }catch{if(current===generation.current){setFailed(true);setMessage('Saved reports could not be read. Retry when the service is available.')}}
+    }catch{if(current===generation.current){setFailed(true);setHistoryLoaded(true);setMessage('Saved reports could not be read. Retry when the service is available.')}}
     finally{inFlight.current=false;setPending(false)}
   }
   useEffect(()=>{void list(null)},[])
@@ -82,7 +84,7 @@ export function ActivityUsageReports({request}:{request?:{reportRef:string;forma
       {selected===null&&request!==undefined?<Button type="button" variant="secondary" disabled={pending} onClick={()=>void read(request.reportRef)}>Read requested report</Button>:null}
     </div>
     <p role="status" aria-live="polite" className="text-sm text-muted-foreground">{message}</p>
-    {reports.length===0?<p className="text-sm text-muted-foreground">{failed?'Saved report history is unavailable.':'No saved reports are currently shown.'}</p>:<ul className="grid gap-2">{reports.map(report=><li key={report.reportRef}><Button type="button" variant="ghost" disabled={pending} onClick={()=>void read(report.reportRef)}>{formatUtcTimestamp(report.createdAt)} · {report.state} · {report.recordCountUnits} Calls</Button></li>)}</ul>}
+    {reports.length===0?<p className="text-sm text-muted-foreground">{failed?'Saved report history is unavailable.':historyLoaded?'No saved reports for this Account.':'Loading saved reports…'}</p>:<ul className="grid gap-2">{reports.map(report=><li key={report.reportRef}><Button type="button" variant="ghost" disabled={pending} onClick={()=>void read(report.reportRef)}>{formatUtcTimestamp(report.createdAt)} · {report.state} · {report.recordCountUnits} Calls</Button></li>)}</ul>}
     {selected===null?null:<>
       <ActivityUsageForecast report={selected} />
       <AeFactList facts={[{label:'State',value:selected.state},{label:'Period starts (UTC)',value:formatUtcTimestamp(selected.periodStartAt)},{label:'Period ends, exclusive (UTC)',value:formatUtcTimestamp(selected.periodEndAt)},

@@ -5,6 +5,7 @@ import { RadioCards } from '@/components/arc/radio-cards/radio-cards'
 import { Skeleton } from '@/components/arc/skeleton/skeleton'
 import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { Spinner } from '@/components/ui/spinner'
+import { useWorkspacePresentationVisible } from '@/lib/client/workspace-presentation'
 import { toast } from '@/lib/ui/toast'
 import { formatDisplayAmount } from '@/modules/money/public'
 import type { AccountFundingBalance, AccountFundingConstraints } from '@/modules/money/server'
@@ -69,20 +70,21 @@ export function AeAccountFundingPanel({
     session,
   } = state
 
+  const visible = useWorkspacePresentationVisible()
   const succeededToastFired = useRef(false)
   useEffect(() => {
     if (paymentStatus !== 'succeeded') {
       succeededToastFired.current = false
       return
     }
-    if (succeededToastFired.current) return
+    if (!visible || succeededToastFired.current) return
     succeededToastFired.current = true
     const balance = accountBalance?.kind === 'available' ? accountBalance.balance : undefined
     const description = balance !== undefined
       ? `Available credit is now ${formatDisplayAmount(balance)}. Paid Calls can use it immediately.`
       : 'Credit will show in Available credit above. Your card charge is confirmed.'
     toast.success('Payment received', { description })
-  }, [accountBalance, paymentStatus])
+  }, [accountBalance, paymentStatus, visible])
 
   const taxOnServiceFeeBps = constraints?.kind === 'available' ? constraints.taxOnServiceFeeBps : 1000
   const selectedSuggestedUnits = suggestedPrincipalUnits.find((units) => units === selectedPrincipalUnits)

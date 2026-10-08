@@ -1,6 +1,6 @@
 import { captureRouteException } from "@/lib/observability/capture-route-exception";
 import { degrade } from "@/lib/observability/degrade";
-import { callPublicSourceQuery, sourceQuery } from "@/lib/server/convex-source";
+import { callPublicSourceQuery, sourceQuery, type CreatePublicConvexClientOptions } from "@/lib/server/convex-source";
 import { readCapabilityToolSearch } from "@/modules/capability-supply/tool-source";
 import type {
   ToolSearchResult,
@@ -84,7 +84,9 @@ export type MarketCatalogQuery = Readonly<{
 export async function readToolListingEvidence(
   tool: PublicToolDescriptor,
   window: MarketWindow = "30d",
+  options?: CreatePublicConvexClientOptions,
 ): Promise<MarketListingEvidenceProjection | undefined> {
+  options?.signal?.throwIfAborted()
   const summary = catalogJobSummary(
     tool.summary || tool.listing.summary,
   );
@@ -94,10 +96,9 @@ export async function readToolListingEvidence(
     summary,
   )} ${summary}`;
   try {
-    const [source] = await callPublicSourceQuery(readListingEvidence, {
-      toolRefs: [tool.toolRef],
-      since: Date.now() - windowMilliseconds(window),
-    });
+    const args = { toolRefs: [tool.toolRef], since: Date.now() - windowMilliseconds(window) };
+    const [source] = options === undefined ? await callPublicSourceQuery(readListingEvidence, args) : await callPublicSourceQuery(readListingEvidence, args, options);
+    options?.signal?.throwIfAborted();
     return source === undefined
       ? undefined
       : projectMarketListingEvidence(
@@ -106,6 +107,7 @@ export async function readToolListingEvidence(
           catalogText,
         );
   } catch (cause) {
+    options?.signal?.throwIfAborted();
     return degrade(
       cause,
       undefined,

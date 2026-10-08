@@ -1,5 +1,6 @@
 "use client"
 
+import { useWorkspacePresentationVisible } from "@/lib/client/workspace-presentation"
 import * as React from "react"
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip"
 
@@ -39,6 +40,8 @@ function TooltipContent({
     TooltipPrimitive.Positioner.Props,
     "align" | "alignOffset" | "side" | "sideOffset"
   >) {
+  const visible = useWorkspacePresentationVisible()
+  if (!visible) return null
   return (
     <TooltipPrimitive.Portal>
       <TooltipPrimitive.Positioner

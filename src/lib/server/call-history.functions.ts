@@ -1,4 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
+import { getRequest } from '@tanstack/react-start/server'
+import { SOURCE_READ_TIMEOUT_MS, awaitBoundedRead } from '@/lib/bounded-read'
 import { z } from 'zod'
 import { providerUnitSummarySchema, type ProviderUnitObservation } from '@/modules/capability-execution/provider-service-units'
 import { accountHistoryResultSchema, type AccountHistoryResult } from '@/modules/money/public'
@@ -6,8 +8,10 @@ import { accountHistoryResultSchema, type AccountHistoryResult } from '@/modules
 import {
   callSourceAction,
   callSourceQuery,
+  createAuthenticatedSourceTransport,
   sourceAction,
   sourceQuery,
+  type ConvexSourceTransport,
 } from '@/lib/server/convex-source'
 
 const listOwnerCallsQuery = sourceQuery<{
@@ -143,37 +147,52 @@ export const readOwnerAccountHistoryServer = createServerFn({ method: 'GET' })
     readOwnerHistoryAction, data.cursor === undefined ? {} : { cursor: data.cursor },
   )))
 
-export const readOwnerCallsServer = createServerFn({ method: 'GET' })
-  .validator((data) => callsInput.parse(data ?? {}))
-  .handler(async ({ data }) => await callSourceQuery(listOwnerCallsQuery, {
+export async function readOwnerCallsThroughSource(input: z.infer<typeof callsInput>, transport?: ConvexSourceTransport) {
+  const data = callsInput.parse(input)
+  const args = {
     ...(data.principalRef === undefined ? {} : { principalRef: data.principalRef }),
     ...(data.periodStartAt === undefined ? {} : { periodStartAt: data.periodStartAt }),
     ...(data.periodEndAt === undefined ? {} : { periodEndAt: data.periodEndAt }),
     paginationOpts: { numItems: 50, cursor: data.cursor ?? null },
-  }))
+  }
+  return transport === undefined ? callSourceQuery(listOwnerCallsQuery, args) : transport.query(listOwnerCallsQuery, args)
+}
+
+export async function readOwnerUsageThroughSource(input: PeriodInput, transport?: ConvexSourceTransport) {
+  const data = periodInput.parse(input)
+  const args = {
+    dimensionKind: data.dimensionKind,
+    ...(data.dimensionRef === undefined ? {} : { dimensionRef: data.dimensionRef }),
+    ...periodBounds(data),
+  }
+  return usageResult.parse(await (transport === undefined
+    ? callSourceQuery(readOwnerUsageQuery, args) : transport.query(readOwnerUsageQuery, args)))
+}
+
+export async function readOwnerSpendThroughSource(input: PeriodInput, transport?: ConvexSourceTransport) {
+  const data = periodInput.parse(input)
+  if (data.dimensionKind !== 'account' || data.dimensionRef !== undefined) {
+    return { kind: 'refused' as const, code: 'spend_dimension_not_supported' }
+  }
+  return spendResult.parse(await (transport === undefined
+    ? callSourceAction(readOwnerSpendAction, periodBounds(data)) : transport.action(readOwnerSpendAction, periodBounds(data))))
+}
+
+export const readOwnerCallsServer = createServerFn({ method: 'GET' })
+  .validator((data) => callsInput.parse(data ?? {}))
+  .handler(async ({ data }) => {
+    const signal = AbortSignal.any([getRequest().signal, AbortSignal.timeout(SOURCE_READ_TIMEOUT_MS)])
+    const transport = await awaitBoundedRead(signal => createAuthenticatedSourceTransport({ signal }), signal)
+    return awaitBoundedRead(() => readOwnerCallsThroughSource(data, transport), signal)
+  })
 
 export const readOwnerUsageServer = createServerFn({ method: 'GET' })
   .validator((data) => periodInput.parse(data))
-  .handler(async ({ data }) => {
-    const period = periodBounds(data)
-    return usageResult.parse(await callSourceQuery(readOwnerUsageQuery, {
-      dimensionKind: data.dimensionKind,
-      ...(data.dimensionRef === undefined ? {} : { dimensionRef: data.dimensionRef }),
-      ...period,
-    }))
-  })
+  .handler(({ data }) => readOwnerUsageThroughSource(data))
 
 export const readOwnerSpendServer = createServerFn({ method: 'GET' })
   .validator((data) => periodInput.parse(data))
-  .handler(async ({ data }) => {
-    if (data.dimensionKind !== 'account' || data.dimensionRef !== undefined) {
-      return { kind: 'refused' as const, code: 'spend_dimension_not_supported' }
-    }
-    return spendResult.parse(await callSourceAction(
-      readOwnerSpendAction,
-      periodBounds(data),
-    ))
-  })
+  .handler(({ data }) => readOwnerSpendThroughSource(data))
 
 function periodBounds(input: PeriodInput): {
   periodStartAt: number

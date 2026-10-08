@@ -5,16 +5,18 @@ import type { ComponentProps, ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
+import { PublicToolRegistrySchemaVersion } from '@/modules/capability-supply/public'
 import { AeMarketPage, type AeMarketPageProps } from '@/components/ae/market/AeMarketPage'
 import { AeX402Directory } from '@/components/ae/market/AeX402Directory'
 import { Route as ProductionMarketRoute } from '@/routes/market'
-import { validateMarketSearch } from '@/modules/market/market-route-data'
+import { marketLoaderDeps, validateMarketSearch } from '@/modules/market/market-route-data'
 
 // This boundary records the catalogue passed to the existing Arc presenter.
 // Its actual pending-panel and keyboard behavior has separate directory tests.
 vi.mock('@/components/ae/market/AeX402Directory', () => ({
-  AeX402Directory: ({ activeView, pendingView, page }: ComponentProps<typeof AeX402Directory>) => <div>
+  AeX402Directory: ({ activeView, pendingView, page, search }: ComponentProps<typeof AeX402Directory>) => <div>
     <h1>Tool market</h1>
+    <p>Shown query: {search.query ?? 'browse'} · Network: {search.network ?? 'all'}</p>
     <p>Selected: {pendingView ?? activeView}</p>
     {pendingView === undefined
       ? <p>Committed: {activeView} · {page.kind === 'ok' ? page.items.length : 'unavailable'}</p>
@@ -47,7 +49,7 @@ async function market(loader: (view: View) => Promise<Data>, initial = '/market?
   const root = createRootRoute()
   const route = createRoute({
     getParentRoute: () => root, path: '/market', validateSearch: validateMarketSearch,
-    loaderDeps: ({ search }) => ({ view: search.view ?? 'discover' }),
+    loaderDeps: ({ search }) => ({ ...marketLoaderDeps(search), view: search.view ?? 'discover' }),
     loader: ({ deps }) => loader(deps.view),
     pendingMs,
     pendingComponent: () => <p>Whole page pending</p>,
@@ -55,7 +57,7 @@ async function market(loader: (view: View) => Promise<Data>, initial = '/market?
   })
   const router = createRouter({ routeTree: root.addChildren([route]), history: createMemoryHistory({ initialEntries: [initial] }) })
   await router.load()
-  render(<RouterProvider router={router} />)
+  await act(async () => { render(<RouterProvider router={router} />) })
   return router
 }
 
@@ -83,6 +85,26 @@ describe('market navigation loading boundary', () => {
     await screen.findByRole('heading', { name: 'Intelligence, put to work.' })
     expect(screen.queryByRole('status')).toBeNull()
     expect(screen.queryByRole('textbox', { name: 'Retained market input' })).toBeNull()
+  })
+
+  it.each([
+    { query: 'storm', network: 'eip155:8453' },
+    { query: 'weather', network: 'eip155:1' },
+  ])('keeps the requested canonical query and filter visible when its read fails: %j', async requested => {
+    const initial = { query: 'weather', network: 'eip155:8453' }
+    const input = (search: typeof initial) => ({ query: search.query, limit: 8, filters: { networkId: search.network } })
+    let next: Data = { ...data('tools'), canonicalSearch: {
+      input: input(initial),
+      result: { kind: 'match', schemaVersion: PublicToolRegistrySchemaVersion, query: 'weather', results: [], partialResults: true,
+        assessed: { source: 'all', scope: 'page', examined: 0, coverage: 'partial', generation: 'one', completedAt: 1 },
+        pagination: { limit: 8, hasMore: false }, next: [] },
+    } }
+    const router = await market(() => Promise.resolve(next), '/market?view=tools&query=weather&network=eip155%3A8453')
+    next = { ...data('tools'), canonicalSearch: { input: input(requested), result: undefined } }
+    await act(async () => { await router.navigate({ to: '/market', search: { view: 'tools', ...requested } }) })
+    expect(screen.getByText(`Shown query: ${requested.query} · Network: ${requested.network}`)).toBeTruthy()
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(router.state.location.search).toMatchObject(requested)
   })
 
   it('returns to the previous source with explicit recovery when the requested catalogue is unavailable', async () => {

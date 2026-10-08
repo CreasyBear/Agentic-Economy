@@ -416,3 +416,98 @@ and current readiness observations. The preceding web rollback target is
 No data migration or backend redeploy is required. Source/component and read-only
 header fixtures do not establish real Clerk popup or authenticated journey
 qualification; that acceptance remains with Joel under the existing deferral.
+
+## 8 October performance and resilience candidate
+
+**Local source candidate; not deployed.** Owner: canonical integrator, with
+bounded independent Sol reviews. Base: `e9950737c9c7620e9df984c6b0b6123eded32570`.
+The measured v4 source-diff/untracked digest is
+`221d0e83c4dc04d68e00dde1c74a446ce586b9573ff208e3369cc4e515de4764`.
+The local `output/release/performance-candidate.json` receipt identifies the
+measurements, source fingerprint and verification results. Unrelated whitepaper
+and strategy drafts are excluded. No new branch, worktree or register was created.
+
+The candidate removes unused Discover reads, defers unopened feature and optional
+observability imports, stabilizes Convex client ownership, and gives Router the
+canonical Market search/cache state. Workspace settings share one request-scoped
+authenticated transport. Calls/Plans load before optional financial reports.
+Read deadlines include response consumption and propagate cancellation; abandoning
+a read does not undo accepted work. Existing REUI Skeleton/Spinner compositions
+provide announced loading states and respect reduced motion.
+
+Independent isolation review corrected old-Account Router cache, private header,
+portal and delayed-notification exposure. The visibility helper contains no
+authority facts. Drafts survive same-Account access refresh; accepted command
+receipts, uncertainty and recovery survive notification suppression.
+
+### Local evidence and limits
+
+| Cohort | Result |
+| --- | --- |
+| Public warm navigation | Matched baseline/v4 HTTP/2 comparison, 600 navigations per build, 100 per directed route pair. Usable median **294→128.5ms**, p95 **310→143.1ms**. Transition-settled p95 **326.6→160.4ms**. No endpoint or local HTTP failures. |
+| Cold browser, controlled mobile | 100 fresh contexts; 390×844, 4× CPU slowdown, 150ms latency, 1.6Mbps downstream. p95 **4.443s**; all endpoints completed. First newly started server request **6.607s**, retained as the one over-budget result. |
+| Cold browser, desktop | 100 fresh contexts on the already started server. p95 **1.207s**; all below 3s. Repeated cold server startup is unqualified. |
+| Signed-in navigation | Test Clerk/local Convex; 25/25 steps completed. Settings menu requests **5→2**, direct Workspace return **4→2**, Activity return **9→6**. Medians 397/259/255/160/488ms across the five journeys; four exceed 200ms. Five samples per journey cannot qualify p95. |
+| Retained browser/rollback | Three emitted-build fixtures passed: same-tab A→B→A, Router/app asset-loss recovery, and command-panel fallback. All traffic was GET. Missing-asset errors were retained. Hosted pinning, old authenticated server-function clients, drafts and purchase recovery across deployment remain open. |
+
+These are compiled-client local fixtures using emitted Nitro under a development
+server environment, not hosted performance. Shared Mac CPU load was recorded;
+unrelated applications were left running. Public browser traffic outside loopback
+was deliberately refused, including Clerk SDK loading; those errors remain in
+the evidence. Authenticated tests separately allowed the configured test Clerk
+host. Timing cohorts made no purchases or Account changes. Activity now waits for
+fresh primary data; its earlier cached-content timing is not an equivalent
+comparison. Optional summaries remained partly unavailable and completed after
+the real Call. Scope-change/delayed-response fixtures do not replace hosted
+two-Account acceptance. The failed preliminary mobile screen is preserved; the
+full cohort uses the original p95 budget.
+
+`npm run check` and the complete `npm run gate` pass under Node 22 with explicit
+development/sandbox configuration. The gate includes the production build, clean
+types, 9,628 unit tests (one skipped), 3,128 integration tests (77 skipped and
+three todo), 20 browser journeys, 20 accessibility checks, CLI package verification,
+and the docs build/publication check (228 pages and 84 owner examples). The browser
+pass leaves 18 environment/configuration-gated cases skipped; those and skipped
+financial/restore integrations are not runtime qualification.
+
+Earlier attempts remain in the local evidence: a workspace disconnection during
+clean types, then two stale navigation/transition assertions. Correcting those
+assertions changed no application behavior; all 21 affected tests and the full
+rerun passed. Final check/gate log: `performance/closeout-final-gate.log` in the
+Codex execution workspace, linked by the local release receipt. The hosted
+hydration stall remains unresolved.
+
+### Compatibility, infrastructure and rollback
+
+The [PR #372 production receipt](https://github.com/CreasyBear/Agentic-Economy/pull/372#issuecomment-6051921139)
+binds current web `6e1abd0162bfef197e35a79b4b1aa8765db9769f` to
+`dpl_5ojMkJbKXCqwtHc9xzZt2xXhstHR`, with backend
+`ce7a0e57e1fbc13a0bf8f0ff8d1bb5ecc99bab7a` on `cautious-zebra-473`.
+Native read-only Vercel inspection confirms that deployment, Sydney, Node 22,
+Fluid Compute, 2048 MiB and a 300-second function timeout. The skew setting is
+43,200 seconds. Installed Nitro supplies the deployment cookie; one live document
+GET confirmed emission matching the expected deployment without retaining its
+value. Configuration and emission do not prove behavior through promotion or expiry.
+
+No changed/new candidate source intersects the inspected Convex runtime-import
+closure: 184 roots and 1,355 files. Backend function names, serialized contracts,
+schema and financial commands are unchanged. Source-contract review requires no
+backend redeploy or data migration; it does not establish byte-identical rebuilt
+backend bundles. API/CLI/protocol compatibility is unchanged by this package;
+existing hosted acceptance remains bound to its recorded release tuple.
+
+Before a separately authorized release, complete hosted compatibility checks and
+re-resolve the current deployment. Retain the verified PR #372 web deployment
+above as this candidate's rollback baseline. Web rollback preserves the backend,
+ledger, opaque references, journals and accepted operation identities; it must
+not restore financial data. Manual deployment controls remain in place.
+
+At 06:57:37 UTC (14:57:37 Perth), public health returned 200 and readiness 503
+`payments_unavailable`, with configuration and Convex ready. Current Infura/Alchemy
+allowance and the cause remain unproved. AWS CLI and intended profiles exist but
+the native login session has expired; no resource queries followed. Current
+backup/metrics/alert evidence and joint restoration remain with Operations/finance
+under MM-042; Datadog stays with #284. The independent ACID review confirmed the
+High Account/month cap race under [MM-004](mercator-maturity-register.md#mm-004).
+This candidate does not repair that financial owner or qualify payment availability
+or operational restoration. No deployment, credentials, caps or infrastructure changed.

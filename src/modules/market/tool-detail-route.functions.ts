@@ -1,3 +1,5 @@
+import { getRequest } from '@tanstack/react-start/server'
+import { awaitBoundedRead, SOURCE_READ_TIMEOUT_MS } from '@/lib/bounded-read'
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 
@@ -22,33 +24,41 @@ const inputSchema = z.strictObject({ toolRef: z.string() })
 export const readPublicToolDetailRouteServer = createServerFn()
   .validator((data) => inputSchema.parse(data))
   .handler(async ({ data }): Promise<PublicToolDetailRouteResult> => {
-    let result: ToolDetailResult
-    try {
-      result = await readCapabilityToolDetail(data)
-    } catch (cause) {
-      return degrade(cause, { kind: 'source_unavailable', toolRef: data.toolRef } as const, {
-        site: 'readPublicToolDetailRouteServer',
-        reason: 'source_unavailable',
-      })
-    }
-    if (result.kind !== 'found') return result
-    // Descriptor authority is independent of listing evidence and public links.
-    const price = result.tool.commercial.price
-    const needsRate = result.tool.commercial.displayPrice === undefined && (price.kind === 'fixed'
-      ? price.amount.currency === 'USDC'
-      : price.kind === 'range' && price.minimum.currency === 'USDC')
-    const [evidence, service, referenceRate] = await Promise.all([
-      readToolListingEvidence(result.tool).catch(cause => degrade(cause, undefined, { site: 'toolListingEvidence', reason: 'source_unavailable' })),
-      registryServicesDetailAction.run({ data: { slug: result.tool.business.slug }, context: { caller: 'ui' } })
-        .catch(cause => degrade(cause, undefined, { site: 'toolPublicBusiness', reason: 'source_unavailable' })),
-      needsRate ? readPersistedReferenceRate().catch(cause => degrade(cause, undefined, { site: 'toolReferenceRate', reason: 'source_unavailable' })) : undefined,
-    ])
-    const exactPublicBusiness = service?.kind === 'found'
-      && service.service.id === result.tool.business.businessId
-      && service.service.ae.publicUrl === `/${result.tool.business.slug}`
-      && service.service.ae.source === 'business_published'
-      && service.service.ae.disposition === 'current'
-    return { ...result, ...(evidence === undefined ? {} : { evidence }), ...(exactPublicBusiness ? { verifiedBusinessSlug: result.tool.business.slug } : {}), ...(referenceRate === undefined ? {} : { referenceRate }) }
+    const request = getRequest()
+    const signal = AbortSignal.any([request.signal, AbortSignal.timeout(SOURCE_READ_TIMEOUT_MS)])
+    const options = { signal }
+    return awaitBoundedRead(async () => {
+      let result: ToolDetailResult
+      try {
+        result = await readCapabilityToolDetail(data, options)
+        signal.throwIfAborted()
+      } catch (cause) {
+        signal.throwIfAborted()
+        return degrade(cause, { kind: 'source_unavailable', toolRef: data.toolRef } as const, {
+          site: 'readPublicToolDetailRouteServer',
+          reason: 'source_unavailable',
+        })
+      }
+      if (result.kind !== 'found') return result
+      // Descriptor authority is independent of listing evidence and public links.
+      const price = result.tool.commercial.price
+      const needsRate = result.tool.commercial.displayPrice === undefined && (price.kind === 'fixed'
+        ? price.amount.currency === 'USDC'
+        : price.kind === 'range' && price.minimum.currency === 'USDC')
+      const [evidence, service, referenceRate] = await Promise.all([
+        readToolListingEvidence(result.tool, '30d', options).catch(cause => { signal.throwIfAborted(); return degrade(cause, undefined, { site: 'toolListingEvidence', reason: 'source_unavailable' }) }),
+        registryServicesDetailAction.run({ data: { slug: result.tool.business.slug }, context: { caller: 'ui', request: new Request(request, { signal }) } })
+          .catch(cause => { signal.throwIfAborted(); return degrade(cause, undefined, { site: 'toolPublicBusiness', reason: 'source_unavailable' }) }),
+        needsRate ? readPersistedReferenceRate(options).catch(cause => { signal.throwIfAborted(); return degrade(cause, undefined, { site: 'toolReferenceRate', reason: 'source_unavailable' }) }) : undefined,
+      ])
+      signal.throwIfAborted()
+      const exactPublicBusiness = service?.kind === 'found'
+        && service.service.id === result.tool.business.businessId
+        && service.service.ae.publicUrl === `/${result.tool.business.slug}`
+        && service.service.ae.source === 'business_published'
+        && service.service.ae.disposition === 'current'
+      return { ...result, ...(evidence === undefined ? {} : { evidence }), ...(exactPublicBusiness ? { verifiedBusinessSlug: result.tool.business.slug } : {}), ...(referenceRate === undefined ? {} : { referenceRate }) }
+    }, signal)
   })
 
 const externalById = sourceQuery<{ id: string }, X402DirectoryCatalogueResource>('x402DirectoryIndex:detailById')

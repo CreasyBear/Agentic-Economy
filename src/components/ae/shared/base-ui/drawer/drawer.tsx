@@ -1,6 +1,7 @@
 /* Adapted from Arc UI drawer source SHA-256: ed9ec15831a21f46582a13f4839e2f22a1b9579822fddad69ab05d83015993ce; source retrieved 2026-10-01. */
 "use client";
 
+import { useWorkspacePresentationVisible } from "@/lib/client/workspace-presentation";
 import { forwardRef } from "react";
 import type { ComponentProps, ReactNode } from "react";
 import { X } from "lucide-react";
@@ -41,6 +42,8 @@ export const DrawerContent = forwardRef<HTMLDivElement, DrawerContentProps>(
     { title, description, closeLabel = "Close", children, side = "right", className, ...props },
     ref,
   ) {
+    const visible = useWorkspacePresentationVisible();
+    if (!visible) return null;
     return (
       <Dialog.Portal>
         <Dialog.Backdrop

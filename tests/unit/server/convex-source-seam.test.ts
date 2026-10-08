@@ -18,8 +18,48 @@ import {
 } from '@/lib/server/convex-source'
 
 import { convexUrl } from './server-seams-harness'
+import { readX402DirectoryCatalogue, readX402DirectoryCatalogueOverview, readX402DirectoryCatalogueResource, readX402DirectoryProviders } from '@/modules/market/x402-directory-index.server'
+import { readPersistedReferenceRate } from '@/modules/money/reference-rate.server'
+import { readCapabilityToolDetail, readCatalogOfferingToolMap } from '@/modules/capability-supply/tool-source'
+import { readPublicOfferingRegistryBusinessDetail } from '@/modules/registry/registry.functions'
+import type { CreatePublicConvexClientOptions } from '@/lib/server/convex-source'
+
 
 describe('server Convex source seam', () => {
+  it.each([
+    ['directory browse', (options: CreatePublicConvexClientOptions) => readX402DirectoryCatalogue({}, options), 'x402DirectoryIndex:browse'],
+    ['directory cards', (options: CreatePublicConvexClientOptions) => readX402DirectoryCatalogue({ query: 'weather' }, options), 'x402DirectoryIndex:searchCompact'],
+    ['directory overview', (options: CreatePublicConvexClientOptions) => readX402DirectoryCatalogueOverview(options), 'x402DirectoryIndex:overview'],
+    ['directory resource', (options: CreatePublicConvexClientOptions) => readX402DirectoryCatalogueResource({ resource: 'https://example.com/tool' }, options), 'x402DirectoryIndex:resource'],
+    ['directory providers', (options: CreatePublicConvexClientOptions) => readX402DirectoryProviders({}, options), 'x402DirectoryIndex:facets'],
+    ['reference rate', (options: CreatePublicConvexClientOptions) => readPersistedReferenceRate(options), 'referenceRateRefresh:current'],
+    ['admitted comparison detail', (options: CreatePublicConvexClientOptions) => readCapabilityToolDetail({ toolRef: 'operation:v1:public' }, options), 'capabilityToolCatalog:detail'],
+    ['comparison offering links', (options: CreatePublicConvexClientOptions) => readCatalogOfferingToolMap(['business-1'], options), 'capabilitySupplyTools:offeringToolMap'],
+    ['comparison public business', (options: CreatePublicConvexClientOptions) => readPublicOfferingRegistryBusinessDetail({ slug: 'provider' }, options), 'registry:getPublicBusinessOfferingSupplyBySlug'],
+  ] as const)('cancels %s through the actual supported Convex response body', async (_name, read, sourcePath) => {
+    const controller = new AbortController()
+    const bodyStarted = Promise.withResolvers<void>()
+    let transportSignal: AbortSignal | null | undefined
+    let calledPath: string | undefined
+    const fetch: typeof globalThis.fetch = async (_input, init) => {
+      transportSignal = init?.signal
+      calledPath = JSON.parse(String(init?.body)).path as string
+      return new Response(new ReadableStream({
+        start(body) {
+          init?.signal?.addEventListener('abort', () => body.error(init.signal?.reason), { once: true })
+          bodyStarted.resolve()
+        },
+      }))
+    }
+    const pending = read({ env: { CONVEX_URL: convexUrl }, fetch, signal: controller.signal })
+    const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+    await bodyStarted.promise
+    controller.abort(new DOMException('Route read cancelled', 'AbortError'))
+    await rejected
+    expect(calledPath).toBe(sourcePath)
+    expect(transportSignal?.aborted).toBe(true)
+  })
+
   it('requires a Convex URL from server env', () => {
     expect(() => readRequiredConvexUrl({})).toThrow(ConvexSourceError)
     expect(() => readRequiredConvexUrl({})).toThrow(expect.objectContaining({ code: 'missing_convex_url', status: 500 }))
@@ -180,6 +220,32 @@ describe('server Convex source seam', () => {
     expect(calls[0]?.init.headers).toMatchObject({ Authorization: 'Bearer owner.jwt' })
     expect(calls[1]?.init.headers).toMatchObject({ Authorization: 'Bearer owner.jwt' })
     expect(calls[2]?.init.headers).not.toMatchObject({ Authorization: expect.any(String) })
+  })
+
+  it('arms authority once for composed reads and uses fresh credentials for the next request', async () => {
+    const getToken = vi.fn().mockResolvedValueOnce('owner.first').mockResolvedValueOnce('owner.second')
+    const calls: { path: string; token: string | null }[] = []
+    const fetch: typeof globalThis.fetch = async (_input, init) => {
+      const path = JSON.parse(String(init?.body)).path as string
+      calls.push({ path, token: new Headers(init?.headers).get('Authorization') })
+      return new Response(JSON.stringify({ status: 'success', value:
+        path === 'interactiveAuthority:materializeCurrentInteractiveAuthority' ? true : 'stored' }))
+    }
+    const options = { env: { CONVEX_URL: convexUrl }, authObject: { isAuthenticated: true, getToken }, fetch }
+    const first = await createAuthenticatedSourceTransport(options)
+    await Promise.all([
+      first.query(sourceQuery<Record<string, never>, string>('test:calls'), {}),
+      first.query(sourceQuery<Record<string, never>, string>('test:plans'), {}),
+      first.action(sourceAction<Record<string, never>, string>('test:spend'), {}),
+    ])
+    expect(getToken).toHaveBeenCalledOnce()
+    expect(calls.filter(call => call.path === 'interactiveAuthority:materializeCurrentInteractiveAuthority')).toHaveLength(1)
+    expect(calls.every(call => call.token === 'Bearer owner.first')).toBe(true)
+    const second = await createAuthenticatedSourceTransport(options)
+    await second.query(sourceQuery<Record<string, never>, string>('test:calls'), {})
+    expect(getToken).toHaveBeenCalledTimes(2)
+    expect(calls.filter(call => call.path === 'interactiveAuthority:materializeCurrentInteractiveAuthority')).toHaveLength(2)
+    expect(calls.at(-1)?.token).toBe('Bearer owner.second')
   })
 
   it('calls a public Convex action without manufacturing end-user JWT identity', async () => {

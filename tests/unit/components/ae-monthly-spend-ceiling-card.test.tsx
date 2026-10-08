@@ -1,9 +1,10 @@
 /** @vitest-environment jsdom */
 import '@testing-library/jest-dom/vitest'
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
+import { WorkspacePresentationVisibility } from '@/lib/client/workspace-presentation'
 import { AeMonthlySpendCeilingCard } from '@/components/ae/console/AeMonthlySpendCeilingCard'
 import { toast } from '@/lib/ui/toast'
 
@@ -42,6 +43,34 @@ const disabledSettings: AeMonthlySpendCeilingCardProps['settings'] = {
 afterEach(cleanup)
 
 describe('AeMonthlySpendCeilingCard (W-23)', () => {
+  it.each(['role', 'Account'] as const)('keeps the accepted save and withholds its private notification after a %s transition', async transition => {
+    vi.mocked(toast.success).mockClear()
+    const completion = Promise.withResolvers<void>()
+    const onSave = vi.fn(() => completion.promise)
+    let visible = true
+    let identity = 0
+    const fixture = () => <WorkspacePresentationVisibility value={visible}>
+      <AeMonthlySpendCeilingCard key={identity} settings={{ enabled: true, ceilingUnits: CEILING_UNITS, revision: 3 }}
+        monthSpend={{ kind: 'available', spendUnits: SPEND_29_PCT_UNITS }} onSave={onSave} />
+    </WorkspacePresentationVisibility>
+    const view = render(fixture())
+    fireEvent.click(screen.getByRole('button', { name: 'Edit limit' }))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.change(within(dialog).getByLabelText(/monthly cap/i), { target: { value: '250' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: /save/i }))
+    expect(onSave).toHaveBeenCalledOnce()
+    expect(onSave).toHaveBeenCalledWith({ enabled: true, ceilingUnits: '250000000', expectedRevision: 3 })
+    visible = false
+    if (transition === 'Account') identity += 1
+    view.rerender(fixture())
+    expect(screen.queryByRole('dialog')).toBeNull()
+    visible = true
+    view.rerender(fixture())
+    await act(async () => { completion.resolve(); await completion.promise })
+    expect(onSave).toHaveBeenCalledOnce()
+    expect(toast.success).not.toHaveBeenCalled()
+  })
+
   it('U1: disabled shows reassurance and Set limit', () => {
     const onSave = vi.fn()
     render(

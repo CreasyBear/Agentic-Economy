@@ -6,6 +6,7 @@ import {
   callPublicSourceQuery,
   callSourceQuery,
   sourceQuery,
+  type ConvexSourceTransport,
 } from '@/lib/server/convex-source'
 import {
   buildPublicOwnerStatusReadback,
@@ -45,15 +46,20 @@ export const readPublicBusinessPageServer = createServerFn()
 
 export async function readOwnerStatusThroughSource(
   slug: string | undefined,
+  transport?: ConvexSourceTransport,
+  signal?: AbortSignal,
 ): Promise<PublicOwnerStatusRouteReadbackResult> {
   const readsCurrentOwner = slug === undefined || slug.trim().length === 0
   try {
+    signal?.throwIfAborted()
     const result = readsCurrentOwner
-      ? await callSourceQuery(currentOwnerCatalogQuery, {})
+      ? await (transport === undefined ? callSourceQuery(currentOwnerCatalogQuery, {}) : transport.query(currentOwnerCatalogQuery, {}))
       : await callPublicSourceQuery(publicCatalogBySlugQuery, { slug })
     if (result.kind !== 'available') return { kind: 'not_found', reason: result.reason }
 
-    const publicDetail = await readPublicOfferingRegistryBusinessDetail({ slug: result.catalog.slug })
+    signal?.throwIfAborted()
+    const publicDetail = await readPublicOfferingRegistryBusinessDetail({ slug: result.catalog.slug },
+      signal === undefined ? undefined : { signal })
     if (publicDetail.kind === 'not_found') return { kind: 'not_found', reason: 'not_public' }
     return { kind: 'available', readback: buildPublicOwnerStatusReadback(result.catalog) }
   } catch (cause) {

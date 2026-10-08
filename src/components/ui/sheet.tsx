@@ -1,5 +1,6 @@
 "use client"
 
+import { useWorkspacePresentationVisible } from "@/lib/client/workspace-presentation"
 import * as React from "react"
 import { XIcon } from "lucide-react"
 import { Dialog as SheetPrimitive } from "@base-ui/react/dialog"
@@ -25,6 +26,8 @@ function SheetClose({
 function SheetPortal({
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Portal>) {
+  const visible = useWorkspacePresentationVisible()
+  if (!visible) return null
   return <SheetPrimitive.Portal data-slot="sheet-portal" {...props} />
 }
 

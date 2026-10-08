@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import type { Rule4Diagnostic } from '@/lib/ui/diagnostic'
+import { useWorkspacePresentationLifetime } from '@/lib/client/workspace-presentation'
 import { toast } from '@/lib/ui/toast'
 import {
   formatExactAmount,
@@ -27,6 +28,7 @@ export function usePriceRevisionForm({
   onUpdatePrice,
   parsedCurrent,
 }: UsePriceRevisionFormInput) {
+  const capturePresentation = useWorkspacePresentationLifetime()
   const [priceAud, setPriceAud] = useState('')
   const [diagnostic, setDiagnostic] = useState<Rule4Diagnostic>()
   const [pending, setPending] = useState(false)
@@ -72,8 +74,10 @@ export function usePriceRevisionForm({
     }
 
     setPending(true)
+    const canPresent = capturePresentation()
     try {
       const result = await onUpdatePrice(normalized)
+      if (!canPresent()) return
       if (result.kind === 'applied') {
         toast.success('Pricing revision published', {
           description: `New price of A$${normalized} is now live in the catalog.`,
@@ -84,7 +88,7 @@ export function usePriceRevisionForm({
       }
     } catch (cause) {
       void cause
-      setDiagnostic(PUBLISH_FAILURE_DIAGNOSTIC)
+      if (canPresent()) setDiagnostic(PUBLISH_FAILURE_DIAGNOSTIC)
     } finally {
       setPending(false)
     }

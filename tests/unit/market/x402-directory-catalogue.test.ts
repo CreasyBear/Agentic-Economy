@@ -9,6 +9,31 @@ import { decodeOpaqueCursor, encodeOpaqueCursor } from '@/modules/registry/opaqu
 beforeEach(() => { query.mockReset(); upstream.mockReset(); vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production') })
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs() })
 describe('indexed catalogue server boundary', () => {
+  it('stops a cancelled continuation before browse or reference-rate work', async () => {
+    const controller = new AbortController()
+    query.mockImplementation(async () => {
+      controller.abort(new DOMException('Account read cancelled', 'AbortError'))
+      return { kind: 'ready', coverage: { generation: 'gen-1', completedAt: 1 } }
+    })
+    await expect(readX402DirectoryCatalogue({
+      indexCursor: encodeOpaqueCursor({ kind: 'x402-directory', scope: 'gen-1', cursor: 'next' }),
+    }, { signal: controller.signal })).rejects.toMatchObject({ name: 'AbortError' })
+    expect(query).toHaveBeenCalledExactlyOnceWith('x402DirectoryIndex:status', {}, { signal: controller.signal })
+    expect(upstream).not.toHaveBeenCalled()
+  })
+
+  it('does not turn a cancelled card query into source_unavailable or start its rate lookup', async () => {
+    const controller = new AbortController()
+    query.mockImplementation(async () => {
+      controller.abort(new DOMException('Route read cancelled', 'AbortError'))
+      return { kind: 'ok', page: [{ id: 'card', source: 'coinbase', resource: 'https://example.com/tool',
+        title: 'Tool', summary: '', provider: 'example.com', network: 'eip155:8453', minimumUsdPrice: '1' }], isDone: true }
+    })
+    await expect(readX402DirectoryCatalogue({ query: 'weather' }, { signal: controller.signal })).rejects.toMatchObject({ name: 'AbortError' })
+    expect(query).toHaveBeenCalledTimes(1)
+    expect(query).toHaveBeenCalledWith('x402DirectoryIndex:searchCompact', expect.objectContaining({ query: 'weather', network: 'eip155:8453' }), { signal: controller.signal })
+  })
+
   it.each([undefined, 'preview'])('refuses an undeclared money environment %s before querying', async (deployment) => {
     vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', deployment)
     expect(await readX402DirectoryCatalogue({})).toEqual({ kind: 'unavailable', reason: 'source_unavailable' })

@@ -35,7 +35,7 @@ vi.mock('@/lib/observability/sentry.server', () => mocks)
 // at the module boundary the same way `tests/unit/server/tool-market-routes.test.ts`
 // does, so readiness tests never depend on a real Convex deployment.
 const toolSearchMocks = vi.hoisted(() => ({
-  readCapabilityToolSearch: vi.fn(async (): Promise<ToolSearchResult> => ({
+  readCapabilityToolSearch: vi.fn<typeof import('@/modules/capability-supply/tool-source').readCapabilityToolSearch>(async (): Promise<ToolSearchResult> => ({
     kind: 'no_candidates',
     schemaVersion: 'registry-tools:v3',
     query: '',
@@ -649,7 +649,7 @@ describe('operational diagnostics routes', () => {
       const result = await readServerReadiness({ env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
 
       expect(result.commercial.quoting).toBe('ready')
-      expect(toolSearchMocks.readCapabilityToolSearch).toHaveBeenCalledWith({ query: '', limit: 1 })
+      expect(toolSearchMocks.readCapabilityToolSearch).toHaveBeenCalledWith({ query: '', limit: 1 }, { signal: expect.any(AbortSignal) })
     })
 
     it('reports quoting unavailable when no routeable Tool is found', async () => {
@@ -676,6 +676,67 @@ describe('operational diagnostics routes', () => {
       })
 
       expect(result.commercial.quoting).toBe('unavailable')
+    })
+
+    it('aborts the unused liveness response body after receiving headers', async () => {
+      let signal: AbortSignal | undefined
+      let aborted = false
+      const fetchImpl: typeof fetch = vi.fn(async (_input, init) => {
+        signal = init?.signal ?? undefined
+        if (signal === undefined) throw new Error('missing_liveness_abort_signal')
+        signal.addEventListener('abort', () => { aborted = true }, { once: true })
+        return new Response(new ReadableStream({ start(controller) {
+          controller.enqueue(new TextEncoder().encode('{'))
+        } }), { status: 200 })
+      })
+      const result = await readServerReadiness({
+        env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://fixture.convex.cloud' },
+        fetch: fetchImpl,
+      })
+      expect(result.checks.convex).toEqual({ status: 'ready' })
+      expect(signal?.aborted).toBe(true)
+      expect(aborted).toBe(true)
+    })
+
+    it.each(['network', 'partial_body'] as const)('aborts actual commercial Convex SDK %s reads at the probe deadline', async failure => {
+      setPublicSourceTransportForTests(undefined)
+      vi.stubEnv('CONVEX_URL', 'https://fixture.convex.cloud')
+      vi.stubEnv('VITE_CONVEX_URL', 'https://fixture.convex.cloud')
+      const actual = await vi.importActual<typeof import('@/modules/capability-supply/tool-source')>('@/modules/capability-supply/tool-source')
+      toolSearchMocks.readCapabilityToolSearch.mockImplementationOnce((input, options) => actual.readCapabilityToolSearch(input, options))
+      const signals: AbortSignal[] = []
+      const aborted: string[] = []
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+        const target = String(input)
+        expect(new URL(target).origin).toBe('https://fixture.convex.cloud')
+        expect(init?.redirect).toBe('error')
+        const signal = init?.signal
+        if (signal == null) throw new Error('missing_commercial_abort_signal')
+        signals.push(signal)
+        if (failure === 'network') return await new Promise<Response>((_resolve, reject) => {
+          const abort = () => { aborted.push(target); reject(new DOMException('private-network-details', 'AbortError')) }
+          if (signal.aborted) abort(); else signal.addEventListener('abort', abort, { once: true })
+        })
+        return new Response(new ReadableStream({ start(controller) {
+          controller.enqueue(new TextEncoder().encode('{"status":"success","value":'))
+          const abort = () => { aborted.push(target); controller.error(new DOMException('private-body-details', 'AbortError')) }
+          if (signal.aborted) abort(); else signal.addEventListener('abort', abort, { once: true })
+        } }), { headers: { 'content-type': 'application/json' } })
+      })
+      try {
+        const result = await readServerReadiness({
+          env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://fixture.convex.cloud' },
+          fetch: readyFetch(), timeoutMs: 25,
+        })
+        expect(result.checks.convex).toEqual({ status: 'ready' })
+        expect(result.commercial).toMatchObject({ catalogue: 'absent', quoting: 'unavailable', sellable: false })
+        expect(signals).toHaveLength(2)
+        expect(signals.every(signal => signal.aborted)).toBe(true)
+        expect(aborted).toHaveLength(2)
+        expect(new Set(aborted.map(target => new URL(target).pathname))).toEqual(new Set(['/api/query', '/api/action']))
+      } finally {
+        fetchSpy.mockRestore()
+      }
     })
 
     it('reports funding configured from a valid Stripe money provider config alone', async () => {

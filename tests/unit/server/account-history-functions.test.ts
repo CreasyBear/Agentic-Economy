@@ -1,6 +1,7 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const source = vi.hoisted(() => ({ action: vi.fn(), query: vi.fn() }))
+const source = vi.hoisted(() => ({ action: vi.fn(), query: vi.fn(), createTransport: vi.fn(), requestController: new AbortController() }))
+vi.mock('@tanstack/react-start/server', () => ({ getRequest: () => ({ signal: source.requestController.signal }) }))
 vi.mock('@tanstack/react-start', () => ({
   createServerFn: () => ({
     validator: (validate: (value: unknown) => unknown) => ({
@@ -13,13 +14,51 @@ vi.mock('@/lib/server/convex-source', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/convex-source')>()),
   callSourceAction: source.action,
   callSourceQuery: source.query,
+  createAuthenticatedSourceTransport: source.createTransport,
 }))
 
+import { SOURCE_READ_TIMEOUT_MS } from '@/lib/bounded-read'
 import { readOwnerAccountHistoryServer, readOwnerCallsServer, readOwnerSpendServer, readOwnerUsageServer } from '@/lib/server/call-history.functions'
 
-afterEach(() => { source.action.mockReset(); source.query.mockReset() })
+beforeEach(() => {
+  source.requestController = new AbortController()
+  source.createTransport.mockResolvedValue({ query: source.query, action: source.action })
+})
+afterEach(() => { source.action.mockReset(); source.query.mockReset(); source.createTransport.mockReset(); vi.restoreAllMocks(); vi.useRealTimers() })
 
 describe('owner Account history server boundary', () => {
+  it('bounds a continuation source that ignores cancellation using a request-local transport', async () => {
+    vi.useFakeTimers()
+    vi.spyOn(AbortSignal, 'timeout').mockImplementation(ms => {
+      const controller = new AbortController()
+      setTimeout(() => controller.abort(new DOMException('Continuation source deadline.', 'TimeoutError')), ms)
+      return controller.signal
+    })
+    source.query.mockReturnValue(new Promise(() => {}))
+    const pending = readOwnerCallsServer({ data: { cursor: 'original-cursor' } })
+    const rejected = expect(pending).rejects.toMatchObject({ name: 'TimeoutError' })
+    await vi.advanceTimersByTimeAsync(SOURCE_READ_TIMEOUT_MS)
+    await rejected
+    expect(source.createTransport).toHaveBeenCalledOnce()
+    expect(source.createTransport.mock.calls[0]?.[0].signal.aborted).toBe(true)
+    expect(source.query.mock.calls[0]?.[1]).toEqual({ paginationOpts: { numItems: 50, cursor: 'original-cursor' } })
+    expect(source.query).toHaveBeenCalledOnce()
+    expect(source.action).not.toHaveBeenCalled()
+  })
+
+  it('cancels the auth wait and dispatches no continuation when credentials arrive late', async () => {
+    let finish!: (transport: unknown) => void
+    source.createTransport.mockReturnValue(new Promise(resolve => { finish = resolve }))
+    const pending = readOwnerCallsServer({ data: { cursor: 'original-cursor' } })
+    source.requestController.abort(new DOMException('Request cancelled.', 'AbortError'))
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+    expect(source.createTransport.mock.calls[0]?.[0].signal.aborted).toBe(true)
+    finish({ query: source.query, action: source.action })
+    await Promise.resolve()
+    expect(source.query).not.toHaveBeenCalled()
+    expect(source.action).not.toHaveBeenCalled()
+  })
+
   it('forwards an exact Agent and fixed range with the same 50-row cursor contract', async () => {
     source.query.mockResolvedValue({ page: [], isDone: true, continueCursor: '' })
     await readOwnerCallsServer({ data: { principalRef: 'principal:exact', periodStartAt: 100, periodEndAt: 200, cursor: 'opaque:next' } })

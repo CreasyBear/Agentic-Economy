@@ -1,11 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 
 import { useRouter } from '@tanstack/react-router'
 import { ArrowLeftIcon, SearchIcon, XIcon } from 'lucide-react'
 
 import { useAppearance } from '@/components/ae/theme/ThemeProvider'
+import { AeRenderErrorBoundary } from '@/components/ae/feedback/AeObservabilityErrorBoundary'
 
 import { Button } from '@/components/arc/button/button'
 import {
@@ -18,12 +19,14 @@ import {
 } from '@/components/ui/dialog'
 
 import { useCommandPanel } from './CommandPanelProvider'
-import { ToolsSearchPage } from './tools-search-page/ToolsSearchPage'
-import { ToolDetailPage } from './pages/ToolDetailPage'
 import { useCommandPanelHotKeys } from './useCommandPanelHotKeys'
+import { ToolsSearchPageSkeleton } from './tools-search-page/ToolsSearchPageSkeleton'
+import { ToolDetailPageSkeleton } from './pages/ToolDetailPageSkeleton'
 import './CommandPanelComposition.css'
 
 const PANEL_CONTENT_ID = 'ae-command-panel-content'
+const ToolsSearchPage = lazy(() => import('./tools-search-page/ToolsSearchPage').then(module => ({ default: module.ToolsSearchPage })))
+const ToolDetailPage = lazy(() => import('./pages/ToolDetailPage').then(module => ({ default: module.ToolDetailPage })))
 
 /**
  * Operator-chrome command router: a stacked modal over the shell.
@@ -121,11 +124,13 @@ export function AeCommandPanel({
           </div>
         ) : null}
         <div className="arc-command-body" data-testid="command-panel-body">
+          <AeRenderErrorBoundary fallback={<p role="alert">Tool search could not load. <a href="/market?view=tools">Browse Tools</a></p>}>
           <div
             hidden={panel.topPage.kind !== 'tools-search'}
             className="contents"
             aria-hidden={panel.topPage.kind !== 'tools-search'}
           >
+            <Suspense fallback={<ToolsSearchPageSkeleton />}>
             <ToolsSearchPage
               isActive={panel.topPage.kind === 'tools-search'}
               query={searchQuery}
@@ -143,13 +148,17 @@ export function AeCommandPanel({
                 setPreference(preference === 'dark' ? 'light' : 'dark')
               }}
             />
+            </Suspense>
           </div>
           {panel.topPage.kind === 'tool-detail' ? (
+            <Suspense fallback={<ToolDetailPageSkeleton />}>
             <ToolDetailPage
               toolRef={panel.topPage.toolRef}
               onNavigate={completeNavigation}
             />
+            </Suspense>
           ) : null}
+          </AeRenderErrorBoundary>
         </div>
         <footer
           aria-label="Keyboard shortcuts"

@@ -3,7 +3,7 @@ import { setResponseHeader } from '@tanstack/react-start/server'
 import { z } from 'zod'
 import { ownerInventoryQuery, ownerInventorySortSchema, type OwnerInventoryQuery, type OwnerInventorySort } from '@/lib/operator/owner-inventory-search'
 
-import { callSourceMutation, callSourceQuery, sourceMutation, sourceQuery } from '@/lib/server/convex-source'
+import { callSourceMutation, callSourceQuery, sourceMutation, sourceQuery, type ConvexSourceTransport } from '@/lib/server/convex-source'
 import { requireStrictClerkConsequenceProof } from '@/lib/server/clerk-consequence-proof'
 import { sourceWriteAdmissionFromContext } from '@/lib/server/source-write-admission'
 import { degrade } from '@/lib/observability/degrade'
@@ -235,10 +235,16 @@ export async function readProviderWorkspacePageThroughSource(
 
 export const readProviderWorkspaceIdentityDetailServer = createServerFn().handler(async (): Promise<ProviderWorkspaceIdentityDetailResult> => {
   privateOwnerResponse()
-  const identity = await readCurrentOwnerIdentity()
+  return readProviderWorkspaceIdentityDetailThroughSource()
+})
+
+export async function readProviderWorkspaceIdentityDetailThroughSource(
+  transport?: ConvexSourceTransport,
+): Promise<ProviderWorkspaceIdentityDetailResult> {
+  const identity = await readCurrentOwnerIdentity(transport)
   if (identity.kind === 'available') return identity
   return secondaryFromIdentity(identity)
-})
+}
 
 export const readProviderToolStatusServer = createServerFn()
   .validator((data) => z.strictObject({
@@ -465,12 +471,14 @@ export const cancelOwnerProviderOffboardingServer = createServerFn({ method: 'PO
     }
   })
 
-export async function readProviderWorkspacePublicStatusThroughSource(): Promise<ProviderWorkspacePublicStatusResult> {
-  const identity = await readCurrentOwnerIdentity()
+export async function readProviderWorkspacePublicStatusThroughSource(
+  transport?: ConvexSourceTransport, signal?: AbortSignal,
+): Promise<ProviderWorkspacePublicStatusResult> {
+  const identity = await readCurrentOwnerIdentity(transport)
   if (identity.kind !== 'available') return secondaryFromIdentity(identity)
   let result: Awaited<ReturnType<typeof readOwnerStatusThroughSource>>
   try {
-    result = await readOwnerStatusThroughSource(undefined)
+    result = await readOwnerStatusThroughSource(undefined, transport, signal)
   } catch (cause) {
     return degrade(cause, { kind: 'unavailable' } as const, {
       site: 'readProviderWorkspacePublicStatusThroughSource',
@@ -483,9 +491,9 @@ export async function readProviderWorkspacePublicStatusThroughSource(): Promise<
   return { kind: 'available', value: result.readback }
 }
 
-async function readCurrentOwnerIdentity(): Promise<CurrentOwnerIdentityResult> {
+async function readCurrentOwnerIdentity(transport?: ConvexSourceTransport): Promise<CurrentOwnerIdentityResult> {
   try {
-    return await callSourceQuery(readCurrentOwnerIdentityQuery, {})
+    return await (transport === undefined ? callSourceQuery(readCurrentOwnerIdentityQuery, {}) : transport.query(readCurrentOwnerIdentityQuery, {}))
   } catch (error) {
     return degrade(error, { kind: 'error', code: 'source_unavailable' } as const, { site: 'readCurrentOwnerIdentity', reason: 'source_unavailable' })
   }

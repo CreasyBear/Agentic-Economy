@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { callSourceMutation, callSourceQuery, callSourceAction, sourceAction, sourceMutation, sourceQuery } from './convex-source'
+import { callSourceMutation, callSourceQuery, callSourceAction, sourceAction, sourceMutation, sourceQuery, type ConvexSourceTransport } from './convex-source'
 import { readClerkMfaConsequenceProof, type ClerkMfaConsequenceProofInput } from './clerk-consequence-proof'
 import { sourceWriteAdmissionFromContext, sourceWriteRequestFromAdmission } from './source-write-admission'
 import type { SourceWriteAdmission, SourceWriteAdmissionRequest } from '@/modules/security/source-write-admission'
@@ -31,8 +31,9 @@ export async function readOwnerPlanThroughSource(planRef: string): Promise<Owner
   if ('kind' in plan) throw new Error('owner_plan_material_invalid')
   return { kind: 'available', quote: available.data.quote, progress, plan }
 }
-export async function listOwnerPlansThroughSource(): Promise<OwnerPlanSummary[]> {
-  return z.array(ownerPlanSummarySchema).max(50).parse(await callSourceQuery(listOwner, {}))
+export async function listOwnerPlansThroughSource(transport?: ConvexSourceTransport): Promise<OwnerPlanSummary[]> {
+  return z.array(ownerPlanSummarySchema).max(50).parse(await (transport === undefined
+    ? callSourceQuery(listOwner, {}) : transport.query(listOwner, {})))
 }
 export async function decideOwnerPlanThroughSource(data: OwnerPlanDecision, context: unknown): Promise<PlanRunResult> {
   const operationKey = `plan-approval:${data.planRef}:${data.decision}`

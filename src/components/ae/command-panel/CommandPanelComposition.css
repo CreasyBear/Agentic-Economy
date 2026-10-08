@@ -36,3 +36,27 @@
 .arc-market .arc-command-detail-title { color: var(--foreground); font-weight: 500; }
 @media (min-width: 640px) { .arc-market .arc-command-trigger-label, .arc-market .arc-command-trigger-key { display: inline; } .arc-market.arc-command-trigger { min-width: 160px; } .arc-market.arc-command-panel { height: min(672px, calc(100dvh - 48px)); } .arc-market .arc-command-footer-search-hint { display: inline-flex; } }
 @media (max-width: 480px) { .arc-market.arc-command-search [data-slot="command-list"] { padding: 6px; } .arc-market .arc-command-footer { gap: 7px; padding-inline: 11px; } }
+
+/* ReUI c-skeleton-7 list / c-spinner-9 inline composition; installed Base Nova primitives.
+ * Placeholders contain no selectable items or cached Tool/account facts. */
+.arc-market .arc-command-loading-label { display: flex; align-items: center; gap: var(--space-2); min-width: 0; margin: 0; padding: var(--space-4) 14px; color: var(--text-secondary); font-size: var(--text-sm); }
+.arc-market .arc-command-loading-label > svg { flex: none; }
+.arc-market .arc-command-loading-rows { display: grid; gap: var(--space-2); padding: 0 6px; }
+.arc-market .arc-command-loading-row { display: flex; align-items: center; gap: var(--space-3); min-width: 0; padding: var(--space-3) 6px; }
+.arc-market .arc-command-loading-row [data-slot="skeleton"],
+.arc-market .arc-command-loading-detail [data-slot="skeleton"] { background: var(--surface-muted); border-radius: var(--radius-control); }
+.arc-market .arc-command-loading-icon { width: 32px; height: 32px; flex: none; }
+.arc-market .arc-command-loading-copy { display: grid; flex: 1; min-width: 0; gap: var(--space-2); }
+.arc-market .arc-command-loading-title { width: min(65%, 280px); height: 16px; }
+.arc-market .arc-command-loading-description { width: min(90%, 420px); height: 14px; }
+.arc-market.arc-command-loading-detail { min-width: 0; flex: 1; }
+.arc-market .arc-command-loading-detail-content { display: grid; min-width: 0; gap: var(--space-4); padding: 0 14px var(--space-5); }
+.arc-market .arc-command-loading-heading { width: min(60%, 260px); height: 28px; }
+.arc-market .arc-command-loading-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); }
+.arc-market .arc-command-loading-fact { min-width: 0; height: 64px; }
+.arc-market .arc-command-loading-action { width: min(100%, 180px); height: 44px; }
+
+.arc-market .arc-command-loading-search-field { display: flex; align-items: center; gap: 10px; min-height: 54px; padding: 5px var(--space-16) 5px 14px; border-block-end: 1px solid var(--border-subtle); }
+.arc-market .arc-command-loading-search-field > svg { width: 20px; height: 20px; flex: none; color: var(--text-secondary); }
+.arc-market .arc-command-loading-search-field [data-slot="skeleton"] { background: var(--surface-muted); }
+.arc-market .arc-command-loading-query { width: min(70%, 280px); height: 16px; }

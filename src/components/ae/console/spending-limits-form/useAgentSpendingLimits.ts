@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 
 import type { Rule4Diagnostic } from '@/lib/ui/diagnostic'
 import { degrade } from '@/lib/observability/degrade'
+import { useWorkspacePresentationLifetime } from '@/lib/client/workspace-presentation'
 import { toast } from '@/lib/ui/toast'
 import type { AgentDetail } from '@/modules/agent-access/agent-operator-view-model'
 import {
@@ -85,6 +86,7 @@ export function useAgentSpendingLimits({
   onUpdateSpendingLimits,
   onReadSpendingLimits,
 }: UseAgentSpendingLimitsParams): UseAgentSpendingLimitsResult {
+  const capturePresentation = useWorkspacePresentationLifetime()
   const principalRef = detail.agent.principalRef
   const [policy, setPolicy] = useState<AgentSpendingPolicyState>(detail.spendingPolicy)
   const [now, setNow] = useState(() => Date.now())
@@ -203,9 +205,9 @@ export function useAgentSpendingLimits({
     }
   }
 
-  const applyUpdateResult = (result: AgentSpendingLimitsResult, title: string, description?: string): boolean => {
+  const applyUpdateResult = (result: AgentSpendingLimitsResult, title: string, description: string, canPresent: () => boolean): boolean => {
     if (result.kind === 'completed' || result.kind === 'replayed') {
-      toast.success(title, description === undefined ? {} : { description })
+      if (canPresent()) toast.success(title, { description })
       setEditing(false)
       void refresh()
       return true
@@ -214,7 +216,7 @@ export function useAgentSpendingLimits({
       ? mapUpdateConflictDiagnostic(result.code)
       : result.kind === 'refused' ? mapUpdateRefusedDiagnostic(result.code) : readUnavailable
     setDiagnostic(mapped)
-    toast.error(mapped.whatHappened, { description: mapped.financialImpact })
+    if (canPresent()) toast.error(mapped.whatHappened, { description: mapped.financialImpact })
     return false
   }
 
@@ -250,6 +252,7 @@ export function useAgentSpendingLimits({
       return
     }
     setPending(true)
+    const canPresent = capturePresentation()
     try {
       const current = await readForWrite()
       if (current === undefined) return
@@ -259,11 +262,12 @@ export function useAgentSpendingLimits({
         return
       }
       const result = await onUpdateSpendingLimits({ principalRef, expectedGeneration: current.generation, ...parsed })
-      if (applyUpdateResult(result, 'Spending limits updated', limitsToastDescription(parsed.maximumSpendPerCall, parsed.maximumDailySpend, parsed.maximumMonthlySpend))
+      if (applyUpdateResult(result, 'Spending limits updated', limitsToastDescription(parsed.maximumSpendPerCall, parsed.maximumDailySpend, parsed.maximumMonthlySpend), canPresent)
         && !(parsed.maximumSpendPerCall.units === '0' && parsed.maximumDailySpend.units === '0' && parsed.maximumMonthlySpend.units === '0')) {
         setSavedLimits(parsed)
       }
     } catch (cause) {
+      if (!canPresent()) return
       const networkDiagnostic: Rule4Diagnostic = degrade(cause, { whatHappened: 'Connection interrupted', financialImpact: FINANCIAL_SAFE_LIMITS_UNCHANGED, nextStep: 'Check your network and try again. Limits were not changed.' }, { site: 'useAgentSpendingLimits.save', reason: 'source_unavailable' })
       setDiagnostic(networkDiagnostic)
       toast.error(networkDiagnostic.whatHappened, { description: networkDiagnostic.financialImpact })
@@ -275,6 +279,7 @@ export function useAgentSpendingLimits({
   const handleTogglePause = async () => {
     if (refreshing || pending || known === undefined || onUpdateSpendingLimits === undefined) return
     setPending(true)
+    const canPresent = capturePresentation()
     try {
       const current = await readForWrite()
       if (current === undefined) return
@@ -306,12 +311,12 @@ export function useAgentSpendingLimits({
       })
       if (applyUpdateResult(result, current.paused ? 'Agent resumed' : 'Agent paused', current.paused
         ? limitsToastDescription(target.maximumSpendPerCall, target.maximumDailySpend, target.maximumMonthlySpend)
-        : 'New paid Calls will be refused. A$0.00 new spend authorized. In-flight Calls are not cancelled.') && !current.paused) {
+        : 'New paid Calls will be refused. A$0.00 new spend authorized. In-flight Calls are not cancelled.', canPresent) && !current.paused) {
         setSavedLimits(current)
       }
     } catch (cause) {
       degrade(cause, undefined, { site: 'useAgentSpendingLimits.togglePause', reason: 'source_unavailable' })
-      toast.error('Network error changing agent pause state')
+      if (canPresent()) toast.error('Network error changing agent pause state')
     } finally {
       setPending(false)
     }

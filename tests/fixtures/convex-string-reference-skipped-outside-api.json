@@ -85,31 +85,55 @@
   },
   {
     "file": "tests/unit/server/convex-source-seam.test.ts",
-    "line": 172,
+    "line": 212,
     "literal": "test:publicMutation",
     "helper": "sourceMutation"
   },
   {
     "file": "tests/unit/server/convex-source-seam.test.ts",
-    "line": 192,
+    "line": 237,
+    "literal": "test:calls",
+    "helper": "sourceQuery"
+  },
+  {
+    "file": "tests/unit/server/convex-source-seam.test.ts",
+    "line": 238,
+    "literal": "test:plans",
+    "helper": "sourceQuery"
+  },
+  {
+    "file": "tests/unit/server/convex-source-seam.test.ts",
+    "line": 239,
+    "literal": "test:spend",
+    "helper": "sourceAction"
+  },
+  {
+    "file": "tests/unit/server/convex-source-seam.test.ts",
+    "line": 245,
+    "literal": "test:calls",
+    "helper": "sourceQuery"
+  },
+  {
+    "file": "tests/unit/server/convex-source-seam.test.ts",
+    "line": 258,
     "literal": "customerRequestApplication:resume",
     "helper": "sourceAction"
   },
   {
     "file": "tests/unit/server/convex-source-seam.test.ts",
-    "line": 213,
+    "line": 279,
     "literal": "test:bounded",
     "helper": "sourceQuery"
   },
   {
     "file": "tests/unit/server/convex-source-seam.test.ts",
-    "line": 234,
+    "line": 300,
     "literal": "test:public-query",
     "helper": "sourceQuery"
   },
   {
     "file": "tests/unit/server/convex-source-seam.test.ts",
-    "line": 254,
+    "line": 320,
     "literal": "test:authenticated-mutation",
     "helper": "sourceMutation"
   }

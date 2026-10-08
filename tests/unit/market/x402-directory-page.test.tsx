@@ -10,7 +10,7 @@ import type { ComponentProps } from 'react'
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
 import type { SearchResult, ToolChoiceSearchOutput } from '@/modules/registry/tool-choice-contracts'
 import { PublicToolRegistrySchemaVersion, type PublicToolRef } from '@/modules/capability-supply/public'
-import { loadMarketRouteData, marketLoaderDeps, validateMarketSearch } from '@/modules/market/market-route-data'
+import { loadCanonicalMarketSearch, loadMarketRouteData, marketLoaderDeps, marketUsesCanonicalSearch, validateMarketSearch } from '@/modules/market/market-route-data'
 import type * as DemandFunctions from '@/modules/market-demand/market-demand.functions'
 // The rate-limit setup preloads degrade and its telemetry dependency. Reload
 // that graph so this file's capture mock observes the real degrade calls.
@@ -62,13 +62,21 @@ type MarketRouteLoader = (deps: ReturnType<typeof marketLoaderDeps>) => unknown 
 // state (Compare selection) follows navigations exactly as in production.
 function Directory({ search: _search, ...rest }: Props) {
   const urlSearch = useRouterState({ select: (state) => state.location.search }) as Props['search']
-  return <AeX402Directory {...rest} search={urlSearch} />
+  const canonicalSearch = useRouterState({ select: state => state.matches.find(match => match.routeId === '/market')?.loaderData }) as Props['canonicalSearch']
+  return <AeX402Directory {...rest} {...(canonicalSearch === undefined ? {} : { canonicalSearch })} search={urlSearch} />
 }
 function show(search: Props['search'] = { offset: 20 }, items = entries, extra: Partial<Omit<Props, 'search'>> = {}, routeLoader?: MarketRouteLoader) {
   const root = createRootRoute()
   const marketRouteBase = { getParentRoute: () => root, path: '/market' as const, validateSearch: validateMarketSearch }
   const marketRoute = routeLoader === undefined
-    ? createRoute(marketRouteBase)
+    ? createRoute({
+      ...marketRouteBase,
+      loaderDeps: ({ search }) => marketLoaderDeps(search),
+      beforeLoad: ({ matches, routeId }) => ({ previousCanonicalSearch: matches.find(match => match.routeId === routeId)?.loaderData as Props['canonicalSearch'] }),
+      loader: ({ deps, abortController, context }) => marketUsesCanonicalSearch(deps) && (deps.view === 'tools' || deps.view === undefined)
+        ? loadCanonicalMarketSearch(deps, { signal: abortController.signal, previousCanonicalSearch: context.previousCanonicalSearch }) : undefined,
+      staleTime: 30_000, preload: false,
+    })
     : createRoute({
       ...marketRouteBase,
       loaderDeps: ({ search }) => marketLoaderDeps(search),
@@ -82,6 +90,7 @@ function show(search: Props['search'] = { offset: 20 }, items = entries, extra: 
     createRoute({ getParentRoute: () => root, path: '/owner/market', validateSearch: validateMarketSearch }),
     createRoute({ getParentRoute: () => root, path: '/tools/$providerHost/$slug' }),
   ]), history: createMemoryHistory({ initialEntries: [`${extra.marketPath ?? '/market'}?${new URLSearchParams(Object.entries(search).filter(([, value]) => value !== undefined).map(([key, value]) => [key, Array.isArray(value) ? JSON.stringify(value) : String(value)]))}`] }) })
+  void router.load()
   const result = render(<RouterContextProvider router={router}><Directory
     page={{ kind: 'ok', items, total: 14455, offset: 20, limit: 20, nextOffset: 40, previousOffset: 0 }}
     compareEntries={[]} {...extra} search={search} /></RouterContextProvider>)
@@ -567,9 +576,9 @@ it('loads Provider keyword results from the indexed catalogue with their refinem
   readX402DirectoryCatalogueOverviewServer.mockResolvedValue(overview)
   const search = validateMarketSearch({ ...nativeFilters, view: 'providers', query: 'research', sort: 'relevance', layout: 'grid' })
   const result = await loadMarketRouteData(marketLoaderDeps(search))
-  expect(readX402DirectoryCatalogueServer).toHaveBeenCalledWith({ data: {
+  expect(readX402DirectoryCatalogueServer).toHaveBeenCalledWith(expect.objectContaining({ data: {
     network: 'eip155:8453', provider: 'example.com', maxUsdPrice: 0.005, directoryCategory: 'research', query: 'research', sort: 'relevance',
-  } })
+  } }))
   expect(result.catalogue).toBe(indexedCatalogue)
   expect(result.page).toBe(indexedPage)
   expect(searchMarketToolsServer).not.toHaveBeenCalled()
@@ -614,9 +623,9 @@ it('continues an empty Provider keyword page with the same filters before declar
   await waitFor(() => expect((screen.getByRole('button', { name: 'Next page' }) as HTMLButtonElement).disabled).toBe(false))
   fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
   expect(await screen.findByRole('button', { name: 'View Tools from example.com' })).toBeTruthy()
-  expect(readX402DirectoryCatalogueServer).toHaveBeenCalledWith({ data: {
+  expect(readX402DirectoryCatalogueServer).toHaveBeenCalledWith(expect.objectContaining({ data: {
     query: 'research', sort: 'relevance', network: 'eip155:8453', indexCursor: 'generation-1:empty-1',
-  } })
+  } }))
   expect(searchMarketToolsServer).not.toHaveBeenCalled()
 })
 
@@ -639,13 +648,15 @@ it.each([true, false, undefined])('routes reviewed-provider keyword search throu
   readX402DirectoryCatalogueServer.mockResolvedValue(indexedCatalogue)
   readX402DirectoryCatalogueOverviewServer.mockResolvedValue(overview)
   const search = validateMarketSearch({ view: 'tools', query: 'research', reviewedProvidersOnly })
+  searchMarketToolsServer.mockResolvedValue({ ...searchMeta, query: 'research', kind: 'match', results: [] })
   const result = await loadMarketRouteData(marketLoaderDeps(search))
   if (reviewedProvidersOnly === true) {
-    expect(readX402DirectoryCatalogueServer).toHaveBeenCalledWith({ data: { query: 'research', reviewedProvidersOnly: true } })
+    expect(readX402DirectoryCatalogueServer).toHaveBeenCalledWith(expect.objectContaining({ data: { query: 'research', reviewedProvidersOnly: true } }))
     expect(result.catalogue).toBe(indexedCatalogue)
   } else {
     expect(readX402DirectoryCatalogueServer).not.toHaveBeenCalled()
-    expect(result.catalogue).toEqual({ kind: 'unavailable', reason: 'canonical_search' })
+    expect(result.catalogue).toMatchObject({ kind: 'ok', page: { items: [] } })
+    expect(result.canonicalSearch?.result).toMatchObject({ query: 'research', kind: 'match' })
   }
 })
 
@@ -665,9 +676,9 @@ it.each([false, true])('continues reviewed-provider keyword pages without mixed 
   expect(screen.queryByText(/go to TypeSafe/)).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
   expect(await screen.findByRole('link', { name: 'Tool 1' })).toBeTruthy()
-  expect(readX402DirectoryCatalogueServer).toHaveBeenCalledWith({ data: {
+  expect(readX402DirectoryCatalogueServer).toHaveBeenCalledWith(expect.objectContaining({ data: {
     query: 'research', reviewedProvidersOnly: true, indexCursor: indexedCatalogue.indexCursor,
-  } })
+  } }))
   expect(searchMarketToolsServer).not.toHaveBeenCalled()
 })
 
@@ -768,7 +779,7 @@ describe('indexed x402 catalogue controls', () => {
     expect(screen.getByText(/2 Tools on this page/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
     const { view: _view, ...filtersWithoutView } = nativeFilters
-    expect(readX402DirectoryCatalogueServer).toHaveBeenCalledWith({ data: { ...filtersWithoutView, sort: 'relevance', indexCursor: indexedCatalogue.indexCursor } })
+    expect(readX402DirectoryCatalogueServer).toHaveBeenCalledWith(expect.objectContaining({ data: { ...filtersWithoutView, sort: 'relevance', indexCursor: indexedCatalogue.indexCursor } }))
     await waitFor(() => expect(screen.getByRole('link', { name: nextItems[0]!.title })).toBeTruthy())
     expect(screen.queryByRole('link', { name: 'Tool 0' })).toBeNull()
     expect(screen.getByText(/2 Tools on this page/)).toBeTruthy()
@@ -819,7 +830,7 @@ describe('indexed x402 catalogue controls', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Next page. Try again.' }))
     await waitFor(() => expect(screen.getByRole('link', { name: nextItems[0]!.title })).toBeTruthy())
-    expect(readX402DirectoryCatalogueServer).toHaveBeenNthCalledWith(2, { data: { indexCursor: indexedCatalogue.indexCursor } })
+    expect(readX402DirectoryCatalogueServer).toHaveBeenNthCalledWith(2, expect.objectContaining({ data: { indexCursor: indexedCatalogue.indexCursor } }))
     expect(screen.queryByRole('alert')).toBeNull()
     expect(screen.queryByRole('link', { name: 'Tool 0' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Next page' })).toBeNull()
@@ -982,6 +993,46 @@ function deferred<T>() {
 }
 
 describe('canonical Market search', () => {
+  it('restores a filtered continuation after detail navigation unmounts the directory, and Previous reuses the cached first page', async () => {
+    const first = { ...searchMeta, kind: 'match', results: [searchRows[0]!] } satisfies ToolChoiceSearchOutput
+    const second = { ...searchMeta, kind: 'match', results: [searchRows[1]!], pagination: { limit: 8, hasMore: false }, next: [] } satisfies ToolChoiceSearchOutput
+    searchMarketToolsServer.mockResolvedValueOnce(first).mockResolvedValueOnce(second)
+    const { router, unmount } = show({ view: 'tools', query: 'weather', network: 'eip155:8453' }, [], { page: indexedPage, catalogue: indexedCatalogue, overview })
+    await screen.findByRole('link', { name: 'Weather Forecast' })
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Next page' }) as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
+    await screen.findByRole('link', { name: 'External Forecast' })
+    const search = { ...router.state.location.search }
+    const state = { ...router.state.location.state }
+    await act(async () => { await router.navigate({ to: '/t/new' }) })
+    unmount()
+    await act(async () => { await router.navigate({ to: '/market', search, state }) })
+    render(<RouterContextProvider router={router}><Directory page={indexedPage} catalogue={indexedCatalogue} overview={overview} compareEntries={[]} search={search} /></RouterContextProvider>)
+    expect(await screen.findByRole('link', { name: 'External Forecast' })).toBeTruthy()
+    expect(screen.getByText('Page 2')).toBeTruthy()
+    expect(searchMarketToolsServer).toHaveBeenCalledTimes(2)
+    fireEvent.click(screen.getByRole('button', { name: 'Previous page' }))
+    expect(await screen.findByRole('link', { name: 'Weather Forecast' })).toBeTruthy()
+    expect(searchMarketToolsServer).toHaveBeenCalledTimes(2)
+    expect(router.state.location.search).toMatchObject({ query: 'weather', network: 'eip155:8453' })
+  })
+  it('continues a bookmarked third page and returns to that exact opaque cursor', async () => {
+    const third = { ...searchMeta, kind: 'match', results: [searchRows[0]!] } satisfies ToolChoiceSearchOutput
+    const fourth = { ...searchMeta, kind: 'match', results: [searchRows[1]!], pagination: { limit: 8, hasMore: false }, next: [] } satisfies ToolChoiceSearchOutput
+    searchMarketToolsServer.mockResolvedValueOnce(third).mockResolvedValueOnce(fourth)
+    const { router } = show({ view: 'tools', query: 'weather', indexCursor: 'opaque:third', page: 3 }, [], { page: indexedPage, catalogue: indexedCatalogue, overview })
+    await screen.findByRole('link', { name: 'Weather Forecast' })
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Next page' }) as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
+    await screen.findByRole('link', { name: 'External Forecast' })
+    expect(screen.getByText('Page 4')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Previous page' }))
+    await screen.findByRole('link', { name: 'Weather Forecast' })
+    expect(screen.getByText('Page 3')).toBeTruthy()
+    expect(router.state.location.search.indexCursor).toBe('opaque:third')
+    expect(searchMarketToolsServer).toHaveBeenCalledTimes(2)
+  })
+
   it('keeps the initial canonical-search skeleton decorative inside its named status', () => {
     searchMarketToolsServer.mockReturnValue(new Promise(() => {}))
     show({ view: 'tools', query: 'weather' }, [], { page: indexedPage, catalogue: indexedCatalogue, overview })
@@ -1011,7 +1062,7 @@ describe('canonical Market search', () => {
       [{ action: 'search_observed', phase: 'observed', surface: 'market', queryLength: 7, resultCount: searchRows.length }],
     ])
   })
-  it('reuses a still-pending initial query across a Providers tab round trip', async () => {
+  it('cancels a departed pending query and starts a current read on return', async () => {
     const first = { ...searchMeta, kind: 'match', results: searchRows } satisfies ToolChoiceSearchOutput
     const pending = deferred<ToolChoiceSearchOutput>()
     searchMarketToolsServer.mockReturnValue(pending.promise)
@@ -1028,16 +1079,18 @@ describe('canonical Market search', () => {
 
     await act(async () => { pending.resolve(first) })
     expect(await screen.findByRole('link', { name: 'Weather Forecast' })).toBeTruthy()
-    expect(callsWhilePending).toBe(1)
-    expect(searchMarketToolsServer).toHaveBeenCalledTimes(1)
+    expect(callsWhilePending).toBe(2)
+    expect(searchMarketToolsServer).toHaveBeenCalledTimes(2)
+    expect(searchMarketToolsServer.mock.calls[0]?.[0].signal.aborted).toBe(true)
   })
   it('ignores a rejected initial search after the Market component unmounts', async () => {
     const pending = deferred<ToolChoiceSearchOutput>()
     const failure = new Error('unmounted initial search failed')
     searchMarketToolsServer.mockReturnValue(pending.promise)
-    const { unmount } = show({ view: 'tools', query: 'weather' }, [], { page: indexedPage, catalogue: indexedCatalogue, overview })
+    const { unmount, router } = show({ view: 'tools', query: 'weather' }, [], { page: indexedPage, catalogue: indexedCatalogue, overview })
     await waitFor(() => expect(searchMarketToolsServer).toHaveBeenCalledTimes(1))
 
+    await act(async () => { await router.navigate({ to: '/t/new' }) })
     unmount()
     await act(async () => { pending.reject(failure) })
 
@@ -1056,10 +1109,11 @@ describe('canonical Market search', () => {
     expect(await screen.findByRole('link', { name: 'External Forecast' })).toBeTruthy()
     expect(screen.getByText('Page 2')).toBeTruthy()
 
+    const secondSearch = { ...router.state.location.search }
     updateSearch({ view: 'providers', query: 'weather' })
     await waitFor(() => expect(router.state.location.search.view).toBe('providers'))
     await waitFor(() => expect(screen.getByRole('tab', { name: 'Directory Hosts' }).getAttribute('aria-selected')).toBe('true'))
-    updateSearch({ view: 'tools', query: 'weather' })
+    updateSearch(secondSearch)
     await waitFor(() => expect(router.state.location.search.view).toBe('tools'))
     await waitFor(() => expect(screen.getByRole('tab', { name: 'Tools' }).getAttribute('aria-selected')).toBe('true'))
 
@@ -1085,7 +1139,7 @@ describe('canonical Market search', () => {
       fireEvent.click(nextPage)
     })
     await waitFor(() => expect(searchMarketToolsServer).toHaveBeenCalledTimes(2))
-    expect(searchMarketToolsServer).toHaveBeenNthCalledWith(2, { data: { query: 'weather', limit: 8, cursor: 'opaque-next' } })
+    expect(searchMarketToolsServer).toHaveBeenNthCalledWith(2, expect.objectContaining({ data: { query: 'weather', limit: 8, cursor: 'opaque-next' } }))
 
     await act(async () => { pendingNext.resolve(second) })
     expect(await screen.findByRole('link', { name: 'External Forecast' })).toBeTruthy()
@@ -1161,11 +1215,11 @@ describe('canonical Market search', () => {
       nowSpy.mockRestore()
     }
   })
-  it.each(['resolve', 'reject'] as const)('ignores an obsolete next-page A request that completes by %s after an A-to-B-to-A search', async completion => {
+  it.each(['resolve', 'reject'] as const)('restores cached first-page A and ignores its canceled continuation that completes by %s after an A-to-B-to-A search', async completion => {
     const firstA = { ...searchMeta, kind: 'match', results: [searchRows[0]!] } satisfies ToolChoiceSearchOutput
     const obsoletePage = { ...searchMeta, kind: 'match', results: [{ ...searchRows[1]!, title: 'Obsolete Weather' }] } satisfies ToolChoiceSearchOutput
     const resultB = { ...searchMeta, query: 'storm', kind: 'match', results: [{ ...searchRows[0]!, title: 'Storm Alert' }] } satisfies ToolChoiceSearchOutput
-    const newestA = { ...searchMeta, kind: 'match', results: [{ ...searchRows[0]!, title: 'Newest Weather' }] } satisfies ToolChoiceSearchOutput
+    const newestA = { ...searchMeta, kind: 'match', results: [{ ...searchRows[0]!, title: 'Weather Forecast' }] } satisfies ToolChoiceSearchOutput
     const pendingNext = deferred<ToolChoiceSearchOutput>()
     const obsoleteFailure = new Error('obsolete next page failed')
     searchMarketToolsServer.mockResolvedValueOnce(firstA).mockReturnValueOnce(pendingNext.promise)
@@ -1180,18 +1234,18 @@ describe('canonical Market search', () => {
     expect(await screen.findByRole('link', { name: 'Storm Alert' })).toBeTruthy()
     updateSearch({ view: 'tools', query: 'weather' })
     await waitFor(() => expect(router.state.location.search.query).toBe('weather'))
-    expect(await screen.findByRole('link', { name: 'Newest Weather' })).toBeTruthy()
+    expect(await screen.findByRole('link', { name: 'Weather Forecast' })).toBeTruthy()
 
     if (completion === 'resolve') await act(async () => { pendingNext.resolve(obsoletePage) })
     else await act(async () => { pendingNext.reject(obsoleteFailure) })
 
-    expect(screen.getByRole('link', { name: 'Newest Weather' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Weather Forecast' })).toBeTruthy()
     expect(screen.queryByRole('link', { name: 'Obsolete Weather' })).toBeNull()
     expect(screen.getByText('Page 1')).toBeTruthy()
     expect(screen.queryByText('Page 2')).toBeNull()
     expect(screen.queryByRole('alert')).toBeNull()
     expect(captureRouteException).not.toHaveBeenCalled()
-    expect(searchMarketToolsServer).toHaveBeenCalledTimes(4)
+    expect(searchMarketToolsServer).toHaveBeenCalledTimes(3)
   })
   it('replaces directory results with one mixed page, uses exact detail links, row-source freshness and an executable filtered cursor', async () => {
     const first = { ...searchMeta, kind: 'match', results: searchRows } satisfies ToolChoiceSearchOutput
@@ -1209,14 +1263,15 @@ describe('canonical Market search', () => {
     expect(screen.getByText('Provider price · US$1')).toBeTruthy()
     expect(screen.getByText(/AE supply projection · fresh/)).toBeTruthy()
     expect(screen.getByText(/Coinbase Bazaar index · stale/)).toBeTruthy()
-    expect(searchMarketToolsServer).toHaveBeenNthCalledWith(1, { data: { query: 'weather', limit: 8, filters: { category: 'research', provider: 'example.com', networkId: 'eip155:8453', priceBand: 'lt_0_01' } } })
+    expect(searchMarketToolsServer).toHaveBeenNthCalledWith(1, expect.objectContaining({ data: { query: 'weather', limit: 8, filters: { category: 'research', provider: 'example.com', networkId: 'eip155:8453', priceBand: 'lt_0_01' } } }))
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Next page' }) as HTMLButtonElement).disabled).toBe(false))
     fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
-    expect(searchMarketToolsServer).toHaveBeenNthCalledWith(2, { data: { query: 'weather', limit: 8, filters: { category: 'research', provider: 'example.com', networkId: 'eip155:8453', priceBand: 'lt_0_01' }, cursor: 'opaque-next' } })
+    await waitFor(() => expect(searchMarketToolsServer).toHaveBeenNthCalledWith(2, expect.objectContaining({ data: { query: 'weather', limit: 8, filters: { category: 'research', provider: 'example.com', networkId: 'eip155:8453', priceBand: 'lt_0_01' }, cursor: 'opaque-next' } })))
     expect(await screen.findByText('Search assessed a limited scope', { exact: false })).toBeTruthy()
     expect(screen.getByText('More catalogue entries remain.')).toBeTruthy()
     expect(screen.queryByRole('link', { name: 'Weather Forecast' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Previous page' }))
-    expect(screen.getByRole('link', { name: 'Weather Forecast' })).toBeTruthy()
+    expect(await screen.findByRole('link', { name: 'Weather Forecast' })).toBeTruthy()
     expect(searchMarketToolsServer).toHaveBeenCalledTimes(2)
   })
 
@@ -1245,7 +1300,7 @@ describe('canonical Market search', () => {
     expect(screen.queryByRole('link', { name: 'Tool 0' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Retry search' }))
     expect(await screen.findByRole('link', { name: 'Weather Forecast' })).toBeTruthy()
-    expect(searchMarketToolsServer).toHaveBeenNthCalledWith(2, { data: { query: 'weather', limit: 8 } })
+    expect(searchMarketToolsServer).toHaveBeenNthCalledWith(2, expect.objectContaining({ data: { query: 'weather', limit: 8 } }))
   })
 
   it('reports failed search and retry with their causes while preserving the query and unavailable state', async () => {
@@ -1255,13 +1310,13 @@ describe('canonical Market search', () => {
       .mockResolvedValueOnce({ ...searchMeta, kind: 'match', results: searchRows })
     show({ view: 'tools', query: 'weather' }, entries.slice(0, 2), { page: indexedPage, catalogue: indexedCatalogue, overview })
     expect(await screen.findByText('Search is unavailable')).toBeTruthy()
-    expect(captureRouteException).toHaveBeenCalledWith(initialFailure, { degraded: 'useCanonicalMarketSearch.initial', reason: 'source_unavailable' }, 'warning')
+    expect(captureRouteException).toHaveBeenCalledWith(initialFailure, { degraded: 'marketCanonicalSearch', reason: 'source_unavailable' }, 'warning')
     fireEvent.click(screen.getByRole('button', { name: 'Retry search' }))
-    await waitFor(() => expect(captureRouteException).toHaveBeenCalledWith(retryFailure, { degraded: 'useCanonicalMarketSearch.retry', reason: 'source_unavailable' }, 'warning'))
+    await waitFor(() => expect(captureRouteException).toHaveBeenCalledWith(retryFailure, { degraded: 'marketCanonicalSearch', reason: 'source_unavailable' }, 'warning'))
     expect(screen.getByText('Search is unavailable')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Retry search' }))
     expect(await screen.findByRole('link', { name: 'Weather Forecast' })).toBeTruthy()
-    expect(searchMarketToolsServer).toHaveBeenNthCalledWith(3, { data: { query: 'weather', limit: 8 } })
+    expect(searchMarketToolsServer).toHaveBeenNthCalledWith(3, expect.objectContaining({ data: { query: 'weather', limit: 8 } }))
   })
 
   it('reports next-page failure without replacing the current result and permits the same cursor to retry', async () => {
@@ -1273,10 +1328,10 @@ describe('canonical Market search', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
     expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'The next page could not load; this page is unchanged. Try Next page again.')
     expect(screen.getByRole('link', { name: 'Weather Forecast' })).toBeTruthy()
-    expect(captureRouteException).toHaveBeenCalledWith(nextPageFailure, { degraded: 'useCanonicalMarketSearch.nextPage', reason: 'source_unavailable' }, 'warning')
+    expect(captureRouteException).toHaveBeenCalledWith(nextPageFailure, { degraded: 'marketCanonicalSearch', reason: 'source_unavailable' }, 'warning')
     fireEvent.click(screen.getByRole('button', { name: 'Next page. Retry' }))
     await waitFor(() => expect(screen.getByText('Page 2')).toBeTruthy())
-    expect(searchMarketToolsServer).toHaveBeenNthCalledWith(3, { data: { query: 'weather', limit: 8, cursor: 'opaque-next' } })
+    expect(searchMarketToolsServer).toHaveBeenNthCalledWith(3, expect.objectContaining({ data: { query: 'weather', limit: 8, cursor: 'opaque-next' } }))
   })
   it('retains the current Market page when a continuation resolves unavailable and lets Next page retry', async () => {
     const first = { ...searchMeta, kind: 'match', results: searchRows } satisfies ToolChoiceSearchOutput

@@ -1,5 +1,5 @@
 import { providerUnitLabel, providerUnitQuantity } from '@/modules/capability-execution/provider-service-units'
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from '@tanstack/react-router'
 
 import {
@@ -7,6 +7,7 @@ import {
   type BuyerCallSummaryFacts,
 } from '@/modules/capability-execution/call-receipt-view'
 import { readOwnerCallsServer } from '@/lib/server/call-history.functions'
+import { BROWSER_READ_TIMEOUT_MS, awaitBoundedRead } from '@/lib/bounded-read'
 import { requestOwnerUsageReportServer } from '@/lib/server/durable-usage-report.functions'
 import { formatDisplayAmount, formatExactAmount } from '@/modules/money/public'
 import { toast } from '@/lib/ui/toast'
@@ -106,18 +107,34 @@ function initialCallPaginationState(source: CallPage): CallPaginationState {
 
 function useCallPagination(initial: CallPage, periodStartAt: number, periodEndAt: number, principalRef?: string) {
   const [state, setState] = useState(() => initialCallPaginationState(initial))
-  const continuationInFlight = useRef(false)
+  const lifetime = useRef<{ generation: number; inFlight: boolean; controller?: AbortController }>({ generation: 0, inFlight: false })
+  // The page/scope key and WorkspaceTransitionBoundary remount this hook on Account changes.
+  useEffect(() => {
+    const current = lifetime.current
+    return () => {
+      current.generation++
+      current.inFlight = false
+      current.controller?.abort(new DOMException('Activity continuation cancelled.', 'AbortError'))
+    }
+  }, [periodStartAt, periodEndAt, principalRef])
 
   async function loadNextPage() {
-    if (state.cursor === undefined || state.status === 'loading' || continuationInFlight.current) return
-    continuationInFlight.current = true
+    if (state.cursor === undefined || state.status === 'loading' || lifetime.current.inFlight) return
+    lifetime.current.inFlight = true
+    const generation = ++lifetime.current.generation
+    const controller = new AbortController()
+    lifetime.current.controller = controller
+    const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(BROWSER_READ_TIMEOUT_MS)])
     const source = state.source
     const cursor = state.cursor
     setState((current) => current.source === source && current.cursor === cursor
       ? { ...current, status: 'loading' }
       : current)
     try {
-      const next = await readOwnerCallsServer({ data: { cursor, periodStartAt, periodEndAt, ...(principalRef ? { principalRef } : {}) } })
+      const next = await awaitBoundedRead(signal => readOwnerCallsServer({
+        data: { cursor, periodStartAt, periodEndAt, ...(principalRef ? { principalRef } : {}) }, signal,
+      }), signal)
+      if (generation !== lifetime.current.generation) return
       setState((current) => current.source === source && current.cursor === cursor
         ? {
             source,
@@ -127,12 +144,16 @@ function useCallPagination(initial: CallPage, periodStartAt: number, periodEndAt
           }
         : current)
     } catch (cause) {
+      if (generation !== lifetime.current.generation) return
       captureClientExceptionOnClient(cause)
       setState((current) => current.source === source && current.cursor === cursor
         ? { ...current, status: 'failed' }
         : current)
     } finally {
-      continuationInFlight.current = false
+      if (generation === lifetime.current.generation) {
+        lifetime.current.inFlight = false
+        delete lifetime.current.controller
+      }
     }
   }
 

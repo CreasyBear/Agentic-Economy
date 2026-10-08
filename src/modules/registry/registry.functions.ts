@@ -1,4 +1,4 @@
-import { callPublicSourceQuery, sourceQuery } from '@/lib/server/convex-source'
+import { callPublicSourceQuery, sourceQuery, type CreatePublicConvexClientOptions } from '@/lib/server/convex-source'
 import type { ActionTimingSink } from '@/modules/common/action'
 import type {
   PublicBusinessCatalogQueryInput,
@@ -75,11 +75,14 @@ function readOfferingSearchPageFromSource(
 
 export async function readPublicOfferingRegistryBusinessDetail(
   input: { slug: string },
+  options?: CreatePublicConvexClientOptions,
 ): Promise<PublicBusinessCatalogV2DetailResult> {
-  if (publicRegistrySourcePortForTests !== undefined) {
-    return getPublicRegistrySourcePort().detail(input)
-  }
-  return callPublicSourceQuery(getPublicBusinessOfferingSupplyBySlugQuery, input)
+  options?.signal?.throwIfAborted()
+  const result = publicRegistrySourcePortForTests !== undefined
+    ? await getPublicRegistrySourcePort().detail(input)
+    : options === undefined ? await callPublicSourceQuery(getPublicBusinessOfferingSupplyBySlugQuery, input) : await callPublicSourceQuery(getPublicBusinessOfferingSupplyBySlugQuery, input, options)
+  options?.signal?.throwIfAborted()
+  return result
 }
 
 function getPublicRegistrySourcePort(): PublicRegistrySourcePort {

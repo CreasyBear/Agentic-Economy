@@ -1,4 +1,4 @@
-import { callPublicSourceQuery, sourceQuery } from '@/lib/server/convex-source'
+import { callPublicSourceQuery, sourceQuery, type CreatePublicConvexClientOptions } from '@/lib/server/convex-source'
 import type { CompactDirectoryPage, CompactDirectoryStatus } from './compact-directory-projection'
 
 const compactQuery = sourceQuery<{
@@ -15,8 +15,11 @@ const compactQuery = sourceQuery<{
 
 const statusQuery = sourceQuery<Record<string, never>, CompactDirectoryStatus>('x402DirectoryIndex:status')
 
-export async function compactDirectoryStatus() {
-  return callPublicSourceQuery(statusQuery, {})
+export async function compactDirectoryStatus(options?: CreatePublicConvexClientOptions) {
+  options?.signal?.throwIfAborted()
+  const result = options === undefined ? await callPublicSourceQuery(statusQuery, {}) : await callPublicSourceQuery(statusQuery, {}, options)
+  options?.signal?.throwIfAborted()
+  return result
 }
 
 export async function readCompactDirectoryPage(input: {
@@ -32,10 +35,14 @@ export async function readCompactDirectoryPage(input: {
     priceBand?: string
     access?: string
   }>
-}): Promise<CompactDirectoryPage> {
-  return callPublicSourceQuery(compactQuery, {
+}, options?: CreatePublicConvexClientOptions): Promise<CompactDirectoryPage> {
+  options?.signal?.throwIfAborted()
+  const args = {
     query: input.query,
     paginationOpts: { cursor: input.cursor, numItems: input.limit },
     ...input.filters,
-  })
+  }
+  const result = options === undefined ? await callPublicSourceQuery(compactQuery, args) : await callPublicSourceQuery(compactQuery, args, options)
+  options?.signal?.throwIfAborted()
+  return result
 }

@@ -295,11 +295,15 @@ function boundedProbeTimeout(timeoutMs = DEFAULT_PROBE_TIMEOUT_MS): number {
 }
 
 /** Races a lazily-started probe against a bounded timeout; never rejects, always settles to `fallback`. */
-function withBoundedTimeout<T>(run: () => Promise<T>, timeoutMs: number, fallback: T): Promise<T> {
+function withBoundedTimeout<T>(run: (signal: AbortSignal) => Promise<T>, timeoutMs: number, fallback: T): Promise<T> {
   return new Promise((resolve) => {
-    const timer = setTimeout(() => resolve(fallback), timeoutMs)
+    const controller = new AbortController()
+    const timer = setTimeout(() => {
+      controller.abort()
+      resolve(fallback)
+    }, timeoutMs)
     Promise.resolve()
-      .then(run)
+      .then(() => run(controller.signal))
       .then(
         (value) => {
           clearTimeout(timer)
@@ -323,7 +327,7 @@ async function readCommercialReadiness(env: StringEnvironment, timeoutMs?: numbe
 
 /** x402 directory freshness, best-effort (shared with `/api/v1/catalogue-status`). */
 function probeCatalogue(timeoutMs: number): Promise<SourceFreshnessState> {
-  return withBoundedTimeout(async () => (await readDirectoryFreshnessField(Date.now())).state, timeoutMs, 'absent')
+  return withBoundedTimeout(async signal => (await readDirectoryFreshnessField(Date.now(), { signal })).state, timeoutMs, 'absent')
 }
 
 /**
@@ -334,8 +338,8 @@ function probeCatalogue(timeoutMs: number): Promise<SourceFreshnessState> {
  */
 function probeQuoting(timeoutMs: number): Promise<'ready' | 'unavailable'> {
   return withBoundedTimeout(
-    async () => {
-      const result = await readCapabilityToolSearch({ query: '', limit: 1 })
+    async signal => {
+      const result = await readCapabilityToolSearch({ query: '', limit: 1 }, { signal })
       return result.kind === 'ok' && result.items.length > 0 ? ('ready' as const) : ('unavailable' as const)
     },
     timeoutMs,
@@ -459,6 +463,8 @@ async function probeConvex(
     return { status: 'failed', code: error instanceof Error && error.name === 'AbortError' ? 'convex_probe_timeout' : 'convex_unreachable' }
   } finally {
     clearTimeout(timer)
+    // Liveness needs only headers; stop an unused or stalled response body.
+    controller.abort()
   }
 }
 

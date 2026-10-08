@@ -1,15 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { recordProductJourney } from "@/lib/observability/product-journey";
-import { useRouter, useRouterState } from "@tanstack/react-router";
+import { lazyRouteComponent, useRouter, useRouterState } from "@tanstack/react-router";
 
 import { AePublicPage } from "@/components/ae/layout/AePublicPage";
-import { DirectoryHostsPage } from "@/components/ae/market/DirectoryHostsPage";
+import { AePageSkeleton } from "@/components/ae/layout/AePageState";
 import { MarketLanding } from "@/components/ae/market/MarketLanding";
-import { AeX402Directory } from "@/components/ae/market/AeX402Directory";
 import { Button } from "@/components/arc/button/button";
 import type { MarketSearch } from "@/modules/market/market.functions";
 import type { X402DirectoryPage } from "@/modules/market/x402-directory";
-import { retainedMarketCatalogue, type MarketCompareEntry } from "@/modules/market/market-route-data";
+import { retainedMarketCatalogue, type MarketCompareEntry, type MarketCanonicalSearchPage } from "@/modules/market/market-route-data";
 import type {
   X402DirectoryCatalogue,
   X402DirectoryCatalogueOverview,
@@ -17,13 +16,23 @@ import type {
 } from "@/modules/market/x402-directory-catalogue";
 import type { X402MarketplaceHome } from "@/modules/market/x402-marketplace-home";
 
+const AeX402Directory = lazyRouteComponent(() => import("@/components/ae/market/AeX402Directory"), "AeX402Directory");
+const DirectoryHostsPage = lazyRouteComponent(() => import("@/components/ae/market/DirectoryHostsPage"), "DirectoryHostsPage");
+
+// Run focus recovery only after the requested presenter's chunk has committed.
+function MarketContent({ children, onReady }: Readonly<{ children: ReactNode; onReady: () => void }>) {
+  useEffect(onReady, [onReady]);
+  return <>{children}</>;
+}
+
 export type AeMarketPageProps = Readonly<{
   data: Readonly<{
     view: NonNullable<MarketSearch["view"]>;
+    canonicalSearch?: MarketCanonicalSearchPage | undefined;
     page: X402DirectoryPage;
     compareEntries: readonly MarketCompareEntry[];
     catalogue: X402DirectoryCatalogue;
-    overview: X402DirectoryCatalogueOverview;
+    overview: X402DirectoryCatalogueOverview | undefined;
     providers: X402DirectoryProvidersPage | undefined;
     home: X402MarketplaceHome | undefined;
     jevRecipient: Readonly<{ label: string; host: string }> | null;
@@ -38,7 +47,8 @@ export function AeMarketPage({ data, search }: AeMarketPageProps) {
     recordProductJourney({ action: 'market_viewed', phase: observedKind === 'ok' ? 'observed' : 'failed', surface: 'market' })
   }, [observedKind, search.view])
   const router = useRouter();
-  const canRetain = data.providers === undefined && data.page.kind === "ok" && (data.view === "tools" || data.view === "providers");
+  const canonicalSucceeded = data.canonicalSearch === undefined || (data.canonicalSearch.result !== undefined && data.canonicalSearch.result.kind !== 'unavailable' && data.canonicalSearch.refreshFailed !== true);
+  const canRetain = canonicalSucceeded && data.providers === undefined && data.page.kind === "ok" && (data.view === "tools" || data.view === "providers");
   const [retained, setRetained] = useState<{ data: AeMarketPageProps["data"]; search: MarketSearch } | undefined>(
     canRetain ? { data, search } : undefined,
   );
@@ -57,7 +67,7 @@ export function AeMarketPage({ data, search }: AeMarketPageProps) {
   const landing = shownData.view === "discover" && pendingView === undefined;
   const previousLanding = useRef(landing);
   const contentRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
+  const onContentReady = useCallback(() => {
     if (pendingView !== undefined) return;
     const changed = previousLanding.current !== landing;
     previousLanding.current = landing;
@@ -69,12 +79,13 @@ export function AeMarketPage({ data, search }: AeMarketPageProps) {
     }
   }, [landing, pendingView]);
   return (
+    <Suspense fallback={<AePageSkeleton title="Loading the market…" description="Loading this market view…" shape="market" />}><MarketContent onReady={onContentReady}>
     <AePublicPage footer="none"><div ref={contentRef} aria-busy={requestedView !== undefined}>
       {requestedView !== undefined && pendingView === undefined ? <p role="status" className="ae-rail py-3 text-sm text-muted-foreground">Updating results. The current search stays visible until the new results arrive.</p> : null}
       {decision.retainPrevious ? (
         <div className="arc-market ae-rail pt-section" role="alert">
           <p className="text-sm text-destructive">This market view could not be loaded. The previous catalogue is still shown.</p>
-          <Button type="button" className="mt-3 min-h-touch" variant="secondary" onClick={() => void router.invalidate()}>Try again</Button>
+          <Button type="button" className="mt-3 min-h-touch" variant="secondary" onClick={() => void router.invalidate({ filter: match => match.id === router.state.matches.find(current => current.routeId === '/market')?.id })}>Try again</Button>
         </div>
       ) : null}
       {landing ? <MarketLanding search={shownSearch} searchRecipient={shownData.jevRecipient} /> : shownData.providers !== undefined && pendingView === undefined ? <DirectoryHostsPage result={shownData.providers} search={shownSearch} /> : <AeX402Directory
@@ -82,16 +93,18 @@ export function AeMarketPage({ data, search }: AeMarketPageProps) {
         defaultLayout="grid"
         activeView={shownData.view}
         {...(pendingView === undefined ? {} : { pendingView })}
+        {...(shownData.canonicalSearch === undefined ? {} : { canonicalSearch: shownData.canonicalSearch })}
         page={shownData.page}
         compareEntries={shownData.compareEntries}
         search={shownSearch}
         catalogue={shownData.catalogue}
-        overview={shownData.overview}
+        {...(shownData.overview === undefined ? {} : { overview: shownData.overview })}
         {...(shownData.jevRecipient === null ? {} : { jevRecipient: `${shownData.jevRecipient.label} (${shownData.jevRecipient.host})` })}
         {...(shownData.chatRecipient === null ? {} : { chatRecipient: `${shownData.chatRecipient.label} (${shownData.chatRecipient.host})` })}
         {...(shownData.providers === undefined ? {} : { providers: shownData.providers })}
         {...(shownData.home === undefined ? {} : { home: shownData.home })}
       />}
     </div></AePublicPage>
+    </MarketContent></Suspense>
   );
 }

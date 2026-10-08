@@ -1,23 +1,26 @@
 /** @vitest-environment jsdom */
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ReactNode } from 'react'
+import { StrictMode, type ReactNode } from 'react'
 
+import { BROWSER_READ_TIMEOUT_MS } from '@/lib/bounded-read'
 import { AeActivity } from '@/components/ae/activity/AeActivity'
 import { toast } from '@/lib/ui/toast'
 import { downloadCsv, downloadJson } from '@/lib/export/csv-export'
 
-afterEach(cleanup)
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.useRealTimers() })
 
-const routerMocks = vi.hoisted(() => ({ navigate: vi.fn().mockResolvedValue(undefined), exportPeriod: vi.fn() }))
+const routerMocks = vi.hoisted(() => ({ navigate: vi.fn().mockResolvedValue(undefined), exportPeriod: vi.fn(), reports: vi.fn(), savedReports: vi.fn(), reportingPolicy: vi.fn() }))
+vi.mock('@/lib/server/activity.functions', () => ({ readOwnerActivityReportsServer: routerMocks.reports }))
+
 vi.mock('@/lib/server/durable-usage-report.functions', () => ({
   requestOwnerUsageReportServer:routerMocks.exportPeriod,
-  listOwnerUsageReportsServer:vi.fn().mockResolvedValue({page:[],isDone:true,continueCursor:''}),
+  listOwnerUsageReportsServer:routerMocks.savedReports,
   readOwnerUsageReportServer:vi.fn().mockResolvedValue({kind:'refused',code:'usage_report_unavailable'}),
   readOwnerUsageReportPartsServer:vi.fn(),
 }))
 
-vi.mock('@/lib/server/complete-monthly-usage.functions',()=>({readUsageReportingPolicyServer:vi.fn().mockResolvedValue({automaticMonthly:false,revision:0,ownerConsentCurrent:false,schedulerActive:false}),requestCompleteMonthlyUsageServer:vi.fn(),readCompleteMonthlyUsageServer:vi.fn(),readMonthlyRelatedDocumentsServer:vi.fn(),readMonthlyFinancialPartsServer:vi.fn(),configureUsageReportingServer:vi.fn()}))
+vi.mock('@/lib/server/complete-monthly-usage.functions',()=>({readUsageReportingPolicyServer:routerMocks.reportingPolicy,requestCompleteMonthlyUsageServer:vi.fn(),readCompleteMonthlyUsageServer:vi.fn(),readMonthlyRelatedDocumentsServer:vi.fn(),readMonthlyFinancialPartsServer:vi.fn(),configureUsageReportingServer:vi.fn()}))
 
 vi.mock('@/lib/ui/toast', () => ({
   toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
@@ -130,6 +133,9 @@ describe('ActivityPage & Filtering (W-38)', () => {
 
   beforeEach(() => {
     routerMocks.exportPeriod.mockReset()
+    routerMocks.reports.mockReset()
+    routerMocks.savedReports.mockReset().mockResolvedValue({page:[],isDone:true,continueCursor:''})
+    routerMocks.reportingPolicy.mockReset().mockResolvedValue({automaticMonthly:false,revision:0,ownerConsentCurrent:false,schedulerActive:false})
     routerMocks.navigate.mockClear()
     vi.mocked(downloadCsv).mockClear()
     vi.mocked(downloadJson).mockClear()
@@ -146,6 +152,109 @@ describe('ActivityPage & Filtering (W-38)', () => {
     expect(plans.compareDocumentPosition(totals) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(screen.getByText('Call date and status filters do not filter this Account Plan history.')).toBeTruthy()
     expect(screen.getByRole('region', { name: 'Loaded Call overview' }).textContent).toContain('full period totals are below')
+  })
+
+  it.each(['empty', 'failed'] as const)('keeps Calls and Plans ready while reports are pending and then %s', async (outcome) => {
+    let resolve!: (value: unknown) => void
+    let reject!: (cause: unknown) => void
+    routerMocks.reports.mockReturnValueOnce(new Promise((ok, fail) => { resolve = ok; reject = fail }))
+    render(<AeActivity result={{ kind: 'available', calls: sampleCalls, plans: [{ planRef: 'plan:review',
+      state: 'awaiting_approval', nodeCount: 2, approvedTotalAudUnits: '12000000', createdAt: 1 }],
+      usage: { kind: 'pending' }, spend: { kind: 'pending' }, periodStart: '2026-09', ...windowScope }} />)
+    expect(screen.getByRole('row', { name: /Australian Tax Calculator/u })).toBeTruthy()
+    expect(screen.getByRole('link', { name: '2 Tool nodes · awaiting approval' })).toBeTruthy()
+    expect(screen.getByText('Loading totals and reconciliation for this period…')).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: 'Period totals' })).toBeNull()
+    expect(screen.queryByText('Some summaries are unavailable')).toBeNull()
+    expect(routerMocks.reports).toHaveBeenCalledExactlyOnceWith({ data: {
+      periodStartAt: windowScope.periodStartAt, periodEndAt: windowScope.periodEndAt,
+    }, signal: expect.any(AbortSignal) })
+    await act(async () => {
+      if (outcome === 'empty') resolve({ usage: { kind: 'empty' }, spend: { kind: 'empty' } })
+      else reject(new Error('report_source_unavailable'))
+    })
+    expect(screen.queryByText('Loading totals and reconciliation for this period…')).toBeNull()
+    expect(screen.getByRole('heading', { name: 'Period totals' })).toBeTruthy()
+    expect(screen.getByRole('row', { name: /Australian Tax Calculator/u })).toBeTruthy()
+    expect(screen.getByRole('link', { name: '2 Tool nodes · awaiting approval' })).toBeTruthy()
+    if (outcome === 'empty') expect(screen.queryByText('Some summaries are unavailable')).toBeNull()
+    else {
+      expect(screen.getByText('Some summaries are unavailable')).toBeTruthy()
+      routerMocks.reports.mockResolvedValueOnce({ usage: sampleUsage, spend: sampleSpend })
+      fireEvent.click(screen.getByRole('button', { name: 'Refresh summaries' }))
+      await waitFor(() => expect(screen.queryByText('Some summaries are unavailable')).toBeNull())
+      expect(routerMocks.reports).toHaveBeenCalledTimes(2)
+    }
+  })
+
+  it('distinguishes pending saved report history from successful empty history', async () => {
+    let resolve!: (value: unknown) => void
+    routerMocks.savedReports.mockReturnValueOnce(new Promise(ok => { resolve = ok }))
+    renderActivity()
+    expect(screen.getByText('Loading saved reports…')).toBeTruthy()
+    expect(screen.queryByText('No saved reports for this Account.')).toBeNull()
+    await act(async () => { resolve({ page: [], isDone: true, continueCursor: '' }) })
+    expect(screen.queryByText('Loading saved reports…')).toBeNull()
+    expect(screen.getByText('No saved reports for this Account.')).toBeTruthy()
+  })
+
+  it('reuses the initial composed report request when React replays the mount effect', async () => {
+    let resolve!: (value: unknown) => void
+    routerMocks.reports.mockReturnValueOnce(new Promise(ok => { resolve = ok }))
+    render(<StrictMode><AeActivity result={{ kind: 'available', calls: sampleCalls,
+      usage: { kind: 'pending' }, spend: { kind: 'pending' }, periodStart: '2026-09', ...windowScope }} /></StrictMode>)
+    expect(routerMocks.reports).toHaveBeenCalledOnce()
+    await act(async () => { resolve({ usage: sampleUsage, spend: sampleSpend }) })
+    expect(screen.queryByText('Loading totals and reconciliation for this period…')).toBeNull()
+    expect(screen.getByRole('heading', { name: 'Period totals' })).toBeTruthy()
+  })
+
+  it('ignores delayed reports from the previous period after the scope changes', async () => {
+    let resolvePrevious!: (value: unknown) => void
+    routerMocks.reports.mockReturnValueOnce(new Promise(ok => { resolvePrevious = ok }))
+      .mockResolvedValueOnce({ usage: { kind: 'empty' }, spend: { kind: 'empty' } })
+    const initial = { kind: 'available' as const, calls: sampleCalls,
+      usage: { kind: 'pending' as const }, spend: { kind: 'pending' as const }, periodStart: '2026-09', ...windowScope }
+    const view = render(<AeActivity result={initial} />)
+    view.rerender(<AeActivity result={{ ...initial, periodStartAt: initial.periodStartAt + 1 }} />)
+    await waitFor(() => expect(screen.queryByText('Loading totals and reconciliation for this period…')).toBeNull())
+    await act(async () => { resolvePrevious({ usage: { kind: 'unavailable', code: 'source_unavailable' }, spend: { kind: 'unavailable', code: 'source_unavailable' } }) })
+    expect(screen.queryByText('Some summaries are unavailable')).toBeNull()
+    expect(routerMocks.reports).toHaveBeenCalledTimes(2)
+    expect(screen.getByRole('row', { name: /Australian Tax Calculator/u })).toBeTruthy()
+  })
+
+  it('settles a stalled report body at the browser deadline and permits only explicit retry', async () => {
+    vi.useFakeTimers()
+    vi.spyOn(AbortSignal, 'timeout').mockImplementation(ms => {
+      const controller = new AbortController()
+      setTimeout(() => controller.abort(new DOMException('Report deadline.', 'TimeoutError')), ms)
+      return controller.signal
+    })
+    routerMocks.reports.mockReturnValueOnce(new Promise(() => {}))
+    render(<AeActivity result={{ kind: 'available', calls: sampleCalls,
+      usage: { kind: 'pending' }, spend: { kind: 'pending' }, periodStart: '2026-09', ...windowScope }} />)
+    expect(screen.getByText('Loading totals and reconciliation for this period…')).toBeTruthy()
+    await act(async () => { await vi.advanceTimersByTimeAsync(BROWSER_READ_TIMEOUT_MS) })
+    expect(screen.queryByText('Loading totals and reconciliation for this period…')).toBeNull()
+    expect(screen.getByText('Some summaries are unavailable')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Refresh summaries' })).toBeTruthy()
+    expect(screen.getByRole('row', { name: /Australian Tax Calculator/u })).toBeTruthy()
+    expect(routerMocks.reports).toHaveBeenCalledOnce()
+    expect(routerMocks.reports.mock.calls[0]?.[0].signal.aborted).toBe(true)
+  })
+
+  it('aborts a report read on genuine unmount without a second request', async () => {
+    routerMocks.reports.mockReturnValueOnce(new Promise(() => {}))
+    const view = render(<StrictMode><AeActivity result={{ kind: 'available', calls: sampleCalls,
+      usage: { kind: 'pending' }, spend: { kind: 'pending' }, periodStart: '2026-09', ...windowScope }} /></StrictMode>)
+    const signal = routerMocks.reports.mock.calls[0]?.[0].signal as AbortSignal
+    expect(routerMocks.reports).toHaveBeenCalledOnce()
+    expect(signal.aborted).toBe(false)
+    await act(async () => { view.unmount(); await Promise.resolve() })
+    expect(signal.aborted).toBe(true)
+    expect(signal.reason).toMatchObject({ name: 'AbortError' })
+    expect(routerMocks.reports).toHaveBeenCalledOnce()
   })
 
   it('shows time to outcome and no charge for a released reservation', () => {

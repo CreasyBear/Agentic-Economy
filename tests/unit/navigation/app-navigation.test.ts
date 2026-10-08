@@ -69,7 +69,7 @@ describe('app navigation', () => {
       ['Market', '/market'],
       ['Ask', '/t/new'],
       ['Activity', '/activity'],
-      ['Settings', '/owner/settings'],
+      ['Settings', '/owner/settings/workspace'],
     ])
     expect(new Set(mobileNavigation().map(({ group }) => group)).size).toBe(4)
   })

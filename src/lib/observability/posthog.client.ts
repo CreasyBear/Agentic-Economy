@@ -75,16 +75,14 @@ function ensurePostHogClient(router?: AnyRouter): Promise<boolean> {
   securePrivateRecordLocation(window.location, window.history)
   if (!productAnalyticsAllowed()) return Promise.resolve(false)
   if (initialized) return Promise.resolve(true)
+  const config = readObservabilityClientConfig()
+  const key = config.posthogKey
+  if (!config.enabled || key === undefined) return Promise.resolve(false)
 
   initPromise ??= import('posthog-js')
     .then(({ default: posthog }) => {
       if (!productAnalyticsAllowed()) return false
-      const config = readObservabilityClientConfig()
-      if (!config.enabled || config.posthogKey === undefined) {
-        return false
-      }
-
-      posthog.init(config.posthogKey, {
+      posthog.init(key, {
         api_host: config.posthogHost,
         person_profiles: 'identified_only',
         capture_pageview: false,

@@ -88,7 +88,7 @@ export const APP_NAVIGATION: readonly AppDestination[] = [
   {
     id: 'settings',
     label: 'Settings',
-    to: '/owner/settings',
+    to: '/owner/settings/workspace',
     group: 'workspace',
     topLevel: true,
     keywords: ['settings', 'account', 'team', 'workspace', 'security'],

@@ -90,6 +90,11 @@ export function WorkspaceAccountSwitcher() {
     {guard !== undefined ? <>
       <p role="status" className="sr-only">Finish or recheck the current change before switching Account. To leave it, choose a navigation destination and review its leave confirmation.</p>
       <Button type="button" variant="ghost" size="icon" onClick={guard.focus} aria-label="Review active change" title="Review the current change before switching Account"><Building2Icon aria-hidden="true" /></Button>
-    </> : <OrganizationSwitcher hidePersonal={false} appearance={{ elements: { organizationPreviewTextContainer: 'hidden lg:block', organizationSwitcherTrigger: 'max-w-44 min-h-11' } }} />}
+    </> : <OrganizationSwitcher hidePersonal={false} appearance={{ elements: {
+      organizationPreview: 'min-w-0',
+      organizationPreviewTextContainer: 'hidden min-w-0 overflow-hidden lg:block',
+      organizationPreviewMainIdentifier: 'truncate',
+      organizationSwitcherTrigger: 'max-w-44 min-w-0 min-h-11 overflow-hidden',
+    } }} />}
   </div>
 }

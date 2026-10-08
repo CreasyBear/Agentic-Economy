@@ -3,8 +3,9 @@ import { ConvexHttpClient } from 'convex/browser'
 import { ConvexReactClient } from 'convex/react'
 import { ConvexProviderWithClerk } from 'convex/react-clerk'
 import { Link } from '@tanstack/react-router'
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
+import { WorkspacePresentationVisibility, useWorkspacePresentationVisible } from '@/lib/client/workspace-presentation'
 import { AePageState } from '@/components/ae/layout/AePageState'
 import { Button } from '@/components/arc/button/button'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
@@ -15,22 +16,25 @@ import './RouteRecoveryComposition.css'
 const CHAT_VISIBLE_STYLE = { display: 'contents' } as const
 const CHAT_HIDDEN_STYLE = { display: 'none' } as const
 
-/**
- * Signed-in pages get a live Convex client without chat's identity gate: server-rendered content
- * shows at once and each `useQuery` site's own loading state covers the auth handshake. Anonymous
- * visitors on public pages open no websocket.
- */
+type ChatAuthorityState = {
+  showChat: boolean
+  keepChatMounted: boolean
+  mountedIdentity: string | null
+  opening: boolean
+  retry: () => void
+}
+
+const ChatAuthorityContext = createContext<ChatAuthorityState | null>(null)
+
+/** One root client and maintained Clerk adapter across public, workspace and chat routes. */
+export function AeConvexProvider({ children, chatRequired = false }: { children: ReactNode; chatRequired?: boolean }) {
+  const convexUrl = import.meta.env.VITE_CONVEX_URL?.trim()
+  if (!convexUrl) return children
+  return <ConfiguredConvexProvider convexUrl={convexUrl} chatRequired={chatRequired}>{children}</ConfiguredConvexProvider>
+}
 
 export function SignedInConvexProvider({ children }: { children: ReactNode }) {
-  const convexUrl = import.meta.env.VITE_CONVEX_URL?.trim()
-  const [client] = useState(() => (convexUrl ? new ConvexReactClient(convexUrl) : null))
-  if (client === null) return children
-  // Keep this wrapper mounted while Clerk resolves auth; changing its depth remounts the shell and resets navigation state.
-  return (
-    <ConvexProviderWithClerk client={client} useAuth={useAuth}>
-      {children}
-    </ConvexProviderWithClerk>
-  )
+  return <AeConvexProvider>{children}</AeConvexProvider>
 }
 
 export function ChatConfigurationUnavailable() {
@@ -51,15 +55,36 @@ export function ChatConfigurationUnavailable() {
 export function ChatConvexProvider({ children }: { children: ReactNode }) {
   const convexUrl = import.meta.env.VITE_CONVEX_URL?.trim()
   if (!convexUrl) return <ChatConfigurationUnavailable />
-  return <ConfiguredChatConvexProvider convexUrl={convexUrl}>{children}</ConfiguredChatConvexProvider>
+  return <AeConvexProvider chatRequired><ChatAuthorityBoundary>{children}</ChatAuthorityBoundary></AeConvexProvider>
 }
 
-function ConfiguredChatConvexProvider({ convexUrl, children }: { convexUrl: string; children: ReactNode }) {
-  const [client] = useState(() => new ConvexReactClient(convexUrl))
+function ConfiguredConvexProvider({ convexUrl, chatRequired, children }: { convexUrl: string; chatRequired: boolean; children: ReactNode }) {
+  const client = useMemo(() => new ConvexReactClient(convexUrl), [convexUrl])
+  const pendingClose = useRef<{ client: ConvexReactClient; cancelled: boolean } | null>(null)
+  useEffect(() => {
+    if (pendingClose.current?.client === client) pendingClose.current.cancelled = true
+    return () => {
+      const disposal = { client, cancelled: false }
+      pendingClose.current = disposal
+      // StrictMode replays effects on the same client. Let its next setup cancel
+      // disposal; a genuinely retired client still closes after child cleanups.
+      queueMicrotask(() => {
+        if (!disposal.cancelled) void client.close().catch(captureClientExceptionOnClient)
+      })
+    }
+  }, [client])
   const auth = useAuth()
   const identity = JSON.stringify([auth.userId, auth.sessionId, auth.orgId])
+  // A role change retires prior authority immediately while preserving the same
+  // account's hidden draft until fresh materialization confirms it is usable.
+  const authorityScope = JSON.stringify([identity, auth.orgRole])
   const [attempt, setAttempt] = useState(0)
-  const [initialization, setInitialization] = useState<{ identity: string; attempt: number; ready: boolean } | null>(null)
+  const [activation, setActivation] = useState({ chatRequired, epoch: 0 })
+  // A return to chat requires fresh authority even if this identity was ready on
+  // an earlier visit. Reconcile before descendants can render that old readiness.
+  if (activation.chatRequired !== chatRequired) setActivation({ chatRequired, epoch: activation.epoch + 1 })
+  const epoch = activation.epoch
+  const [initialization, setInitialization] = useState<{ authorityScope: string; epoch: number; attempt: number; ready: boolean } | null>(null)
   const generation = useRef(0)
   const installedSession = useRef<{ client: ConvexHttpClient; generation: number } | null>(null)
   const mountedIdentity = useRef<string | null>(null)
@@ -72,11 +97,12 @@ function ConfiguredChatConvexProvider({ convexUrl, children }: { convexUrl: stri
     const clerkGetToken = clerk.getToken
     const getToken = useCallback(async (options: Parameters<typeof clerkGetToken>[0]) => {
       const requestGeneration = ++generation.current
-      setInitialization(previous => previous?.identity === identity && previous.ready ? previous : null)
+      if (!chatRequired) return clerkGetToken(options)
+      setInitialization(previous => previous?.authorityScope === authorityScope && previous.epoch === epoch && previous.ready ? previous : null)
       try {
         const token = await clerkGetToken(options)
         if (token === null) {
-          if (requestGeneration === generation.current) setInitialization({ identity, attempt, ready: false })
+          if (requestGeneration === generation.current) setInitialization({ authorityScope, epoch, attempt, ready: false })
           return null
         }
         const bootstrap = new ConvexHttpClient(convexUrl)
@@ -90,38 +116,39 @@ function ConfiguredChatConvexProvider({ convexUrl, children }: { convexUrl: stri
         ]).finally(() => window.clearTimeout(timer))
         if (requestGeneration !== generation.current) return null
         installedSession.current = ready ? { client: bootstrap, generation: requestGeneration } : null
-        setInitialization({ identity, attempt, ready })
+        setInitialization({ authorityScope, epoch, attempt, ready })
         return ready ? token : null
       } catch (cause) {
         captureClientExceptionOnClient(cause)
         if (requestGeneration === generation.current) setInitialization(previous =>
-          previous?.identity === identity && previous.ready ? previous : { identity, attempt, ready: false })
+          previous?.authorityScope === authorityScope && previous.epoch === epoch && previous.ready ? previous : { authorityScope, epoch, attempt, ready: false })
         return null
       }
-    // The memo factory changes on identity and retry. The nested hook must
+    // The memo factory changes on authority scope and retry. The nested hook must
     // refresh its token callback with that factory, even though these values
     // are outside the nested hook's own render scope.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
-    }, [clerkGetToken, convexUrl, identity, attempt])
+    }, [clerkGetToken, convexUrl, authorityScope, epoch, chatRequired, attempt])
     return {
       ...clerk,
       getToken,
-      // Convex's Clerk adapter intentionally tracks sessionId, not getToken, to
-      // decide when to install a new auth fetcher. An online epoch forces one
-      // fresh token + authority check after an offline fetch returned null.
-      sessionId: clerk.sessionId && attempt > 0 ? `${clerk.sessionId}:chat:${attempt}` : clerk.sessionId,
+      // The installed Clerk adapter memoizes its fetcher by session/org/role;
+      // changing this hook factory or getToken alone does not reinstall auth.
+      // This adapter-only key adds route activation, user scope and retry epochs.
+      // The actual Clerk session and exact fetched token remain unchanged.
+      sessionId: clerk.sessionId ? `${clerk.sessionId}:ae:${identity}:${epoch}:${attempt}` : clerk.sessionId,
     }
-  }, [convexUrl, identity, attempt])
+  }, [convexUrl, identity, authorityScope, epoch, chatRequired, attempt])
   useEffect(() => {
-    if (!auth.isLoaded || !auth.isSignedIn) return
+    if (!chatRequired || !auth.isLoaded || !auth.isSignedIn) return
     const reconnect = () => {
       if (mountedIdentity.current === identity) setAttempt((value) => value + 1)
     }
     window.addEventListener('online', reconnect)
     return () => window.removeEventListener('online', reconnect)
-  }, [auth.isLoaded, auth.isSignedIn, identity])
+  }, [chatRequired, auth.isLoaded, auth.isSignedIn, identity])
   useEffect(() => {
-    if (!auth.isSignedIn) return
+    if (!chatRequired || !auth.isSignedIn) return
     // Convex does not always expose JWT exp in UserIdentity. Maintain its short
     // server-anchored window with the already-installed token; the backend
     // verifies that token again and refuses revoked authority. Successful
@@ -131,7 +158,7 @@ function ConfiguredChatConvexProvider({ convexUrl, children }: { convexUrl: stri
       if (session === null || session.generation !== generation.current) return
       void session.client.mutation(api.interactiveAuthority.materializeCurrentInteractiveAuthority, {}).then(
         (ready) => {
-          if (!ready && session.generation === generation.current) setInitialization({ identity, attempt, ready: false })
+          if (!ready && session.generation === generation.current) setInitialization({ authorityScope, epoch, attempt, ready: false })
         },
         (cause) => {
           captureClientExceptionOnClient(cause)
@@ -141,8 +168,8 @@ function ConfiguredChatConvexProvider({ convexUrl, children }: { convexUrl: stri
       )
     }, 20_000)
     return () => window.clearInterval(interval)
-  }, [auth.isSignedIn, identity, attempt])
-  const current = initialization?.identity === identity
+  }, [chatRequired, auth.isSignedIn, authorityScope, epoch, attempt])
+  const current = initialization?.authorityScope === authorityScope && initialization.epoch === epoch
     && (initialization.attempt === attempt || initialization.ready)
     ? initialization
     : null
@@ -152,32 +179,49 @@ function ConfiguredChatConvexProvider({ convexUrl, children }: { convexUrl: stri
   // change replaces the keyed subtree, and an explicit refusal still removes it.
   const keepChatMounted = !showChat && current?.ready !== false && mountedIdentity.current !== null
   if (showChat) mountedIdentity.current = identity
+  useEffect(() => () => {
+    // An old HTTP completion or installed-token renewal cannot authorize a new
+    // route mode, identity or client after its auth fetcher has been retired.
+    generation.current += 1
+    installedSession.current = null
+  }, [client, authorityScope, epoch, attempt])
   return (
     <ConvexProviderWithClerk client={client} useAuth={useInitializedAuth}>
-      {(showChat || keepChatMounted) && (
-        <div key={mountedIdentity.current} hidden={!showChat} style={showChat ? CHAT_VISIBLE_STYLE : CHAT_HIDDEN_STYLE}>
-          {children}
-        </div>
-      )}
-      {!showChat && (current === null ? (
-        <AePageState title="Opening chat" description="Connecting to your account…" />
-      ) : (
-        <AePageState
-          title="Couldn’t open chat"
-          description="Your account connection could not be completed. Try again or browse Tools."
-          tone="warning"
-          action={(
-            <div className="arc-market arc-recovery-action-row">
-              <Button type="button" size="md" onClick={() => setAttempt((value) => value + 1)}>
-                Try again
-              </Button>
-              <Link to="/market" className={actionLinkClassName('secondary', 'md')}>Browse Tools</Link>
-            </div>
-          )}
-        />
-      ))}
+      <ChatAuthorityContext.Provider value={{ showChat, keepChatMounted, mountedIdentity: mountedIdentity.current, opening: current === null, retry: () => setAttempt(value => value + 1) }}>
+        {children}
+      </ChatAuthorityContext.Provider>
     </ConvexProviderWithClerk>
   )
+}
+
+/** Gate only the routed chat projection; the app shell keeps its own lifecycle. */
+export function ChatAuthorityBoundary({ children, required = true }: { children: ReactNode; required?: boolean }) {
+  const visible = useWorkspacePresentationVisible()
+  const authority = useContext(ChatAuthorityContext)
+  if (!required || authority === null) return children
+  const { showChat, keepChatMounted, mountedIdentity, opening, retry } = authority
+  return <>
+    {(showChat || keepChatMounted) && (
+      <div key={mountedIdentity} hidden={!showChat} style={showChat ? CHAT_VISIBLE_STYLE : CHAT_HIDDEN_STYLE}>
+        <WorkspacePresentationVisibility value={visible && showChat}>{children}</WorkspacePresentationVisibility>
+      </div>
+    )}
+    {!showChat && (opening ? (
+      <AePageState title="Opening chat" description="Connecting to your account…" />
+    ) : (
+      <AePageState
+        title="Couldn’t open chat"
+        description="Your account connection could not be completed. Try again or browse Tools."
+        tone="warning"
+        action={(
+          <div className="arc-market arc-recovery-action-row">
+            <Button type="button" size="md" onClick={retry}>Try again</Button>
+            <Link to="/market" className={actionLinkClassName('secondary', 'md')}>Browse Tools</Link>
+          </div>
+        )}
+      />
+    ))}
+  </>
 }
 
 export function requiresChatProviders(pathname: string): boolean {

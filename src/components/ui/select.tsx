@@ -1,5 +1,6 @@
 "use client"
 
+import { useWorkspacePresentationVisible } from "@/lib/client/workspace-presentation"
 import * as React from "react"
 import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react"
 import { Select as SelectPrimitive } from "@base-ui/react/select"
@@ -62,6 +63,8 @@ function SelectContent({
   }) {
   const alignItemWithTrigger = position === "item-aligned"
 
+  const visible = useWorkspacePresentationVisible()
+  if (!visible) return null
   return (
     <SelectPrimitive.Portal>
       {/* Match Arc Select's menu layer so portaled options stay above modal drawers. */}

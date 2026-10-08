@@ -5,6 +5,7 @@ import { Link } from '@tanstack/react-router'
 
 import { AeToolInspector } from '@/components/ae/market/tool-detail'
 import '../CommandPanelComposition.css'
+import { ToolDetailPageSkeleton } from './ToolDetailPageSkeleton'
 import type { PublicToolDescriptor } from '@/modules/capability-supply/public'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 
@@ -67,9 +68,7 @@ export function ToolDetailPage({
       className="arc-market arc-command-detail"
     >
       {state.kind === 'loading' ? (
-        <p role="status" className="arc-market arc-command-status">
-          Loading Tool…
-        </p>
+        <ToolDetailPageSkeleton />
       ) : null}
       {state.kind === 'unavailable' ? (
         <div className="arc-market arc-command-recovery">

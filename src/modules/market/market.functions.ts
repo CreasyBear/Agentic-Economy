@@ -1,3 +1,5 @@
+import { getRequest } from '@tanstack/react-start/server'
+import { awaitBoundedRead as awaitMarketRead, BROWSER_READ_TIMEOUT_MS as MARKET_READ_TIMEOUT_MS, SOURCE_READ_TIMEOUT_MS as MARKET_SOURCE_TIMEOUT_MS } from '@/lib/bounded-read'
 import { createServerFn } from "@tanstack/react-start";
 import { degrade } from '@/lib/observability/degrade'
 import { readCanonicalBaseUrlServer } from '@/lib/server/canonical-url.functions'
@@ -11,7 +13,7 @@ import { jevDiscoveryRecipient } from "@/modules/decision-engine/public";
 import { callPublicSourceQuery, sourceQuery } from '@/lib/server/convex-source'
 
 import { marketWindowSchema } from "./contracts";
-import { loadMarketRouteData, type MarketSearch } from './market-route-data'
+import { loadMarketRouteData, type MarketSearch, type MarketRouteReadOptions } from './market-route-data'
 import { readMarketRouteProjection } from "./server";
 
 const inputSchema = z.object({
@@ -39,17 +41,22 @@ export const readMarketDiscoveryRecipientServer = createServerFn({ method: "GET"
 export const readMarketChatRecipientServer = createServerFn({ method: 'GET' })
   .handler(async () => {
     if (!process.env.CONVEX_URL?.trim() && !process.env.VITE_CONVEX_URL?.trim()) return null
-    return await callPublicSourceQuery(chatRecipientQuery, {})
+    const signal = AbortSignal.any([getRequest().signal, AbortSignal.timeout(MARKET_SOURCE_TIMEOUT_MS)])
+    return await awaitMarketRead(() => callPublicSourceQuery(chatRecipientQuery, {}, { signal }), signal)
   })
 
 /** Catalogue stays authoritative; disclosure and head metadata are independent. */
-export async function loadMarketPageRouteData(deps: MarketSearch) {
+export async function loadMarketPageRouteData(deps: MarketSearch, options: MarketRouteReadOptions = {}) {
+  const deadline = AbortSignal.timeout(MARKET_READ_TIMEOUT_MS)
+  const signal = options.signal === undefined ? deadline : AbortSignal.any([options.signal, deadline])
+  const read = <T>(fetch: () => Promise<T>) => awaitMarketRead(fetch, signal)
   const [data, canonicalBaseUrl, jevRecipient, chatRecipient] = await Promise.all([
-    loadMarketRouteData(deps),
-    readCanonicalBaseUrlServer().catch(cause => degrade(cause, undefined, { site: 'marketCanonicalUrl', reason: 'source_unavailable' })),
-    readMarketDiscoveryRecipientServer().catch(cause => degrade(cause, null, { site: 'marketDiscoveryRecipient', reason: 'source_unavailable' })),
-    readMarketChatRecipientServer().catch(cause => degrade(cause, null, { site: 'marketChatRecipient', reason: 'source_unavailable' })),
+    loadMarketRouteData(deps, options),
+    read(() => readCanonicalBaseUrlServer({ signal })).catch(cause => { if (options.signal?.aborted) throw cause; return degrade(cause, undefined, { site: 'marketCanonicalUrl', reason: 'source_unavailable' }) }),
+    read(() => readMarketDiscoveryRecipientServer({ signal })).catch(cause => { if (options.signal?.aborted) throw cause; return degrade(cause, null, { site: 'marketDiscoveryRecipient', reason: 'source_unavailable' }) }),
+    read(() => readMarketChatRecipientServer({ signal })).catch(cause => { if (options.signal?.aborted) throw cause; return degrade(cause, null, { site: 'marketChatRecipient', reason: 'source_unavailable' }) }),
   ])
+  options.signal?.throwIfAborted()
   return { ...data, canonicalBaseUrl, jevRecipient, chatRecipient }
 }
 
@@ -84,4 +91,5 @@ export {
   marketCompareParam,
   carryMarketCompare,
   type MarketSearch,
+  type MarketCanonicalSearchPage,
 } from './market-route-data'

@@ -20,14 +20,14 @@ describe('Route view transition isolation (S-20)', () => {
   })
 
 
-  it('cross-fades only the root content region when motion is allowed', () => {
+  it('bounds the root transition group and content fades when motion is allowed', () => {
     const noPreferenceBlock = GLOBALS_CSS.match(
       /@media\s*\(prefers-reduced-motion:\s*no-preference\)\s*\{([\s\S]*?)\n\}/,
     )?.[1]
     expect(noPreferenceBlock).toBeTruthy()
     const block = normalizeCssChunk(noPreferenceBlock ?? '')
     expect(block).toContain(
-      '::view-transition-old(root), ::view-transition-new(root) { animation-duration: var(--motion-duration-base); animation-timing-function: var(--motion-ease-standard); }',
+      '::view-transition-group(root), ::view-transition-old(root), ::view-transition-new(root) { animation-duration: 80ms; animation-timing-function: var(--motion-ease-standard); }',
     )
   })
 

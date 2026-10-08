@@ -6,6 +6,7 @@ import { LockKeyholeIcon } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
+import { useWorkspacePresentationVisible } from '@/lib/client/workspace-presentation'
 import { api } from '../../../../convex/_generated/api'
 import { AeChatPage } from '@/components/ae/layout/AeChatPage'
 import { AeEmptyState } from '@/components/ae/shared/empty-state/AeEmptyState'
@@ -74,6 +75,7 @@ function SharedChatThread({ shareToken }: { shareToken: string }) {
   const messages = [...olderMessages, ...baseMessages]
   const loadingMore = loadMoreStatus === 'loading'
   const slot = useChatHeaderSlot()
+  const visible = useWorkspacePresentationVisible()
   const title = initial?.title ?? chatShared.fallbackTitle
   const sharedBar = <ReuiChatHeader title={title} description={chatShared.detail}
     leading={<LockKeyholeIcon aria-hidden="true" size={18} />}
@@ -116,7 +118,7 @@ function SharedChatThread({ shareToken }: { shareToken: string }) {
   return (
     <AeChatPage
       kind="shared"
-      header={slot === null ? (
+      header={!visible ? null : slot === null ? (
         <header className="arc-market arc-chat arc-shared-header">
           {sharedBar}
         </header>

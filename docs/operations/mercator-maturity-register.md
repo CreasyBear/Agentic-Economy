@@ -129,7 +129,7 @@ the exact remaining acceptance.
 | [MM-001](#mm-001) | Actor and Account ownership | Supported in source; scoped runtime recorded | F1 | P1 |
 | [MM-002](#mm-002) | Organisation membership and administrator controls | Roster/invitation source supported; role change/removal and full journey remain open | F1/F5 | P2 |
 | [MM-003](#mm-003) | Stable Agent identity and credential replacement | Supported in source; rotation tests passed | F1/F5 | P1 |
-| [MM-004](#mm-004) | Delegated scope, budget, expiry and current authority | Call and bounded Plan authority implemented; full aggregate qualification open | F1/F3 | P1 |
+| [MM-004](#mm-004) | Delegated scope, budget, expiry and current authority | Account monthly-cap race confirmed; financial qualification blocked | F1/F3 | P1 |
 | [MM-005](#mm-005) | Per-client OAuth and bearer authentication | Supported in source and public metadata; client matrix partial | F1/F5 | P1 |
 | [MM-006](#mm-006) | Connection and payment readiness | Supported diagnostics; sustained live capacity unproved | F1/F5 | P1 |
 | [MM-007](#mm-007) | Revocation, isolation and offboarding lifecycle | Supported in source; combined persona recovery partial | F1/F5 | P1 |
@@ -199,6 +199,7 @@ the exact remaining acceptance.
 - **Success criteria:** Human and organisation contexts resolve uniquely; wrong Account, ambiguous binding and suspended actor refuse before releasing input or value.
 - **End condition:** Current source tests plus two-Account hosted read/write negatives and a documented actor model are linked. Mercator org internals remain unknown rather than invented.
 - **Supported implementation:** Retain Principal/Account resolution and current Clerk integration; no new identity service.
+- **8 October performance candidate — local isolation correction:** actual installed Router fixtures demonstrated that invalidation retained prior-scope cached loader data. The existing workspace owner now clears native cache/preload entries before a scope change and after its synchronous refresh, remains mounted through authentication routes, and rejects obsolete refresh completions. Identity replacement remounts private content; same-Account role refresh hides it while retaining drafts. Private header slots and maintained dialog/menu portals follow that visibility, including Chat's own authority wait. These are local source/browser-fixture proofs; the required two-Account hosted read/write negatives remain open. No purchase authority is supplied by display caches.
 - **References:** [Mercator auth][M-A]; [AE principal schema][AE-P]; [Account schema][AE-AC]; [foundation model][B].
 
 <a id="mm-002"></a>
@@ -229,12 +230,15 @@ the exact remaining acceptance.
 
 ### MM-004 — Delegated scope, budget, expiry and current authority
 
-- **State:** open · Call and bounded Plan authority implemented; full aggregate qualification open. **Priority/wave:** P1 · F1/F3.
+- **State:** open · Account monthly-cap race confirmed on 8 October; financial qualification blocked. **Priority/wave:** P1 · F1/F3.
 - **Owner / dependencies:** Authority / finance; [MM-001](#mm-001), [MM-003](#mm-003).
 - **Required behaviour:** A credential identifies an actor; a current grant authorises bounded work. Account funding never expands scope or budget.
 - **Success criteria:** Wrong resource/scope/environment, expired or revoked grant and concurrent spending beyond a ceiling refuse; each unreleased node rechecks current authority.
 - **End condition:** Grant negatives, atomic concurrent-budget proof and revoked-after-quote graph proof pass. Accepted work and historical access follow an explicit current policy.
 - **Supported implementation:** Retain implemented Plan reservation and current per-Node effect authority in the existing DelegationGrant/Call owners; qualify the remaining negatives.
+- **8 October ACID finding — High, confirmed source/local guard defect:** the organization cap reads settled native spend plus outstanding Plan exposure, but ordinary Calls neither reserve Account/month exposure nor revise the Plan-only snapshot fence. With settled spend 90, cap 100 and sufficient separate Principal budgets, two distinct ordinary Calls of 7 can both pass; an ordinary Call followed by a Plan can do the same. Ordinary settlement also leaves the snapshot digest unchanged. Two controlled `convex-test` cases exercised the actual exposure reader and guard, asserting these unsafe outcomes; they did not execute a complete purchase or hosted ledger transaction. No production incident is inferred.
+- **Finding sources / mitigation:** `convex/lib/capabilityExecution/callLifecycle/callFinancialReservation.ts`, `admissionRefusal.ts`, `admissionReserve.ts`, `convex/lib/capabilityExecution/plans/planCommands.ts`, and `src/modules/money/internal/organization-monthly-spend-fence.ts`. Same-key replay, native atomic cash/legal/treasury reservations, Principal budgets and Plan-to-Plan fencing remain protections, but do not enforce this Account ceiling.
+- **Correction owner / acceptance:** Authority/finance must use one Account/month capacity owner across ordinary Calls and aggregate Plan Holds. Reserve before new admission, retain uncertain exposure, reconcile native commit/local attachment and settled-snapshot revisions, and avoid counting Plan Nodes twice. Merely summing pending Calls is insufficient. Preserve accepted keys, booking references, historical periods and recovery; any native quota change needs versioned migration with existing consumption and unresolved commitments included. Focused acceptance: ordinary/ordinary and ordinary/Plan concurrency, settlement-before-attachment, conclusive release, uncertain retention, replay, month rollover and Plan-node accounting. The performance candidate makes no financial schema or ledger correction; MM-004 remains open.
 - **References:** [Spending limits][M-P]; [delegation contracts][AE-D]; [Call authority][AE-C].
 
 <a id="mm-005"></a>
@@ -679,6 +683,7 @@ the exact remaining acceptance.
 - **Success criteria:** Health/readiness are truthful; request IDs reach support; metrics separate discovery, quote, queue, supplier, recovery and settlement; logs exclude secret/raw customer payloads.
 - **End condition:** Five-case authorised operational evidence and alert/runbook proof are linked through existing #284/ADR 0005 ownership; no duplicate Datadog configuration or trace store.
 - **Supported implementation:** Reuse current Sentry/PostHog/metering/correlation and separately owned supported monitoring plan.
+- **8 October performance review:** one public observation at 06:57:37 UTC returned health 200 and readiness 503 `payments_unavailable`, with configuration and Convex ready. The response does not establish an RPC quota cause. Current Infura/Alchemy usage, spend caps, reset windows and throughput remain blocked on authenticated provider evidence; Money/operations and the existing provider-account owner must obtain it. Datadog delivery/alert acceptance remains with #284. No cap, credential, failover or monitoring change was made.
 - **References:** [Health API][M-O]; [AE deployment/readiness][AE-DEP]; [Datadog owner][DD].
 
 <a id="mm-042"></a>
@@ -691,6 +696,7 @@ the exact remaining acceptance.
 - **Success criteria:** Fail closed on stale readiness/cash evidence; restore preserves accepted effect identity, result accessibility and ledger reconciliation; recovery does not buy work again.
 - **End condition:** Approved joint restore/failure and evidence-expiry observations pass with exact environment/revision/time/RPO/RTO receipts. Historical 20 payments do not prove indefinite availability.
 - **Supported implementation:** Use existing operational records and supported provider/database backup mechanisms; no new backup subsystem.
+- **8 October performance/ACID review:** source declares a single private application host, Multi-AZ RDS and independent encrypted backups; these do not prove host replacement or a coherent Convex/storage/ledger restore. Current provider settings, backup/copy outcomes, writer fencing, joint cutoff, reconciliation and alert delivery still require the existing Operations/finance owner's isolated drill and readback. `infra/package4/README.md` and production-root variables reference missing `docs/operations/aws-foundation.md`; identify the authoritative gate before using that procedure. Local browser asset-loss/rollback fixtures are separate web evidence, not financial restoration. No restore or archived-worker activation ran.
 - **References:** [Durable job contract][M-J]; [AE deployment proof limits][AE-DEP]; [operational owner][DD].
 
 <a id="mm-043"></a>

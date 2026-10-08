@@ -1,10 +1,9 @@
 import { useAuth } from '@clerk/tanstack-react-start'
-import { Link, useNavigate, useRouter } from '@tanstack/react-router'
+import { Link, useNavigate, useRouter, useRouterState } from '@tanstack/react-router'
 import { ArrowLeftIcon, ArrowRightIcon, CompassIcon, HeartIcon, ListFilterIcon, Loader2Icon, SearchIcon, StoreIcon, XIcon } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { AeEmptyState } from '@/components/ae/shared/empty-state/AeEmptyState'
-import { degrade } from '@/lib/observability/degrade'
 import { AeCollectionRail } from '@/components/ae/shared/AeCollectionRail'
 import { Badge } from '@/components/arc/badge/badge'
 import { Button } from '@/components/arc/button/button'
@@ -30,7 +29,7 @@ import { DirectoryProviderHeader } from './DirectoryProviderHeader'
 import type { X402DirectoryCatalogue, X402DirectoryCatalogueInput, X402DirectoryCatalogueOverview, X402DirectoryProvidersPage } from '@/modules/market/x402-directory-catalogue'
 import { readX402DirectoryCatalogueServer } from '@/modules/market/x402-directory-index.functions'
 import { directoryCatalogueSearchValues } from '@/modules/market/x402-directory-navigation'
-import { carryMarketCompare, marketCompareParam, parseMarketCompareRefs, validateMarketSearch, marketHasBrowseOnlyFilters, marketToolSearchInput, marketUsesCanonicalSearch, toggleMarketCompareRef, type MarketCompareEntry, type MarketToolSearchState } from '@/modules/market/market-route-data'
+import { carryMarketCompare, marketCompareParam, parseMarketCompareRefs, validateMarketSearch, marketHasBrowseOnlyFilters, marketToolSearchInput, marketUsesCanonicalSearch, toggleMarketCompareRef, type MarketCompareEntry, type MarketCanonicalSearchPage } from '@/modules/market/market-route-data'
 import { directoryDate } from './directory-presentation'
 import type { X402MarketplaceHome } from '@/modules/market/x402-marketplace-home'
 import { DirectoryComparison } from './DirectoryComparison'
@@ -51,12 +50,18 @@ import { parseMarketSaveIntent } from './market-save-intent'
 import { MarketSavedNeedAction } from './MarketSavedNeedAction'
 import { DirectorySavedNeeds } from './DirectorySavedNeeds'
 import { useMarketCompare } from './compare/useMarketCompare'
-import { searchMarketToolsServer } from '@/modules/market/market-tool-search.functions'
 import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 
 
-type AeX402DirectoryProps = Readonly<{ page: X402DirectoryPage; compareEntries: readonly MarketCompareEntry[]; search: MarketReturnSearch; marketPath?: MarketPath; workspace?: boolean; defaultLayout?: 'table' | 'grid'; activeView?: NonNullable<MarketReturnSearch['view']>; pendingView?: NonNullable<MarketReturnSearch['view']>; home?: X402MarketplaceHome; catalogue?: X402DirectoryCatalogue; overview?: X402DirectoryCatalogueOverview; providers?: X402DirectoryProvidersPage; jevRecipient?: string; chatRecipient?: string }>
+type AeX402DirectoryProps = Readonly<{ canonicalSearch?: MarketCanonicalSearchPage; page: X402DirectoryPage; compareEntries: readonly MarketCompareEntry[]; search: MarketReturnSearch; marketPath?: MarketPath; workspace?: boolean; defaultLayout?: 'table' | 'grid'; activeView?: NonNullable<MarketReturnSearch['view']>; pendingView?: NonNullable<MarketReturnSearch['view']>; home?: X402MarketplaceHome; catalogue?: X402DirectoryCatalogue; overview?: X402DirectoryCatalogueOverview; providers?: X402DirectoryProvidersPage; jevRecipient?: string; chatRecipient?: string }>
 type MarketTabView = NonNullable<MarketReturnSearch['view']>
+
+declare module '@tanstack/history' {
+  interface HistoryState {
+    /** Cursor breadcrumbs only. Search results remain in the Router loader cache. */
+    marketSearchPages?: Readonly<{ input: string; pages: readonly Readonly<{ cursor: string | null; page: number }>[] }>
+  }
+}
 
 function indexedPaginationState(indexed: boolean, catalogue: X402DirectoryCatalogue | undefined): IndexedPaginationState {
   return indexed && catalogue?.kind === 'ok'
@@ -134,103 +139,69 @@ function useIndexedPagination(indexed: boolean, catalogue: X402DirectoryCatalogu
   }
 }
 
-const CANONICAL_SEARCH_FRESH_MS = 30_000
-
-function useCanonicalMarketSearch(search: MarketReturnSearch, enabled: boolean) {
-  const { query, directoryCategory, provider, network, priceBand } = search
-  const input = useMemo(() => marketToolSearchInput({ query, directoryCategory, provider, network, priceBand }), [query, directoryCategory, provider, network, priceBand])
-  const key = JSON.stringify(input)
-  const [state, setState] = useState<MarketToolSearchState>({ query: '', pages: [], index: 0, receivedAt: null, request: { kind: 'idle' } })
-  const snapshot = useRef(state)
-  const generation = useRef(0)
-  const publish = useCallback((next: MarketToolSearchState) => {
-    snapshot.current = next
-    setState(next)
-  }, [])
-  useEffect(() => () => { generation.current += 1 }, [])
-
-  const loadFirstPage = useCallback(async (reason: 'initial' | 'retry') => {
-    const previous = snapshot.current
-    const retained = previous.query === key && previous.receivedAt !== null
-    const requestGeneration = ++generation.current
-    publish({ query: key, pages: retained ? previous.pages : [], index: retained ? previous.index : 0, receivedAt: retained ? previous.receivedAt : null, request: { kind: 'loading', purpose: 'search', generation: requestGeneration } })
-    try {
-      const result = await searchMarketToolsServer({ data: input })
-      if (generation.current !== requestGeneration || snapshot.current.query !== key) return
-      recordProductJourney({ action: 'search_observed', phase: result.kind === 'unavailable' ? 'failed' : 'observed', surface: 'market', queryLength: input.query.length, resultCount: result.kind === 'unavailable' || result.kind === 'noMatch' ? 0 : result.results.length })
-      if (result.kind === 'unavailable' && retained) {
-        publish({ ...snapshot.current, request: { kind: 'failed', purpose: 'search' } })
-        return
-      }
-      publish({ query: key, pages: [result], index: 0, receivedAt: result.kind === 'unavailable' ? null : Date.now(), request: { kind: 'idle' } })
-    } catch (cause) {
-      if (generation.current !== requestGeneration || snapshot.current.query !== key) return
-      recordProductJourney({ action: 'search_observed', phase: 'failed', surface: 'market', queryLength: input.query.length })
-      degrade(cause, undefined, { site: reason === 'initial' ? 'useCanonicalMarketSearch.initial' : 'useCanonicalMarketSearch.retry', reason: 'source_unavailable' })
-      publish({ ...snapshot.current, request: { kind: 'failed', purpose: 'search' } })
-    }
-  }, [input, key, publish])
-
-  useEffect(() => {
-    if (!enabled || query === undefined) return
-    const previous = snapshot.current
-    if (previous.query === key) {
-      // A same-query public request can finish while its result tab is inactive.
-      const pending = previous.request.kind === 'loading' && previous.request.generation === generation.current
-      if (pending && previous.request.purpose === 'search') return
-      const fresh = previous.receivedAt !== null && Date.now() - previous.receivedAt < CANONICAL_SEARCH_FRESH_MS
-      if (fresh && (previous.request.kind !== 'loading' || pending)) return
-    }
-    void loadFirstPage('initial')
-  }, [enabled, key, query, loadFirstPage])
-
-  const current = enabled && state.query === key ? state.pages[state.index] : undefined
-  async function nextPage(cursor: string, query: string) {
-    const previous = snapshot.current
-    if (!enabled || previous.query !== key || previous.request.kind === 'loading' || query !== input.query) return
-    const continuation = previous.pages[previous.index]?.next.find(action => action.action === 'registry.tools.search' && action.args.cursor !== undefined)
-    if (continuation?.action !== 'registry.tools.search' || continuation.args.cursor !== cursor || continuation.args.query !== query) return
-    if (previous.index + 1 < previous.pages.length) {
-      publish({ ...previous, index: previous.index + 1, request: { kind: 'idle' } })
-      return
-    }
-    const index = previous.index
-    const requestGeneration = ++generation.current
-    publish({ ...previous, request: { kind: 'loading', purpose: 'page', generation: requestGeneration } })
-    try {
-      const result = await searchMarketToolsServer({ data: { ...input, query, cursor } })
-      if (generation.current !== requestGeneration || snapshot.current.query !== key || snapshot.current.index !== index) return
-      if (result.kind === 'unavailable') {
-        publish({ ...snapshot.current, request: { kind: 'failed', purpose: 'page' } })
-        return
-      }
-      publish({ ...snapshot.current, pages: [...snapshot.current.pages, result], index: snapshot.current.pages.length, request: { kind: 'idle' } })
-    } catch (cause) {
-      if (generation.current !== requestGeneration || snapshot.current.query !== key || snapshot.current.index !== index) return
-      degrade(cause, undefined, { site: 'useCanonicalMarketSearch.nextPage', reason: 'source_unavailable' })
-      publish({ ...snapshot.current, request: { kind: 'failed', purpose: 'page' } })
-    }
+function useCanonicalMarketSearch(search: MarketReturnSearch, routeSearch: MarketCanonicalSearchPage | undefined, marketPath: MarketPath) {
+  const router = useRouter()
+  const navigate = useNavigate()
+  const routeSearchPending = useRouterState({ select: state => state.location.pathname === marketPath
+    && (state.status === 'pending' || state.matches.some(match => match.routeId === marketPath && match.isFetching !== false)) })
+  // Display retention during recovery is not a cache: every successful page is
+  // still fetched, raced and cached by the Router, including after unmount.
+  const [lastSearch, setLastSearch] = useState<{ data: MarketCanonicalSearchPage; page: number }>()
+  if (routeSearch?.result !== undefined && routeSearch.result.kind !== 'unavailable' && routeSearch.refreshFailed !== true && lastSearch?.data !== routeSearch) {
+    setLastSearch({ data: routeSearch, page: search.page ?? 1 })
   }
+  const sameSearch = lastSearch !== undefined && routeSearch !== undefined
+    && JSON.stringify({ ...lastSearch.data.input, cursor: undefined }) === JSON.stringify({ ...routeSearch.input, cursor: undefined })
+  const searchFailed = routeSearch?.refreshFailed === true || (sameSearch && (routeSearch?.result === undefined || routeSearch.result.kind === 'unavailable'))
+  const result = searchFailed ? lastSearch?.data.result ?? routeSearch?.result : routeSearch?.result
+  const pageNavigation = useRef(false)
   function retry() {
-    if (!enabled || snapshot.current.request.kind === 'loading') return
-    return loadFirstPage('retry')
-  }
-  function previous() {
-    const previous = snapshot.current
-    if (previous.query !== key || previous.index === 0 || previous.request.kind === 'loading') return
-    publish({ ...previous, index: previous.index - 1, request: { kind: 'idle' } })
+    const id = router.state.matches.find(match => match.routeId === marketPath)?.id
+    return router.invalidate({ filter: match => match.id === id })
   }
   return {
-    result: current,
-    loading: state.query !== key || state.request.kind === 'loading',
-    failed: state.query === key && state.request.kind === 'failed' && state.request.purpose === 'page',
-    refreshing: current !== undefined && state.request.kind === 'loading' && state.request.purpose === 'search',
-    refreshFailed: current !== undefined && state.request.kind === 'failed' && state.request.purpose === 'search',
-    hasPrevious: state.index > 0,
-    pageNumber: state.index + 1,
-    previous,
-    nextPage,
+    result,
+    loading: routeSearchPending,
+    failed: searchFailed && routeSearch?.input.cursor !== undefined,
+    refreshing: routeSearchPending && routeSearch?.result !== undefined,
+    refreshFailed: searchFailed && routeSearch?.input.cursor === undefined,
+    hasPrevious: (searchFailed ? lastSearch?.page ?? search.page ?? 1 : search.page ?? 1) > 1,
+    pageNumber: searchFailed ? lastSearch?.page ?? search.page ?? 1 : search.page ?? 1,
+    previousLabel: (router.state.location.state.marketSearchPages?.pages.length ?? 0) > 1 ? 'Previous page' : 'First page',
     retry,
+    previous: () => {
+      if (pageNavigation.current) return
+      const input = JSON.stringify(marketToolSearchInput(search))
+      const history = router.state.location.state.marketSearchPages
+      const pages = history?.input === input ? history.pages.slice(0, -1) : []
+      const previous = pages.at(-1) ?? { cursor: null, page: 1 }
+      const previousSearch = { ...search }
+      delete previousSearch.indexCursor
+      delete previousSearch.page
+      pageNavigation.current = true
+      void navigate({
+        to: marketPath, resetScroll: false,
+        search: { ...previousSearch, ...(previous.cursor === null ? {} : { indexCursor: previous.cursor }), ...(previous.page > 1 ? { page: previous.page } : {}) },
+        state: current => ({ ...current, marketSearchPages: { input, pages } }),
+      }).finally(() => { pageNavigation.current = false })
+    },
+    nextPage: (cursor: string, query: string) => {
+      if (pageNavigation.current || routeSearchPending || query !== routeSearch?.input.query) return
+      if (searchFailed) { void retry(); return }
+      const continuation = routeSearch?.result?.next.find(action => action.action === 'registry.tools.search' && action.args.cursor === cursor)
+      if (continuation?.action !== 'registry.tools.search' || continuation.args.query !== query) return
+      const input = JSON.stringify(marketToolSearchInput(search))
+      const history = router.state.location.state.marketSearchPages
+      const current = { cursor: search.indexCursor ?? null, page: search.page ?? 1 }
+      const matchesCurrent = history?.input === input && history.pages.at(-1)?.cursor === current.cursor && history.pages.at(-1)?.page === current.page
+      const pages = [...(matchesCurrent ? history.pages : [current]), { cursor, page: current.page + 1 }]
+      pageNavigation.current = true
+      void navigate({
+        to: marketPath, resetScroll: false,
+        search: { ...search, indexCursor: cursor, page: (search.page ?? 1) + 1 },
+        state: current => ({ ...current, marketSearchPages: { input, pages } }),
+      }).finally(() => { pageNavigation.current = false })
+    },
   }
 }
 
@@ -257,7 +228,7 @@ function directoryInput(search: X402DirectoryInput) {
   }
 }
 
-function DirectoryMarketplace({ page, compareEntries, search, workspace = false, defaultLayout = 'table', activeView, pendingView, home, catalogue, overview, jevRecipient, chatRecipient }: AeX402DirectoryProps) {
+function DirectoryMarketplace({ canonicalSearch: routeSearch, page, compareEntries, search, workspace = false, defaultLayout = 'table', activeView, pendingView, home, catalogue, overview, jevRecipient, chatRecipient }: AeX402DirectoryProps) {
   const navigate = useNavigate()
   const router = useRouter()
   const marketPath = useMarketPath()
@@ -274,14 +245,14 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
   const displayView = pendingView ?? view
   const { query, offset, network, provider, maxUsdPrice } = search
   const canonicalSearchEnabled = marketUsesCanonicalSearch(search) && view === 'tools'
-  const canonicalSearch = useCanonicalMarketSearch(search, canonicalSearchEnabled)
+  const canonicalSearch = useCanonicalMarketSearch(search, routeSearch, marketPath)
   const sourceInput = useMemo(() => directoryInput({ query, offset, network, provider, maxUsdPrice }), [query, offset, network, provider, maxUsdPrice])
   const coverage = catalogue?.kind === 'ok' ? catalogue.coverage : overview?.kind === 'ok' ? overview.coverage : undefined
-  const indexed = catalogue?.kind === 'ok' && catalogue.source === 'index'
+  const indexed = !canonicalSearchEnabled && catalogue?.kind === 'ok' && catalogue.source === 'index'
   const filterValues = directoryCatalogueSearchValues(search)
   const browse = !Object.entries(filterValues).some(([key, value]) => !['sort', 'indexCursor', 'offset'].includes(key) && value !== undefined && value !== false)
-  // The page number is shareable. The index cursor stays out of the URL, and a
-  // refresh walks forward from the first page until that number or the list ends.
+  // Catalogue browsing shares page numbers and restores them by walking the
+  // index. Canonical search navigation keeps its opaque continuation unchanged.
   const requestedPage = search.page ?? 1
   const { state: loadMore, loadNextPage, showPreviousPage } = useIndexedPagination(indexed, catalogue, filterValues, view === 'tools' ? requestedPage : 1)
   const providerPages = useProviderCataloguePages(indexed && view === 'providers', catalogue, filterValues, requestedPage)
@@ -472,7 +443,7 @@ function DirectoryMarketplace({ page, compareEntries, search, workspace = false,
         </>
       }} />}
       <nav aria-label="Search pages" className="flex items-center justify-between gap-3 border-t border-border pt-4">
-        {canonicalSearch.hasPrevious ? <Button type="button" variant="secondary" onClick={canonicalSearch.previous} disabled={canonicalSearch.loading}><ArrowLeftIcon />Previous page</Button> : <span />}
+        {canonicalSearch.hasPrevious ? <Button type="button" variant="secondary" onClick={canonicalSearch.previous} disabled={canonicalSearch.loading}><ArrowLeftIcon />{canonicalSearch.previousLabel}</Button> : <span />}
         <span className="text-sm text-muted-foreground">Page {canonicalSearch.pageNumber}</span>
         {continuation?.action !== 'registry.tools.search' || pageCursor === undefined ? <span /> : <Button type="button" variant="secondary" onClick={() => void canonicalSearch.nextPage(pageCursor, continuation.args.query)} disabled={canonicalSearch.loading} aria-label={canonicalSearch.failed ? 'Next page. Retry' : 'Next page'}>Next page<ArrowRightIcon /></Button>}
       </nav>
