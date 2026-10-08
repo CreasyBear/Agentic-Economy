@@ -649,3 +649,48 @@ The prior backend source is `ce7a0e57e1fbc13a0bf8f0ff8d1bb5ecc99bab7a`; retain t
 new optional Call field and additive indexes if rolling its code back. The
 financial guard and original-reference precautions in the candidate entry still
 apply. A code rollback never restores financial data or replaces accepted keys.
+
+## 8 October public table repair
+
+[PR #374](https://github.com/CreasyBear/Agentic-Economy/pull/374) replaces the public
+catalogue's operator-table wrappers with the installed REUI auto-width
+composition. Native components retain layout and scrolling; existing owners
+retain prices, identities, Save/Compare, Host selection and opaque pagination.
+No upstream vendor source, dependency, API, backend or financial owner changed.
+
+Runtime source `b8d4570c7241cf28ce0557953fb6897cc3ba2f62` was built from a clean Git
+archive as Vercel `dpl_2AUthBPTg2eZPXZLjvqNLyfX1thR`,
+`agentic-economy-4c81a95ej-creasybears-projects.vercel.app`, and promoted to
+`https://app.aecon.ai`. The protected candidate and public release endpoint both
+reported that source. The backend retains the established `c608833bd` release;
+this was a web-only deployment. Rollback web target is
+`dpl_6YhthsjQUGVZffbTB5Gu41TCLWkd`; no backend or financial rollback is needed.
+
+The complete source gate passed: 9,650 unit tests (one existing skip), 3,133
+integration tests (77 skips, three todos), 20 public browser checks (18 skips),
+20 accessibility checks, CLI packaging, and 228 docs pages with 84 owner examples.
+Twelve focused existing table tests and independent Sol source review passed.
+Local actual-component evidence covers three table views at six widths, dark
+mode, keyboard actions and saved-status failure/recovery. A source hook reported
+two advisory pure-helper allocation warnings; no React errors.
+
+At 12:23 UTC, anonymous production Tool and Host tables passed at 1440px and
+390px: no filler cells, clipped cell content, page overflow or JavaScript errors.
+Tool names received 451px at desktop instead of the old 150px; price decimals
+and provenance remained visible. Compare toggled on/off and opaque pagination
+advanced and returned to the original rows. A tab retained across promotion
+navigated successfully in 56ms. Signed-in saved persistence and purchases were
+not exercised. Screenshots and raw checks are in the execution workspace under
+`performance/market-table-hosted.json` and `performance/market-table-release/`.
+
+The first fresh desktop Tools load took 4,688ms to the hydrated-header/table
+marker and remains a performance miss. Later fresh diagnostic samples took
+1,878–2,363ms; their first response arrived in 177–201ms, while the document
+finished at 976–1,398ms. Neither the earlier landing-page cohort nor these three
+Tools observations establishes p95 or explains the first-load outlier. The next
+Web/DX package must separate streamed data completion from hydration and reduce
+confirmed unnecessary reads/imports before claiming a timing improvement.
+
+Health returned 200. Readiness remained 503 (`payments_unavailable`), with stale
+catalogue and quoting ready at this observation. RPC configuration and the
+Admin-only payment audience were unchanged; no purchase budget was spent.

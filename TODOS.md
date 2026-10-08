@@ -80,6 +80,17 @@ telemetry removal are not part of the table repair.
 References: [React lazy boundaries](https://react.dev/reference/react/lazy),
 [TanStack route splitting](https://tanstack.com/router/latest/docs/guide/automatic-code-splitting)
 and [Motion bundle guidance](https://motion.dev/docs/react-reduce-bundle-size).
+The subsequent table release retains a separate 4.688s fresh desktop catalogue
+miss to hydrated header plus visible rows. Three additional fresh Tools traces
+took 1.878–2.363s to that combined marker; document completion alone took
+0.976–1.398s. For Tools, first trace the owning catalogue/overview/disclosure reads
+and SSR flush boundaries. The gap after the first response is 0.799–1.210s;
+browser evidence cannot separate upstream reads, SSR, streaming and transfer.
+Use [TanStack deferred loading](https://tanstack.com/router/latest/docs/guide/deferred-data-loading)
+for optional overview/comparison data only after attribution. Capture stage data
+with the next threshold miss. Retain the bundle work above; no long tasks were
+observed in these samples. These small anonymous cohorts across different views
+and releases do not establish a controlled improvement, protected navigation or p95.
 
 ## Platform UI upgrade — production journey qualification
 
@@ -127,8 +138,10 @@ filler and clipped price decimals. Local actual-component checks with captured
 public catalogue data pass at six widths for each table, with keyboard Save,
 Compare state changes, saved-status failure/recovery, dark mode and horizontal
 table scrolling. Twelve affected tests, `npm run check` and the full source gate
-pass; hosted table verification remains open. This evidence does not qualify
-signed-in persistence or purchases.
+pass. [PR #374's web release](docs/operations/deployments.md#8-october-public-table-repair)
+also passes actual production desktop/mobile layout, Compare toggling, forward
+and back paging, and retained-browser navigation. This evidence does not qualify
+signed-in persistence, purchases or the unresolved cold-loading performance.
 
 The For Providers recut now uses licensed REUI Hero 14, generated Aecon artwork,
 the installed Stepper and Arc FAQ. Its supported setup scope is explicit; the
