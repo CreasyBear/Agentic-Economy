@@ -391,3 +391,11 @@ Rollback reference: previous web `dpl_6QuZitnMGqaoLy8cyUESZVw5dWBF`, source
 inventory fields now stored in projections; reverting the old schema alone is
 unsafe. Preserve accepted operations and financial history; financial recovery
 remains fix-forward. Automatic Git deployment from `main` remains disabled.
+
+**Sidebar visibility follow-up:** [PR #371](https://github.com/CreasyBear/Agentic-Economy/pull/371)
+owns the subsequent web-only release and its exact deployment receipt. It makes
+the desktop sidebar opt-in from the existing Display settings dropdown. Backend,
+domain modules, server handlers and deployment bindings have identical Git trees
+to `ce7a0e57`; that backend and the alpha.2 contract remain compatible without a
+backend redeploy. Read the PR receipt and `/api/v1/release` for the newer web
+revision; the coordinated release tuple above records the preceding rollout.
