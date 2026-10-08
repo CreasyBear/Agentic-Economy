@@ -154,6 +154,7 @@ async function persistReservedCall(
 ): Promise<void> {
   await ctx.db.insert('capabilityCalls', {
     ...reservation,
+    ...(commitment === null ? {} : { buyerAmountUnits: commitment.decisionAudUnits }),
     ...(plan === undefined || commitment?.planNodeId === undefined ? {} : {
       planRef: plan.planRef, planNodeId: commitment.planNodeId, planAllocation: {
         planRef: plan.planRef, planDigest: plan.planDigest, approvedTotalUnits: plan.approvedTotalAudUnits,

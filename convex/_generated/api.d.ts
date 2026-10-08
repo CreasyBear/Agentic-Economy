@@ -271,7 +271,6 @@ import type * as lib_capabilityExecution_plans_holdLifecycle from "../lib/capabi
 import type * as lib_capabilityExecution_plans_nodeCommands from "../lib/capabilityExecution/plans/nodeCommands.js";
 import type * as lib_capabilityExecution_plans_nodeMaterial from "../lib/capabilityExecution/plans/nodeMaterial.js";
 import type * as lib_capabilityExecution_plans_ownerPlans from "../lib/capabilityExecution/plans/ownerPlans.js";
-import type * as lib_capabilityExecution_plans_planCommands from "../lib/capabilityExecution/plans/planCommands.js";
 import type * as lib_capabilityExecution_plans_planDrafts from "../lib/capabilityExecution/plans/planDrafts.js";
 import type * as lib_capabilityExecution_plans_planReads from "../lib/capabilityExecution/plans/planReads.js";
 import type * as lib_capabilityExecution_plans_planState from "../lib/capabilityExecution/plans/planState.js";
@@ -576,8 +575,11 @@ import type * as lib_money_managedCall_reservationRead from "../lib/money/manage
 import type * as lib_money_managedCall_transitions from "../lib/money/managedCall/transitions.js";
 import type * as lib_money_managedCall_x402Proof from "../lib/money/managedCall/x402Proof.js";
 import type * as lib_money_monthlyBudget_configure from "../lib/money/monthlyBudget/configure.js";
+import type * as lib_money_monthlyBudget_exposure from "../lib/money/monthlyBudget/exposure.js";
+import type * as lib_money_monthlyBudget_exposureContracts from "../lib/money/monthlyBudget/exposureContracts.js";
 import type * as lib_money_monthlyBudget_read from "../lib/money/monthlyBudget/read.js";
 import type * as lib_money_monthlyBudget_readOrganization from "../lib/money/monthlyBudget/readOrganization.js";
+import type * as lib_money_monthlyBudget_snapshot from "../lib/money/monthlyBudget/snapshot.js";
 import type * as lib_money_monthlyDraft_completeContracts from "../lib/money/monthlyDraft/completeContracts.js";
 import type * as lib_money_monthlyDraft_completeFinancial from "../lib/money/monthlyDraft/completeFinancial.js";
 import type * as lib_money_monthlyDraft_completeFreeze from "../lib/money/monthlyDraft/completeFreeze.js";
@@ -1086,7 +1088,6 @@ declare const fullApi: ApiFromModules<{
   "lib/capabilityExecution/plans/nodeCommands": typeof lib_capabilityExecution_plans_nodeCommands;
   "lib/capabilityExecution/plans/nodeMaterial": typeof lib_capabilityExecution_plans_nodeMaterial;
   "lib/capabilityExecution/plans/ownerPlans": typeof lib_capabilityExecution_plans_ownerPlans;
-  "lib/capabilityExecution/plans/planCommands": typeof lib_capabilityExecution_plans_planCommands;
   "lib/capabilityExecution/plans/planDrafts": typeof lib_capabilityExecution_plans_planDrafts;
   "lib/capabilityExecution/plans/planReads": typeof lib_capabilityExecution_plans_planReads;
   "lib/capabilityExecution/plans/planState": typeof lib_capabilityExecution_plans_planState;
@@ -1391,8 +1392,11 @@ declare const fullApi: ApiFromModules<{
   "lib/money/managedCall/transitions": typeof lib_money_managedCall_transitions;
   "lib/money/managedCall/x402Proof": typeof lib_money_managedCall_x402Proof;
   "lib/money/monthlyBudget/configure": typeof lib_money_monthlyBudget_configure;
+  "lib/money/monthlyBudget/exposure": typeof lib_money_monthlyBudget_exposure;
+  "lib/money/monthlyBudget/exposureContracts": typeof lib_money_monthlyBudget_exposureContracts;
   "lib/money/monthlyBudget/read": typeof lib_money_monthlyBudget_read;
   "lib/money/monthlyBudget/readOrganization": typeof lib_money_monthlyBudget_readOrganization;
+  "lib/money/monthlyBudget/snapshot": typeof lib_money_monthlyBudget_snapshot;
   "lib/money/monthlyDraft/completeContracts": typeof lib_money_monthlyDraft_completeContracts;
   "lib/money/monthlyDraft/completeFinancial": typeof lib_money_monthlyDraft_completeFinancial;
   "lib/money/monthlyDraft/completeFreeze": typeof lib_money_monthlyDraft_completeFreeze;

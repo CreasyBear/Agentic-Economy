@@ -2,7 +2,7 @@
 
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { StrictMode, useEffect, type ComponentType, type ReactNode } from 'react'
+import { StrictMode, Suspense, startTransition, useEffect, type ComponentType, type ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const runtime = vi.hoisted(() => ({
@@ -147,7 +147,7 @@ import { toast as sonnerToast } from 'sonner'
 import { WorkspacePresentationVisibility } from '@/lib/client/workspace-presentation'
 import { ChatHeader } from '@/components/ae/chat/chat-session/components/ChatHeader'
 import { ChatHeaderSlotProvider, ChatHeaderSlot } from '@/components/ae/layout/app-shell/ChatHeaderSlot'
-import { requiresChatProviders, SignedInConvexProvider } from '@/components/ae/layout/AeConvexProviders'
+import { AeConvexProvider, ChatAuthorityBoundary, requiresChatProviders, SignedInConvexProvider } from '@/components/ae/layout/AeConvexProviders'
 import { Route } from '@/routes/__root'
 
 
@@ -398,6 +398,54 @@ describe('Tool chat provider boundary', () => {
     view.rerender(<Root />)
     await waitFor(() => expect(screen.getByRole('textbox', { name: 'Draft' })).not.toBe(draft))
     expect(screen.getByRole('textbox', { name: 'Draft' })).toHaveProperty('value', '')
+  })
+
+  it('preserves the committed draft when an identity render suspends and is abandoned', async () => {
+    const suspended = vi.fn()
+    const never = new Promise<never>(() => {})
+    function Draft({ suspend }: { suspend: boolean }) {
+      if (suspend) {
+        suspended()
+        throw never
+      }
+      return <input aria-label="Draft" defaultValue="" />
+    }
+    const tree = (suspend: boolean) => (
+      <Suspense fallback={<div>Suspended identity</div>}>
+        <AeConvexProvider chatRequired>
+          <ChatAuthorityBoundary><Draft suspend={suspend} /></ChatAuthorityBoundary>
+        </AeConvexProvider>
+      </Suspense>
+    )
+    const view = render(tree(false))
+    const draft = await screen.findByRole('textbox', { name: 'Draft' })
+    fireEvent.change(draft, { target: { value: 'Keep the committed identity draft' } })
+
+    // An anonymous identity can render immediately, but its suspended subtree
+    // never commits. Its render must not change the committed signed-in key.
+    runtime.isAuthenticated = false
+    runtime.userId = 'owner-2'
+    runtime.sessionId = 'session-2'
+    await act(async () => { startTransition(() => view.rerender(tree(true))) })
+    expect(suspended).toHaveBeenCalled()
+    expect(screen.queryByText('Suspended identity')).toBeNull()
+    expect(screen.getByRole('textbox', { name: 'Draft' })).toBe(draft)
+
+    // Abandon that render for a temporary handshake of the original identity.
+    runtime.isAuthenticated = true
+    runtime.isLoaded = false
+    runtime.userId = 'owner-1'
+    runtime.sessionId = null
+    view.rerender(tree(false))
+    expect(screen.queryByRole('textbox', { name: 'Draft' })).toBeNull()
+    expect(screen.getByDisplayValue('Keep the committed identity draft')).toBe(draft)
+
+    runtime.isLoaded = true
+    runtime.sessionId = 'session-1'
+    view.rerender(tree(false))
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Draft' })).toBe(draft))
+    expect(draft).toHaveProperty('value', 'Keep the committed identity draft')
+    expect(runtime.constructClient).toHaveBeenCalledTimes(1)
   })
 
   it('keeps one live client and mounted shell across market, workspace and chat transitions', async () => {

@@ -11,8 +11,8 @@ owns shipped source and environments.
 
 | Boundary | Next action / evidence |
 | --- | --- |
-| Production availability | Continue source/readiness observation across evidence expiry; preserve fail-closed RPC/receipt behavior and distinguish unavailable evidence from cash disagreement. |
-| Account monthly cap — High | Authority/finance: correct the confirmed ordinary Call/Plan exposure race under [MM-004](docs/operations/mercator-maturity-register.md#mm-004). Financial qualification is blocked; existing Principal/native capacity protections are not an Account-wide ceiling. Preserve accepted purchase identity and recovery. |
+| Production availability | Alchemy's existing Base project reports exhausted monthly capacity; Infura responds. Joel chose to leave Alchemy unchanged on 8 October. Preserve two-provider agreement and closed payment readiness; the separate US$25/month proposal is not activated. |
+| Account monthly cap — High | Authority/finance: source correction, independent review and full release gate complete for [MM-004](docs/operations/mercator-maturity-register.md#mm-004); deployment and hosted purchase qualification remain open. Existing Calls and Plan Holds now share one bounded admission fence, preserving accepted identity and recovery. |
 | Alpha invitations | [#288](https://github.com/CreasyBear/Agentic-Economy/issues/288): Joel's go/no-go. Production remains Admin-only. |
 | Paid development chat | [#279](https://github.com/CreasyBear/Agentic-Economy/issues/279): real Base Sepolia journey, separate from completed mainnet CLI acceptance. |
 | Metering operations | Qualify hosted large-period exports, any historical backfill, automatic monthly schedule activation and financial-evidence archive operation in the actual environment. [Runbook](docs/operations/usage-metering.md). |
@@ -45,13 +45,14 @@ completed with fewer requests, but four journey medians still exceed 200ms.
 Next work stays with these owners:
 
 - **Web/DX:** protected-screen latency, hosted hydration, two-Account isolation
-  and retained-browser/accepted-operation compatibility. Review the inherited
-  render-time Chat identity ref flagged by the advisory React Doctor hook;
-  source comparison finds no new error-level finding. Local fixtures and test
+  and retained-browser/accepted-operation compatibility. The inherited
+  render-time Chat identity ref flagged by the advisory React Doctor hook is
+  corrected in the alpha candidate; its abandoned-render regression passes. Local fixtures and test
   Clerk journeys do not replace Joel's deferred hosted acceptance.
 - **Authority/finance — MM-004:** repair the Account monthly-cap race confirmed by
-  independent source review and two local guard cases; retain the existing
-  commercial and recovery invariants.
+  independent source review and two local guard cases. The correction is now
+  implemented and independently reviewed; complete its release and hosted
+  qualification without waiving current payment readiness.
 - **Money/infrastructure — MM-041/MM-042:** qualify current RPC allowance and
   payment readiness, then coherent Convex/storage/Formance restoration. Native
   Vercel Sydney/Fluid/skew metadata and cookie emission are verified; expired AWS

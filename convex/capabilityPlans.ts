@@ -1,7 +1,6 @@
 import { v } from 'convex/values'
 import { action, internalAction, internalQuery, query } from './_generated/server'
 import { internalMutation, mutation } from './usageTrackedMutation'
-import { outstandingPlanExposureArgs, outstandingPlanExposureResult, readOutstandingPlanExposureHandler } from './lib/capabilityExecution/plans/planCommands'
 
 import {
   authenticatePlanQuoteArgs,
@@ -40,13 +39,6 @@ export const quote = action({
   returns: planQuoteResultValue,
   handler: quotePlanActionHandler,
 })
-
-export const readOutstandingPlanExposure = internalQuery({
-  args: outstandingPlanExposureArgs,
-  returns: outstandingPlanExposureResult,
-  handler: readOutstandingPlanExposureHandler,
-})
-
 
 import { beginRunHandler, beginRunResult, prepareRunHandler, prepareRunResult, runArgsValue } from './lib/capabilityExecution/plans/runAdmission'
 import { continueRunHandler, runActionHandler } from './lib/capabilityExecution/plans/runAction'

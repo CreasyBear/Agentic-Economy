@@ -1,4 +1,5 @@
-import { digestReference, digestValue, stripDigest, planHoldAccountAddress, planPromotionalHoldAccountAddress } from './formance-digest'
+import { digestReference, digestValue, stripDigest, planHoldAccountAddress, planPromotionalHoldAccountAddress, formanceReference } from './formance-digest'
+export { formanceReference } from './formance-digest'
 import type { Infer } from 'convex/values'
 import type { managedCallBookingValue } from '../managed-call-contracts'
 import { PLAN_FORMANCE_SCHEMA_VERSION } from '../formance-schema'
@@ -797,10 +798,6 @@ export function balanceAsset(kind: FormanceBalanceKind): 'AUD/6' | 'USDC/6' {
 
 export function capacityAsset(kind: FormanceCapacityKind): 'AUD/6' | 'USDC/6' {
   return balanceAsset(kind)
-}
-
-export function formanceReference(commandIdentity: unknown, suffix: string): string {
-  return `ae-p4:${digestValue('transaction-reference', commandIdentity)}:${suffix}`
 }
 
 export function formanceAccountMetadataDigest(accountRef: string): string | undefined {

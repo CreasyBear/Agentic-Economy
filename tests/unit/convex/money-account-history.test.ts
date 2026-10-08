@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { convexTestWithMarketComponents, ownerAdmin, publishedBusinessOwner } from '../../helpers/convex-fixtures'
 import { formanceAccountMetadataDigest } from '@/modules/money/formance-workflows'
 import { digestReference, type AccountHistoryResult } from '@/modules/money/public'
+import { api } from '../../../convex/_generated/api'
 
 const ledger = vi.hoisted(() => ({ listTransactions: vi.fn() }))
 vi.mock('@/modules/money/formance', async (importOriginal) => ({
@@ -20,6 +21,26 @@ afterEach(() => {
 })
 
 describe('authenticated Account history', () => {
+  it('keeps internal monthly sale proof out of the existing owner spending response', async () => {
+    const backend = convexTestWithMarketComponents()
+    const fixture = await publishedBusinessOwner(backend, 'monthly-report-contract')
+    const accountDigest = formanceAccountMetadataDigest(fixture.canonicalAccountRef)
+    const period = { periodStartAt: Date.now() - 10_000, periodEndAt: Date.now() }
+    const legal = `legal_customers:${'a'.repeat(64)}`
+    ledger.listTransactions.mockResolvedValueOnce({ v2TransactionsCursorResponse: { cursor: {
+      data: [{ id: 1n, reference: `ae-p4:${'b'.repeat(64)}:settle-buyer`, template: 'BUYER_SALE_SETTLED', reverted: false,
+        timestamp: new Date(period.periodStartAt + 1), insertedAt: new Date(period.periodStartAt + 2), metadata: { account_digest: accountDigest },
+        postings: [{ source: `${legal}:exposure_reserved`, destination: `${legal}:exposure_settled`, asset: 'AUD/6', amount: 7n }] }],
+      hasMore: false,
+    } } })
+    const result = await fixture.owner.action(api.moneyOwnerSpend.readOwnerSpend, period)
+    expect(result).toMatchObject({ kind: 'available', spendUnits: '7', transactionCountUnits: '1' })
+    expect(result).not.toHaveProperty('sales')
+    expect(result).not.toHaveProperty('highWaterTransactionId')
+    ledger.listTransactions.mockResolvedValueOnce({ v2TransactionsCursorResponse: { cursor: { data: [], hasMore: false } } })
+    expect(await fixture.owner.action(api.moneyOwnerSpend.readOwnerSpend, period)).toEqual({ kind: 'empty' })
+  })
+
   it('resolves the Account from owner identity on every page and rejects another owner cursor before the ledger', async () => {
     vi.stubEnv('AE_CONVEX_SERVER_FUNCTION_TOKEN', 'account-history-test-cursor-key-32-bytes')
     const backend = convexTestWithMarketComponents()

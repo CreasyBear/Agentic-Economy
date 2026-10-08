@@ -265,6 +265,24 @@ facts material to the selected Call. The caller never supplies an `accountRef`.
 
 ### Bounded action surface
 
+The Account monthly cap counts gross native sales plus unresolved ordinary Call
+and Plan exposure. Quote is a provisional check; the admission mutation rereads
+the current cap and a complete source fingerprint before accepting new work.
+That fingerprint includes current-month completed Calls, so a purchase that
+starts and finishes during a native read cannot disappear from the comparison.
+Only exact native sale references still represented in held exposure are
+deduplicated. Concluded Plan Nodes are not deducted twice. Uncertain work carries
+across month boundaries; application refunds do not replenish gross monthly
+capacity. Native effective dates remain authoritative for settled spend.
+
+The 8 October source correction preserves native bookings, request identities,
+accepted recovery and the public response shape. A frozen gross-price projection
+on new Calls supports indexed exclusion of old free work; the consumed Quote
+remains its authority. Incomplete, malformed or over-limit evidence refuses new
+paid admission. This bounded alpha fence is not an unlimited-history counter:
+its operating limits and hosted qualification remain in MM-004 and the release
+record.
+
 The recommended managed-Call path is:
 
 ```text

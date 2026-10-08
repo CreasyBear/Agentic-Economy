@@ -106,23 +106,29 @@ export const installationResult = v.union(
   setupRequired,
   unavailable,
 )
+const periodSpendSnapshotFields = {
+  periodStartAt: v.number(), periodEndAt: v.number(), snapshotAt: v.number(),
+  highWaterTransactionId: v.union(v.string(), v.null()),
+  coverage: v.literal('complete'),
+  sales: v.array(v.object({ reference: v.string(), units: v.string(), effectiveAt: v.number() })),
+}
 export const periodSpendResult = v.union(
   v.object({
+    ...periodSpendSnapshotFields,
     kind: v.literal('available'),
     currency: v.literal('AUD'),
     exponent: v.literal(6),
     spendUnits: v.string(),
     transactionCountUnits: v.string(),
-    periodStartAt: v.number(),
-    periodEndAt: v.number(),
     observedAt: v.number(),
     source: v.literal('formance_transaction_cursor'),
     authoritativeForConsequences: v.literal(false),
   }),
-  v.object({ kind: v.literal('empty') }),
+  v.object({ ...periodSpendSnapshotFields, kind: v.literal('empty') }),
   setupRequired,
   unavailable,
 )
+
 export const statementPageResult = v.union(
   v.object({
     kind: v.literal('available'),
@@ -153,6 +159,7 @@ export const displayBalanceResult = v.union(
 
 export const readPeriodSpendArgs = {
   accountRef: v.string(), periodStartAt: v.number(), periodEndAt: v.number(),
+  expectedEnvironment: v.optional(financialEnvironmentValue),
 }
 export const readAccountHistoryArgs = { accountRef: v.string(), cursor: v.optional(v.string()) }
 export const readStatementPageArgs = {

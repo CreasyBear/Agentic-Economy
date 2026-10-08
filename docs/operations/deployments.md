@@ -519,3 +519,94 @@ under MM-042; Datadog stays with #284. The independent ACID review confirmed the
 High Account/month cap race under [MM-004](mercator-maturity-register.md#mm-004).
 This candidate does not repair that financial owner or qualify payment availability
 or operational restoration. No deployment, credentials, caps or infrastructure changed.
+
+## 8 October bounded alpha readiness candidate
+
+Owner: canonical integrator with independent Sol finance review. Candidate base
+`44ae4826a83752e84e5503bf03047b15a68ac333` plus the reviewed working diff; this
+section does not record a deployment. The bounded change corrects committed Chat
+identity and the Account monthly admission race under MM-004. The earlier
+performance candidate remains part of this local source lineage.
+
+At 10:14 UTC production web reported
+`6e1abd0162bfef197e35a79b4b1aa8765db9769f`; native Convex
+`cautious-zebra-473` reported `ce7a0e57e1fbc13a0bf8f0ff8d1bb5ecc99bab7a`.
+Health was 200; readiness was 503 `payments_unavailable`. Direct read-only RPC
+probes identified Alchemy's monthly capacity refusal while Infura answered.
+Joel explicitly chose to leave Alchemy unchanged. The proposed US$25/month
+Alchemy allowance and alerts are preparation only, separate from his authorized
+US$200 aggregate / US$10 per test-user treasury purchase ceiling. The ceiling
+is not a target, permission to raise existing financial limits, or an instruction
+to create twenty users. Invitations and the Admin-only payment audience remain
+unchanged. No paid Call, deployment, billing, credential or failover change has
+occurred in this correction.
+
+The native cap reader was exercised read-only from local candidate source
+against the verified production ledger at 10:50:54 UTC: complete traversal,
+24 current-month sales for the existing authenticated Account, gross 182,595
+AUD/6 units, high-water ID 195, 2,381 ms. Its sale-list SHA-256 was
+`58dc4d47c6ca35338c7e56684058ea0c742c84d9f093632c26439373c356973f`.
+The reader uses the official SDK's descending native cursor and validates scope,
+identities, amounts and completeness. This does not qualify a deployed financial
+mutation, paid delivery, cross-channel recovery or joint restore.
+
+At 11:06 UTC the actual installed CLI `0.3.2 (development)`, official MCP client
+(protocol `2026-07-28`, 29 authenticated Tools) and direct authenticated HTTPS
+all read the same completed historical Call. Their Call/result projection hashes
+matched: `2832c96cad6b3ae466b65a14332fdf90ae3b146e8309c893f417554c3e2c4e79`.
+The CLI journey envelope retains the original Call recovery object. The installed
+binary SHA-256 is `a1f6e0a606c56ea1afbd0a62de256bff19fe41960a07262512d7f27592fe2c30`;
+this identifies the tested installation without claiming a newly published client.
+Credential-free HTTP redirected to HTTPS with 308. Health passed; readiness
+remained 503, catalogue stale and quoting unavailable at this observation.
+Evidence is retained in the execution workspace's
+`performance/proposals/alpha-readonly-channels.json`. These checks performed no
+new purchase or replay submission. Fresh paid Chat/MCP/CLI/HTTPS delivery,
+response-loss replay and authenticated browser acceptance remain unqualified.
+
+Backend changes are additive indexes and an optional immutable Call gross-price
+projection, plus replacement of the internal Plan-only exposure query. Public
+HTTP/MCP/CLI contracts, owner spend response shape and existing native references
+are preserved. Generated Convex API files come from official anonymous local
+codegen. New Quotes initialize zero Plan exposure; old unknown material remains
+visible. No historical purchase or financial record is rewritten.
+
+At 11:10–11:11 UTC bounded native document reads completed below their 1,001-row
+sentinel: 25 Calls (24 completed, one refused), three terminal Plans and 57
+Quotes. All Calls had conclusive financial states; no unheld begun Plan remained.
+The cohort fits the new source bounds without rewriting its 25 legacy Calls
+whose optional price projection is absent. This is point-in-time record evidence,
+not proof that no action is executing or that the new indexed query is deployed.
+The execution workspace retains `performance/proposals/alpha-production-cohort-bounds.json`.
+
+Source verification passed: `npm run check`, official anonymous Convex codegen
+and the full `npm run gate`: 9,650 unit tests, 3,133 integration tests, 20 public
+browser checks, 20 accessibility checks, packaged CLI, types, boundaries, SEO,
+production build and 228 docs pages/84 owner examples. Existing unavailable
+qualifications remain one unit skip, 77 integration skips/three todos and 18
+browser skips. The complete gate log is retained at
+`performance/alpha-final-gate.log` in the Codex execution workspace. Independent
+Sol review found no remaining material source regression within the stated native
+snapshot and source-coverage assumptions. This is not hosted paid acceptance.
+
+Before release, preserve accepted journals. Drain cap-reading preparation actions
+before switching the backend;
+old query/snapshot shapes are incompatible with the new internal contract.
+If an unheld begun Plan crosses the switch, inspect/requeue its original Plan
+reference through its owner. Do not cancel/recreate it or weaken the new guard.
+Frozen Hold booking and accepted Call recovery material remain unchanged.
+Backend and web require their own release identities. After new Calls carry
+`buyerAmountUnits`, any backend rollback must retain that optional schema field
+and the additive indexes: redeploying the raw previous schema can reject existing
+documents. A rollback to the previous financial guard also reintroduces MM-004;
+keep new paid admission closed if that rollback is necessary. Code rollback never
+restores the ledger or Convex data, changes accepted keys, or authorizes a
+replacement payment. Paid production
+qualification remains blocked until existing RPC and treasury readiness recover.
+
+Catalogue freshness is a separate open Operations/Registry decision: the import
+runs every 168 hours but reports stale after 36 hours. The previous unchanged
+scan shortcut is absent from deployed source. Daily full import requires current
+cost/allowance evidence; no cadence increase or timestamp-only freshness repair
+was made. AWS session expiry and joint financial restoration remain separate
+Operations acceptance boundaries.

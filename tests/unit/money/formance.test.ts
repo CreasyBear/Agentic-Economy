@@ -587,8 +587,10 @@ describe('Package 4 official Formance boundary', () => {
           cursor: {
             data: [
               {
-                id: 1n,
+                id: 3n,
                 timestamp: new Date('2026-09-01T01:00:00.000Z'),
+                insertedAt: new Date('2026-09-01T01:00:00.000Z'),
+                reference: `ae-p4:${DIGEST_A}:settle-buyer`,
                 reverted: false,
                 template: 'BUYER_SALE_SETTLED',
                 metadata: { account_digest: DIGEST_A },
@@ -601,6 +603,8 @@ describe('Package 4 official Formance boundary', () => {
               {
                 id: 2n,
                 timestamp: new Date('2026-09-01T02:00:00.000Z'),
+                insertedAt: new Date('2026-09-01T02:00:00.000Z'),
+                reference: `ae-p4:${DIGEST_B}:settle-buyer`,
                 reverted: false,
                 template: 'CALL_RESERVED_AUD',
                 metadata: { account_digest: DIGEST_A },
@@ -617,8 +621,10 @@ describe('Package 4 official Formance boundary', () => {
         v2TransactionsCursorResponse: {
           cursor: {
             data: [{
-              id: 3n,
+              id: 1n,
               timestamp: new Date('2026-09-02T01:00:00.000Z'),
+                insertedAt: new Date('2026-09-02T01:00:00.000Z'),
+                reference: `ae-p4:${DIGEST_B}:settle-buyer`,
               reverted: false,
               template: 'BUYER_SALE_SETTLED',
               metadata: { account_digest: DIGEST_A },
@@ -649,7 +655,7 @@ describe('Package 4 official Formance boundary', () => {
       accountDigest: DIGEST_A,
       periodStartAt,
       periodEndAt,
-      now: 123,
+      now: periodEndAt + 123,
     })).resolves.toEqual({
       kind: 'available',
       currency: 'AUD',
@@ -658,14 +664,21 @@ describe('Package 4 official Formance boundary', () => {
       transactionCountUnits: '2',
       periodStartAt,
       periodEndAt,
-      observedAt: 123,
+      observedAt: periodEndAt + 123,
+      snapshotAt: periodEndAt + 123,
+      coverage: 'complete',
+      highWaterTransactionId: '3',
+      sales: [
+        { reference: `ae-p4:${DIGEST_A}:settle-buyer`, units: '3', effectiveAt: Date.parse('2026-09-01T01:00:00.000Z') },
+        { reference: `ae-p4:${DIGEST_B}:settle-buyer`, units: '5', effectiveAt: Date.parse('2026-09-02T01:00:00.000Z') },
+      ],
       source: 'formance_transaction_cursor',
       authoritativeForConsequences: false,
     })
     expect(listTransactions.mock.calls[0]?.[0]).toMatchObject({
       ledger: 'test-ledger',
       pageSize: 15,
-      sort: 'id:asc',
+      sort: 'id:desc',
       query: {
         $and: [
           { $match: { 'metadata[account_digest]': DIGEST_A } },

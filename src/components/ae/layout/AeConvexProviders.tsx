@@ -3,7 +3,7 @@ import { ConvexHttpClient } from 'convex/browser'
 import { ConvexReactClient } from 'convex/react'
 import { ConvexProviderWithClerk } from 'convex/react-clerk'
 import { Link } from '@tanstack/react-router'
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
 import { WorkspacePresentationVisibility, useWorkspacePresentationVisible } from '@/lib/client/workspace-presentation'
 import { AePageState } from '@/components/ae/layout/AePageState'
@@ -87,7 +87,7 @@ function ConfiguredConvexProvider({ convexUrl, chatRequired, children }: { conve
   const [initialization, setInitialization] = useState<{ authorityScope: string; epoch: number; attempt: number; ready: boolean } | null>(null)
   const generation = useRef(0)
   const installedSession = useRef<{ client: ConvexHttpClient; generation: number } | null>(null)
-  const mountedIdentity = useRef<string | null>(null)
+  const committedIdentity = useRef<string | null>(null)
   // Requires a verified Clerk token. Initialize that exact token before the
   // maintained Convex integration installs it for reactive reads, including
   // every refresh. While rotating authority, descendants cannot read the old
@@ -142,7 +142,7 @@ function ConfiguredConvexProvider({ convexUrl, chatRequired, children }: { conve
   useEffect(() => {
     if (!chatRequired || !auth.isLoaded || !auth.isSignedIn) return
     const reconnect = () => {
-      if (mountedIdentity.current === identity) setAttempt((value) => value + 1)
+      if (committedIdentity.current === identity) setAttempt((value) => value + 1)
     }
     window.addEventListener('online', reconnect)
     return () => window.removeEventListener('online', reconnect)
@@ -177,8 +177,14 @@ function ConfiguredConvexProvider({ convexUrl, chatRequired, children }: { conve
   // A temporary Clerk/Convex handshake can clear the current identity. Keep the
   // same session mounted but hidden until it is verified again; a real identity
   // change replaces the keyed subtree, and an explicit refusal still removes it.
-  const keepChatMounted = !showChat && current?.ready !== false && mountedIdentity.current !== null
-  if (showChat) mountedIdentity.current = identity
+  const keepChatMounted = !showChat && current?.ready !== false && committedIdentity.current !== null
+  // Derive this render's key from its verified identity, but retain only the
+  // identity of a committed subtree. A suspended render must not replace the
+  // draft identity that a later hidden handshake will preserve.
+  const mountedIdentity = showChat ? identity : committedIdentity.current
+  useLayoutEffect(() => {
+    if (showChat) committedIdentity.current = identity
+  }, [showChat, identity])
   useEffect(() => () => {
     // An old HTTP completion or installed-token renewal cannot authorize a new
     // route mode, identity or client after its auth fetcher has been retired.
@@ -187,7 +193,7 @@ function ConfiguredConvexProvider({ convexUrl, chatRequired, children }: { conve
   }, [client, authorityScope, epoch, attempt])
   return (
     <ConvexProviderWithClerk client={client} useAuth={useInitializedAuth}>
-      <ChatAuthorityContext.Provider value={{ showChat, keepChatMounted, mountedIdentity: mountedIdentity.current, opening: current === null, retry: () => setAttempt(value => value + 1) }}>
+      <ChatAuthorityContext.Provider value={{ showChat, keepChatMounted, mountedIdentity, opening: current === null, retry: () => setAttempt(value => value + 1) }}>
         {children}
       </ChatAuthorityContext.Provider>
     </ConvexProviderWithClerk>

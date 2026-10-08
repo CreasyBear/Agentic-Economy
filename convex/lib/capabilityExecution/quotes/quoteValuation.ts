@@ -218,7 +218,7 @@ export type OrganizationMonthlySpendAdmissionSnapshot = Readonly<{
   enabled: boolean
   ceilingUnits?: string | undefined
   monthSpendUnits?: string | undefined
-  heldPlanExposure: Readonly<
+  heldExposure: Readonly<
     | { kind: 'known'; units: string }
     | { kind: 'unavailable' }
   >
@@ -234,7 +234,7 @@ export function quoteOrganizationMonthlySpendAdmission(
     enabled: true,
     ceilingUnits: snapshot.ceilingUnits,
     monthSpendUnits: snapshot.monthSpendUnits,
-    heldPlanExposure: snapshot.heldPlanExposure,
+    heldExposure: snapshot.heldExposure,
     requestUnits,
   })
   switch (fence.kind) {

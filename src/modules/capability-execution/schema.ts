@@ -122,6 +122,8 @@ export const capabilityCallTables = {
     .index('by_planRef', ['planRef'])
     .index('by_ownerId_and_createdAt', ['ownerId', 'createdAt'])
     .index('by_accountRef_and_organizationMonth', ['accountRef', 'organizationMonth'])
+    .index('by_accountRef_and_environment_and_organizationMonth', ['accountRef', 'environment', 'organizationMonth'])
+    .index('by_accountRef_environment_organizationMonthlyExposureUnits', ['accountRef', 'environment', 'organizationMonthlyExposureUnits'])
     .index('by_principalId_and_idempotencyKey', ['principalId', 'idempotencyKey'])
     .index('by_ownerId_and_state_and_createdAt', ['ownerId', 'state', 'createdAt']),
   callUsefulnessFeedback: defineTable({
