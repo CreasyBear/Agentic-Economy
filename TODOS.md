@@ -45,7 +45,9 @@ completed with fewer requests, but four journey medians still exceed 200ms.
 Next work stays with these owners:
 
 - **Web/DX:** protected-screen latency, hosted hydration, two-Account isolation
-  and retained-browser/accepted-operation compatibility. Local fixtures and test
+  and retained-browser/accepted-operation compatibility. Review the inherited
+  render-time Chat identity ref flagged by the advisory React Doctor hook;
+  source comparison finds no new error-level finding. Local fixtures and test
   Clerk journeys do not replace Joel's deferred hosted acceptance.
 - **Authority/finance — MM-004:** repair the Account monthly-cap race confirmed by
   independent source review and two local guard cases; retain the existing

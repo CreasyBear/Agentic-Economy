@@ -477,6 +477,14 @@ rerun passed. Final check/gate log: `performance/closeout-final-gate.log` in the
 Codex execution workspace, linked by the local release receipt. The hosted
 hydration stall remains unresolved.
 
+The local advisory React Doctor hook reports one error-level finding and 26
+warnings across touched files. Its baseline comparison reports zero new errors
+and five new warnings. The error is the inherited render-time `mountedIdentity`
+ref write in `AeConvexProviders.tsx`, present at the base revision. Web/DX retains
+its lifecycle review in `TODOS.md`; passing the gate does not dismiss it. The
+comparison reports are retained beside the gate log. No post-gate runtime edit
+was made.
+
 ### Compatibility, infrastructure and rollback
 
 The [PR #372 production receipt](https://github.com/CreasyBear/Agentic-Economy/pull/372#issuecomment-6051921139)
