@@ -20,6 +20,7 @@ export type PublicToolDetailRouteResult =
   | Readonly<{ kind: 'source_unavailable'; toolRef: string }>
 
 const inputSchema = z.strictObject({ toolRef: z.string() })
+const OPTIONAL_DETAIL_TIMEOUT_MS = 3_000
 
 export const readPublicToolDetailRouteServer = createServerFn()
   .validator((data) => inputSchema.parse(data))
@@ -27,38 +28,43 @@ export const readPublicToolDetailRouteServer = createServerFn()
     const request = getRequest()
     const signal = AbortSignal.any([request.signal, AbortSignal.timeout(SOURCE_READ_TIMEOUT_MS)])
     const options = { signal }
-    return awaitBoundedRead(async () => {
-      let result: ToolDetailResult
-      try {
-        result = await readCapabilityToolDetail(data, options)
-        signal.throwIfAborted()
-      } catch (cause) {
-        signal.throwIfAborted()
-        return degrade(cause, { kind: 'source_unavailable', toolRef: data.toolRef } as const, {
-          site: 'readPublicToolDetailRouteServer',
-          reason: 'source_unavailable',
-        })
-      }
-      if (result.kind !== 'found') return result
-      // Descriptor authority is independent of listing evidence and public links.
-      const price = result.tool.commercial.price
-      const needsRate = result.tool.commercial.displayPrice === undefined && (price.kind === 'fixed'
-        ? price.amount.currency === 'USDC'
-        : price.kind === 'range' && price.minimum.currency === 'USDC')
-      const [evidence, service, referenceRate] = await Promise.all([
-        readToolListingEvidence(result.tool, '30d', options).catch(cause => { signal.throwIfAborted(); return degrade(cause, undefined, { site: 'toolListingEvidence', reason: 'source_unavailable' }) }),
-        registryServicesDetailAction.run({ data: { slug: result.tool.business.slug }, context: { caller: 'ui', request: new Request(request, { signal }) } })
-          .catch(cause => { signal.throwIfAborted(); return degrade(cause, undefined, { site: 'toolPublicBusiness', reason: 'source_unavailable' }) }),
-        needsRate ? readPersistedReferenceRate(options).catch(cause => { signal.throwIfAborted(); return degrade(cause, undefined, { site: 'toolReferenceRate', reason: 'source_unavailable' }) }) : undefined,
-      ])
+    let result: ToolDetailResult
+    try {
+      result = await awaitBoundedRead(() => readCapabilityToolDetail(data, options), signal)
+    } catch (cause) {
       signal.throwIfAborted()
-      const exactPublicBusiness = service?.kind === 'found'
-        && service.service.id === result.tool.business.businessId
-        && service.service.ae.publicUrl === `/${result.tool.business.slug}`
-        && service.service.ae.source === 'business_published'
-        && service.service.ae.disposition === 'current'
-      return { ...result, ...(evidence === undefined ? {} : { evidence }), ...(exactPublicBusiness ? { verifiedBusinessSlug: result.tool.business.slug } : {}), ...(referenceRate === undefined ? {} : { referenceRate }) }
-    }, signal)
+      return degrade(cause, { kind: 'source_unavailable', toolRef: data.toolRef } as const, {
+        site: 'readPublicToolDetailRouteServer',
+        reason: 'source_unavailable',
+      })
+    }
+    request.signal.throwIfAborted()
+    if (result.kind !== 'found') return result
+    // Optional evidence gets at most three seconds and only the remaining page
+    // budget. Its timeout must not discard an already-loaded Tool descriptor.
+    const optionalSignal = AbortSignal.any([signal, AbortSignal.timeout(OPTIONAL_DETAIL_TIMEOUT_MS)])
+    const optionalOptions = { signal: optionalSignal }
+    const readOptional = <T>(read: () => Promise<T>, site: string): Promise<T | undefined> =>
+      awaitBoundedRead(read, optionalSignal).catch(cause => {
+        request.signal.throwIfAborted()
+        return degrade(cause, undefined, { site, reason: 'source_unavailable' })
+      })
+    const price = result.tool.commercial.price
+    const needsRate = result.tool.commercial.displayPrice === undefined && (price.kind === 'fixed'
+      ? price.amount.currency === 'USDC'
+      : price.kind === 'range' && price.minimum.currency === 'USDC')
+    const [evidence, service, referenceRate] = await Promise.all([
+      readOptional(() => readToolListingEvidence(result.tool, '30d', optionalOptions), 'toolListingEvidence'),
+      readOptional(() => registryServicesDetailAction.run({ data: { slug: result.tool.business.slug }, context: { caller: 'ui', request: new Request(request, { signal: optionalSignal }) } }), 'toolPublicBusiness'),
+      needsRate ? readOptional(() => readPersistedReferenceRate(optionalOptions), 'toolReferenceRate') : undefined,
+    ])
+    request.signal.throwIfAborted()
+    const exactPublicBusiness = service?.kind === 'found'
+      && service.service.id === result.tool.business.businessId
+      && service.service.ae.publicUrl === `/${result.tool.business.slug}`
+      && service.service.ae.source === 'business_published'
+      && service.service.ae.disposition === 'current'
+    return { ...result, ...(evidence === undefined ? {} : { evidence }), ...(exactPublicBusiness ? { verifiedBusinessSlug: result.tool.business.slug } : {}), ...(referenceRate === undefined ? {} : { referenceRate }) }
   })
 
 const externalById = sourceQuery<{ id: string }, X402DirectoryCatalogueResource>('x402DirectoryIndex:detailById')

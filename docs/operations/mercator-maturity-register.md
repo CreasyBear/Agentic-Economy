@@ -688,6 +688,17 @@ the exact remaining acceptance.
 - **Supported implementation:** Reuse current Sentry/PostHog/metering/correlation and separately owned supported monitoring plan.
 - **8 October performance review:** one public observation at 06:57:37 UTC returned health 200 and readiness 503 `payments_unavailable`, with configuration and Convex ready. The response does not establish an RPC quota cause. Current Infura/Alchemy usage, spend caps, reset windows and throughput remain blocked on authenticated provider evidence; Money/operations and the existing provider-account owner must obtain it. Datadog delivery/alert acceptance remains with #284. No cap, credential, failover or monitoring change was made.
 - **References:** [Health API][M-O]; [AE deployment/readiness][AE-DEP]; [Datadog owner][DD].
+- **9 October Sydney follow-through:** live configuration/Convex checks pass;
+  payment readiness remains closed. Direct probes confirm Alchemy's monthly
+  quota failure while Infura answers. Scheduled treasury evidence has matched
+  funding/reservations but unavailable chain/receipt/cash-attribution checks.
+  The candidate removes nested treasury transport retries without weakening
+  quorum or freshness. HTTP admission and Agent-directory cancellation, optional
+  Tool evidence containment and native PostHog/Vercel lifetime integration pass
+  focused tests, independent review and the full source gate; rollout is pending.
+  Historical Sentry attribution, hosted PostHog flushing and
+  service-origin alert acknowledgment remain open; no empty log query closes
+  them. [Current evidence and owners](deployments.md#9-october-sydney-health-follow-through-candidate).
 
 <a id="mm-042"></a>
 
@@ -701,6 +712,14 @@ the exact remaining acceptance.
 - **Supported implementation:** Use existing operational records and supported provider/database backup mechanisms; no new backup subsystem.
 - **8 October performance/ACID review:** source declares a single private application host, Multi-AZ RDS and independent encrypted backups; these do not prove host replacement or a coherent Convex/storage/ledger restore. Current provider settings, backup/copy outcomes, writer fencing, joint cutoff, reconciliation and alert delivery still require the existing Operations/finance owner's isolated drill and readback. `infra/package4/README.md` and production-root variables reference missing `docs/operations/aws-foundation.md`; identify the authoritative gate before using that procedure. Local browser asset-loss/rollback fixtures are separate web evidence, not financial restoration. No restore or archived-worker activation ran.
 - **References:** [Durable job contract][M-J]; [AE deployment proof limits][AE-DEP]; [operational owner][DD].
+- **9 October Sydney follow-through:** the migration's native Convex/storage
+  comparison and paused-Virginia fix-forward boundary are recorded. Live AWS
+  shows current private Multi-AZ RDS/PITR but no disposable restore target. A
+  joint financial drill needs one coherent cutoff, temporary billable RDS,
+  managed credential, scoped permissions and explicit cleanup authority; current
+  restrictions block those actions. The infrastructure README now identifies
+  the missing historical foundation gate rather than linking to an absent
+  approval. No joint financial restore or host replacement is claimed.
 
 <a id="mm-043"></a>
 

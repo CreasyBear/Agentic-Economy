@@ -65,6 +65,8 @@ export async function readGuardedX402EvmReceipt(input: Readonly<{
   dispatcher: Agent
   minimumConfirmations?: number
   confirmationTimeoutMs?: number
+  /** A caller with its own retry budget can disable the transport's retries. */
+  transportRetryCount?: 0
 }>): Promise<X402EvmReceipt | undefined> {
   const { defaultDnsResolver, isPublicHttpTarget } = await import('@/modules/network-guard/public')
   const profile = x402PaymentProfileForEnvironment(input.aeEnvironment)
@@ -96,7 +98,7 @@ export async function readGuardedX402EvmReceipt(input: Readonly<{
           }
           return result.value
         },
-      }),
+      }, input.transportRetryCount === undefined ? {} : { retryCount: input.transportRetryCount }),
     })
     const minimumConfirmations = input.minimumConfirmations ?? 1
     const receiptPromise = minimumConfirmations === 1

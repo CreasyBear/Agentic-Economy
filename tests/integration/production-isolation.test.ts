@@ -1,5 +1,7 @@
 import { anyApi } from 'convex/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { defaultDnsResolver } from '@/modules/network-guard/public'
+import * as networkGuard from '@/modules/network-guard/server'
 
 import { api, internal } from '../../convex/_generated/api'
 import { defaultSandboxAgentAccessPolicy } from '@/modules/agent-access/sandbox-policy'
@@ -25,6 +27,10 @@ const sandboxGate = evaluateCommercialPolicyGate({
 if (sandboxGate.kind !== 'admitted') throw new Error('sandbox_policy_fixture_missing')
 
 beforeEach(() => {
+  // Synthetic Tool health is supplied explicitly by observeHealthyReadiness.
+  // Drain automatic probes deterministically before seeding that evidence.
+  vi.spyOn(defaultDnsResolver, 'lookup').mockResolvedValue([])
+  vi.spyOn(networkGuard, 'sendGuardedHttpRequest').mockRejectedValue(new Error('unexpected_fixture_network_request'))
   vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
   vi.stubEnv('AE_FORMANCE_ENVIRONMENT', 'production')
   vi.stubEnv('AE_CONVEX_SERVER_FUNCTION_TOKEN', serviceKey)
@@ -32,7 +38,14 @@ beforeEach(() => {
   vi.stubEnv('AE_X402_CUSTODY_PAYEE_DAILY_MAX_ATOMIC', '100000')
   vi.stubEnv('AE_X402_CUSTODY_NEW_PAYEE_MAX_ATOMIC', '100000')
 })
-afterEach(() => { vi.unstubAllEnvs() })
+afterEach(() => {
+  try {
+    expect(networkGuard.sendGuardedHttpRequest).not.toHaveBeenCalled()
+  } finally {
+    vi.restoreAllMocks()
+    vi.unstubAllEnvs()
+  }
+})
 
 describe('production financial boundary isolation', () => {
   it('refuses a canonical sandbox principal and independently a sandbox Tool before Quote material', async () => {

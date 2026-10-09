@@ -116,8 +116,13 @@ cost ingestion and a passing recovery drill are all evidenced. It uses
 `ae-production`, VPC `10.43.0.0/16`, a dedicated encrypted state bucket and KMS
 key, Sydney primary and Melbourne recovery copy, and fresh Cloudflare and
 database identities. It contains no application traffic binding. The root
-refuses to plan unless `foundation_gates_passed=true`; the canonical criteria
-are in `docs/operations/aws-foundation.md`.
+refuses to plan unless `foundation_gates_passed=true`. Its former
+`docs/operations/aws-foundation.md` gate is missing; do not set that flag or
+provision a replacement stack from this historical declaration. The existing
+production footprint and current release authority are recorded in
+[Deployment operations](../../docs/operations/deployments.md#destinations-and-authority).
+[MM-042](../../docs/operations/mercator-maturity-register.md#mm-042) retains the
+unqualified joint restore, host replacement and alert-delivery requirements.
 
 ## Application binding
 

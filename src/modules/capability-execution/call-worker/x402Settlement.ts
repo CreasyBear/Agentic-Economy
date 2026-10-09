@@ -93,6 +93,7 @@ export async function readX402EvmReceipt(
   payer: string,
   nonce: string,
   confirmation?: Readonly<{ minimumConfirmations: number; timeoutMs: number }>,
+  rpcRetry?: Readonly<{ retryCount: 0 }>,
 ): Promise<X402EvmReceipt | undefined> {
   if (callReceiptPaymentProfile(environment, network, asset) === undefined) return undefined
   const targets = configuredX402RpcUrls(network, environment)
@@ -109,6 +110,7 @@ export async function readX402EvmReceipt(
         payer,
         nonce,
         dispatcher,
+        ...(rpcRetry === undefined ? {} : { transportRetryCount: rpcRetry.retryCount }),
         ...(confirmation === undefined
           ? {}
           : {

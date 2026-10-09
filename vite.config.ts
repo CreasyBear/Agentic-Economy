@@ -76,7 +76,19 @@ export default defineConfig({
     sourcemap: sentryPluginEnabled,
   },
   plugins: [
-    tanstackStart(),
+    tanstackStart({
+      router: {
+        codeSplittingOptions: {
+          // Load each route's data code and pending UI with that route.
+          defaultBehavior: [['loader'], ['component'], ['pendingComponent'], ['errorComponent'], ['notFoundComponent']],
+          // The installed compiler cannot split Activity's object-form loader.
+          // Preserve its blocking stale-reload behavior without rewriting it.
+          splitBehavior: ({ routeId }) => routeId === '/_operator/activity'
+            ? [['component'], ['pendingComponent'], ['errorComponent'], ['notFoundComponent']]
+            : undefined,
+        },
+      },
+    }),
     nitro({
       // Scope 1 pins Vercel Node serverless, not edge: existing webhook routes
       // use raw Request bodies plus Node/WebCrypto signature verification.

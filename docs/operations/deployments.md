@@ -1206,3 +1206,166 @@ Private execution evidence remains outside Git under
 `live-health-initial.json`, `live-cutover-verification.json`,
 `payment-readiness-after.json`, `public-http-before-valid.json`,
 `public-http-after.json`, `gate-receipt.json`, and scoped AWS receipts.
+
+## 9 October Sydney health follow-through candidate
+
+Baseline at 04:53 UTC still resolves production web and Sydney backend to
+`7d4eba169`. Health is 200; configuration and Convex readiness pass; payment
+readiness is 503. Direct read-only probes found Infura responding and Alchemy
+returning HTTP 429 with exhausted monthly capacity. The 8 October Infura daily
+quota notice does not establish its current state or explain a Tool-detail
+timeout. Alchemy remains unchanged under Joel's explicit instruction.
+
+The 05:07 UTC native treasury readback distinguishes matched funding and
+reservations from unavailable payment receipts, chain evidence and cash
+attribution. Available ledger/spend projections are not a substitute for those
+missing checks. No financial difference, recovery success or healthy payment
+state is inferred from an unavailable result.
+
+At 05:21 UTC the existing host is SSM-online and all eight CloudWatch alarms
+are OK. Six recent five-minute samples show host CPU below 10%, memory below
+14% and disk below 16%; RDS CPU is below 6%, with about 3.07 GB free memory and
+49.67 GB free storage. RDS is private, encrypted, deletion-protected and
+Multi-AZ, with seven-day retention and a latest restorable time of 05:11:41 UTC.
+These observations provide no evidence for a host/database capacity upgrade;
+alarm state does not prove notification delivery or recovery.
+
+### Bounded source repairs
+
+- The treasury receipt audit already owns two attempts. Pinned viem's transport
+  adds three retries by default, allowing eight physical requests per failing
+  method/provider. Only this audit now selects transport `retryCount: 0`.
+  Its explicit retry, total budget, two-provider agreement, 12 confirmations,
+  identity and freshness remain unchanged. Other execution/recovery callers
+  retain their original transport policy. Offline real-transport regression
+  demonstrates four versus one HTTP request per invocation; 86 focused tests
+  pass, with independent review.
+- HTTP admission uses existing 12-second bounded waiting and request
+  cancellation, including signature acquisition and response-body consumption.
+  Late signing cannot initiate quota writes; late admission cannot dispatch the
+  operation. A remotely accepted quota debit cannot be undone by abort. No
+  automatic retry is added. Existing 503/429 outcomes remain; 23 focused tests
+  pass, including actual SDK cancellation and both admission branches.
+- Agent-directory authentication and canonical reads share the source deadline.
+  Optional policy/activity reads now use the existing three-second enrichment
+  bound alongside keys/connections. Canonical identity survives optional
+  failures, authority/usage remain unavailable, and unfinished Convex reads are
+  aborted on completion. Request cancellation prevents returning a stale private
+  projection. Clerk SDK work may not be cancellable; waiting is bounded. The
+  existing directory and owner-console suites pass 40 tests, including a
+  review-discovered cancellation race corrected by lazy enrichment dispatch.
+- Public Tool detail retains its loaded descriptor if optional listing evidence,
+  Provider-link verification or display FX exceed three seconds or the remaining
+  page deadline. Essential reads still time out; visitor cancellation still
+  rejects, including a reviewed primary-settlement race. Missing enrichment
+  stays absent rather than implying performance, price or Provider identity.
+  The inspected evidence query is indexed and bounded; this containment defect
+  does not establish the cause of the inaccessible historical Sentry event.
+- PostHog's existing singleton now receives the official Vercel `waitUntil`
+  helper (`@vercel/functions` 3.9.11, Node 22 compatible). The installed SDK owns
+  batching and debounce; capture does not await network work. Its send timeout
+  is five seconds with no immediate transport retries. Network-failed batches
+  can remain in the SDK queue for a later flush; this is best-effort telemetry,
+  not durable event delivery. No event fields, opt-out, sanitization or explicit
+  feedback acknowledgment change. Controlled-transport tests with the pinned
+  SDK cover concurrent captures, later batches, held responses and cancellation.
+  Hosted lifetime and ingestion still need independent qualification. The
+  current Nitro Node adapter does not expose `Request.waitUntil`; the official
+  provider helper avoids relying on that absent adapter hook.
+- TanStack's supported splitting moves eligible loaders and pending UI into
+  route chunks. A retained failed build identified the installed compiler's
+  unsupported object-form Activity loader. A supported route-specific exception
+  preserves its `staleReloadMode: 'blocking'`; no handler rewrite is used.
+  Operator guards, Market disclosure/preload policy and recovery remain intact.
+  Independent emitted-code review finds RPC stubs in split client loaders and
+  matching SSR registrations, without inspected server implementation markers.
+
+| Build measure | Before | Candidate |
+| --- | ---: | ---: |
+| Main client entry | 325,782 B | 237,597 B |
+| Full client static dependency graph | 1,412,088 B / 137 files | 1,384,768 B / 141 files |
+| Summed gzip of that graph | 461,794 B | 455,763 B |
+| Full SSR router static dependency graph | 15,285,672 B | 15,212,090 B |
+
+The client entry decreases 27.1%, but total static bytes decrease only 1.94%
+(summed gzip 1.31%). Additional lazy requests may offset savings. These are build
+measurements, not browser timing acceptance. Pending-only splitting increased
+summed gzip and was not selected. Existing Node externalization warnings were
+identical across the previous successful build and failed candidate.
+
+References: [TanStack supported splitting](https://tanstack.com/router/latest/docs/guide/automatic-code-splitting),
+[viem custom-transport retry semantics](https://viem.sh/docs/clients/transports/custom).
+[Vercel request lifetime](https://vercel.com/docs/functions/functions-api-reference/vercel-functions-package#waituntil)
+and the installed PostHog 5.39 SDK's native `waitUntil` option govern telemetry
+flushing; no custom scheduler or per-request SDK shutdown is introduced.
+No financial data/schema migration, cache of payment truth, provider failover,
+allowance change, new credential or infrastructure subscription is included.
+
+The first configured full gate passed 9,690 unit tests but exposed three
+intermittent integration failures. Independent review traced real DNS/demo-host
+traffic in two preexisting fixture files: a registered owner probe timed out,
+and a scheduled probe outlived the isolation fixture's timer pump. Focused and
+whole-integration reruns passed, but did not erase that failure. File-scoped DNS
+and guarded-HTTP fixtures now supply deterministic unavailable responses while
+retaining registered authorization/probe code, valid/invalid 402 assertions,
+environment-isolation checks and empty purchase/payment tables. Scheduled work
+is drained before restoring fixtures; no timeout is raised and no production
+logic is bypassed. The owner outcome is asserted as `health_unhealthy`, its
+actual domain refusal for the simulated HTTP 503. The corrected six cases pass.
+
+### Remaining access and recovery boundaries
+
+The supplied Sentry issue could not be accessed with available authorized tools.
+A bounded current-deployment Vercel log query returned no entries; that does not
+prove the historical issue fixed or establish its cause. Codex's browser plugin
+is installed but its required execution tool is unavailable in this session;
+Orca is not a substitute. Signed-in, two-Account and retained-browser acceptance
+remain open, separately from source tests and HTTP probes.
+
+The native AWS readback finds one private Multi-AZ PostgreSQL 16.13 RDS instance,
+`ae-alpha-formance`, with 50 GB gp3 storage and current PITR. No disposable target
+exists. The maintained joint restore needs an isolated temporary RDS target,
+managed credential and scoped host-role permissions, plus a coherent writer
+fence and Convex/storage/Formance cutoff. It cannot reuse the migration's Convex
+archive with an unrelated current ledger baseline. Execution effects must stay
+blocked; never overwrite production or resume Virginia.
+
+For review only, official Sydney prices imply approximately US$0.45 for four
+hours of Single-AZ db.t4g.medium, 50 GB storage and one prorated secret, before
+CPU surplus, logs, KMS, transfer and tax. Maximum continuous surplus CPU would
+add about US$0.60 over four hours. This is not a hard billing cap; approve exact
+temporary resources, log bounds, permissions, cutoff and teardown before running
+the drill. The existing no-new-spend/access restriction prevents execution now.
+The obsolete `aws-foundation.md` link in the infrastructure README is replaced
+with an explicit missing-gate warning and current authority/evidence links;
+the historical production root is not authorized for replacement provisioning.
+
+Pricing evidence: [RDS Sydney offer](https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/current/ap-southeast-2/index.json),
+[CloudWatch Sydney offer](https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudWatch/current/ap-southeast-2/index.json),
+[Secrets Manager pricing](https://aws.amazon.com/secrets-manager/pricing/).
+
+### Final source qualification
+
+On 9 October, `npm run check` and the complete `npm run gate` passed using Node
+22, npm 11.5.1, declared development/sandbox and four Vitest workers. The gate
+passed 9,697 unit tests, 3,134 integration tests, type/import/security/SEO checks,
+20 browser journeys, 20 accessibility checks and the installed CLI package.
+The docs build verified 228 pages and 84 owner examples including emitted
+resources. One unit test, 77 integration cases and 18 browser cases stayed
+skipped; three integration TODOs remain. These exclusions are not acceptance
+of authenticated, native-provider or hosted recovery behavior.
+
+Independent Sol reviews cleared the final retry, cancellation, route-splitting,
+Tool containment and telemetry changes. Real-SDK telemetry tests use a controlled
+transport, without sending events. Earlier failed and interrupted runs remain
+recorded, including restore-script timeouts during the workstation-disconnection
+period; the final complete gate passes those tests without changing their limits.
+
+This is still an uncommitted, unreleased candidate against main `1a8457b604`.
+Native readback at 06:09–06:14 UTC confirms default Sydney production and the
+existing Vercel deployment; backend release binding remains `7d4eba169`.
+Virginia's ordinary query refuses as paused. The existing Wayfinder #256 now
+records the actual bindings and payment/recovery blockers. Private evidence,
+the owned-path patch and source digests are in the existing workspace's
+`performance/health-followthrough-2026-10-09/`. No provider allowance, credential,
+financial state, AWS resource or production deployment changed in this follow-up.
