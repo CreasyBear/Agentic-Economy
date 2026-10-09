@@ -1,6 +1,6 @@
 # Deployment map
 
-**Last verified:** 9 October 2026, after the Sydney cutover in PR #376. This is a dated inventory;
+**Last verified:** 9 October 2026, after the Sydney health follow-through in PR #378. This is a dated inventory;
 resolve current provider identities and source revisions before mutations.
 [TODOS.md](../../TODOS.md) owns work; [readiness](../production-readiness-plan.md)
 owns acceptance and its limits.
@@ -23,22 +23,25 @@ stack is approved. Resolve provider identities afresh before mutations.
 
 ## Current production release
 
-At 03:38 UTC on 9 October, production moved to Sydney. Web and backend use
-source `7d4eba16926e870fbe5dda4ab0999b18d4b04b7c`, reviewed in
-[PR #376](https://github.com/CreasyBear/Agentic-Economy/pull/376), merged as
-`9932af51c037dd0c97977015bc8ea3d9d8236dc5` with the same runtime tree.
+At 03:38 UTC on 9 October, production moved to Sydney through
+[PR #376](https://github.com/CreasyBear/Agentic-Economy/pull/376). The subsequent
+[PR #378](https://github.com/CreasyBear/Agentic-Economy/pull/378) deploys bounded
+request work, treasury retries and telemetry lifetime. At 06:34 UTC, both web
+and backend report source `d3c9061f4297a5d56e2f84379c20cdf86572f56a`, merged as
+`40789ec3e91ec83e6afcb5239a2f57439d245ded` with the same runtime tree.
 
 | Surface | Current identity |
 | --- | --- |
-| Web | `app.aecon.ai`, Vercel `dpl_DWQJGdALwj3BhFWiN21W6YUPoZkb`, `syd1`, Node 22; `/api/v1/release` reports `7d4eba16926e870fbe5dda4ab0999b18d4b04b7c` |
+| Web | `app.aecon.ai`, Vercel `dpl_2qcjc45uo7dZP3u8P1GrfiJ2fs28`, `syd1`, Node 22; `/api/v1/release` reports `d3c9061f4297a5d56e2f84379c20cdf86572f56a` |
 | Backend | `upbeat-cricket-954`, permanent/default production, `aws-ap-southeast-2`; cloud `https://upbeat-cricket-954.ap-southeast-2.convex.cloud`, site `https://upbeat-cricket-954.ap-southeast-2.convex.site` |
 | Retained backend | `cautious-zebra-473`, nondefault and paused, reference `production-virginia-retained-2026-10-09`; never run both against shared financial providers |
 | Browser recovery lineage | `VITE_AE_ADMIN_RECOVERY_DEPLOYMENT_URL=https://cautious-zebra-473.convex.cloud`; preserve this namespace on subsequent releases |
 
 Health is live; web configuration and Convex readiness pass. Payment readiness
-remains blocked. This migration does not requalify earlier paid or signed-in
-journeys. The [cutover receipt](#final-cutover-and-live-verification) below owns
-current evidence, limitations and the fix-forward boundary.
+remains blocked. These releases do not requalify earlier paid or signed-in
+journeys. The [cutover receipt](#final-cutover-and-live-verification) retains the
+migration evidence; [follow-through verification](#follow-through-release-and-live-verification)
+records current evidence and the fix-forward boundary.
 
 ## Historical accepted application releases
 
@@ -1361,11 +1364,56 @@ transport, without sending events. Earlier failed and interrupted runs remain
 recorded, including restore-script timeouts during the workstation-disconnection
 period; the final complete gate passes those tests without changing their limits.
 
-This is still an uncommitted, unreleased candidate against main `1a8457b604`.
-Native readback at 06:09–06:14 UTC confirms default Sydney production and the
-existing Vercel deployment; backend release binding remains `7d4eba169`.
-Virginia's ordinary query refuses as paused. The existing Wayfinder #256 now
-records the actual bindings and payment/recovery blockers. Private evidence,
-the owned-path patch and source digests are in the existing workspace's
-`performance/health-followthrough-2026-10-09/`. No provider allowance, credential,
-financial state, AWS resource or production deployment changed in this follow-up.
+Before release, native readback at 06:09–06:14 UTC confirmed default Sydney
+production at source `7d4eba169` and Virginia's paused refusal. The candidate
+was based on main `1a8457b604`. Private evidence, the owned-path patch, source
+digests, retained failures and complete gate log are in the existing workspace's
+`performance/health-followthrough-2026-10-09/`.
+
+### Follow-through release and live verification
+
+Joel authorized one temporary release branch, with deletion after merge.
+[PR #378](https://github.com/CreasyBear/Agentic-Economy/pull/378) merged the
+independently reviewed 24-file candidate as `40789ec3e`. Backend and web were
+built from an immutable archive of `d3c9061f4297a5d56e2f84379c20cdf86572f56a`;
+owned-file digests matched the gated candidate. The merge has the same runtime
+tree. Sydney Convex deployed successfully before the web promotion. Its
+`AE_RELEASE_SOURCE_REVISION` binding was read back as that exact revision.
+
+The Vercel production candidate `dpl_2qcjc45uo7dZP3u8P1GrfiJ2fs28` was READY
+in `syd1`, Node 22, before promotion. Read-only checks used the existing
+automation access without creating or rotating a bypass. At 06:34 UTC the
+public `app.aecon.ai` alias resolved to that deployment, `/api/v1/release`
+returned the expected revision, and `/api/health` returned 200. `/api/ready`
+returned 503 `payments_unavailable`, with configuration and Convex ready.
+The original browser-recovery namespace is unchanged. At 06:36 UTC an
+authenticated application query to Virginia still refused as paused. System
+environment reads remain available on a paused deployment and cannot prove
+application execution is enabled; anonymous application errors omit the reason.
+
+Six bounded native HTTP rounds from the same Perth workstation returned 200
+for all 24 requests. Warm response-start medians were 222 ms for Market,
+265 ms for Tools, 454 ms for Providers and 453 ms for catalogue status. First
+requests were 364 ms, 1,174 ms, 592 ms and 444 ms respectively. These are
+connection-to-response diagnostics, not browser navigation, hydration, cold
+isolation or p95 acceptance. The earlier misses remain in the cutover receipt.
+
+The 06:38 UTC treasury readback includes the normal 06:29 and 06:34 cycles after
+backend deployment: funding and reservations match, ledger/spending reads are available,
+and chain, settlement receipts and cash attribution remain unavailable. No
+forced audit or paid Call ran. These are scheduled-cycle observations, not
+sustained payment health or a financial reconciliation pass.
+
+Application-code rollback retains the previous Sydney web deployment
+`dpl_DWQJGdALwj3BhFWiN21W6YUPoZkb` and runtime source
+`7d4eba16926e870fbe5dda4ab0999b18d4b04b7c`. Verify backend compatibility before
+promoting old code; if a backend correction is needed, use the existing Sydney
+deployment. Never resume Virginia, restore financial data or repeat an accepted
+purchase to roll back code. Financial correction remains append-only/fix-forward.
+
+No provider allowance, credential, financial policy, AWS resource or audience
+changed. Payment readiness, hosted browser/Account and retained-operation
+qualification, hosted PostHog ingestion, historical Sentry attribution, joint
+financial restore, host replacement and service-origin alert acknowledgment
+remain open with their existing owners. This release does not close MM-004,
+MM-041, MM-042 or authorize alpha invitations.

@@ -55,7 +55,8 @@ retains failures, current limits and the confirmed Sydney web/Virginia Convex pl
 Next work stays with these owners:
 
 - **Infrastructure/execution — Sydney migration completed:** production web and
-  Convex now run in Sydney at reviewed source `7d4eba169`, PR #376. Virginia is
+  Convex now run in Sydney; PR #376 performed the cutover and PR #378 advances
+  both to reviewed source `d3c9061f4`. Virginia is
   paused and retained; preserve the original browser-recovery namespace and fix
   forward after new execution. The final comparison matches all 248 tables,
   307,930 exported records and eight files; native workers progressed on a new
@@ -88,7 +89,7 @@ Next work stays with these owners:
   replacement ran. The current root/state mismatch must not create an
   `ae-production` replacement stack. Preserve the US$400 budget; review gross
   cost visibility because credits mask the runway budget's current usage.
-- **Web/DX — request bounds candidate:** HTTP admission now uses the existing
+- **Web/DX — request bounds deployed in PR #378:** HTTP admission now uses the existing
   12-second source deadline and caller cancellation, checks cancellation before
   quota dispatch, and cannot dispatch the operation after late admission.
   Agent-directory authentication/primary reads share that deadline; optional
@@ -96,7 +97,10 @@ Next work stays with these owners:
   three seconds, with unfinished Convex reads cancelled. Public Tool detail
   preserves its descriptor when optional evidence times out, while respecting
   visitor cancellation and retaining unknown enrichment. Independent reviews,
-  focused tests, `check` and the full source gate pass; rollout is pending.
+  focused tests, `check` and the full source gate pass. Matching Sydney web and
+  backend revisions, public health and explicit payment refusal are verified;
+  [release evidence](docs/operations/deployments.md#follow-through-release-and-live-verification)
+  retains the separate hosted acceptance gaps.
   PostHog now uses the official Vercel
   request-lifetime helper and a five-second SDK send deadline without immediate
   retries. Controlled-transport SDK evidence passes; hosted ingestion and
@@ -120,7 +124,7 @@ Clerk bytes. The unused Discover/Host reads and shared chrome/admin recovery
 boundary are corrected by PR #375. Web/DX still owns evidence-led reduction of
 eager animation dependencies on static public surfaces, then review of
 off-route loader/contract imports using TanStack's maintained splitting. The
-9 October follow-through candidate splits supported loaders and pending UI;
+9 October follow-through release, PR #378, splits supported loaders and pending UI;
 Activity retains its object-form loader because the installed compiler rejects
 splitting it. Main client entry shrinks 27.1%, but the full static dependency
 graph shrinks only 1.94% (summed gzip 1.31%). This is build evidence, not a timing
