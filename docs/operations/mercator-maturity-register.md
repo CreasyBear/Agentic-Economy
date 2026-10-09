@@ -692,10 +692,13 @@ the exact remaining acceptance.
   payment readiness remains closed. Direct probes confirm Alchemy's monthly
   quota failure while Infura answers. Scheduled treasury evidence has matched
   funding/reservations but unavailable chain/receipt/cash-attribution checks.
-  The candidate removes nested treasury transport retries without weakening
+  PR #378 removes nested treasury transport retries without weakening
   quorum or freshness. HTTP admission and Agent-directory cancellation, optional
   Tool evidence containment and native PostHog/Vercel lifetime integration pass
-  focused tests, independent review and the full source gate; rollout is pending.
+  focused tests, independent review and the full source gate. Matching Sydney
+  web/backend source `d3c9061f4` is deployed; public health is 200 and readiness
+  remains 503 with the payment boundary closed. Scheduled treasury observations
+  are not a sustained reconciliation pass.
   Historical Sentry attribution, hosted PostHog flushing and
   service-origin alert acknowledgment remain open; no empty log query closes
   them. [Current evidence and owners](deployments.md#9-october-sydney-health-follow-through-candidate).
