@@ -74,6 +74,45 @@ function productionEnvironment(): Record<string, string> {
 }
 
 describe('deployment manifest validator', () => {
+  it('validates and fingerprints an explicit recovery lineage without changing the active backend', () => {
+    const environment = productionEnvironment()
+    const inherited = validateDeploymentManifest({ ...environment,
+      VITE_AE_ADMIN_RECOVERY_DEPLOYMENT_URL: 'https://original.convex.cloud' })
+    expect(inherited.findings).toEqual([])
+    expect(inherited.fingerprint).not.toBe(validateDeploymentManifest(environment).fingerprint)
+    expect(validateDeploymentManifest({ ...environment,
+      VITE_AE_ADMIN_RECOVERY_DEPLOYMENT_URL: 'javascript:alert(1)' }).ok).toBe(false)
+    expect(validateDeploymentManifest({ ...environment,
+      VITE_AE_ADMIN_RECOVERY_DEPLOYMENT_URL: 'https://original.convex.cloud/another-scope' }).ok).toBe(false)
+  })
+
+  it('includes the regional Convex site binding in deployment evidence', () => {
+    const environment = {
+      ...productionEnvironment(),
+      CONVEX_URL: 'https://upbeat-cricket-954.ap-southeast-2.convex.cloud',
+      VITE_CONVEX_URL: 'https://upbeat-cricket-954.ap-southeast-2.convex.cloud',
+    }
+    const withoutSite = validateDeploymentManifest(environment)
+    const current = validateDeploymentManifest({ ...environment,
+      CONVEX_SITE_URL: 'https://upbeat-cricket-954.ap-southeast-2.convex.site' })
+    const stale = validateDeploymentManifest({ ...environment,
+      CONVEX_SITE_URL: 'https://cautious-zebra-473.convex.site' })
+
+    expect(current.findings).toEqual([])
+    expect(DEPLOYMENT_MANIFEST.configuration.optional).toContain('CONVEX_SITE_URL')
+    expect(current.fingerprint).not.toBe(withoutSite.fingerprint)
+    expect(current.fingerprint).not.toBe(stale.fingerprint)
+  })
+
+  it.each(['not-a-url', 'javascript:alert(1)', 'http://example.convex.site',
+    'https://secret@example.convex.site', 'https://example.convex.site?other=deployment'])('rejects a malformed production Convex site URL %s', CONVEX_SITE_URL => {
+    const result = validateDeploymentManifest({ ...productionEnvironment(), CONVEX_SITE_URL })
+
+    expect(result.ok).toBe(false)
+    expect(result.findings).toContainEqual({ kind: 'malformed', code: 'convex_site_url_invalid',
+      names: ['CONVEX_SITE_URL'], scope: 'configuration' })
+  })
+
   it('declares the exact optional alpha screening policy and rejects unknown modes', () => {
     expect(validateDeploymentManifest({ ...productionEnvironment(), AE_X402_PAYEE_SCREENING_POLICY: 'alpha_not_screened_v1' }).ok).toBe(true)
     expect(DEPLOYMENT_MANIFEST.configuration.optional).toContain('AE_X402_PAYEE_SCREENING_POLICY')

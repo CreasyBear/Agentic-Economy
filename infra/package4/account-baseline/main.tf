@@ -26,6 +26,36 @@ resource "aws_ebs_encryption_by_default" "this" {
 
 data "aws_iam_policy_document" "audit_key" {
   statement {
+    sid    = "AllowVpcFlowLogEncryption"
+    effect = "Allow"
+    actions = [
+      "kms:Encrypt",
+      "kms:Decrypt",
+      "kms:ReEncrypt*",
+      "kms:GenerateDataKey*",
+      "kms:DescribeKey",
+    ]
+    resources = ["*"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["delivery.logs.amazonaws.com"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceAccount"
+      values   = [local.account_id]
+    }
+
+    condition {
+      test     = "ArnLike"
+      variable = "aws:SourceArn"
+      values   = ["arn:${data.aws_partition.current.partition}:logs:ap-southeast-2:${local.account_id}:*"]
+    }
+  }
+
+  statement {
     sid       = "DelegateAdministrationToAccount"
     effect    = "Allow"
     actions   = ["kms:*"]

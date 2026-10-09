@@ -1,0 +1,9 @@
+# Resolve the existing alpha state bucket, exact key and actual state KMS key
+# before init. Keep explicit SSE-KMS and native locking enabled. This root creates
+# no backend; do not substitute another environment state or create a new stack.
+bucket       = "replace-with-authorized-encrypted-state-bucket"
+key          = "agentic-economy/alpha/opentofu.tfstate"
+region       = "ap-southeast-2"
+encrypt      = true
+use_lockfile = true
+kms_key_id   = "replace-with-authorized-state-kms-key-arn"

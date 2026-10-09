@@ -3,7 +3,8 @@ set -euo pipefail
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y --no-install-recommends ca-certificates curl jq python3 unzip
+# SSM may install CloudWatch concurrently during first boot.
+apt-get -o DPkg::Lock::Timeout=600 install -y --no-install-recommends ca-certificates curl jq python3 unzip
 
 curl --fail --silent --show-error --location \
   '${aws_cli_install_url}' \
@@ -77,8 +78,8 @@ database_secret=$(aws secretsmanager get-secret-value \
   --secret-id '${rds_secret_arn}' \
   --query SecretString \
   --output text)
-database_username=$(jq -r '.username' <<<"$database_secret")
-database_password=$(jq -r '.password' <<<"$database_secret")
+database_username=$(jq -er '.username | select(type == "string" and length > 0)' <<<"$database_secret" 2>/dev/null)
+database_password=$(jq -er '.password | select(type == "string" and length > 0)' <<<"$database_secret" 2>/dev/null)
 database_uri=$(DB_USER="$database_username" DB_PASSWORD="$database_password" python3 - <<'PY'
 import os
 from urllib.parse import quote
@@ -88,7 +89,8 @@ PY
 )
 unset database_secret database_username database_password
 
-kubectl apply -f - <<YAML
+# API errors can include the submitted credential-bearing manifest.
+if ! kubectl apply -f - 2>/dev/null <<YAML
 apiVersion: formance.com/v1beta1
 kind: Versions
 metadata:
@@ -184,6 +186,10 @@ spec:
   dev: false
   debug: false
 YAML
+then
+  printf '%s\n' 'Failed to apply Formance configuration; credentials omitted.' >&2
+  exit 1
+fi
 unset database_uri
 
 for _ in $(seq 1 120); do
@@ -192,13 +198,20 @@ for _ in $(seq 1 120); do
 done
 kubectl get namespace '${stack_name}' >/dev/null
 
-kubectl -n '${stack_name}' create secret generic cloudflare-tunnel-token \
-  --from-literal=token="$(aws secretsmanager get-secret-value \
-    --region '${aws_region}' \
-    --secret-id '${cloudflare_tunnel_secret_arn}' \
-    --query SecretString \
-    --output text)" \
-  --dry-run=client -o yaml | kubectl apply -f -
+cloudflare_tunnel_token=$(aws secretsmanager get-secret-value \
+  --region '${aws_region}' \
+  --secret-id '${cloudflare_tunnel_secret_arn}' \
+  --query SecretString \
+  --output json)
+jq -e 'type == "string" and length > 0' <<<"$cloudflare_tunnel_token" >/dev/null 2>&1
+if ! printf '%s' "$cloudflare_tunnel_token" | jq -jr '.' 2>/dev/null | \
+  kubectl -n '${stack_name}' create secret generic cloudflare-tunnel-token \
+  --from-file=token=/dev/stdin \
+  --dry-run=client -o yaml 2>/dev/null | kubectl apply -f - 2>/dev/null; then
+  printf '%s\n' 'Failed to apply tunnel credentials; credentials omitted.' >&2
+  exit 1
+fi
+unset cloudflare_tunnel_token
 
 kubectl -n '${stack_name}' apply -f - <<'YAML'
 apiVersion: apps/v1
@@ -256,12 +269,25 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 ExecStart=/opt/agentic-economy-package4/reconcile.sh
-RemainAfterExit=yes
 TimeoutStartSec=1800
+UNIT
+
+cat >/etc/systemd/system/agentic-economy-package4-reconcile.timer <<'UNIT'
+[Unit]
+Description=Refresh Package 4 configuration and managed database credentials
+
+[Timer]
+OnBootSec=1m
+# Retry failed runs too, without overlapping a running oneshot service.
+OnUnitInactiveSec=5m
+AccuracySec=30s
+Unit=agentic-economy-package4-reconcile.service
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=timers.target
 UNIT
 
 systemctl daemon-reload
-systemctl enable --now agentic-economy-package4-reconcile.service
+# Arm retries before the initial synchronous run, including if bootstrap fails.
+systemctl enable --now agentic-economy-package4-reconcile.timer
+systemctl start agentic-economy-package4-reconcile.service

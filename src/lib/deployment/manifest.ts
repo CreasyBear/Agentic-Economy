@@ -153,6 +153,8 @@ const conditional: readonly RequirementGroup[] = [
   },
 ]
 const optionalNames = Object.freeze([
+  'CONVEX_SITE_URL',
+  'VITE_AE_ADMIN_RECOVERY_DEPLOYMENT_URL',
   'AE_X402_PAYEE_SCREENING_POLICY',
   'OPENROUTER_API_KEY', 'AE_LLM_MODEL', 'AE_CHAT_PROXY_SECRET',
   'AE_JEV_DISCOVERY_ENABLED',
@@ -170,8 +172,9 @@ const optionalNames = Object.freeze([
 export const fieldRules: readonly FieldRule[] = [
   { name: 'AE_JEV_DISCOVERY_ENABLED', kind: 'boolean' },
   { name: 'AE_PUBLIC_DOCS_URL', kind: 'url' }, { name: 'VITE_AE_DOCS_APP_URL', kind: 'url' },
+  { name: 'VITE_AE_ADMIN_RECOVERY_DEPLOYMENT_URL', kind: 'url' },
   { name: 'AE_CANONICAL_BASE_URL', kind: 'url' }, { name: 'AE_CANONICAL_HOST_ALLOWLIST', kind: 'host-list' },
-  { name: 'CONVEX_URL', kind: 'url' }, { name: 'VITE_CONVEX_URL', kind: 'url' }, { name: 'CLERK_JWT_ISSUER_DOMAIN', kind: 'url' },
+  { name: 'CONVEX_URL', kind: 'url' }, { name: 'VITE_CONVEX_URL', kind: 'url' }, { name: 'CONVEX_SITE_URL', kind: 'url' }, { name: 'CLERK_JWT_ISSUER_DOMAIN', kind: 'url' },
   { name: 'AE_GATEWAY_SMOKE_BASE_URL', kind: 'url' }, { name: 'AE_RELEASE_CONVEX_URL', kind: 'url' },
   { name: 'AE_GATEWAY_SMOKE_CONFIRM_LIVE_SPEND', kind: 'boolean' },
   { name: 'AE_OPENROUTER_API_BASE_URL', kind: 'url' }, { name: 'SITE_URL', kind: 'url' }, { name: 'AE_SITE_URL', kind: 'url' },
@@ -622,6 +625,7 @@ function validateField(environment: DeploymentEnvironmentInput, rule: FieldRule,
 function isMalformed(rule: FieldRule, value: string, production: boolean): boolean {
   if (rule.kind === 'credential-ref') return rule.target === undefined || value !== `env:${rule.target}`
   if (rule.kind === 'url') return !validUrl(value, production)
+    || (rule.name === 'VITE_AE_ADMIN_RECOVERY_DEPLOYMENT_URL' && new URL(value).pathname !== '/')
   if (rule.kind === 'host-list') return !value.split(',').every((entry) => validHost(entry.trim()))
   if (rule.kind === 'boolean') return value !== 'true' && value !== 'false' && !(rule.name === 'AE_CSP_REPORT_ONLY' && ['0', '1'].includes(value))
   return false

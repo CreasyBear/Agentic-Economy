@@ -1,0 +1,14 @@
+cloudflare_account_id = "replace-with-cloudflare-account-id"
+cloudflare_zone_id    = "replace-with-cloudflare-zone-id"
+source_revision       = "0000000000000000000000000000000000000000"
+
+# Historical variable/address retained for existing state continuity.
+# Set true only for the reviewed saved plan against verified existing ae-alpha
+# state. This does not authorize another stack, financial host replacement,
+# credential changes, application rebinding or expanded payment authority.
+alpha_sandbox_acknowledged = false
+
+# Supply provider credentials through their normal environment or credential
+# chain. Never copy credentials or synthetic release profiles from Package 4.
+# application_binding describes current production authority; it is not a
+# deployment instruction, readiness receipt or new ledger initialization step.
