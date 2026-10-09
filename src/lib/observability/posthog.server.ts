@@ -1,4 +1,5 @@
 import { PostHog } from 'posthog-node'
+import { waitUntil } from '@vercel/functions'
 
 import { captureRouteException } from '@/lib/observability/capture-route-exception'
 import { readObservabilityServerConfig } from '@/lib/observability/config'
@@ -18,6 +19,11 @@ function getPostHogServerClient(): PostHog | undefined {
     host: config.posthogHost,
     flushAt: 10,
     flushInterval: 5000,
+    // The SDK owns debouncing and batching; Vercel owns request lifetime.
+    // Best-effort diagnostics must not keep a function retrying after response.
+    waitUntil,
+    requestTimeout: 5_000,
+    fetchRetryCount: 0,
   })
 
   return client

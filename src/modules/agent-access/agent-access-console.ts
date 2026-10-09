@@ -1,5 +1,6 @@
 import { createAuthenticatedSourceTransport, sourceQuery } from '@/lib/server/convex-source'
 import { degrade } from '@/lib/observability/degrade'
+import { awaitBoundedRead, SOURCE_READ_TIMEOUT_MS } from '@/lib/bounded-read'
 import { listAgentAccessKeysServer } from '@/modules/agent-access/agent-access.functions'
 import type { AgentAccessKeyInventoryItem } from '@/modules/agent-access/agent-access'
 import type { AgentConnectionReadback } from '@/modules/agent-access/agent-connection'
@@ -147,11 +148,11 @@ export async function loadOwnerReconnectCandidates(
 }
 
 
-async function boundedDirectoryEnrichment<T, U>(read: Promise<T>, unavailable: U, site: string): Promise<T | U> {
+async function boundedDirectoryEnrichment<T, U>(read: () => Promise<T>, unavailable: U, site: string, signal: AbortSignal): Promise<T | U> {
   const { promise, reject } = Promise.withResolvers<never>()
   const timer = setTimeout(() => reject(new Error('agent_directory_enrichment_timeout')), 3_000)
   try {
-    return await Promise.race([read, promise])
+    return await awaitBoundedRead(() => Promise.race([read(), promise]), signal)
   } catch (cause) {
     return degrade(cause, unavailable, { site, reason: 'source_unavailable' })
   } finally {
@@ -163,36 +164,56 @@ export async function loadAgentDirectoryReadback(
   cursor: string | null = null,
   principalRef?: string,
   callRef?: string,
+  requestSignal?: AbortSignal,
+): Promise<AgentDirectoryProjection> {
+  const completed = new AbortController()
+  const signal = AbortSignal.any([completed.signal, AbortSignal.timeout(SOURCE_READ_TIMEOUT_MS),
+    ...(requestSignal === undefined ? [] : [requestSignal])])
+  try {
+    signal.throwIfAborted()
+    return await readAgentDirectoryReadback(cursor, principalRef, callRef, signal)
+  } finally {
+    // Cancel optional Convex reads that lost their shorter enrichment deadline.
+    completed.abort()
+  }
+}
+
+async function readAgentDirectoryReadback(
+  cursor: string | null,
+  principalRef: string | undefined,
+  callRef: string | undefined,
+  signal: AbortSignal,
 ): Promise<AgentDirectoryProjection> {
   const now = Date.now()
   const { periodStartAt, periodEndAt } = currentUtcMonthBounds(now)
   const keysRead = boundedDirectoryEnrichment(
-    listAgentAccessKeysServer(), [] as readonly AgentAccessKeyInventoryItem[],
-    'loadAgentDirectoryReadback.keys',
+    () => listAgentAccessKeysServer({ signal }), [] as readonly AgentAccessKeyInventoryItem[],
+    'loadAgentDirectoryReadback.keys', signal,
   )
-  const source = await createAuthenticatedSourceTransport()
-  const canonicalAgents = await source.query(listOwnedAgentDirectoryQuery, {
+  const source = await awaitBoundedRead(signal => createAuthenticatedSourceTransport({ signal }), signal)
+  const canonicalAgents = await awaitBoundedRead(() => source.query(listOwnedAgentDirectoryQuery, {
     now,
     ...(principalRef === undefined ? {} : { principalRef }),
     paginationOpts: { numItems: 25, cursor },
-  })
+  }), signal)
   const principalRefs = canonicalAgents.page.map(({ principalRef }) => principalRef)
   const [policyReadbacks, ownerAgentReadbacks, connectionResult] = await Promise.all([
     principalRefs.length === 0
       ? Promise.resolve([] as readonly AgentOwnerPolicyReadback[])
-      : source.query(listOwnerGrantReadbacksQuery, { principalRefs }).catch((cause) => degrade(
-          cause, [] as readonly AgentOwnerPolicyReadback[],
-          { site: 'loadAgentDirectoryReadback.policy', reason: 'source_unavailable' },
-        )),
+      : boundedDirectoryEnrichment(() => source.query(listOwnerGrantReadbacksQuery, { principalRefs }),
+          [] as readonly AgentOwnerPolicyReadback[], 'loadAgentDirectoryReadback.policy', signal),
     Promise.all(canonicalAgents.page.map(async ({ principalRef }) => {
       try {
-        const readback = await source.query(readOwnerAgentReadbackQuery, {
+        const readback = await boundedDirectoryEnrichment(() => source.query(readOwnerAgentReadbackQuery, {
           principalRef,
           ...(callRef === undefined ? {} : { callRef }),
           periodStartAt,
           periodEndAt,
           paginationOpts: { numItems: 50, cursor: null },
-        })
+        }), undefined, 'loadAgentDirectoryReadback.activity', signal)
+        if (readback === undefined) return {
+          principalRef, readback: { principalRef, activity: [], activityIsDone: true, dataState: 'unavailable' as const },
+        }
         return { principalRef, readback: mapOwnerAgentReadback(principalRef, readback) }
       } catch (cause) {
         return degrade(cause, {
@@ -209,14 +230,15 @@ export async function loadAgentDirectoryReadback(
     principalRefs.length === 0
       ? Promise.resolve({ kind: 'available' as const, connections: [] as readonly AgentConnectionReadback[] })
       : boundedDirectoryEnrichment(
-          source.query(listOwnerConnectionReadbacksQuery, { principalRefs, now })
+          () => source.query(listOwnerConnectionReadbacksQuery, { principalRefs, now })
             .then((connections) => ({ kind: 'available' as const, connections })),
           { kind: 'unavailable' as const },
-          'loadAgentDirectoryReadback.connections',
+          'loadAgentDirectoryReadback.connections', signal,
         ),
   ])
   const grants = policyReadbacks.flatMap(({ grant }) => grant === undefined ? [] : [grant])
   const sources = readAgentCredentialSources(await keysRead, grants)
+  signal.throwIfAborted()
   const projection = projectAgentDirectory(sources, canonicalAgents.page,
     connectionResult.kind === 'available' ? connectionResult.connections : [],
     ownerAgentReadbacks.map(({ readback }) => readback), policyReadbacks,

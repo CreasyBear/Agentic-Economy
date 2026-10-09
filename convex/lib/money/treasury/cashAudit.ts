@@ -101,8 +101,9 @@ export async function auditTreasuryCash(input: CashAuditInput, readReceipt?: Rec
   const dispatcher = readReceipt === undefined ? new Agent({ connect: { lookup: createGuardedLookup(defaultDnsResolver) } }) : undefined
   const reader: ReceiptReader = readReceipt ?? (async (attempt, hash) => {
     if (dispatcher === undefined || attempt.paymentPayer === undefined || attempt.paymentNonce === undefined) return undefined
+    // auditPayments owns the bounded retry. Do not multiply it inside viem.
     const receipt = await readX402EvmReceipt(attempt.network, attempt.asset, hash, dispatcher, input.identity.environment,
-      attempt.paymentPayer, attempt.paymentNonce)
+      attempt.paymentPayer, attempt.paymentNonce, undefined, { retryCount: 0 })
     return receipt !== undefined && receipt.confirmations >= 12n ? receipt : undefined
   })
   let settlement: Awaited<ReturnType<typeof auditPayments>>

@@ -23,6 +23,7 @@ vi.mock('@/lib/server/canonical-url.functions', () => ({ readCanonicalBaseUrlSer
 import { readPublicToolDetailRouteServer } from '@/modules/market/tool-detail-route.functions'
 import { readPublicBusinessRouteServer } from '@/lib/server/public-business-route.functions'
 import { buildPublicBusinessPageHead } from '@/modules/seo/public-route'
+import { SOURCE_READ_TIMEOUT_MS } from '@/lib/bounded-read'
 
 const descriptor = {
   kind: 'found' as const,
@@ -33,7 +34,7 @@ const descriptor = {
   },
 }
 
-afterEach(() => { for (const mock of Object.values(sources)) mock.mockReset(); requestState.request = new Request('https://example.com/market') })
+afterEach(() => { for (const mock of Object.values(sources)) mock.mockReset(); vi.restoreAllMocks(); requestState.request = new Request('https://example.com/market') })
 
 describe('public detail containment', () => {
   it('cancels a pending descriptor and prevents late evidence, link, and rate reads', async () => {
@@ -63,13 +64,88 @@ describe('public detail containment', () => {
     sources.service.mockResolvedValue(undefined)
     sources.rate.mockResolvedValue(undefined)
     expect(await readPublicToolDetailRouteServer({ data: { toolRef: descriptor.tool.toolRef } })).toEqual(descriptor)
-    const options = sources.tool.mock.calls[0]?.[1] as { signal: AbortSignal }
+    const options = sources.evidence.mock.calls[0]?.[2] as { signal: AbortSignal }
     expect(sources.evidence).toHaveBeenCalledWith(descriptor.tool, '30d', options)
     expect(sources.rate).toHaveBeenCalledWith(options)
     const serviceContext = sources.service.mock.calls[0]?.[0].context as { request: Request }
     controller.abort()
     expect(options.signal.aborted).toBe(true)
     expect(serviceContext.request.signal.aborted).toBe(true)
+  })
+
+  it.each(['optional', 'remaining page'] as const)('retains the loaded descriptor when the %s deadline expires during enrichment', async deadline => {
+    const pageDeadline = new AbortController()
+    const optionalDeadline = new AbortController()
+    const timeout = vi.spyOn(AbortSignal, 'timeout').mockImplementation(ms => {
+      if (ms === SOURCE_READ_TIMEOUT_MS) return pageDeadline.signal
+      if (ms === 3_000) return optionalDeadline.signal
+      throw new Error(`unexpected_timeout:${ms}`)
+    })
+    const started = Promise.withResolvers<void>()
+    sources.tool.mockResolvedValue(descriptor)
+    sources.evidence.mockReturnValue(new Promise(() => {}))
+    sources.service.mockReturnValue(new Promise(() => {}))
+    sources.rate.mockImplementation(() => { started.resolve(); return new Promise(() => {}) })
+    const pending = readPublicToolDetailRouteServer({ data: { toolRef: descriptor.tool.toolRef } })
+    await started.promise
+    const elapsedDeadline = deadline === 'optional' ? optionalDeadline : pageDeadline
+    elapsedDeadline.abort(new DOMException('Read deadline', 'TimeoutError'))
+    expect(await pending).toEqual(descriptor)
+    expect(timeout).toHaveBeenCalledWith(SOURCE_READ_TIMEOUT_MS)
+    expect(timeout).toHaveBeenCalledWith(3_000)
+    const evidenceOptions = sources.evidence.mock.calls[0]?.[2] as { signal: AbortSignal }
+    const serviceContext = sources.service.mock.calls[0]?.[0].context as { request: Request }
+    const rateOptions = sources.rate.mock.calls[0]?.[0] as { signal: AbortSignal }
+    expect(evidenceOptions.signal.aborted).toBe(true)
+    expect(serviceContext.request.signal.aborted).toBe(true)
+    expect(rateOptions.signal.aborted).toBe(true)
+    expect(sources.tool).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the essential descriptor deadline and never starts optional reads after it expires', async () => {
+    const deadline = new AbortController()
+    vi.spyOn(AbortSignal, 'timeout').mockReturnValue(deadline.signal)
+    sources.tool.mockReturnValue(new Promise(() => {}))
+    const pending = readPublicToolDetailRouteServer({ data: { toolRef: descriptor.tool.toolRef } })
+    const rejected = expect(pending).rejects.toMatchObject({ name: 'TimeoutError' })
+    deadline.abort(new DOMException('Read deadline', 'TimeoutError'))
+    await rejected
+    expect(sources.evidence).not.toHaveBeenCalled()
+    expect(sources.service).not.toHaveBeenCalled()
+    expect(sources.rate).not.toHaveBeenCalled()
+  })
+
+  it('rejects visitor cancellation during enrichment rather than returning the loaded descriptor', async () => {
+    const controller = new AbortController()
+    requestState.request = new Request('https://example.com/market', { signal: controller.signal })
+    const started = Promise.withResolvers<void>()
+    sources.tool.mockResolvedValue(descriptor)
+    sources.evidence.mockReturnValue(new Promise(() => {}))
+    sources.service.mockReturnValue(new Promise(() => {}))
+    sources.rate.mockImplementation(() => { started.resolve(); return new Promise(() => {}) })
+    const pending = readPublicToolDetailRouteServer({ data: { toolRef: descriptor.tool.toolRef } })
+    const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+    await started.promise
+    controller.abort()
+    await rejected
+    const options = sources.evidence.mock.calls[0]?.[2] as { signal: AbortSignal }
+    expect(options.signal.aborted).toBe(true)
+    expect(sources.tool).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects cancellation between primary settlement and a not-found return', async () => {
+    const controller = new AbortController()
+    requestState.request = new Request('https://example.com/market', { signal: controller.signal })
+    const detail = Promise.withResolvers<{ kind: 'not_found' }>()
+    sources.tool.mockReturnValue(detail.promise)
+    const pending = readPublicToolDetailRouteServer({ data: { toolRef: descriptor.tool.toolRef } })
+    const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+    detail.resolve({ kind: 'not_found' })
+    queueMicrotask(() => controller.abort())
+    await rejected
+    expect(sources.evidence).not.toHaveBeenCalled()
+    expect(sources.service).not.toHaveBeenCalled()
+    expect(sources.rate).not.toHaveBeenCalled()
   })
 
   it('retains the exact Tool descriptor when evidence, public link, and display FX fail', async () => {

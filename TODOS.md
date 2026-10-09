@@ -88,10 +88,19 @@ Next work stays with these owners:
   replacement ran. The current root/state mismatch must not create an
   `ae-production` replacement stack. Preserve the US$400 budget; review gross
   cost visibility because credits mask the runway budget's current usage.
-- **Web/DX — remaining request bounds:** bound HTTP admission before dispatch,
-  and Agent-directory enrichment, using existing cancellation/deadline owners.
-  Qualify PostHog flushing against the native serverless request lifetime. These
-  source findings remain open; regional placement alone does not resolve them.
+- **Web/DX — request bounds candidate:** HTTP admission now uses the existing
+  12-second source deadline and caller cancellation, checks cancellation before
+  quota dispatch, and cannot dispatch the operation after late admission.
+  Agent-directory authentication/primary reads share that deadline; optional
+  policy/activity/connection/key reads retain explicit unavailable results after
+  three seconds, with unfinished Convex reads cancelled. Public Tool detail
+  preserves its descriptor when optional evidence times out, while respecting
+  visitor cancellation and retaining unknown enrichment. Independent reviews,
+  focused tests, `check` and the full source gate pass; rollout is pending.
+  PostHog now uses the official Vercel
+  request-lifetime helper and a five-second SDK send deadline without immediate
+  retries. Controlled-transport SDK evidence passes; hosted ingestion and
+  request-lifetime qualification remain open.
 - **Existing Datadog owner — [#284](https://github.com/CreasyBear/Agentic-Economy/issues/284):**
   current metrics, backup coverage, alert delivery and recovery evidence.
 
@@ -110,7 +119,13 @@ diagnostic sampling, not a p95 or signed-in acceptance. The startup graph fetche
 Clerk bytes. The unused Discover/Host reads and shared chrome/admin recovery
 boundary are corrected by PR #375. Web/DX still owns evidence-led reduction of
 eager animation dependencies on static public surfaces, then review of
-off-route loader/contract imports using TanStack's maintained splitting. Compare
+off-route loader/contract imports using TanStack's maintained splitting. The
+9 October follow-through candidate splits supported loaders and pending UI;
+Activity retains its object-form loader because the installed compiler rejects
+splitting it. Main client entry shrinks 27.1%, but the full static dependency
+graph shrinks only 1.94% (summed gzip 1.31%). This is build evidence, not a timing
+claim. Arc Hero alone cannot remove Motion already used by shared controls.
+Compare
 emitted imports, bytes and repeated cold/warm timings; preserve disclosure,
 keyboard actions, admin recovery and Account isolation. Do not claim timing gains
 from source inspection alone. Broad HTML caching, infrastructure changes and

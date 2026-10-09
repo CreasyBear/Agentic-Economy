@@ -70,7 +70,7 @@ describe('x402 RPC receipt consensus', () => {
     expect(mocks.readGuardedX402EvmReceipt).not.toHaveBeenCalled()
   })
 
-  it('requires two configured endpoints to agree on transaction evidence', async () => {
+  it.each([undefined, { retryCount: 0 }] as const)('requires both endpoints to agree with retry policy %s', async rpcRetry => {
     setRpcConfig(['https://rpc.one.example', 'https://rpc.two.example'])
     mocks.readGuardedX402EvmReceipt.mockResolvedValue(receipt)
 
@@ -82,6 +82,8 @@ describe('x402 RPC receipt consensus', () => {
       'production',
       PAYER,
       NONCE,
+      undefined,
+      rpcRetry,
     )).resolves.toEqual(receipt)
     expect(mocks.readGuardedX402EvmReceipt).toHaveBeenCalledTimes(2)
     expect(callTargets()).toEqual([
@@ -94,6 +96,9 @@ describe('x402 RPC receipt consensus', () => {
       payer: PAYER,
       nonce: NONCE,
     })
+    for (const [input] of mocks.readGuardedX402EvmReceipt.mock.calls) {
+      expect(input.transportRetryCount).toBe(rpcRetry?.retryCount)
+    }
   })
 
   it('returns no receipt when either endpoint is unavailable', async () => {

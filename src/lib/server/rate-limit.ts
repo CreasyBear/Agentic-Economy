@@ -7,6 +7,7 @@ import {
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { degrade } from '@/lib/observability/degrade'
 import { problem } from '@/lib/server/problem'
+import { awaitBoundedRead, SOURCE_READ_TIMEOUT_MS } from '@/lib/bounded-read'
 
 export type RateLimitName =
   | 'public-read'
@@ -62,6 +63,18 @@ export async function assertHttpAdmission(
   name: HttpRateLimitName,
   options: Readonly<{ key?: string; keySuffix?: string }> = {},
 ): Promise<RateLimitResult> {
+  const signal = AbortSignal.any([request.signal, AbortSignal.timeout(SOURCE_READ_TIMEOUT_MS)])
+  // Bound the admission decision, including signing and transports that ignore
+  // abort. An uncertain quota debit never permits or retries the operation.
+  return await awaitBoundedRead(signal => readHttpAdmission(request, name, options, signal), signal)
+}
+
+async function readHttpAdmission(
+  request: Request,
+  name: HttpRateLimitName,
+  options: Readonly<{ key?: string; keySuffix?: string }>,
+  signal: AbortSignal,
+): Promise<RateLimitResult> {
   const key = options.key ?? (name === 'chat-anonymous-edge'
     ? anonymousChatAdmissionKey(request)
     : requestAdmissionKey(request, options.keySuffix))
@@ -72,10 +85,11 @@ export async function assertHttpAdmission(
       scope: 'chat_anonymous:admit',
       command: { key },
     })
+    signal.throwIfAborted()
     const result = await callPublicSourceMutation(anonymousChatAdmissionMutation, {
       key,
       serviceAuth,
-    })
+    }, { signal })
     if (result.kind === 'refused') throw new Error('anonymous_chat_admission_refused')
     return result.kind === 'limited'
       ? { ok: false, retryAfter: result.retryAfter }
@@ -88,7 +102,8 @@ export async function assertHttpAdmission(
     scope: 'rate_limit:admit_http',
     command: { name, key },
   })
-  return await callPublicSourceMutation(admitMutation, { name, key, serviceAuth })
+  signal.throwIfAborted()
+  return await callPublicSourceMutation(admitMutation, { name, key, serviceAuth }, { signal })
 }
 
 export function createHttpRateLimitAdmission(name: HttpRateLimitName): RateLimitAdmission {
@@ -112,6 +127,7 @@ export async function withHttpRateLimit(
   let admission: RateLimitResult
   try {
     admission = await assertHttpAdmission(request, name)
+    request.signal.throwIfAborted()
   } catch (cause) {
     return degrade(cause, problem({
       status: 503, kind: 'UNAVAILABLE', code: 'source_unavailable', retryable: true,

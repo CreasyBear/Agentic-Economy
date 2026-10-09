@@ -369,6 +369,7 @@ describe('independent treasury cash reconciliation behavior', () => {
       ? { kind: 'matched', checkedCount: 1, expectedUnits: PAYMENT }
       : { kind: 'unavailable', code: 'treasury_payment_receipt_unavailable' })
     expect(result.cash.kind).toBe(confirmations === 12n ? 'matched' : 'unavailable')
+    expect(vi.mocked(readX402EvmReceipt).mock.calls.every(args => args[8]?.retryCount === 0)).toBe(true)
   })
 
   it.each([false, true])('isolates a throwing RPC receipt boundary with confirmed orphan=%s', async hasOrphan => {

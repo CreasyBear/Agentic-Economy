@@ -114,6 +114,18 @@ describe('guarded x402 EVM receipt reader', () => {
     mocks.isPublicHttpTarget.mockClear()
   })
 
+  it.each([undefined, 0] as const)('bounds actual failed RPC attempts with transport retry count %s', async transportRetryCount => {
+    mocks.fetch.mockImplementation(async () => new Response('quota exhausted', { status: 429 }))
+    await expect(readGuardedX402EvmReceipt({
+      target: new URL('https://rpc.example.test'), aeEnvironment: 'production',
+      network: BASE_MAINNET_NETWORK, asset: BASE_MAINNET_USDC_ADDRESS,
+      transactionHash, payer, nonce, dispatcher: {} as never,
+      ...(transportRetryCount === undefined ? {} : { transportRetryCount }),
+    })).resolves.toBeUndefined()
+    expect(mocks.fetch).toHaveBeenCalledTimes(transportRetryCount === undefined ? 4 : 1)
+    expect(mocks.fetch.mock.calls.every(([, init]) => JSON.parse(String((init as RequestInit).body)).method === 'eth_getTransactionReceipt')).toBe(true)
+  })
+
   it('reads mined transaction evidence and the confirmation head after the receipt wait completes', async () => {
     installSuccessfulRpc(BASE_SEPOLIA_USDC_ADDRESS)
     const respond = mocks.fetch.getMockImplementation()!

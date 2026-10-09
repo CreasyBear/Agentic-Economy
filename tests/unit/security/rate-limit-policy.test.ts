@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { setPublicSourceTransportForTests } from '@/lib/server/convex-source'
+import * as convexSource from '@/lib/server/convex-source'
+import { SOURCE_READ_TIMEOUT_MS } from '@/lib/bounded-read'
 
 import { anonymousChatAdmissionKey, rateLimitedResponse, requestAdmissionKey, setHttpRateLimitAdmissionForTests, withHttpRateLimit } from '@/lib/server/rate-limit'
 // The Convex limiter owns quota state. HTTP admission exposes only success and
@@ -10,6 +12,91 @@ describe('HTTP admission quota headers', () => {
     setHttpRateLimitAdmissionForTests(undefined)
     setPublicSourceTransportForTests(undefined)
     vi.unstubAllEnvs()
+    vi.restoreAllMocks()
+  })
+
+  it('bounds a hung admission and ignores a late success without dispatch or retry', async () => {
+    const deadline = new AbortController()
+    const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(deadline.signal)
+    const pending = Promise.withResolvers<{ ok: true }>()
+    const admission = vi.fn(() => pending.promise)
+    setHttpRateLimitAdmissionForTests(admission)
+    const operation = vi.fn(async () => new Response('must not run'))
+    const response = withHttpRateLimit(new Request('https://ae.test/x'), 'public-mutation', operation)
+
+    deadline.abort(new DOMException('Admission deadline', 'TimeoutError'))
+    expect((await response).status).toBe(503)
+    expect(timeout).toHaveBeenCalledWith(SOURCE_READ_TIMEOUT_MS)
+    pending.resolve({ ok: true })
+    await pending.promise
+    expect(admission).toHaveBeenCalledOnce()
+    expect(operation).not.toHaveBeenCalled()
+  })
+
+  it('does not request admission for an already cancelled request', async () => {
+    const controller = new AbortController()
+    controller.abort()
+    const admission = vi.fn(async () => ({ ok: true as const }))
+    setHttpRateLimitAdmissionForTests(admission)
+    const operation = vi.fn(async () => new Response('must not run'))
+
+    const response = await withHttpRateLimit(new Request('https://ae.test/x', { signal: controller.signal }), 'public-mutation', operation)
+
+    expect(response.status).toBe(503)
+    expect(admission).not.toHaveBeenCalled()
+    expect(operation).not.toHaveBeenCalled()
+  })
+
+  it.each(['public-mutation', 'chat-anonymous-edge'] as const)('does not debit quota after cancellation during %s signing', async name => {
+    setHttpRateLimitAdmissionForTests(undefined)
+    vi.stubEnv('AE_CONVEX_SERVER_FUNCTION_TOKEN', 'rate-limit-fixture-service-key-at-least-32-characters')
+    const signing = Promise.withResolvers<void>()
+    const original = convexSource.createConvexServerFunctionAssertion
+    const assertion = vi.spyOn(convexSource, 'createConvexServerFunctionAssertion').mockImplementation(async input => {
+      await signing.promise
+      return await original(input)
+    })
+    const mutation = vi.fn().mockResolvedValue({ ok: true })
+    setPublicSourceTransportForTests({ query: vi.fn(), mutation, action: vi.fn() })
+    const controller = new AbortController()
+    const operation = vi.fn(async () => new Response('must not run'))
+    const response = withHttpRateLimit(new Request('https://ae.test/x', { signal: controller.signal }), name, operation)
+
+    expect(assertion).toHaveBeenCalledOnce()
+    controller.abort()
+    expect((await response).status).toBe(503)
+    signing.resolve()
+    await assertion.mock.results[0]?.value
+    expect(mutation).not.toHaveBeenCalled()
+    expect(operation).not.toHaveBeenCalled()
+  })
+
+  it.each(['public-mutation', 'chat-anonymous-edge'] as const)('cancels the actual %s HTTP response body without retrying', async name => {
+    setHttpRateLimitAdmissionForTests(undefined)
+    setPublicSourceTransportForTests(undefined)
+    vi.stubEnv('AE_CONVEX_SERVER_FUNCTION_TOKEN', 'rate-limit-fixture-service-key-at-least-32-characters')
+    vi.stubEnv('CONVEX_URL', 'https://admission-fixture.convex.cloud')
+    const started = Promise.withResolvers<AbortSignal>()
+    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+      const signal = init?.signal
+      if (signal == null) throw new Error('missing admission cancellation')
+      started.resolve(signal)
+      return new Response(new ReadableStream({
+        start(controller) {
+          signal.addEventListener('abort', () => controller.error(signal.reason), { once: true })
+        },
+      }), { headers: { 'content-type': 'application/json' } })
+    })
+    const controller = new AbortController()
+    const operation = vi.fn(async () => new Response('must not run'))
+    const response = withHttpRateLimit(new Request('https://ae.test/x', { signal: controller.signal }), name, operation)
+    const transportSignal = await started.promise
+
+    controller.abort()
+    expect((await response).status).toBe(503)
+    expect(transportSignal.aborted).toBe(true)
+    expect(fetch).toHaveBeenCalledOnce()
+    expect(operation).not.toHaveBeenCalled()
   })
 
   it.each([

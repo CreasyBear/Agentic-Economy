@@ -1,4 +1,5 @@
 import { createServerFn } from '@tanstack/react-start'
+import { getRequest } from '@tanstack/react-start/server'
 import { z } from 'zod'
 import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
 
@@ -8,7 +9,7 @@ import {
 
 export const readAgentDirectoryServer = createServerFn({ method: 'GET' })
   .validator((data) => z.strictObject({ principalRef: z.string().regex(/^prn_[0-9a-f]{32}$/u).optional(), callRef: z.string().min(1).max(500).optional() }).parse(data ?? {}))
-  .handler(async ({ data }) => loadAgentDirectoryReadback(null, data.principalRef, data.principalRef === undefined ? undefined : data.callRef))
+  .handler(async ({ data }) => loadAgentDirectoryReadback(null, data.principalRef, data.principalRef === undefined ? undefined : data.callRef, getRequest().signal))
 
 export const readAgentAccessEnvironmentServer = createServerFn({ method: 'GET' })
   .handler(async () => {
@@ -19,4 +20,4 @@ export const readAgentAccessEnvironmentServer = createServerFn({ method: 'GET' }
 
 export const readAgentDirectoryPageServer = createServerFn({ method: 'GET' })
   .validator((data) => z.strictObject({ cursor: z.string().min(1).max(2_000) }).parse(data))
-  .handler(async ({ data }) => loadAgentDirectoryReadback(data.cursor))
+  .handler(async ({ data }) => loadAgentDirectoryReadback(data.cursor, undefined, undefined, getRequest().signal))

@@ -4,6 +4,8 @@ import { validatePaymentRequired } from '@x402/core/schemas'
 
 import { api, internal } from '../../convex/_generated/api'
 import { runCapabilityReadinessProbe } from '@/modules/capability-supply/server'
+import { defaultDnsResolver } from '@/modules/network-guard/public'
+import * as networkGuard from '@/modules/network-guard/server'
 import { convexTestWithMarketComponents } from '../helpers/convex-fixtures'
 import {
   createPublishedBusinessOwner,
@@ -14,11 +16,27 @@ import {
 import { installProviderConnectionFixture } from './capability-publication-harness'
 
 describe('owner supply test', () => {
-  beforeEach(() => vi.useFakeTimers())
-  afterEach(() => vi.useRealTimers())
+  let fixtureBackend: ReturnType<typeof convexTestWithMarketComponents> | undefined
+  beforeEach(() => {
+    vi.useFakeTimers()
+    // The direct challenge probe below owns its send fixture. Registered owner
+    // and scheduled probes must not depend on the live demo host or DNS.
+    vi.spyOn(defaultDnsResolver, 'lookup').mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
+    vi.spyOn(networkGuard, 'sendGuardedHttpRequest').mockImplementation(async () => new Response(null, { status: 503 }))
+  })
+  afterEach(async () => {
+    try {
+      await fixtureBackend?.finishAllScheduledFunctions(() => vi.runOnlyPendingTimers())
+    } finally {
+      fixtureBackend = undefined
+      vi.restoreAllMocks()
+      vi.useRealTimers()
+    }
+  })
 
   it.each([false, true])('publishes an owner-authorized Tool only when the 402 payment challenge is valid: %s', async (validChallenge) => {
     const backend = convexTestWithMarketComponents()
+    fixtureBackend = backend
     const { businessId, owner } = await createPublishedBusinessOwner(
       backend,
       'owner-x402-test',
@@ -168,6 +186,7 @@ describe('owner supply test', () => {
     ).resolves.toMatchObject({
       step: 'test',
       state: 'refused',
+      refusal: 'health_unhealthy',
     })
     await expect(
       backend.run(async ctx => ({
@@ -175,5 +194,6 @@ describe('owner supply test', () => {
         payments: await ctx.db.query('moneyX402PaymentAttempts').collect(),
       })),
     ).resolves.toEqual({ calls: [], payments: [] })
+    expect(networkGuard.sendGuardedHttpRequest).toHaveBeenCalled()
   })
 })

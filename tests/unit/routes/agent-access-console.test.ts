@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { getFunctionName } from 'convex/server'
+import { createAuthenticatedSourceTransport } from '@/lib/server/convex-source'
+import { SOURCE_READ_TIMEOUT_MS } from '@/lib/bounded-read'
 import {
   currentUtcMonthBounds,
   loadAgentDirectoryReadback,
@@ -12,7 +14,7 @@ import { canonicalAgentRecord } from '../../helpers/agent-directory-fixture'
 const transport = vi.hoisted(() => ({ query: vi.fn(), action: vi.fn(), keys: vi.fn() }))
 vi.mock('@/lib/server/convex-source', async (original) => ({
   ...await original<typeof import('@/lib/server/convex-source')>(),
-  createAuthenticatedSourceTransport: async () => transport,
+  createAuthenticatedSourceTransport: vi.fn(async () => transport),
 }))
 vi.mock('@/modules/agent-access/agent-access.functions', () => ({ listAgentAccessKeysServer: transport.keys }))
 
@@ -46,7 +48,7 @@ const owner: AgentOwnerReadback = {
     amountCoverage: 'complete', updatedAt: call.updatedAt },
   dataState: 'source',
 }
-afterEach(() => { vi.restoreAllMocks(); vi.clearAllMocks() })
+afterEach(() => { vi.restoreAllMocks(); vi.clearAllMocks(); vi.useRealTimers() })
 
 describe('owner Agent projection', () => {
   it('preserves available owner activity and usage with no surviving keys or grants', async () => {
@@ -209,6 +211,94 @@ describe('owner Agent projection', () => {
     expect(performance.now() - startedAt).toBeLessThan(4_500)
     expect(directory.items).toMatchObject([{ principalRef, connectionsAvailable: false }])
   }, 5_000)
+
+  it('retains canonical Agents when all optional reads stall, then cancels their transport', async () => {
+    vi.useFakeTimers()
+    transport.keys.mockReturnValue(Promise.withResolvers<never>().promise)
+    transport.query.mockImplementation(async ref => getFunctionName(ref) === 'agentDirectory:listOwnedPage'
+      ? { page: [canonical], isDone: false, continueCursor: 'opaque:next' }
+      : await Promise.withResolvers<never>().promise)
+    const pending = loadAgentDirectoryReadback()
+
+    await vi.advanceTimersByTimeAsync(3_000)
+    const directory = await pending
+
+    expect(directory.items).toMatchObject([{ principalRef, connectionsAvailable: false, spendingPolicy: { kind: 'unavailable' } }])
+    expect(directory.details[0]).toMatchObject({ dataState: 'unavailable', activity: [] })
+    expect(directory.details[0]).not.toHaveProperty('usage')
+    expect(directory.nextCursor).toBe('opaque:next')
+    expect(createAuthenticatedSourceTransport).toHaveBeenCalledOnce()
+    expect(vi.mocked(createAuthenticatedSourceTransport).mock.calls[0]?.[0]?.signal?.aborted).toBe(true)
+  })
+
+  it('bounds authentication and never starts the primary query after its deadline', async () => {
+    vi.useFakeTimers()
+    vi.spyOn(AbortSignal, 'timeout').mockImplementation(ms => {
+      const controller = new AbortController()
+      setTimeout(() => controller.abort(new DOMException('Directory deadline', 'TimeoutError')), ms)
+      return controller.signal
+    })
+    transport.keys.mockResolvedValue([])
+    const authentication = Promise.withResolvers<Awaited<ReturnType<typeof createAuthenticatedSourceTransport>>>()
+    vi.mocked(createAuthenticatedSourceTransport).mockReturnValueOnce(authentication.promise)
+    const pending = expect(loadAgentDirectoryReadback()).rejects.toMatchObject({ name: 'TimeoutError' })
+
+    await vi.advanceTimersByTimeAsync(SOURCE_READ_TIMEOUT_MS)
+    await pending
+    authentication.resolve({ query: transport.query, action: transport.action, mutation: vi.fn() })
+    await authentication.promise
+    expect(transport.query).not.toHaveBeenCalled()
+  })
+
+  it('rejects an aborted Account request without reading protected sources', async () => {
+    const controller = new AbortController()
+    controller.abort()
+    await expect(loadAgentDirectoryReadback(null, undefined, undefined, controller.signal)).rejects.toMatchObject({ name: 'AbortError' })
+    expect(createAuthenticatedSourceTransport).not.toHaveBeenCalled()
+    expect(transport.query).not.toHaveBeenCalled()
+    expect(transport.keys).not.toHaveBeenCalled()
+  })
+
+  it('rejects cancellation during enrichment instead of returning a late private projection', async () => {
+    transport.keys.mockResolvedValue([])
+    const started = Promise.withResolvers<void>()
+    const optional = Promise.withResolvers<never[]>()
+    transport.query.mockImplementation(async ref => {
+      if (getFunctionName(ref) === 'agentDirectory:listOwnedPage') return { page: [canonical], isDone: true, continueCursor: '' }
+      started.resolve()
+      return await optional.promise
+    })
+    const controller = new AbortController()
+    const pending = expect(loadAgentDirectoryReadback(null, undefined, undefined, controller.signal)).rejects.toMatchObject({ name: 'AbortError' })
+    await started.promise
+    controller.abort()
+    await pending
+    const dispatched = transport.query.mock.calls.length
+    optional.resolve([])
+    await optional.promise
+    expect(transport.query).toHaveBeenCalledTimes(dispatched)
+    expect(vi.mocked(createAuthenticatedSourceTransport).mock.calls[0]?.[0]?.signal?.aborted).toBe(true)
+  })
+
+  it('does not start enrichment when cancellation wins after the primary read', async () => {
+    transport.keys.mockResolvedValue([])
+    const started = Promise.withResolvers<void>()
+    const primary = Promise.withResolvers<{ page: typeof canonical[]; isDone: boolean; continueCursor: string }>()
+    transport.query.mockImplementation(ref => {
+      if (getFunctionName(ref) === 'agentDirectory:listOwnedPage') {
+        started.resolve()
+        return primary.promise
+      }
+      return Promise.reject(new Error('optional read must not start after abort'))
+    })
+    const controller = new AbortController()
+    const pending = expect(loadAgentDirectoryReadback(null, undefined, undefined, controller.signal)).rejects.toMatchObject({ name: 'AbortError' })
+    await started.promise
+    primary.resolve({ page: [canonical], isDone: true, continueCursor: '' })
+    queueMicrotask(() => controller.abort())
+    await pending
+    expect(transport.query).toHaveBeenCalledOnce()
+  })
 
   describe('W-25: Agent directory spend vs limit projection', () => {
     const testGrant: AgentAccessOwnerGrantReadback = {
