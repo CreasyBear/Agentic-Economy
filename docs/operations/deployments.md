@@ -1,6 +1,6 @@
 # Deployment map
 
-**Last verified:** 6 October 2026, after PR #366. This is a dated inventory;
+**Last verified:** 9 October 2026, after the Sydney cutover in PR #376. This is a dated inventory;
 resolve current provider identities and source revisions before mutations.
 [TODOS.md](../../TODOS.md) owns work; [readiness](../production-readiness-plan.md)
 owns acceptance and its limits.
@@ -11,7 +11,7 @@ owns acceptance and its limits.
 | Purpose | Address | Provider identity | Authority |
 | --- | --- | --- | --- |
 | Marketing | <https://aecon.ai> | Vercel `agentic-economy-website`; separate repository | Public website |
-| Production app | <https://app.aecon.ai> | Vercel `agentic-economy`, project `prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9`; Convex `cautious-zebra-473` | Explicit production declaration; Admin-only payments |
+| Production app | <https://app.aecon.ai> | Vercel `agentic-economy`, project `prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9`; Convex `upbeat-cricket-954` (`aws-ap-southeast-2`) | Explicit production declaration; Admin-only payments |
 | Isolated staging | <https://staging.aecon.ai> | Same Vercel project, `staging` environment; Convex `courteous-finch-213` | Development declaration, sandbox payments; staging inventory last verified 2 October |
 | Production ledger | <https://formance-alpha.aecon.ai> | Formance Ledger 2.4.14, ledger `agentic-economy-production`, existing AWS `ae-alpha` footprint | Production financial authority |
 | Production identity | <https://clerk.aecon.ai> | Existing Clerk production instance | Signed identity, owner MFA and revocation checks |
@@ -21,7 +21,26 @@ branch Preview is not a separate application project. The existing AWS topology
 is one private host and Multi-AZ RDS with independent backups; no second permanent
 stack is approved. Resolve provider identities afresh before mutations.
 
-## Accepted application release
+## Current production release
+
+At 03:38 UTC on 9 October, production moved to Sydney. Web and backend use
+source `7d4eba16926e870fbe5dda4ab0999b18d4b04b7c`, reviewed in
+[PR #376](https://github.com/CreasyBear/Agentic-Economy/pull/376), merged as
+`9932af51c037dd0c97977015bc8ea3d9d8236dc5` with the same runtime tree.
+
+| Surface | Current identity |
+| --- | --- |
+| Web | `app.aecon.ai`, Vercel `dpl_DWQJGdALwj3BhFWiN21W6YUPoZkb`, `syd1`, Node 22; `/api/v1/release` reports `7d4eba16926e870fbe5dda4ab0999b18d4b04b7c` |
+| Backend | `upbeat-cricket-954`, permanent/default production, `aws-ap-southeast-2`; cloud `https://upbeat-cricket-954.ap-southeast-2.convex.cloud`, site `https://upbeat-cricket-954.ap-southeast-2.convex.site` |
+| Retained backend | `cautious-zebra-473`, nondefault and paused, reference `production-virginia-retained-2026-10-09`; never run both against shared financial providers |
+| Browser recovery lineage | `VITE_AE_ADMIN_RECOVERY_DEPLOYMENT_URL=https://cautious-zebra-473.convex.cloud`; preserve this namespace on subsequent releases |
+
+Health is live; web configuration and Convex readiness pass. Payment readiness
+remains blocked. This migration does not requalify earlier paid or signed-in
+journeys. The [cutover receipt](#final-cutover-and-live-verification) below owns
+current evidence, limitations and the fix-forward boundary.
+
+## Historical accepted application releases
 
 The following acceptance evidence is dated 6 October 2026.
 
@@ -999,8 +1018,8 @@ unchanged. No paid Call, production migration, AWS apply or release promotion ra
 Joel authorised healing and migration after the audit above. Its earlier
 no-apply/no-data-copy statements describe that audit, not this implementation.
 Source baseline: `d46a07ad70df0a71f7539f0f8b437c287ecd2b24`. Unrelated whitepaper
-and strategy drafts remain untouched. Virginia remains the sole active
-production backend until the cutover receipt is completed.
+and strategy drafts remain untouched. The preparation below preceded the
+completed cutover recorded at the end of this section.
 
 ### Repairs and source reconciliation
 
@@ -1065,3 +1084,125 @@ worker/cron/financial freeze; coherent web/browser/site/bridge bindings;
 retained-client refusal/reload; source release gate; and actual regional
 measurements. Old production is a rollback source only until new consequential
 work occurs. Alchemy and Admin-only payment eligibility are unchanged.
+
+
+### Final cutover and live verification
+
+**Completed 9 October 2026.** The source pause began at 03:20:30.556 UTC;
+Sydney resumed at 03:38:39.826 UTC (approximately 18 minutes, 9 seconds).
+All ordinary source requests still refuse execution. Sydney is permanent
+production with no expiry and is now the default. The reviewed Vercel candidate
+was promoted before Sydney resumed. Its custom alias, release identity, compiled
+browser URLs, site URL and stable browser-recovery namespace were verified.
+Production project bindings and the GitHub production deployment key now target
+Sydney; keys and environment values are not recorded here.
+
+The final pause census covered root plus all 18 components with zero pending or
+in-progress scheduled functions. The three existing batch workers were stopped;
+the notification worker remained absent. All 18 root crons had pending next runs,
+with no in-progress run at the freeze. Native deployment pause supplied the
+execution barrier throughout export, import and comparison.
+
+| Frozen archive evidence | Result |
+| --- | --- |
+| Source snapshot | `1791516095352967219` |
+| Restored snapshot | `1791516612868970277` |
+| Existing full comparator | Matched: 248 tables, 307,930 exported records, eight stored files, 467 archive members |
+| Source ZIP SHA-256 | `3ff9eced488f7023f88ed0d536fa1d9195d9ff70f60f9c67345a0184c0d1d440` |
+| Restored ZIP SHA-256 | `65fbbfef32bc6faa4c534876a9abed17cdc7e8ff53039f8918b7c331d8b183e1` |
+
+The comparator's default 128 MiB member limit rejected the existing 296 MB
+catalogue table. Its supported bounded override (384 MiB member, 600-second
+comparison deadline, 60-second command deadline) completed with identity,
+content, schema, archive membership and storage checks unchanged. The initial
+refusal and successful receipt are retained. Different ZIP hashes are expected;
+record and stored-file equality, not ZIP container equality, is the acceptance.
+
+The frozen disposition retained 25 terminal Calls, three terminal Plans, a
+completed purchase Workflow and financial records unchanged. The one pending
+funding command is sandbox, with expired Checkout/recovery time; no production
+funding command was pending. Six failed Stripe inbox records refer to absent
+funding commands and were preserved without replay. The pending daily-close
+signature and four treasury alerts remain owner work. Two unexpired API keys
+use read-time expiry; no missing expiry job needed recreation.
+
+Before starting each existing worker, native empty enqueue refreshed its
+copied deployment-local function handles while it remained stopped. Native
+status and work queries passed, then all three workers started. The initial
+post-resume assertion requiring zero work failed: enabled root crons had already
+created a new `x402DirectoryIndexRefresh:scan`. Native component inspection
+confirmed page 0 completed successfully and page 100 progressed under the new
+workflow. The historical purchase Workflow stayed terminal and all 11 historical
+steps stayed inactive. Independent review confirms this establishes new-work
+progress; it does not establish completed catalogue refresh or financial
+execution. The initial failed assertion is retained, not relabelled as a pass.
+
+Live checks establish:
+
+- Production alias points at `dpl_DWQJGdALwj3BhFWiN21W6YUPoZkb`; liveness returns
+  200 and the public release reports the reviewed source.
+- `/api/ready` identifies Sydney and passes configuration/Convex checks. A fresh
+  owner readiness refresh passes web identity, Formance, CDP custody, commercial
+  policy and reference rate. Base RPC reports `treasury_chain_unavailable` and
+  treasury reports `treasury_reconciliation_stale`; readiness remains 503.
+  Alchemy, custody limits and Admin-only eligibility are unchanged.
+- A document request carrying the old Vercel deployment cookie returns 200 and
+  replaces it with the new deployment cookie. This is native HTTP evidence, not
+  a signed-in retained-browser journey. Codex computer use was unavailable.
+- The first cron read observed 14 successful last runs, two cancelled last-run
+  records and two with no last run; all 18 had pending next runs. No blanket
+  scheduler or provider-recovery acceptance follows from this point observation.
+
+### Measured improvement and remaining limits
+
+Fifteen interleaved warm native backend reads of the same records from Perth
+measured median 326 ms in Virginia and 103 ms in Sydney, with no failures and
+matching record digests. This measures the regional read path, not browser
+navigation or payment execution.
+
+Six HTTP samples per public route, including the first cold observation, used
+the same routes before and after. Warm medians are diagnostic response-start
+samples from Perth; they do not establish a p95 or usable-content target.
+
+| Public HTTP path | Before warm median | After warm median |
+| --- | ---: | ---: |
+| `/market` | 264 ms | 286 ms |
+| `/market?view=tools` | 514 ms | 326 ms |
+| `/market?view=providers` | 502 ms | 342 ms |
+| `/api/v1/catalogue-status` | 756 ms | 380 ms |
+
+The first post-promotion Market response took 4.43 seconds; a subsequent Tools
+sample took 3.14 seconds. Keep those failures visible. Cold startup, hydration,
+protected-screen latency and the agreed navigation percentiles remain open with
+Web/DX. Moving the database improved several reads; it did not close them.
+
+The complete release gate passed with `VITEST_MAX_WORKERS=4`, using unchanged
+assertions/timeouts: 9,676 unit tests, 3,133 integration tests, 76 import tests,
+20 browser and 20 accessibility cases, CLI packaging and the generated docs
+build (228 pages, 84 owner examples). Existing skips/todos do not qualify hosted
+behavior. The earlier unit timeout, its standalone passing file, full rerun and
+172 focused passes remain in the evidence bundle. Subsequent closeout edits are
+records only; they do not change the reviewed/deployed runtime tree.
+
+### Recovery boundary and follow-up owners
+
+Sydney now owns new execution and state. **Fix forward. Do not resume Virginia
+or promote an old web build that reconnects it.** The frozen source, final native
+archives and retained web deployment are recovery evidence, not an automatic
+rollback recipe. A financial restore requires the existing coherent
+Convex/storage/Formance reconciliation procedure and an explicit recovery
+boundary. Retained records do not qualify that procedure by themselves.
+
+Web/DX owns cold/hydration and authenticated compatibility acceptance; Money and
+infrastructure own RPC readiness and joint financial restore (MM-041/MM-042);
+the existing operations owner retains host replacement and acknowledged
+service-origin alert tests. No paid Call, historical purchase-work replay, Alchemy upgrade, authority
+expansion or new permanent AWS stack ran in this migration.
+
+Private execution evidence remains outside Git under
+`performance/sydney-migration-2026-10-09/` in the execution workspace:
+`final-comparison.json`, `source-freeze.json`, `frozen-census.json`,
+`default-switch.json`, `target-resume.json`, `target-resume-verification.json`,
+`live-health-initial.json`, `live-cutover-verification.json`,
+`payment-readiness-after.json`, `public-http-before-valid.json`,
+`public-http-after.json`, `gate-receipt.json`, and scoped AWS receipts.
