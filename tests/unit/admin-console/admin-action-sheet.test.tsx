@@ -34,6 +34,7 @@ const props = {
 } satisfies Parameters<typeof AdminActionSheet>[0]
 
 afterEach(() => {
+  vi.unstubAllEnvs()
   cleanup()
   vi.restoreAllMocks()
   window.localStorage.clear()
@@ -203,7 +204,10 @@ describe('Admin action sheet', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
     expect(props.onOpenChange).toHaveBeenCalledWith(false)
   })
-  it('retains only identity before dispatch and restores an uncertain command entry after remount', async () => {
+  it('retains identity before dispatch and blocks duplicate submission after a backend migration', async () => {
+    const predecessor = 'https://original.convex.cloud'
+    vi.stubEnv('VITE_CONVEX_URL', predecessor)
+    vi.stubEnv('VITE_AE_ADMIN_RECOVERY_DEPLOYMENT_URL', '')
     mocks.access.mockReturnValue({ kind: 'allowed', actorRef: 'actor:test', role: 'owner_admin' })
     const scope = adminCommandRecoveryScope('actor:test')
     mocks.execute.mockImplementation((request) => {
@@ -216,6 +220,8 @@ describe('Admin action sheet', () => {
     await screen.findByText(/Command outcome could not be confirmed/)
     const original = mocks.execute.mock.calls[0]?.[0]
     rendered.unmount()
+    vi.stubEnv('VITE_CONVEX_URL', 'https://replacement.ap-southeast-2.convex.cloud')
+    vi.stubEnv('VITE_AE_ADMIN_RECOVERY_DEPLOYMENT_URL', predecessor)
     expect(readAdminCommandRecovery(scope)).toEqual([{ action: original.action, operationKey: original.operationKey, correlationId: original.correlationId }])
     render(<AdminActionSheet {...props} />)
     toPreview()

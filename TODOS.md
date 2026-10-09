@@ -1,6 +1,6 @@
 # Current work
 
-**Reconciled:** 8 October 2026. This is the repository's current queue; reuse the
+**Reconciled:** 9 October 2026. This is the repository's current queue; reuse the
 linked issues instead of creating parallel backlogs. The [roadmap](IMPLEMENTATION_ROADMAP.md)
 owns capability requirements and [deployment map](docs/operations/deployments.md)
 owns shipped source and environments.
@@ -54,6 +54,20 @@ retains failures, current limits and the confirmed Sydney web/Virginia Convex pl
 
 Next work stays with these owners:
 
+- **Infrastructure/execution — Sydney migration:** Joel accepts the regional
+  surcharge if validation demonstrates improved performance. Native API confirms
+  Sydney is available; production remains in
+  Virginia. Before a restored backend runs, prove execution isolation, component
+  coverage and pending-work/schedule disposition; preserve browser recovery
+  identities across the URL change. Then measure matching Australian journeys.
+  [Validation and cutover gates](docs/operations/deployments.md#9-october-sydney-migration-validation)
+  retain the independent review. Codex computer-use dashboard verification is
+  pending tool availability. Joel authorised healing and migration on 9 October.
+  The paused Sydney target now has application/component code and is restoring a
+  production snapshot. No production secret bindings or execution are enabled
+  there. Preserve browser recovery under the original deployment scope. The
+  [live audit](docs/operations/deployments.md#9-october-live-infrastructure-audit-and-isolated-target)
+  records exact identity, expiry and the remaining restore/performance gates.
 - **Web/DX:** protected-screen latency, hosted hydration, two-Account isolation
   and retained-browser/accepted-operation compatibility. The inherited
   render-time Chat identity ref flagged by the advisory React Doctor hook is
@@ -65,14 +79,30 @@ Next work stays with these owners:
   qualification without waiving current payment readiness.
 - **Money/infrastructure — MM-041/MM-042:** qualify current RPC allowance and
   payment readiness, then coherent Convex/storage/Formance restoration. Native
-  Vercel Sydney/Fluid/skew metadata and cookie emission are verified; expired AWS
-  login blocks resource readback. Configuration is not operational qualification.
+  Vercel Sydney/Fluid/skew metadata and cookie emission are verified. AWS login
+  is restored: current private host, Multi-AZ RDS, recent PITR and Melbourne copies
+  are verified. Joint financial restoration, host replacement and acknowledged
+  service-origin alert delivery remain unqualified.
+- **Infrastructure — live audit corrections:** `ae-alpha` VPC Flow Log delivery
+  is repaired through a reviewed account-baseline KMS policy update. Fresh
+  encrypted records arrived and provider status is now `SUCCESS`. The existing
+  alpha root, credential refresh timer and SNS encryption are reconciled in
+  source; pinned OpenTofu validation passes. No environment apply or host
+  replacement ran. The current root/state mismatch must not create an
+  `ae-production` replacement stack. Preserve the US$400 budget; review gross
+  cost visibility because credits mask the runway budget's current usage.
+- **Web/DX — remaining request bounds:** bound HTTP admission before dispatch,
+  and Agent-directory enrichment, using existing cancellation/deadline owners.
+  Qualify PostHog flushing against the native serverless request lifetime. These
+  source findings remain open; regional placement alone does not resolve them.
 - **Existing Datadog owner — [#284](https://github.com/CreasyBear/Agentic-Economy/issues/284):**
   current metrics, backup coverage, alert delivery and recovery evidence.
 
-Preserved unrelated whitepaper/strategy drafts and existing worktrees. The web
-and backend release is recorded; no paid production Calls, cap/credential/failover
-changes, additional infrastructure or archived-worker activation occurred.
+The 8 October closeout preserved unrelated whitepaper/strategy drafts and existing
+worktrees, with no paid production Calls, cap/credential/failover changes,
+additional infrastructure or archived-worker activation. The 9 October
+implementation repairs network logging and prepares the paused Sydney restore.
+Production cutover remains pending; payment policy and RPC caps are unchanged.
 
 The 8 October public loading re-audit retains the 4.275s hosted cold-entry miss.
 Five additional fresh anonymous desktop contexts measured 1.401–1.469s to the

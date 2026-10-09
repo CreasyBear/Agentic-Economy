@@ -14,7 +14,7 @@ const changedEvent = 'ae:admin-command-recovery-changed'
 
 /** Storage contains only opaque identity, scoped to deployment and authenticated actor.
  * A missing receipt never proves that the original command had no effect. */
-export function adminCommandRecoveryScope(actorRef: string, deployment = import.meta.env.VITE_CONVEX_URL ?? ''): string {
+export function adminCommandRecoveryScope(actorRef: string, deployment = import.meta.env.VITE_AE_ADMIN_RECOVERY_DEPLOYMENT_URL?.trim() || import.meta.env.VITE_CONVEX_URL || ''): string {
   return `ae.admin-command-recovery.v1.${encodeURIComponent(deployment)}.${encodeURIComponent(actorRef)}`
 }
 

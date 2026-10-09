@@ -24,9 +24,27 @@ import { useAdminCommandRecovery, useAdminCommandObservation } from '@/component
 vi.mock('@tanstack/react-router', () => ({ Link: ({ children, to }: { children: ReactNode; to: string }) => <a href={to}>{children}</a> }))
 
 const identity = { action: 'set_payments_paused' as const, operationKey: 'admin:original', correlationId: 'admin:original:correlation' }
-afterEach(() => { cleanup(); window.localStorage.clear(); vi.clearAllMocks(); mocks.access = { kind: 'allowed', role: 'owner_admin', actorRef: 'actor:a' }; mocks.observation = { kind: 'unrecorded' }; mocks.accessError = null })
+afterEach(() => { cleanup(); window.localStorage.clear(); vi.clearAllMocks(); vi.unstubAllEnvs(); mocks.access = { kind: 'allowed', role: 'owner_admin', actorRef: 'actor:a' }; mocks.observation = { kind: 'unrecorded' }; mocks.accessError = null })
 
 describe('admin command recovery identity', () => {
+  it('retains the same actor journal across a verified backend migration without moving or replaying it', async () => {
+    const predecessor = 'https://original.convex.cloud'
+    vi.stubEnv('VITE_CONVEX_URL', predecessor)
+    vi.stubEnv('VITE_AE_ADMIN_RECOVERY_DEPLOYMENT_URL', '')
+    const scope = adminCommandRecoveryScope('actor:a')
+    retainAdminCommandRecovery(scope, identity)
+
+    vi.stubEnv('VITE_CONVEX_URL', 'https://replacement.ap-southeast-2.convex.cloud')
+    vi.stubEnv('VITE_AE_ADMIN_RECOVERY_DEPLOYMENT_URL', predecessor)
+    expect(adminCommandRecoveryScope('actor:a')).toBe(scope)
+    expect(readAdminCommandRecovery(adminCommandRecoveryScope('actor:b'))).toEqual([])
+    const hook = renderHook(() => useAdminCommandRecovery())
+    await waitFor(() => expect(hook.result.current.entries).toEqual([identity]))
+    expect(window.localStorage.length).toBe(1)
+    expect(retainAdminCommandRecovery(scope, { ...identity, correlationId: 'admin:replacement' })).toBe(false)
+    expect(mocks.query.mock.calls.every(([query]) => getFunctionName(query) === 'adminConsoleAudit:readAdminAuditAccess')).toBe(true)
+  })
+
   it('contains a recovery access failure, retains saved identity, and retries only recovery reads', async () => {
     const scope = adminCommandRecoveryScope('actor:a')
     retainAdminCommandRecovery(scope, identity)

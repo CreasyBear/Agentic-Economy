@@ -794,3 +794,274 @@ public probes were ready, with stale catalogue. No purchase budget was spent.
 Signed-in performance, controlled mobile/cold p95, retained-browser recovery and
 payment acceptance remain open. Alchemy, payment audience, provider agreement,
 credentials and infrastructure were unchanged.
+
+## 9 October Sydney migration validation
+
+Owner: canonical integrator with infrastructure, execution and authority owners;
+continue [#256](https://github.com/CreasyBear/Agentic-Economy/issues/256).
+Reviewed source: `d46a07ad70df0a71f7539f0f8b437c287ecd2b24`. Joel accepts
+the 30% regional surcharge if validation demonstrates improved performance.
+Sydney is the recommended migration candidate for the Australian product and
+existing Sydney web tier. This is a placement recommendation,
+not a measured performance improvement or approval to run two financial backends.
+
+Native Convex management GETs on 9 October confirm production
+`cautious-zebra-473`, project `2983394` (`agentic-economy`), in `aws-us-east-1`.
+Team `505132` reports `aws-ap-southeast-2` available. The project has production,
+development and preview deployments, all in Virginia; no Sydney target exists.
+The preceding Vercel inspection confirms `dpl_EBpeFYykzMSFr8qUaJY6qg3ge512`
+in `syd1`. AWS ledger placement remains declared Sydney; expired AWS login
+prevents fresh resource verification. No deployment, binding, credential, payment
+audience, Alchemy plan or production data was changed in this validation.
+
+[Convex regions](https://docs.convex.dev/production/regions) documents a 30%
+regional usage surcharge and requires a new deployment plus export/import to
+move regions. Exact account billing and dashboard cross-checks remain unverified:
+the installed Codex browser skill's required control tool is unavailable in this
+session. Orca was stopped when Joel selected Codex computer use; no substitute
+browser driver was used. Usage counters alone do not establish the invoice.
+
+Independent Sol source review and integrator spot checks identify these gates:
+
+| Boundary | Finding and required disposition |
+| --- | --- |
+| Executing copied work | `convex/crons.ts` registers 18 workloads. Copied workload identities can remain active. `convex/lib/money/treasury/paymentAdmission.ts` deliberately preserves accepted Call replay outside new-purchase admission. Payment pause is not a rehearsal execution barrier. |
+| Component backlog | Workpool recovery can classify missing scheduled jobs as failed and retry them. Three Workpools and Workflow carry Call, Stripe, notification and lifecycle work. Prove nested component coverage and disposition; neither dropping components nor blindly cancelling work establishes safety. |
+| Existing quarantine | `convex/lib/capabilityExecution/callLifecycle/restoredDispatches.ts` handles at most 25 exact Call/work-ID pairs and requires separately observing retirement. It is not a global worker or financial-effects fence. |
+| Missing schedules | Backups omit pending scheduled functions. Copied credential-expiry and Plan materializations can still reference them. Inventory and reconstruct or explicitly resolve missing continuations before accepting work. |
+| Browser recovery | `src/components/ae/admin/actions/admin-command-recovery.ts` scopes retained commands by deployment URL and actor. Resolve or deliberately bridge the old namespace while preserving actor isolation and original operation identities. |
+| Bridge and readiness bindings | Switch `CONVEX_URL`, `VITE_CONVEX_URL`, `CONVEX_SITE_URL` and `AE_PROVIDER_CONSEQUENCE_ORIGIN` coherently. The explicit site URL takes precedence in the consequence bridge. Regenerate readiness against the new configuration; imported green evidence is insufficient. |
+
+Use [native deployment pause](https://docs.convex.dev/production/pause-deployment)
+as the first candidate isolation control, established and verified on an empty
+target before importing data or activating application workers. Pause rejects
+function calls, skips crons and queues scheduled jobs until resume. It therefore
+cannot qualify running-app latency and does not dispose of backlog. A safe
+read-only benchmark needs separately proven isolation before any resume; no
+custom replacement scheduler or blanket migration flag has been selected.
+
+The bounded sequence is:
+
+1. Prove target isolation and production-effect refusal using synthetic work;
+   verify target defaults, ingress and external bridge bindings. Do not copy
+   production credentials into an active rehearsal.
+2. Rehearse application, nested component and storage restoration behind that
+   barrier. Compare snapshot membership, counts and digests using the existing
+   archive comparator; separately prove schedule reconstruction and pending-work
+   disposition. `tools/release/convex-restore.ts` only compares archives.
+3. Measure matching source, data/index coverage and Australian cold/warm
+   journeys. Keep desktop cold p95 <3s, controlled mobile <5s, eligible warm
+   median <200ms and p95 <500ms. Retain failures and separate regional latency
+   from caching, hydration and RPC readiness. No Sydney measurement exists yet.
+4. Qualify authentication, original Call/recovery identities, old browser
+   journals, storage, aggregate consistency and pagination across the URL change.
+   Embedded Convex cursor portability is unproven; restart pagination explicitly
+   if necessary. Run candidate checks, affected tests and the release gate.
+5. Cut over with one authoritative writer/worker, a controlled quiescence
+   boundary, final consistent snapshot and explicit pending-work transfer.
+   Switch bindings together, preserve payment policy and verify fresh readiness.
+   Once Sydney accepts value-bearing work, reactivating the old database is not
+   a safe rollback; financial recovery remains fix-forward.
+
+[Backup semantics](https://docs.convex.dev/database/backup-restore) cover data,
+not code, configuration, environment variables or pending schedules. The
+existing snapshot comparator is evidence for archive equality only. This review
+does not qualify a restore, live migration, regional speedup or payment journey.
+Verdict: proceed with isolation/rehearsal preparation; no-go for running a copied
+production backend or cutting over now. Codex dashboard access, proven isolation,
+component/schedule recovery and measured Sydney performance remain open.
+
+## 9 October live infrastructure audit and isolated target
+
+Follow-up to the validation above, after Joel completed the native AWS login.
+This supersedes its expired-login and no-Sydney-target observations. Canonical
+source remains `d46a07ad`; production web remains
+`dpl_EBpeFYykzMSFr8qUaJY6qg3ge512`, runtime `e4d04a47e`, and production Convex
+remains `cautious-zebra-473` in Virginia. No production binding was changed.
+
+Method: repository deployment-operations and Wayfinder, installed pstack
+poteto/how/verification guidance, Convex reviewer and Cloudflare skills; four
+bounded independent Sol source reviews followed by native provider readback.
+The maintained [AWS review skill](https://github.com/aws/agent-toolkit-for-aws/blob/main/plugins/aws-core/skills/aws-well-architected-review/SKILL.md)
+was evaluated as a reference. This is a focused operational audit, not a complete
+AWS Well-Architected review or certification. No Codex computer-control tool is
+available; no alternate browser driver was used.
+
+### Live evidence and decisions
+
+AWS caller is the non-root `Package4ReleaseOpenTofu` assumed role in account
+`197716152388`. Queries and two read-only SSM inspections completed on 9 October:
+`e11ade46-8b95-433a-b8cc-50d10c14e1c0` and
+`4d084f42-35d2-40ec-af1d-d4432573ceda`. No secret values were emitted.
+
+| Area | Verified result, limit and disposition |
+| --- | --- |
+| Compute | `i-073197e0346d83010`, `ae-alpha-package4-k3s`, is a private `t4g.large` in Sydney `ap-southeast-2a`, SSM online and IMDSv2 required. One sample reported 13% CPU and 16% memory; workload pods were running without restarts. Keep current size pending sustained load evidence. One host and one NAT remain an AZ dependency; two tunnel pods do not remove it. |
+| Database and copies | `ae-alpha-formance` is available, encrypted, private, Multi-AZ PostgreSQL 16.13 on `db.t4g.medium`. Seven-day PITR was current to 01:51:40 UTC when inspected at approximately 01:57 UTC. The two queried 8/9 October backup jobs and Melbourne copies completed. This proves recent protection, not five-minute RPO, host recovery, regional restore or joint Convex/ledger consistency. |
+| Credential consumption | RDS rotates its managed password every seven days. Contrary to the initial source-only concern, the live host has an active five-minute reconciliation timer; its last inspected run succeeded at 02:00:46 UTC. It reads the current secret and reapplies Settings. The initial checksum attribution was incorrect: the inspected SHA-256 strings were image pins, not credential comparisons. Ledger pods started about four minutes after the last password rotation. Preserve this working mechanism and reconcile its missing source declaration; reconnect behavior was not fault-injected. |
+| Infrastructure alerts | All eight current alarms were OK with actions enabled. The live SNS topic uses customer-managed key `73c82281-a628-4334-9307-5073361571c8` with CloudWatch/EventBridge grants, one confirmed subscription, and a recorded successful CloudWatch publish on 2 October. This disproves the source-only `alias/aws/sns` diagnosis for the live deployment. It does not prove recipient acknowledgement, backup-event delivery or Datadog journey alerts. |
+| Network logging — confirmed failure | Active flow log `fl-085d85b94cfa66529` reports `FAILED`, `Access error`. Its audit bucket uses KMS key `08d05b35-edd3-4f11-9779-1a03fb2ba211`; the live key lacks `delivery.logs.amazonaws.com`, while bucket write permissions exist. Missing KMS permission is the leading demonstrated configuration cause. Correct the existing key through reviewed IaC and verify newly delivered objects before closing. No live policy changed in this audit. |
+| Cost visibility | AWS Cost Explorer estimated US$72.87 for 1–8 October excluding credits/refunds, led by RDS US$41.75 and EC2 compute/other US$27.34. The US$400 runway budget includes credits/refunds and reports US$0; a separate US$20 unblended-cost budget reports US$72.87. Preserve the authorized ceiling, but reconcile gross usage and net billing alerts. This is neither a monthly forecast nor total Vercel/Convex/Cloudflare spend. |
+| Provider access | The configured Cloudflare management token failed verification (HTTP 400), so current zone rules, Access policy and Tunnel dashboard state are unverified. Running cloudflared pods establish process state only. Datadog's native pilot and whole-stream privacy/delivery acceptance remain with #284. No credentials were changed or external test notification sent. |
+
+[AWS's flow-log requirement](https://docs.aws.amazon.com/vpc/latest/userguide/flow-logs-s3-cmk-policy.html)
+and [S3 delivery guidance](https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/AWS-logs-infrastructure-S3.html)
+require the customer-managed key's delivery permission; Bucket Keys also need
+explicit consideration. Enabling caching of ledger balances or transactions is
+not a remedy for missing log delivery or Sydney–Virginia application reads.
+
+State identity was checked in memory, without dumping state or credentials.
+Bucket `agentic-economy-p4-state-197716152388-ap-southeast-2` contains:
+
+- `agentic-economy/account-baseline/opentofu.tfstate`, serial 5, OpenTofu 1.12.6:
+  `aws_kms_key.audit` is the exact failing log destination key above.
+- `agentic-economy/alpha/opentofu.tfstate`, serial 6, OpenTofu 1.12.6:
+  `module.alpha_environment` owns the exact live host, database, flow log and
+  custom SNS key. The checked-in environment roots do not match that module
+  address. `environments/production` declares a different `ae-production` stack.
+
+Before AWS apply, recover the canonical alpha root and reconcile the live timer
+and SNS key with source. Do not apply the declaration-only production root or
+replace working resources to match stale templates. The account-baseline key
+correction needs its own saved plan, unchanged unrelated resources, and fresh
+delivery proof. Existing README references to `docs/operations/aws-foundation.md`
+and the deployment skill's optional `scripts/deployment_snapshot.sh` are stale;
+neither file exists. Use this deployment map and native provider tools until the
+owning procedures are corrected.
+
+### Isolated Sydney preparation
+
+Created preview `upbeat-cricket-954` (ID `6033150`) in the existing project
+`2983394`, `aws-ap-southeast-2`, reference
+`preview/preview-sydney-rehearsal-2026-10-09`. It is not the default deployment.
+Verified provider expiry is 9 October 2026 at **06:02 UTC / 14:02 Perth**;
+re-resolve it before further work. Preview/default environment lists were empty.
+No application code, production data, secrets, payment bindings or webhooks were
+copied. Native pause returned 200; a query returned transport 200 with a domain
+error explicitly refusing execution because the deployment was paused. This is
+refusal evidence, not a successful query or proof about a restored job queue.
+
+Provider canonical URL readback returned:
+
+- `https://upbeat-cricket-954.ap-southeast-2.convex.cloud`
+- `https://upbeat-cricket-954.ap-southeast-2.convex.site`
+
+The sanitized receipt is `performance/sydney-rehearsal/target.json` in the
+execution workspace. The preview is deliberately temporary and paused; no
+regional application latency measurement or data restoration has occurred.
+Production continues to use its original backend. The isolation, backlog,
+schedule reconstruction and single-writer cutover gates above still apply.
+
+### Source correction and next bounded work
+
+`src/lib/deployment/manifest.ts` now includes `CONVEX_SITE_URL` in optional URL
+validation and the configuration fingerprint. Previously a malformed or changed
+site binding could leave validation evidence unchanged. Focused cases in
+`tests/unit/deployment/deployment-manifest.test.ts` cover regional URLs, changed
+binding evidence and invalid production URLs. This validates URL shape and
+evidence sensitivity; it does not prove a cloud/site pair belongs to the same
+deployment. Provider canonical identity remains a cutover check.
+
+The fingerprint input set changes even when the site variable is absent.
+Regenerate affected configuration/readiness evidence with the candidate;
+historical hashes, accepted purchases and recovery references are not rewritten.
+The initial direct test-runner invocation failed because `vitest` was not on its
+PATH. Rerunning through npm succeeded: 2 files, 139 tests. `npm run check` passed,
+including 25 import suites / 76 tests and the TypeScript standards check. This
+candidate is not merged or deployed; the full release gate has not been rerun.
+An independent Sol closeout review found no material source or record correction;
+it verified the sanitized preview receipt and evidence limits. AWS live facts
+were checked by the integrator, not independently re-attested by that reviewer.
+
+The independent web review leaves three bounded source packages open:
+
+1. HTTP admission in `src/lib/server/rate-limit.ts` has no request deadline before
+   dispatch. Reuse existing bounded read/signal mechanics; fail closed on timeout
+   and do not retry or dispatch after uncertain admission.
+2. `src/modules/agent-access/agent-access-console.ts` can await policy and up to
+   25 per-Agent history reads without an overall deadline. Reuse the existing
+   page composition owner, preserve available directory facts, and disclose
+   incomplete enrichment. Measure before redesigning its query model.
+3. `src/lib/observability/posthog.server.ts` buffers events without a demonstrated
+   serverless flush lifetime. Qualify a bounded native request-lifetime flush;
+   event loss is a risk, not an observed financial-record loss.
+
+Executive disposition: keep current AWS capacity and financial isolation;
+continue Sydney preparation after proving safe restored-work handling; repair
+network logging and source/live drift before claiming operational readiness.
+Hosted signed-in performance, retained-browser deployment recovery, current joint
+financial restore and acknowledged alerts remain separate acceptance gates.
+Alchemy, the Admin-only payment audience and the purchase-test budget are
+unchanged. No paid Call, production migration, AWS apply or release promotion ran.
+
+## 9 October Sydney migration execution
+
+Joel authorised healing and migration after the audit above. Its earlier
+no-apply/no-data-copy statements describe that audit, not this implementation.
+Source baseline: `d46a07ad70df0a71f7539f0f8b437c287ecd2b24`. Unrelated whitepaper
+and strategy drafts remain untouched. Virginia remains the sole active
+production backend until the cutover receipt is completed.
+
+### Repairs and source reconciliation
+
+The reviewed account-baseline plan changed only audit-key policy on
+`08d05b35-edd3-4f11-9779-1a03fb2ba211`: the documented AWS log-delivery service
+grant, constrained to account `197716152388` and Sydney Logs ARNs, retaining
+existing administration and CloudTrail statements. Apply completed at 02:35:52
+UTC with zero creates/deletes and one policy change. Fresh encrypted VPC log
+files arrived by 02:44 UTC. One file contained 390 records: 386 `OK`, two
+`NODATA`, two `SKIPDATA`; this proves restored delivery, not lossless capture.
+Provider delivery status cleared to `SUCCESS` by 02:55:59 UTC.
+
+The first plan attempt lacked the bucket-required KMS header for its S3 state
+lock. Configuring the existing backend key resolved the refusal; locking and
+bucket protections stayed enabled. Private receipts and saved plan are in the
+execution workspace's `performance/sydney-migration-2026-10-09/aws/` directory.
+
+`infra/package4/environments/alpha/` restores the existing state's root/module
+addresses from retained infrastructure history. Module declarations now include
+its live SNS CMK, storage ceiling and five-minute credential reconcile timer.
+Pinned OpenTofu 1.12.6 formatting, backend-free initialization and validation
+pass. No alpha environment plan/apply ran: bootstrap changes can replace the
+host and need their own reviewed replacement/restore qualification. Current
+capacity, 18:00 UTC backups, financial state and archived workers are preserved.
+
+### Recovery and rehearsal
+
+The web candidate accepts optional
+`VITE_AE_ADMIN_RECOVERY_DEPLOYMENT_URL`, retaining the existing browser journal
+namespace when the current Convex URL changes. For this data lineage it must
+remain `https://cautious-zebra-473.convex.cloud`. It carries no authority: the
+current server still validates actor and operation correlation. Migration/remount
+regressions prove retained same-actor recovery and no duplicate execution;
+independent Sol review found no material defect. This binding and
+`CONVEX_SITE_URL` participate in URL validation and configuration fingerprinting.
+Regenerate readiness evidence; preserve historical purchase hashes and identity.
+
+A native census covers the root and all 18 deployed components. The rehearsal
+observation found no pending/in-progress scheduled functions, 25 terminal Calls,
+three terminal Plans, one completed Workflow and four empty Workpools. The two
+future credentials are API keys without interactive-expiry materialization.
+All 18 root cron records had pending next runs and completed last runs. This
+is point-in-time evidence, not the final freeze; repeat after pausing source
+execution. Pending funding and failed Stripe inbox records need preserved
+continuation ownership, not blind replay.
+
+Sydney demonstrates code push, import, export and ordinary-query refusal while
+natively paused. Source snapshot `1791514139509132865` includes application,
+component and storage data. Restore, re-export and full archive equality remain
+in progress. No production secrets or application execution are enabled on the
+target. Running copied code would also enable crons; stopped Workpools alone
+are not an execution barrier.
+
+Focused verification passed 172 tests and `npm run check`. The first full gate
+passed 9,675 unit tests but timed out in the existing 10,000-record usage-report
+case at 90 seconds. Its entire five-test file passed alone in 44.9 seconds.
+A complete gate rerun uses Vitest's supported four-worker limit, preserving all
+assertions and timeouts. The failed run is retained; the rerun is not yet a pass.
+
+Remaining cutover gates: archive equality; permanent target identity; final
+worker/cron/financial freeze; coherent web/browser/site/bridge bindings;
+retained-client refusal/reload; source release gate; and actual regional
+measurements. Old production is a rollback source only until new consequential
+work occurs. Alchemy and Admin-only payment eligibility are unchanged.

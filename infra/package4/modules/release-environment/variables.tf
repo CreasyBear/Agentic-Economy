@@ -45,6 +45,21 @@ variable "database_instance_class" {
   default = "db.t4g.medium"
 }
 
+variable "database_max_allocated_storage" {
+  description = "RDS autoscaling limit in GiB; 0 disables autoscaling. Enabled limits must be at least 10 percent above the initial 50 GiB."
+  type        = number
+  default     = 200
+  nullable    = false
+
+  validation {
+    condition = var.database_max_allocated_storage == 0 || (
+      var.database_max_allocated_storage >= 55
+      && floor(var.database_max_allocated_storage) == var.database_max_allocated_storage
+    )
+    error_message = "database_max_allocated_storage must be 0 to disable autoscaling or an integer of at least 55 GiB."
+  }
+}
+
 variable "alert_email" {
   description = "Optional operator mailbox subscribed to infrastructure alarms."
   type        = string
