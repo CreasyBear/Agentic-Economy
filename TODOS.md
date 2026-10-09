@@ -43,7 +43,7 @@ desktop. The initial 6.607s server-start miss is retained. All 25 protected step
 completed with fewer requests, but four journey medians still exceed 200ms.
 
 The 8 October follow-up, [PR #375](https://github.com/CreasyBear/Agentic-Economy/pull/375),
-is deployed at runtime source `e4d04a47e`. It removes unused Market reads, adds bounded native Nitro
+was deployed at runtime source `e4d04a47e`. It removes unused Market reads, adds bounded native Nitro
 reuse for common public browse presets, and separates admin recovery from public
 startup. Independent review corrected pending disclosure and cache cardinality
 issues. The full source gate passes. Five interleaved SSR requests per deployment
@@ -54,20 +54,17 @@ retains failures, current limits and the confirmed Sydney web/Virginia Convex pl
 
 Next work stays with these owners:
 
-- **Infrastructure/execution — Sydney migration:** Joel accepts the regional
-  surcharge if validation demonstrates improved performance. Native API confirms
-  Sydney is available; production remains in
-  Virginia. Before a restored backend runs, prove execution isolation, component
-  coverage and pending-work/schedule disposition; preserve browser recovery
-  identities across the URL change. Then measure matching Australian journeys.
-  [Validation and cutover gates](docs/operations/deployments.md#9-october-sydney-migration-validation)
-  retain the independent review. Codex computer-use dashboard verification is
-  pending tool availability. Joel authorised healing and migration on 9 October.
-  The paused Sydney target now has application/component code and is restoring a
-  production snapshot. No production secret bindings or execution are enabled
-  there. Preserve browser recovery under the original deployment scope. The
-  [live audit](docs/operations/deployments.md#9-october-live-infrastructure-audit-and-isolated-target)
-  records exact identity, expiry and the remaining restore/performance gates.
+- **Infrastructure/execution — Sydney migration completed:** production web and
+  Convex now run in Sydney at reviewed source `7d4eba169`, PR #376. Virginia is
+  paused and retained; preserve the original browser-recovery namespace and fix
+  forward after new execution. The final comparison matches all 248 tables,
+  307,930 exported records and eight files; native workers progressed on a new
+  catalogue refresh while the historical purchase Workflow stayed terminal.
+  [Cutover evidence and boundaries](docs/operations/deployments.md#final-cutover-and-live-verification)
+  record the 18-minute pause and unchanged payment/RPC restrictions. Warm public
+  HTTP medians improved for Tools, Providers and catalogue status; a 4.43-second
+  cold Market request and 3.14-second Tools outlier remain failures. This does
+  not close browser, hydration, payment or financial-restore acceptance.
 - **Web/DX:** protected-screen latency, hosted hydration, two-Account isolation
   and retained-browser/accepted-operation compatibility. The inherited
   render-time Chat identity ref flagged by the advisory React Doctor hook is
@@ -101,8 +98,9 @@ Next work stays with these owners:
 The 8 October closeout preserved unrelated whitepaper/strategy drafts and existing
 worktrees, with no paid production Calls, cap/credential/failover changes,
 additional infrastructure or archived-worker activation. The 9 October
-implementation repairs network logging and prepares the paused Sydney restore.
-Production cutover remains pending; payment policy and RPC caps are unchanged.
+implementation repaired network logging and completed the Sydney cutover. The
+old backend stays paused; payment policy and RPC caps are unchanged. Closeout
+records preserve unresolved hosted, cold-start and financial-recovery evidence.
 
 The 8 October public loading re-audit retains the 4.275s hosted cold-entry miss.
 Five additional fresh anonymous desktop contexts measured 1.401–1.469s to the
