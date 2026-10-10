@@ -244,7 +244,9 @@ function DirectoryMarketplace({ canonicalSearch: rankedSource, landingRows, load
   const rankedMatches = rankedResult !== undefined && rankedResult.kind !== 'unavailable' && rankedResult.kind !== 'noMatch' && rankedResult.results.length > 0 ? rankedResult : undefined
   const rankedPage = rankedMatches !== undefined && ranked.status === 'ready' ? ranked.page : undefined
   const [revealedPage, setRevealedPage] = useState<MarketCanonicalSearchPage>()
-  const revealed = rankedPage !== undefined && revealedPage === rankedPage
+  const refreshFailed = rankedPage?.refreshFailed === true
+  // A failed refresh carries the same last-good ranking, so it stays revealed rather than collapsing behind a button.
+  const revealed = rankedPage !== undefined && (revealedPage === rankedPage || (refreshFailed && revealedPage?.result === rankedPage.result))
   const resultsRef = useRef<HTMLDivElement>(null)
   const jumpToRanked = useRef(false)
   useLayoutEffect(() => {
@@ -331,6 +333,10 @@ function DirectoryMarketplace({ canonicalSearch: rankedSource, landingRows, load
       <header className="ae-browse-section-head">
         <h2 id="market-best-matches" tabIndex={-1}>Best matches</h2>
         <p>{result.kind === 'scoped' ? result.reason : `Ranked for “${result.query}” across ${formatCount(result.assessed.examined)} tools.`}</p>
+        {refreshFailed ? <p role="status" className="ae-browse-status">
+          Best matches couldn’t refresh, so these are the last ones that loaded.
+          <Button type="button" variant="secondary" size="sm" onClick={() => void router.invalidate()}>Try again</Button>
+        </p> : null}
       </header>
       <CanonicalSearchResults layout={layout} results={result.results} renderActions={item => {
         const identity = item.toolRef !== undefined && item.access !== 'external_listing'

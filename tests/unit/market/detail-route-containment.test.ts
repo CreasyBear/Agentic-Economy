@@ -4,7 +4,7 @@ import type * as ReactStart from '@tanstack/react-start'
 const requestState = vi.hoisted(() => ({ request: new Request('https://example.com/market') }))
 vi.mock('@tanstack/react-start/server', () => ({ getRequest: () => requestState.request }))
 
-const sources = vi.hoisted(() => ({ tool: vi.fn(), evidence: vi.fn(), rate: vi.fn(), service: vi.fn(), page: vi.fn(), offering: vi.fn(), canonical: vi.fn() }))
+const sources = vi.hoisted(() => ({ search: vi.fn(), tool: vi.fn(), evidence: vi.fn(), rate: vi.fn(), service: vi.fn(), page: vi.fn(), offering: vi.fn(), canonical: vi.fn() }))
 
 vi.mock('@tanstack/react-start', async importOriginal => ({
   ...(await importOriginal<typeof ReactStart>()),
@@ -15,12 +15,14 @@ vi.mock('@tanstack/react-start', async importOriginal => ({
 vi.mock('@/modules/capability-supply/tool-source', () => ({ readCapabilityToolDetail: sources.tool }))
 vi.mock('@/modules/market/server', () => ({ readToolListingEvidence: sources.evidence }))
 vi.mock('@/modules/money/reference-rate.server', () => ({ readPersistedReferenceRate: sources.rate }))
+vi.mock('@/modules/registry/tools.actions', () => ({ registryToolsSearchAction: { run: sources.search } }))
 vi.mock('@/modules/registry/registry.actions', () => ({ registryServicesDetailAction: { run: sources.service } }))
 vi.mock('@/lib/server/owner-status.functions', () => ({ readPublicBusinessPageServer: sources.page }))
 vi.mock('@/modules/registry/registry.functions', () => ({ readPublicOfferingRegistryBusinessDetail: sources.offering }))
 vi.mock('@/lib/server/canonical-url.functions', () => ({ readCanonicalBaseUrlServer: sources.canonical }))
 
 import { readPublicToolDetailRouteServer } from '@/modules/market/tool-detail-route.functions'
+import { searchMarketToolsServer } from '@/modules/market/market-tool-search.functions'
 import { readPublicBusinessRouteServer } from '@/lib/server/public-business-route.functions'
 import { buildPublicBusinessPageHead } from '@/modules/seo/public-route'
 import { SOURCE_READ_TIMEOUT_MS } from '@/lib/bounded-read'
@@ -35,6 +37,40 @@ const descriptor = {
 }
 
 afterEach(() => { for (const mock of Object.values(sources)) mock.mockReset(); vi.restoreAllMocks(); requestState.request = new Request('https://example.com/market') })
+
+/** Nitro/srvx hands server functions a NodeRequest: Request.prototype without undici state, so `new Request(it)` throws. */
+function srvxLikeRequest(url: string, signal = new AbortController().signal): Request {
+  const request = Object.create(Request.prototype) as Request
+  const headers = new Headers({ accept: 'application/json' })
+  Object.defineProperties(request, {
+    url: { get: () => url },
+    method: { get: () => 'GET' },
+    headers: { get: () => headers },
+    signal: { get: () => signal },
+  })
+  return request
+}
+
+describe('srvx runtime requests', () => {
+  it('searches the Market when the runtime request is not an undici Request', async () => {
+    requestState.request = srvxLikeRequest('https://example.com/_serverFn/search')
+    sources.search.mockResolvedValue({ kind: 'results' })
+    expect(await searchMarketToolsServer({ data: {} as never })).toEqual({ kind: 'results' })
+    const context = sources.search.mock.calls[0]?.[0].context as { request: Request }
+    expect(context.request.url).toBe('https://example.com/_serverFn/search')
+    expect(context.request.headers.get('accept')).toBe('application/json')
+  })
+
+  it('reads the public business link when the runtime request is not an undici Request', async () => {
+    requestState.request = srvxLikeRequest('https://example.com/market')
+    sources.tool.mockResolvedValue(descriptor)
+    sources.evidence.mockResolvedValue(undefined)
+    sources.service.mockResolvedValue(undefined)
+    sources.rate.mockResolvedValue(undefined)
+    expect(await readPublicToolDetailRouteServer({ data: { toolRef: descriptor.tool.toolRef } })).toEqual(descriptor)
+    expect(sources.service).toHaveBeenCalledTimes(1)
+  })
+})
 
 describe('public detail containment', () => {
   it('cancels a pending descriptor and prevents late evidence, link, and rate reads', async () => {

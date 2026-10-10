@@ -13,7 +13,7 @@ import { BRAND_NAME } from '@/content/brand-copy'
 import { degrade } from '@/lib/observability/degrade'
 import { readCanonicalBaseUrlServer } from '@/lib/server/canonical-url.functions'
 import { toDirectoryToolCardModel } from '@/modules/market/directory-card.view-model'
-import { readDirectoryToolDetailRouteServer } from '@/modules/market/tool-detail-route.functions'
+import { readDirectoryToolDetailRouteServer, readPublicToolDetailRouteServer } from '@/modules/market/tool-detail-route.functions'
 import { buildPublicPageHead } from '@/modules/seo/public'
 
 const providerHostPattern = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/u
@@ -36,8 +36,11 @@ export const Route = createFileRoute('/tools/$providerHost/$slug')({
     if ((metadata.kind === 'found' || metadata.kind === 'found_upstream') && directoryProviderKey(metadata.item.entry.provider) !== params.providerHost) {
       return { metadata: { kind: 'unavailable' as const, reason: 'query_invalid' }, baseUrl }
     }
-    if (metadata.kind === 'found' && metadata.item.toolRef !== undefined) {
-      throw redirect({ to: '/tools/$toolRef', params: { toolRef: metadata.item.toolRef }, replace: true, state: location.state.fromMarket === true ? { fromMarket: true } : {} })
+    // A current publication can still be dropped by the detail projection; redirect only when the Tool page will render.
+    const toolRef = metadata.kind === 'found' ? metadata.item.toolRef : undefined
+    const detail = toolRef === undefined ? undefined : await readPublicToolDetailRouteServer({ data: { toolRef } }).catch(() => undefined)
+    if (toolRef !== undefined && detail?.kind === 'found') {
+      throw redirect({ to: '/tools/$toolRef', params: { toolRef }, replace: true, state: location.state.fromMarket === true ? { fromMarket: true } : {} })
     }
     return { metadata, referenceRate, baseUrl }
   },
