@@ -368,15 +368,15 @@ describe('ActivityPage & Filtering (W-38)', () => {
     expect(screen.getAllByText('Postal Address Lookup')).toHaveLength(1)
   })
 
-  it('renders status and purchase status badges with payment line', () => {
+  it('renders one purchase status badge with the Call and payment line', () => {
     renderActivity()
 
     expect(screen.getAllByText('Completed').length).toBeGreaterThanOrEqual(1)
     expect(screen.getAllByText('Refused').length).toBeGreaterThanOrEqual(1)
     expect(screen.getAllByText('Resolved — delivered').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Resolved — refunded').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('Payment: Settled')).toBeTruthy()
-    expect(screen.getAllByText('Payment: Released')).toBeTruthy()
+    expect(screen.getAllByText('Call completed, payment settled').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Call refused, payment released').length).toBeGreaterThan(0)
   })
 
   it('shows export preview text for loaded record count', () => {
@@ -539,7 +539,7 @@ describe('ActivityPage & Filtering (W-38)', () => {
     ] }
     render(<AeActivity result={{ kind: 'available', calls, usage: sampleUsage, spend: sampleSpend,
       periodStart: 'Test range', ...windowScope }} />)
-    for (const label of ['Amount', 'Time to outcome', 'When']) {
+    for (const label of ['Amount', 'Time to outcome', 'Started']) {
       const control = screen.getByRole('button', { name: new RegExp(label, 'u') })
       fireEvent.click(control)
       if (control.closest('th')?.getAttribute('aria-sort') !== 'ascending') fireEvent.click(control)

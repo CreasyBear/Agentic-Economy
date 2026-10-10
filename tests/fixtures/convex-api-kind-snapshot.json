@@ -901,6 +901,12 @@
   },
   {
     "visibility": "public",
+    "module": "capabilityCalls",
+    "method": "watchOwnerCallState",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
     "module": "capabilityCallsStatus",
     "method": "readCallStatus",
     "kind": "query"

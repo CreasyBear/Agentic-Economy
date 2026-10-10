@@ -1,4 +1,5 @@
-import { SortableDataTable, type DataColumn } from '@/components/arc/sortable-data-table/sortable-data-table'
+import { AeSortableDataTable as SortableDataTable } from '@/components/ae/shared/sortable-data-table/AeSortableDataTable'
+import type { AeDataColumn as DataColumn } from '@/components/ae/shared/sortable-data-table/sortable-data-table.contracts'
 
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import '../../RecordWorkspaceComposition.css'
@@ -8,22 +9,22 @@ import {
   type ProviderConnectionsTableProps,
 } from '../provider-object.contracts'
 import { providerStatusLabel } from '@/lib/operator/admin-console/status-adapter'
+import { ProviderStatusBadge } from './ProviderStatusBadge'
 
 const columns: DataColumn<ProviderConnectionRow>[] = [
   {
     key: 'connectionRef',
-    width: 240,
     sortable: false,
     label: PROVIDER_OBJECT_COPY.columns.connection,
     render: (_value, row) => (
-      <AeCopyReference label={PROVIDER_OBJECT_COPY.columns.connection} value={row.connectionRef} />
+      <AeCopyReference compact label={PROVIDER_OBJECT_COPY.columns.connection} value={row.connectionRef} />
     ),
   },
   {
     key: 'lifecycle',
     sortable: false,
     label: PROVIDER_OBJECT_COPY.columns.lifecycle,
-    render: (_value, row) => providerStatusLabel(row.lifecycle),
+    render: (_value, row) => <ProviderStatusBadge value={row.lifecycle} />,
   },
   {
     key: 'sourceEnvironment',

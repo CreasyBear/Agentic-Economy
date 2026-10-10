@@ -1,6 +1,5 @@
 import { formatAudAmountString } from '@/components/ae/console/credit-top-up-format'
 import type { InvoiceExportRow } from '@/lib/export/csv-export'
-import { formatTimestamp } from '@/lib/ui/format-time'
 import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import type { AeInvoiceHistoryRow } from '@/modules/money/invoice-history.view-model'
 import { formatExactAmount } from '@/modules/money/public'
@@ -25,7 +24,6 @@ function exactAud(units: bigint) {
 export function receiptDisplay(row: AeInvoiceHistoryRow) {
   const recorded = recordedFundingAmounts(row)
   return {
-    date: formatTimestamp(row.createdAt),
     amount: formatAudAmountString(row.totalUnits),
     gst: recorded === undefined ? undefined : `${formatAudAmountString(recorded.tax.toString())} GST included`,
     status: row.status === 'succeeded'

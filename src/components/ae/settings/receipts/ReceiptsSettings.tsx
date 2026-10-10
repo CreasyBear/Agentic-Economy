@@ -121,7 +121,7 @@ export function ReceiptsSettings({
       id: row.commandRef,
       anchorId: `funding-receipt-${row.commandRef}`,
       description: row.description,
-      date: display.date,
+      createdAt: row.createdAt,
       amount: display.amount,
       status: { label: display.status, tone: row.status === 'succeeded' ? 'paid' : 'reversed' },
       detail: <>

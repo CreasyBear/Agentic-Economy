@@ -4,7 +4,6 @@ import type { AeRecordTableFeatures } from '@/components/ae/operator/AeOperatorD
 
 import { useMemo } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
-import { ArrowUpRightIcon } from 'lucide-react'
 
 import { Badge } from '@/components/arc/badge/badge'
 import {
@@ -14,7 +13,7 @@ import {
 import { AeEmptyState } from '@/components/ae/shared/empty-state/AeEmptyState'
 import { formatDisplayAmount } from '@/modules/money/public'
 import { projectCallSummaryPurchaseStatus } from '@/modules/capability-execution/call-receipt-view'
-import { formatUtcTimestamp } from '@/lib/ui/format-time'
+import { RecordTime } from '@/components/ae/operator/RecordTime'
 import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import type {
   AgentActivityView,
@@ -56,8 +55,8 @@ export function AeAgentCallHistoryTable({
       {
         id: 'task',
         accessorFn: (item) => item.toolLabel,
-        meta: { label: 'Tool / Task' },
-        header: ({ column }) => <AeOperatorSortableHeader label="Tool / Task" column={column} />,
+        meta: { label: 'Tool' },
+        header: ({ column }) => <AeOperatorSortableHeader label="Tool" column={column} />,
         cell: ({ row }) => (
           <div className="aeAgentCallIdentity">
             <span className="aeAgentCallIdentityName font-medium text-foreground" title={row.original.toolLabel}>
@@ -79,6 +78,20 @@ export function AeAgentCallHistoryTable({
             {row.original.providerRef}
           </span>
         ),
+      },
+      {
+        id: 'status',
+        accessorFn: (item) => projectCallSummaryPurchaseStatus(item).label,
+        meta: { label: 'Status' },
+        header: ({ column }) => <AeOperatorSortableHeader label="Status" column={column} />,
+        cell: ({ row }) => {
+          const status = projectCallSummaryPurchaseStatus(row.original)
+          return (
+            <Badge tone={purchaseStatusBadgeVariant(status.kind)}>
+              {status.label}
+            </Badge>
+          )
+        },
       },
       {
         id: 'amount',
@@ -105,47 +118,25 @@ export function AeAgentCallHistoryTable({
         },
       },
       {
-        id: 'status',
-        accessorFn: (item) => projectCallSummaryPurchaseStatus(item).label,
-        meta: { label: 'Status' },
-        header: ({ column }) => <AeOperatorSortableHeader label="Status" column={column} />,
-        cell: ({ row }) => {
-          const status = projectCallSummaryPurchaseStatus(row.original)
-          return (
-            <Badge tone={purchaseStatusBadgeVariant(status.kind)}>
-              {status.label}
-            </Badge>
-          )
-        },
-      },
-      {
         id: 'when',
         accessorKey: 'createdAt',
-        meta: { label: 'When' },
-        header: ({ column }) => <AeOperatorSortableHeader label="When" column={column} />,
-        cell: ({ row }) => (
-          <time
-            dateTime={new Date(row.original.createdAt).toISOString()}
-            className="font-mono text-sm tabular-nums text-muted-foreground"
-          >
-            {formatUtcTimestamp(row.original.createdAt)} UTC
-          </time>
-        ),
+        meta: { label: 'Started' },
+        header: ({ column }) => <AeOperatorSortableHeader label="Started" column={column} />,
+        cell: ({ row }) => <RecordTime at={row.original.createdAt} />,
       },
       {
         id: 'receipt',
         accessorKey: 'callRef',
         enableSorting: false,
         meta: { label: 'Receipt' },
-        header: () => null,
+        header: 'Receipt',
         cell: ({ row }) => (
           <a
             href={`/calls/${encodeURIComponent(row.original.callRef)}`}
             className={actionLinkClassName('ghost', 'sm')}
             aria-label={`View call receipt ${row.original.callRef}`}
           >
-            <span>Receipt</span>
-            <ArrowUpRightIcon className="size-3" aria-hidden="true" />
+            View
           </a>
         ),
       },
@@ -193,6 +184,7 @@ export function AeAgentCallHistoryTable({
           data={activity}
           columns={columns}
           getRowId={(row) => row.callRef}
+          caption="Agent Calls"
           emptyMessage="No calls found."
         />
       )}

@@ -148,7 +148,7 @@ describe('/admin/calls/$callRef', () => {
     fireEvent.click(screen.getByText('Request details'))
     const table = screen.getByRole('table', { name: 'Answer model requests' })
     expect(within(table).getAllByRole('columnheader').map((header) => header.textContent?.trim())).toEqual([
-      'Request', 'Model', 'Tokens in / out', 'USD cost',
+      'Request', 'Model', 'Input tokens', 'Output tokens', 'Cost (US$)',
     ])
     const requestRows = () => within(table).getAllByRole('row').slice(1)
     const firstColumnValues = () => requestRows().map((row) => within(row).getAllByRole('cell')[0]?.textContent?.trim())
@@ -156,9 +156,8 @@ describe('/admin/calls/$callRef', () => {
 
     expect(within(table).getByRole('button', { name: 'Sort by Request' })).toBeTruthy()
     expect(within(table).getByRole('button', { name: 'Sort by Model' })).toBeTruthy()
-    expect(within(table).getAllByRole('columnheader')[2]?.getAttribute('aria-sort')).toBeNull()
-    expect(within(table).getAllByRole('columnheader')[3]?.getAttribute('aria-sort')).toBeNull()
-    for (const index of [2, 3]) {
+    expect(within(table).getByRole('button', { name: 'Sort by Cost (US$)' })).toBeTruthy()
+    for (const index of [2, 3, 4]) {
       expect(within(table).getAllByRole('columnheader')[index]?.classList.contains('text-end')).toBe(true)
       for (const row of requestRows()) {
         const cell = within(row).getAllByRole('cell')[index]
@@ -170,11 +169,10 @@ describe('/admin/calls/$callRef', () => {
     expect(within(table).getByText('Reported model')).toBeTruthy()
     expect(within(table).getByText('~typesafe/jev-latest')).toBeTruthy()
     expect(within(table).getByText('Requested model')).toBeTruthy()
-    expect(within(table).getByText('10 / 20')).toBeTruthy()
-    expect(within(table).getByText('Unknown / Unknown')).toBeTruthy()
+    expect(within(requestRows()[0]!).getAllByRole('cell').slice(2, 4).map((cell) => cell.textContent)).toEqual(['10', '20'])
     expect(within(table).getByText('0.001', { exact: true })).toBeTruthy()
     expect(within(table).getByText('Response usage')).toBeTruthy()
-    expect(within(table).getByText('Unknown', { exact: true })).toBeTruthy()
+    expect(within(table).getAllByText('Unknown', { exact: true })).toHaveLength(3)
     expect(within(table).getByText('jev usage only')).toBeTruthy()
 
     fireEvent.click(within(table).getByRole('button', { name: 'Sort by Request' }))
@@ -188,7 +186,7 @@ describe('/admin/calls/$callRef', () => {
     expect(screen.getByText('test/actual')).toBeTruthy()
     expect(screen.getByText('jev usage only')).toBeTruthy()
     expect(screen.getByText('Related Calls (2)')).toBeTruthy()
-    expect(screen.getByText('Unknown')).toBeTruthy()
+    expect(screen.getAllByText('Unknown')).toHaveLength(3)
   })
 
   it('renders the found Call header and keeps uncertainty distinct from a zero charge', () => {

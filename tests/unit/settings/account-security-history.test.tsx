@@ -78,14 +78,14 @@ describe('account security history', () => {
     expect(screen.getByRole('heading', { name: 'Recorded activity' })).toBeTruthy()
     expect(within(table).getAllByRole('columnheader').map((header) => header.textContent)).toEqual([
       'Activity',
-      'Time',
+      'Outcome',
       'Source',
+      'Time',
       'Evidence',
     ])
     expect(screen.getByText('Session revoked')).toBeTruthy()
     expect(screen.getByText('Revoked')).toBeTruthy()
     expect(screen.getByText('Clerk observed')).toBeTruthy()
-    expect(within(table).getByText(/^Recorded /u)).toBeTruthy()
     expect(screen.queryByText('clerk:delivery-hash')).toBeNull()
     expect(document.querySelector('details')).toBeNull()
     const detailsButton = screen.getByRole('button', {
@@ -169,7 +169,6 @@ describe('account security history', () => {
     }} />)
 
     expect(screen.getByText('Observed time unavailable')).toBeTruthy()
-    expect(within(screen.getByRole('table', { name: 'Account security history' })).getByText(/^Recorded /u)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', {
       name: 'View details for security event audit:clerk:delivery-hash',
     }))

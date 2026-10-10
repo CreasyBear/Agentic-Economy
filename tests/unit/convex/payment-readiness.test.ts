@@ -131,14 +131,14 @@ describe('payment readiness evidence publication and admission view', () => {
     // chain observation. A later balance read cannot refresh that chain fact.
     await seedTreasuryReadinessFacts(backend, { observation: 'create', observationAt: NOW,
       snapshotAt: NOW - 15 * 60_000, chainObservedAt: NOW - 25 * 60_000 })
-    expect(await backend.query(internal.moneyReadiness.readSourceChecks, { environment: 'production', now: NOW }))
+    expect(await backend.query(internal.moneyReadiness.readSourceChecks, { environment: 'production' }))
       .toMatchObject({ treasury: { kind: 'failed', code: 'treasury_reconciliation_required' } })
     const red = snapshot({ checks: { ...passedChecks(), treasury: { kind: 'failed', code: 'treasury_reconciliation_required' } } })
     await backend.mutation(publish, { snapshot: red })
     const storedRed = await storedRows(backend)
     vi.mocked(Date.now).mockReturnValue(NOW + 1_000)
     await seedTreasuryReadinessFacts(backend, { observation: 'create' })
-    expect(await backend.query(internal.moneyReadiness.readSourceChecks, { environment: 'production', now: NOW + 1_000 }))
+    expect(await backend.query(internal.moneyReadiness.readSourceChecks, { environment: 'production' }))
       .toMatchObject({ treasury: { kind: 'passed' } })
     expect(await view(backend, NOW + 1_000)).toMatchObject({ kind: 'not_ready', code: 'treasury_reconciliation_required' })
     const late = snapshot({ startedAt: NOW - 2_000, completedAt: NOW + 1_000 })
@@ -217,6 +217,32 @@ describe('payment readiness evidence publication and admission view', () => {
     expect(outward).not.toContain(evidence.configurationDigest)
     expect(outward).not.toContain(evidence.evidenceDigest)
     expect(outward).not.toContain('private-')
+  })
+
+  it('publishes a transient provider failure red at once over fresh green evidence', async () => {
+    const backend = convexTest(schema, modules)
+    await seedTreasuryReadinessFacts(backend, { observation: 'create' })
+    await backend.mutation(publish, { snapshot: snapshot({ startedAt: NOW - 1000 }) })
+    const flaky = snapshot({ startedAt: NOW - 500, checks: { ...passedChecks(), formance: { kind: 'failed', code: 'formance_readiness_unavailable' } } })
+    expect(await backend.mutation(publish, { snapshot: flaky })).toEqual({ kind: 'published', replayed: false })
+    expect(await view(backend)).toMatchObject({ kind: 'not_ready', code: 'formance_readiness_unavailable' })
+  })
+
+  it('does not gate x402 payments readiness on the AUD reference rate', async () => {
+    const backend = convexTest(schema, modules)
+    await seedTreasuryReadinessFacts(backend, { observation: 'create' })
+    await backend.mutation(publish, { snapshot: snapshot({ checks: { ...passedChecks(), reference_rate: { kind: 'failed', code: 'reference_rate_stale' } } }) })
+    expect(await view(backend)).toMatchObject({ kind: 'ready', code: null,
+      checks: { reference_rate: { kind: 'failed', code: 'reference_rate_stale' } } })
+  })
+
+  it('does not bound readiness expiry by an earlier AUD reference rate deadline', async () => {
+    const backend = convexTest(schema, modules)
+    await seedTreasuryReadinessFacts(backend, { observation: 'create' })
+    const evidence = snapshot({ checks: { ...passedChecks(), reference_rate: { kind: 'passed', validUntil: NOW + 1 } } })
+    expect(evidence.expiresAt).toBe(NOW + 120_000)
+    await backend.mutation(publish, { snapshot: evidence })
+    expect(await view(backend, NOW + 1)).toMatchObject({ kind: 'ready', expiresAt: NOW + 120_000 })
   })
 
   it('replays exact concurrent publications with one row', async () => {
@@ -318,7 +344,7 @@ describe('payment readiness evidence publication and admission view', () => {
 
   it('derives expiry from the earliest check and refuses at the exact expiry', async () => {
     const backend = convexTest(schema, modules)
-    const evidence = snapshot({ checks: { ...passedChecks(), reference_rate: { kind: 'passed', validUntil: NOW + 1 } } })
+    const evidence = snapshot({ checks: { ...passedChecks(), formance: { kind: 'passed', validUntil: NOW + 1 } } })
     await backend.mutation(publish, { snapshot: evidence })
     expect(evidence.expiresAt).toBe(NOW + 1)
     const expired = await view(backend, NOW + 1)

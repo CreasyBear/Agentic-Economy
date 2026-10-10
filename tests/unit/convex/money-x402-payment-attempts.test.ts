@@ -539,6 +539,7 @@ describe('money x402 payment authorization attempt', () => {
     expect(db.patchCalls).toHaveLength(1)
     expect(scheduler.runAfter).toHaveBeenCalledTimes(1)
     expect(getFunctionName(scheduler.runAfter.mock.calls[0]?.[1])).toBe('moneyX402PaymentAttempts:beginResponseRecovery')
+    expect(scheduler.runAfter.mock.calls[0]?.[0]).toBe(15_000)
     const beforeVerification = await readAttempt({ db }, {
       dispatchRef: 'invocation:test', attemptRef: 'attempt:test', effectGeneration: 1,
     })
@@ -1139,9 +1140,14 @@ describe('retained response recovery watchdog', () => {
     db.seedTable('capabilityCalls', { _id: 'call:watchdog', callRef: 'call:watchdog', state: 'reconciliation_required' })
     const scheduler = { runAt: vi.fn(), runAfter: vi.fn() }
     const ctx = { db, scheduler }
+    const t0 = 1_000_000
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(t0)
     await expect(beginRecovery(ctx, { callRef: 'call:watchdog', attempt: 0 })).resolves.toBe(true)
     await expect(beginRecovery(ctx, { callRef: 'call:watchdog', attempt: 0 })).resolves.toBe(false)
     expect(scheduler.runAt).toHaveBeenCalledTimes(1)
+    expect(scheduler.runAt.mock.calls[0]?.[0]).toBe(t0 + 60_000)
+    expect(db.rows('capabilityCalls')[0]).toMatchObject({ reconciliation: {
+      nextAttemptAt: t0 + 60_000, leaseExpiresAt: t0 + 120_000 } })
     expect(getFunctionName(scheduler.runAt.mock.calls[0]?.[1])).toBe('moneyX402PaymentAttempts:beginResponseRecovery')
     expect(scheduler.runAfter).toHaveBeenCalledTimes(1)
     expect(getFunctionName(scheduler.runAfter.mock.calls[0]?.[1])).toBe('moneyX402ResponseActions:recover')
@@ -1153,7 +1159,9 @@ describe('retained response recovery watchdog', () => {
     await beginRecovery(ctx, { callRef: 'call:watchdog', attempt: 2 })
     await beginRecovery(ctx, { callRef: 'call:watchdog', attempt: 3 })
     await expect(beginRecovery(ctx, { callRef: 'call:watchdog', attempt: 4 })).resolves.toBe(false)
-    expect(scheduler.runAt).toHaveBeenCalledTimes(4)
+    clock.mockRestore()
+    // After the 15s checkpoint hop, the ladder reaches manual review about 15 minutes later.
+    expect(scheduler.runAt.mock.calls.map(call => (call[0] as number) - t0)).toEqual([60_000, 120_000, 240_000, 480_000])
     expect(scheduler.runAfter).toHaveBeenCalledTimes(4)
     await expect(recoveryIsCurrent({ db }, { callRef: 'call:watchdog', attempt: 4 })).resolves.toBe(false)
     expect(db.rows('capabilityCalls')[0]).toMatchObject({ reconciliation: { disposition: 'manual_review', attemptCount: 5 } })

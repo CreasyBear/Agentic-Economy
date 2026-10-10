@@ -5,6 +5,7 @@ import '../../RecordWorkspaceComposition.css'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeRecordTable } from '@/components/ae/operator/AeOperatorDataTable'
 import { Badge } from '@/components/arc/badge/badge'
+import { RecordTime } from '@/components/ae/operator/RecordTime'
 import {
   ADMIN_EXCEPTIONS_COPY,
   type AdminResolutionRowModel,
@@ -14,9 +15,10 @@ import {
 const columns: ColumnDef<AeRecordTableFeatures, AdminResolutionRowModel, unknown>[] = [
   {
     accessorKey: 'callRef',
+    meta: { truncate: true },
     header: ADMIN_EXCEPTIONS_COPY.columnLabels.call,
     cell: ({ row }) => (
-      <a className="arc-admin-record-link" href={row.original.href}>
+      <a className="arc-admin-record-link font-mono" href={row.original.href} title={row.original.callRef}>
         {row.original.callRef}
       </a>
     ),
@@ -24,14 +26,12 @@ const columns: ColumnDef<AeRecordTableFeatures, AdminResolutionRowModel, unknown
   {
     accessorKey: 'terminalStateLabel',
     header: ADMIN_EXCEPTIONS_COPY.columnLabels.terminalState,
-    cell: ({ row }) => <Badge tone="neutral">{row.original.terminalStateLabel}</Badge>,
+    cell: ({ row }) => <Badge tone={row.original.terminalStateTone}>{row.original.terminalStateLabel}</Badge>,
   },
   {
-    accessorKey: 'resolvedAtLabel',
+    accessorKey: 'resolvedAtIso',
     header: ADMIN_EXCEPTIONS_COPY.columnLabels.resolvedAt,
-    cell: ({ row }) => (
-      <time dateTime={row.original.resolvedAtIso}>{row.original.resolvedAtLabel}</time>
-    ),
+    cell: ({ row }) => <RecordTime at={row.original.resolvedAtIso} />,
   },
 ]
 

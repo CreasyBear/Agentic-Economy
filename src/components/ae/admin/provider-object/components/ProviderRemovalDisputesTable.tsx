@@ -1,4 +1,5 @@
-import { SortableDataTable, type DataColumn } from '@/components/arc/sortable-data-table/sortable-data-table'
+import { AeSortableDataTable as SortableDataTable } from '@/components/ae/shared/sortable-data-table/AeSortableDataTable'
+import type { AeDataColumn as DataColumn } from '@/components/ae/shared/sortable-data-table/sortable-data-table.contracts'
 
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import '../../RecordWorkspaceComposition.css'
@@ -7,40 +8,35 @@ import {
   type ProviderRemovalDisputeRow,
   type ProviderRemovalDisputesTableProps,
 } from '../provider-object.contracts'
-import { providerStatusLabel } from '@/lib/operator/admin-console/status-adapter'
-import { providerTimestamp } from '../provider-object.view-model'
+import { RecordTime } from '@/components/ae/operator/RecordTime'
+import { ProviderStatusBadge } from './ProviderStatusBadge'
 import { ProviderDisputeAction } from './ProviderDisputeAction'
 
 function disputeColumns(onCloseDispute?: ProviderRemovalDisputesTableProps['onCloseDispute']): DataColumn<ProviderRemovalDisputeRow>[] { return [
   {
     key: 'disputeRef',
-    width: 240,
     sortable: false,
     label: PROVIDER_OBJECT_COPY.columns.removalDispute,
     render: (_value, row) => (
-      <AeCopyReference label={PROVIDER_OBJECT_COPY.columns.removalDispute} value={row.disputeRef} />
+      <AeCopyReference compact label={PROVIDER_OBJECT_COPY.columns.removalDispute} value={row.disputeRef} />
     ),
   },
   {
     key: 'status',
     sortable: false,
     label: PROVIDER_OBJECT_COPY.columns.state,
-    render: (_value, row) => providerStatusLabel(row.status),
+    render: (_value, row) => <ProviderStatusBadge value={row.status} />,
   },
   {
     key: 'updatedAt',
-    width: 180,
     sortable: false,
     label: PROVIDER_OBJECT_COPY.columns.updated,
-    render: (_value, row) => {
-      const updatedAt = providerTimestamp(row.updatedAt)
-      return <time dateTime={updatedAt.iso} style={{ whiteSpace: 'nowrap' }}>{updatedAt.label}</time>
-    },
+    render: (_value, row) => <RecordTime at={row.updatedAt} />,
   },
   {
     key: 'actions',
     sortable: false,
-    label: PROVIDER_OBJECT_COPY.closeDispute,
+    label: 'Action',
     render: (_value, row) => <ProviderDisputeAction dispute={row} onClose={onCloseDispute} />,
   },
 ]

@@ -9,10 +9,11 @@ import { AeAlert as Alert } from '@/components/ae/shared/alert/AeAlert'
 import { Badge } from '@/components/arc/badge/badge'
 import { AeEmptyState } from '@/components/ae/shared/empty-state/AeEmptyState'
 import { SearchField } from '@/components/arc/search-field/search-field'
-import { SortableDataTable } from '@/components/arc/sortable-data-table/sortable-data-table'
+import { AeSortableDataTable as SortableDataTable } from '@/components/ae/shared/sortable-data-table/AeSortableDataTable'
 import { Button } from '@/components/arc/button/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { formatPerthTimestamp } from '@/lib/ui/format-time'
+import { enumLabel } from '@/lib/ui/enum-label'
+import { RecordTime } from '@/components/ae/operator/RecordTime'
 import { AdminSearchNotice } from '../AdminSearchNotice'
 import { AdminTrialAccess } from '../actions/AdminTrialAccess'
 
@@ -101,10 +102,10 @@ function AccountsList({ search, onSearchChange }: AccountSearchProps) {
                   </div>
                 ) },
                 { key: 'lifecycle', label: 'Status', render: (_value, account) => (
-                  <Badge tone={account.lifecycle === 'suspended' ? 'warning' : 'neutral'}>{account.lifecycle.replaceAll('_', ' ')}</Badge>
+                  <Badge tone={account.lifecycle === 'suspended' ? 'warning' : 'neutral'}>{enumLabel(account.lifecycle)}</Badge>
                 ) },
                 { key: 'createdAt', label: 'Created', numeric: false, render: (_value, account) => (
-                  <time className="text-xs text-muted-foreground" dateTime={new Date(account.createdAt).toISOString()}>{formatPerthTimestamp(account.createdAt)}</time>
+                  <RecordTime at={account.createdAt} />
                 ) },
               ]}
             />

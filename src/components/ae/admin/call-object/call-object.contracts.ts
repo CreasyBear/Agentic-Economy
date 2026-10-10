@@ -27,7 +27,7 @@ export type AdminCallObjectFoundProps = Readonly<{
 
 export type AdminCallActivityRow = Readonly<{
   id: string
-  at: string
+  at: number
   eventType: string
   actorRef: string
   outcome: string
@@ -86,7 +86,7 @@ export const ADMIN_CALL_OBJECT_COPY = {
   agentLabel: 'Agent',
   correlationLabel: 'Correlation',
   activityTitle: 'Activity',
-  activityDescription: 'Newest recorded activity appears first. Times are shown in Australia/Perth.',
+  activityDescription: 'Newest recorded activity appears first.',
   noActivity: 'No activity is recorded for this Call.',
   occurredAtColumn: 'Occurred',
   eventTypeColumn: 'Event type',
