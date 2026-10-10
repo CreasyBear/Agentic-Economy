@@ -99,6 +99,7 @@ import type * as crons from "../crons.js";
 import type * as devSeed from "../devSeed.js";
 import type * as devSeedStore from "../devSeedStore.js";
 import type * as discovery from "../discovery.js";
+import type * as emailWebhook from "../emailWebhook.js";
 import type * as facilitatorDiscovery from "../facilitatorDiscovery.js";
 import type * as http from "../http.js";
 import type * as interactiveAuthority from "../interactiveAuthority.js";
@@ -921,6 +922,7 @@ declare const fullApi: ApiFromModules<{
   devSeed: typeof devSeed;
   devSeedStore: typeof devSeedStore;
   discovery: typeof discovery;
+  emailWebhook: typeof emailWebhook;
   facilitatorDiscovery: typeof facilitatorDiscovery;
   http: typeof http;
   interactiveAuthority: typeof interactiveAuthority;

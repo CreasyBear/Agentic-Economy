@@ -2407,6 +2407,12 @@
   },
   {
     "visibility": "internal",
+    "module": "emailWebhook",
+    "method": "receiveResendWebhook",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
     "module": "facilitatorDiscovery",
     "method": "reconcile",
     "kind": "mutation"
@@ -3914,6 +3920,12 @@
   {
     "visibility": "internal",
     "module": "notifications",
+    "method": "applyResendEvent",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "notifications",
     "method": "completeDelivery",
     "kind": "mutation"
   },
@@ -3960,6 +3972,12 @@
     "kind": "query"
   },
   {
+    "visibility": "internal",
+    "module": "notifications",
+    "method": "readSendSuppression",
+    "kind": "query"
+  },
+  {
     "visibility": "public",
     "module": "notifications",
     "method": "readUsageAlertHistory",
@@ -3980,7 +3998,7 @@
   {
     "visibility": "internal",
     "module": "notifications",
-    "method": "unsubscribeStalled",
+    "method": "unsubscribeEmailStream",
     "kind": "mutation"
   },
   {

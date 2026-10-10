@@ -4,6 +4,7 @@ import type { PaginationOptions } from 'convex/server'
 import { STALLED_STEPS as JOURNEY_STALLED_STEPS, readStalledPage, type StalledStep } from '../../journey/stalled'
 import { resolveClerkUserIdForPrincipal } from '../workspace/directory'
 import { enqueueEmail } from './enqueue'
+import { signUnsubscribeToken } from './unsubscribe'
 
 type StalledKind = 'stalled_not_funded' | 'stalled_no_agent' | 'stalled_never_called'
 
@@ -73,25 +74,6 @@ export async function enqueueStalledStepEmailsHandler(
   return { isDone: page.isDone, continueCursor: page.continueCursor }
 }
 
-/** RFC 8058 one-click target. The deliveryRef is a random UUID only the recipient's inbox holds. */
-export async function unsubscribeStalledHandler(ctx: MutationCtx, args: { deliveryRef: string }): Promise<boolean> {
-  const delivery = await ctx.db.query('notificationDeliveries')
-    .withIndex('by_deliveryRef', (query) => query.eq('deliveryRef', args.deliveryRef)).unique()
-  if (delivery === null || !isStalledKind(delivery.eventKind)) return false
-  const preference = await ctx.db.query('userNotificationPreferences')
-    .withIndex('by_principalRef_and_accountRef', (query) => query
-      .eq('principalRef', delivery.recipientPrincipalRef).eq('accountRef', delivery.accountRef)).unique()
-  if (preference?.stalledStepEmails === true) {
-    await ctx.db.patch(preference._id, {
-      stalledStepEmails: false,
-      revision: preference.revision + 1,
-      updatedAt: Date.now(),
-      lastCorrelationRef: `unsubscribe:${delivery.deliveryRef}`,
-    })
-  }
-  return true
-}
-
 /** Re-checks at send time: still the owner, still opted in, step still not done. */
 export async function readStalledDeliveryContext(
   ctx: QueryCtx,
@@ -111,7 +93,14 @@ export async function readStalledDeliveryContext(
   if (siteUrl === undefined || siteUrl.length === 0) return { kind: 'skip' as const, code: 'site_url_missing' }
   const convexSiteUrl = process.env.CONVEX_SITE_URL?.trim().replace(/\/+$/u, '')
   if (convexSiteUrl === undefined || convexSiteUrl.length === 0) return { kind: 'skip' as const, code: 'unsubscribe_url_missing' }
-  const unsubscribeUrl = `${convexSiteUrl}/notifications/unsubscribe?d=${encodeURIComponent(delivery.deliveryRef)}`
+  const unsubscribeSecret = process.env.EMAIL_UNSUBSCRIBE_SECRET?.trim()
+  if (unsubscribeSecret === undefined || unsubscribeSecret.length === 0) return { kind: 'skip' as const, code: 'unsubscribe_url_missing' }
+  const token = await signUnsubscribeToken(unsubscribeSecret, {
+    principalRef: delivery.recipientPrincipalRef,
+    accountRef: delivery.accountRef,
+    stream: 'lifecycle',
+  })
+  const unsubscribeUrl = `${convexSiteUrl}/notifications/unsubscribe?t=${encodeURIComponent(token)}`
   return {
     kind: 'ready' as const,
     deliveryRef: delivery.deliveryRef,

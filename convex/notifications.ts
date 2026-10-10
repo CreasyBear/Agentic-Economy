@@ -6,11 +6,15 @@ import { internalAction,internalQuery, query } from './_generated/server'
 import { degradeBackend } from '../src/lib/observability/degrade-backend'
 import { internalMutation, mutation } from './usageTrackedMutation'
 import {
+  applyResendEventHandler,
   completeDeliveryArgs,
   completeDeliveryHandler,
   readNotificationContextArgs,
   readNotificationContextHandler,
   readNotificationContextResult,
+  readSendSuppressionArgs,
+  readSendSuppressionHandler,
+  resendEventArgs,
 } from './lib/principalAccount/notifications/delivery'
 import { enqueueAgentApprovalRequestedHandler } from './lib/principalAccount/notifications/enqueue'
 import { paginationOptsValidator } from 'convex/server'
@@ -19,12 +23,13 @@ import { STALLED_STEP_NAMES, stalledStepValue } from './lib/journey/stalled'
 import {
   enqueueStalledStepEmailsHandler,
   stalledEmailsEnabled,
-  unsubscribeStalledHandler,
 } from './lib/principalAccount/notifications/stalled'
 import {
   readPreferencesArgs,
   readPreferencesHandler,
   readPreferencesResult,
+  unsubscribeEmailStreamArgs,
+  unsubscribeEmailStreamHandler,
   updatePreferencesArgs,
   updatePreferencesHandler,
   updatePreferencesResult,
@@ -84,16 +89,28 @@ export const sweepStalledStepEmails = internalAction({
   },
 })
 
-export const unsubscribeStalled = internalMutation({
-  args: { deliveryRef: v.string() },
+export const unsubscribeEmailStream = internalMutation({
+  args: unsubscribeEmailStreamArgs,
   returns: v.boolean(),
-  handler: unsubscribeStalledHandler,
+  handler: unsubscribeEmailStreamHandler,
 })
 
 export const readNotificationContext = internalQuery({
   args: readNotificationContextArgs,
   returns: readNotificationContextResult,
   handler: readNotificationContextHandler,
+})
+
+export const readSendSuppression = internalQuery({
+  args: readSendSuppressionArgs,
+  returns: v.union(v.string(), v.null()),
+  handler: readSendSuppressionHandler,
+})
+
+export const applyResendEvent = internalMutation({
+  args: resendEventArgs,
+  returns: v.union(v.literal('applied'), v.literal('duplicate')),
+  handler: applyResendEventHandler,
 })
 
 export const completeDelivery = internalMutation({

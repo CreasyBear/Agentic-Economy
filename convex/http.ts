@@ -12,6 +12,7 @@ import {
   providerConsequenceX402Rpc,
 } from './providerConsequenceHttp'
 import { secretLifecycleRpc } from './secretLifecycleHttp'
+import { verifyUnsubscribeToken } from './lib/principalAccount/notifications/unsubscribe'
 
 const http = httpRouter()
 
@@ -34,20 +35,41 @@ const settingsLink = (label: string) => {
   const site = process.env.AE_SITE_URL?.trim().replace(/\/+$/u, '')
   return site ? `<a href="${escapeAttr(`${site}/owner/settings/notifications`)}">${label}</a>` : label
 }
-const deliveryRefFrom = (request: Request) => new URL(request.url).searchParams.get('d')?.slice(0, 200) ?? ''
 const escapeAttr = (value: string) => value.replace(/[&"<>]/gu, char => `&#${char.charCodeAt(0)};`)
+const STREAM_LABEL = { alert: 'account alert emails', lifecycle: 'stalled-step emails' } as const
+const invalidPage = () => page(`<p>This unsubscribe link is not valid. Manage emails in ${settingsLink('notification settings')}.</p>`, 404)
 
-// RFC 8058: mail clients POST here for one-click unsubscribe. GET only renders a confirm button,
-// so link scanners that prefetch the footer link cannot change the preference.
-http.route({ path: UNSUBSCRIBE_PATH, method: 'GET', handler: httpAction(async (_ctx, request) => page(
-  `<form method="post" action="${UNSUBSCRIBE_PATH}?d=${escapeAttr(encodeURIComponent(deliveryRefFrom(request)))}"><p>Stop stalled-step emails for this account?</p><button type="submit">Unsubscribe</button></form>`,
-)) })
+// Resend posts here with a Svix signature. The raw body goes to a node action that verifies it before any state changes.
+http.route({ path: '/resend/webhook', method: 'POST', handler: httpAction(async (ctx, request) => {
+  const result = await ctx.runAction(internal.emailWebhook.receiveResendWebhook, {
+    rawBody: await request.text(),
+    svixId: request.headers.get('svix-id') ?? '',
+    svixTimestamp: request.headers.get('svix-timestamp') ?? '',
+    svixSignature: request.headers.get('svix-signature') ?? '',
+  })
+  return new Response(null, { status: result === 'invalid' ? 400 : 200 })
+}) })
+
+// The token in `t` is HMAC-signed and names one principal, account and stream. GET only renders a confirm form,
+// so link scanners that prefetch the footer link cannot change the preference. POST (RFC 8058 one-click) flips it.
+const tokenFrom = (request: Request) => new URL(request.url).searchParams.get('t')?.slice(0, 1000) ?? ''
+const verifiedUnsubscribe = async (request: Request) => {
+  const secret = process.env.EMAIL_UNSUBSCRIBE_SECRET?.trim()
+  return secret ? await verifyUnsubscribeToken(secret, tokenFrom(request)) : null
+}
+http.route({ path: UNSUBSCRIBE_PATH, method: 'GET', handler: httpAction(async (_ctx, request) => {
+  const target = await verifiedUnsubscribe(request)
+  if (target === null) return invalidPage()
+  return page(
+    `<form method="post" action="${UNSUBSCRIBE_PATH}?t=${escapeAttr(encodeURIComponent(tokenFrom(request)))}"><p>Stop ${STREAM_LABEL[target.stream]} for this account?</p><button type="submit">Unsubscribe</button></form>`,
+  )
+}) })
 http.route({ path: UNSUBSCRIBE_PATH, method: 'POST', handler: httpAction(async (ctx, request) => {
-  const deliveryRef = deliveryRefFrom(request)
-  const done = deliveryRef.length > 0 && await ctx.runMutation(internal.notifications.unsubscribeStalled, { deliveryRef })
+  const target = await verifiedUnsubscribe(request)
+  const done = target !== null && await ctx.runMutation(internal.notifications.unsubscribeEmailStream, target)
   return done
-    ? page(`<p>You will not get stalled-step emails for this account. You can turn them back on in ${settingsLink('notification settings')}.</p>`)
-    : page(`<p>This unsubscribe link is not valid. Manage emails in ${settingsLink('notification settings')}.</p>`, 404)
+    ? page(`<p>You will not get ${STREAM_LABEL[target.stream]} for this account. You can turn them back on in ${settingsLink('notification settings')}.</p>`)
+    : invalidPage()
 }) })
 
 export default http

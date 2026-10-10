@@ -66,6 +66,7 @@ export async function enqueueEmail(ctx: MutationCtx, input: {
     accountRef: input.accountRef,
     eventKind: input.eventKind,
     stream: input.stream,
+    required: input.stream === 'transactional',
     sourceEventRef: input.sourceEventRef,
     ...input.evidence,
     state: admitted ? 'pending' : 'suppressed',

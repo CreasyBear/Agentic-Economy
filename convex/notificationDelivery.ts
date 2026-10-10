@@ -7,6 +7,7 @@ import { degradeBackend } from '../src/lib/observability/degrade-backend'
 import { internal } from './_generated/api'
 import { internalAction } from './_generated/server'
 import { sendDeliveryEmailResult } from './lib/principalAccount/notifications/delivery'
+import { emailAddressHash } from './lib/principalAccount/notifications/suppression'
 import { postResendEmail } from './lib/principalAccount/notifications/resend'
 import { buildDigest, operatorDate } from './operatorDigest'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -45,6 +46,13 @@ export const sendDeliveryEmail = internalAction({
     const fresh = await ctx.runQuery(internal.notifications.readNotificationContext, { deliveryId })
     if (fresh.kind === 'skip') return { outcome: 'suppressed', code: fresh.code }
     if (propsDigest(fresh) !== propsDigest(context)) return { outcome: 'suppressed', code: 'notification_context_changed' }
+
+    // The Clerk address is the one Resend will receive, so bounce and complaint records are matched here.
+    const suppressed = await ctx.runQuery(internal.notifications.readSendSuppression, {
+      deliveryId,
+      addressHash: await emailAddressHash(primaryEmail.emailAddress),
+    })
+    if (suppressed !== null) return { outcome: 'suppressed', code: suppressed }
 
     return await postResendEmail({
       apiKey: resendApiKey,

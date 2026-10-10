@@ -1,9 +1,13 @@
 import { makeFunctionReference, type UserIdentity } from 'convex/server'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { WorkId } from '@convex-dev/workpool'
+import { Webhook } from 'svix'
 import { components, internal } from '../../../convex/_generated/api'
 import { AUTHORITY_REQUEST_TTL_MS } from '../../../convex/lib/capabilityExecution/callLifecycle/admissionApprovals'
 import { enqueueEmail } from '../../../convex/lib/principalAccount/notifications/enqueue'
+import type { Id } from '../../../convex/_generated/dataModel'
+import { emailAddressHash } from '../../../convex/lib/principalAccount/notifications/suppression'
+import { signUnsubscribeToken } from '../../../convex/lib/principalAccount/notifications/unsubscribe'
 import { convexTestWithWorkers } from '../../helpers/convex-fixtures'
 import { samIdentity } from '../../helpers/interactive-authority-provisioning'
 import {
@@ -21,6 +25,15 @@ import {
 
 
 afterEach(() => { vi.unstubAllEnvs() })
+
+const UNSUBSCRIBE_SECRET = 'unsubscribe-secret-test'
+const WEBHOOK_SECRET = `whsec_${Buffer.from('resend-webhook-test-key').toString('base64')}`
+const signedToken = (stream: 'alert' | 'lifecycle') => signUnsubscribeToken(UNSUBSCRIBE_SECRET, {
+  principalRef: PRINCIPAL_REF,
+  accountRef: ACCOUNT_REF,
+  stream,
+})
+const unsubscribePath = (token: string) => `/notifications/unsubscribe?t=${encodeURIComponent(token)}`
 
 async function insertPendingApprovalCall(
   backend: InteractiveAuthorityBackend,
@@ -883,15 +896,14 @@ describe('stalled step notification deliveries', () => {
   })
 
   it('one-click unsubscribe turns stalled-step emails off for that owner and account only', async () => {
-    vi.stubEnv('AE_STALLED_EMAILS_ENABLED', 'true')
+    vi.stubEnv('EMAIL_UNSUBSCRIBE_SECRET', UNSUBSCRIBE_SECRET)
     const backend = await createNotificationBackend()
     await seedStalledOwner(backend, true)
-    await enqueueStalled(backend)
-    const [delivery] = await listDeliveryRows(backend)
-    if (delivery === undefined) throw new Error('delivery_missing')
+    const token = await signedToken('lifecycle')
 
-    await expect(backend.mutation(internal.notifications.unsubscribeStalled, { deliveryRef: 'notification:unknown' })).resolves.toBe(false)
-    await expect(backend.mutation(internal.notifications.unsubscribeStalled, { deliveryRef: delivery.deliveryRef })).resolves.toBe(true)
+    await expect(backend.fetch(unsubscribePath(token), { method: 'GET' })).resolves.toMatchObject({ status: 200 })
+    await expect(readPreferences(backend)).resolves.toMatchObject({ stalledStepEmails: true })
+    await expect(backend.fetch(unsubscribePath(token), { method: 'POST' })).resolves.toMatchObject({ status: 200 })
     await expect(readPreferences(backend)).resolves.toMatchObject({ stalledStepEmails: false, agentApprovalRequested: true })
   })
 
@@ -899,6 +911,7 @@ describe('stalled step notification deliveries', () => {
     vi.stubEnv('AE_STALLED_EMAILS_ENABLED', 'true')
     vi.stubEnv('AE_SITE_URL', 'https://ae.example.test')
     vi.stubEnv('CONVEX_SITE_URL', 'https://convex.example.test/')
+    vi.stubEnv('EMAIL_UNSUBSCRIBE_SECRET', UNSUBSCRIBE_SECRET)
     const backend = await createNotificationBackend()
     await seedStalledOwner(backend, true)
     await enqueueStalled(backend)
@@ -906,9 +919,47 @@ describe('stalled step notification deliveries', () => {
     if (delivery === undefined) throw new Error('delivery_missing')
 
     const context = await backend.query(internal.notifications.readNotificationContext, { deliveryId: delivery._id })
-    const unsubscribeUrl = `https://convex.example.test/notifications/unsubscribe?d=${encodeURIComponent(delivery.deliveryRef)}`
+    const unsubscribeUrl = `https://convex.example.test/notifications/unsubscribe?t=${encodeURIComponent(await signedToken('lifecycle'))}`
     expect(context).toMatchObject({ kind: 'ready', unsubscribeUrl })
     expect(context.kind === 'ready' ? context.text : '').toContain(`Stop these emails: ${unsubscribeUrl}`)
+  })
+
+  it('ignores the retired deliveryRef unsubscribe form', async () => {
+    vi.stubEnv('AE_STALLED_EMAILS_ENABLED', 'true')
+    vi.stubEnv('EMAIL_UNSUBSCRIBE_SECRET', UNSUBSCRIBE_SECRET)
+    const backend = await createNotificationBackend()
+    await seedStalledOwner(backend, true)
+    await enqueueStalled(backend)
+    const [delivery] = await listDeliveryRows(backend)
+    if (delivery === undefined) throw new Error('delivery_missing')
+
+    await expect(backend.fetch(`/notifications/unsubscribe?d=${encodeURIComponent(delivery.deliveryRef)}`, { method: 'POST' }))
+      .resolves.toMatchObject({ status: 404 })
+    await expect(readPreferences(backend)).resolves.toMatchObject({ stalledStepEmails: true })
+  })
+
+  it('one-click unsubscribe from alerts turns off the alert toggles and leaves stalled emails alone', async () => {
+    vi.stubEnv('EMAIL_UNSUBSCRIBE_SECRET', UNSUBSCRIBE_SECRET)
+    const backend = await createNotificationBackend()
+    await seedStalledOwner(backend, true)
+
+    await expect(backend.fetch(unsubscribePath(await signedToken('alert')), { method: 'POST' })).resolves.toMatchObject({ status: 200 })
+    await expect(readPreferences(backend)).resolves.toMatchObject({
+      lowCreditBalance: false,
+      spendCapWarning: false,
+      callFailureSpike: false,
+      stalledStepEmails: true,
+    })
+  })
+
+  it('refuses a tampered unsubscribe token without changing preferences', async () => {
+    vi.stubEnv('EMAIL_UNSUBSCRIBE_SECRET', UNSUBSCRIBE_SECRET)
+    const backend = await createNotificationBackend()
+    await seedStalledOwner(backend, true)
+    const token = await signedToken('lifecycle')
+
+    await expect(backend.fetch(unsubscribePath(`${token.slice(0, -2)}xx`), { method: 'POST' })).resolves.toMatchObject({ status: 404 })
+    await expect(readPreferences(backend)).resolves.toMatchObject({ stalledStepEmails: true })
   })
 
   it('enqueues the operator digest on the notification workpool', async () => {
@@ -929,10 +980,144 @@ describe('stalled step notification deliveries', () => {
   it('renders an invalid unsubscribe link as a page that points to notification settings', async () => {
     vi.stubEnv('AE_SITE_URL', 'https://ae.example.test/')
     const backend = await createNotificationBackend()
-    const response = await backend.fetch('/notifications/unsubscribe?d=notification:unknown', { method: 'POST' })
+    const response = await backend.fetch('/notifications/unsubscribe?t=not-a-token', { method: 'POST' })
     expect(response.status).toBe(404)
     const html = await response.text()
     expect(html).toContain('<html lang="en">')
     expect(html).toContain('<a href="https://ae.example.test/owner/settings/notifications">notification settings</a>')
+  })
+})
+
+describe('resend delivery webhook', () => {
+  async function insertSentDelivery(
+    backend: InteractiveAuthorityBackend,
+    input: { vendorMessageId: string; stream: 'transactional' | 'lifecycle' | 'operator' },
+  ) {
+    const now = Date.now()
+    return await backend.run((ctx) => ctx.db.insert('notificationDeliveries', {
+      deliveryRef: `notification:webhook-${input.vendorMessageId}`,
+      recipientPrincipalRef: PRINCIPAL_REF,
+      accountRef: ACCOUNT_REF,
+      eventKind: input.stream === 'lifecycle' ? 'stalled_not_funded' : 'agent_approval_requested',
+      stream: input.stream,
+      sourceEventRef: `source:${input.vendorMessageId}`,
+      vendorMessageId: input.vendorMessageId,
+      state: 'sent',
+      createdAt: now,
+      updatedAt: now,
+    }))
+  }
+
+  async function postResendEvent(
+    backend: InteractiveAuthorityBackend,
+    event: { type: string; emailId: string; to: string; bounceType?: 'Permanent' | 'Transient' },
+    svixId: string,
+    secret = WEBHOOK_SECRET,
+  ) {
+    const body = JSON.stringify({
+      type: event.type,
+      created_at: '2026-10-11T00:00:00.000Z',
+      data: {
+        email_id: event.emailId,
+        to: [event.to],
+        ...(event.bounceType === undefined ? {} : { bounce: { type: event.bounceType, message: 'test bounce' } }),
+      },
+    })
+    const timestamp = new Date()
+    const signature = new Webhook(secret).sign(svixId, timestamp, body)
+    return await backend.fetch('/resend/webhook', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'svix-id': svixId,
+        'svix-timestamp': String(Math.floor(timestamp.getTime() / 1000)),
+        'svix-signature': signature,
+      },
+      body,
+    })
+  }
+
+  const suppressionRows = (backend: InteractiveAuthorityBackend) =>
+    backend.run((ctx) => ctx.db.query('emailSuppressions').collect())
+  const deliveryState = async (backend: InteractiveAuthorityBackend, id: Id<'notificationDeliveries'>) =>
+    (await backend.run((ctx) => ctx.db.get(id)))?.state
+
+  it('records a permanent bounce, moves the delivery to bounced and suppresses the address', async () => {
+    vi.stubEnv('RESEND_WEBHOOK_SECRET', WEBHOOK_SECRET)
+    const backend = await createNotificationBackend()
+    const deliveryId = await insertSentDelivery(backend, { vendorMessageId: 'em_bounce_1', stream: 'transactional' })
+
+    const response = await postResendEvent(backend, { type: 'email.bounced', emailId: 'em_bounce_1', to: 'Owner@Example.test', bounceType: 'Permanent' }, 'msg_bounce_1')
+
+    expect(response.status).toBe(200)
+    await expect(deliveryState(backend, deliveryId)).resolves.toBe('bounced')
+    await expect(suppressionRows(backend)).resolves.toEqual([expect.objectContaining({
+      addressHash: await emailAddressHash('owner@example.test'),
+      domain: 'example.test',
+      reason: 'hard_bounce',
+      sourceDeliveryRef: 'notification:webhook-em_bounce_1',
+    })])
+  })
+
+  it('treats a replayed svix id as a duplicate and adds no second suppression', async () => {
+    vi.stubEnv('RESEND_WEBHOOK_SECRET', WEBHOOK_SECRET)
+    const backend = await createNotificationBackend()
+    await insertSentDelivery(backend, { vendorMessageId: 'em_replay_1', stream: 'transactional' })
+    const event = { type: 'email.bounced', emailId: 'em_replay_1', to: 'replay@example.test', bounceType: 'Permanent' as const }
+
+    await expect(postResendEvent(backend, event, 'msg_replay_1')).resolves.toMatchObject({ status: 200 })
+    await expect(postResendEvent(backend, event, 'msg_replay_1')).resolves.toMatchObject({ status: 200 })
+    await expect(suppressionRows(backend)).resolves.toHaveLength(1)
+    await expect(backend.run((ctx) => ctx.db.query('emailWebhookEvents').collect())).resolves.toHaveLength(1)
+  })
+
+  it('refuses a payload whose signature does not match and changes nothing', async () => {
+    vi.stubEnv('RESEND_WEBHOOK_SECRET', WEBHOOK_SECRET)
+    const backend = await createNotificationBackend()
+    const deliveryId = await insertSentDelivery(backend, { vendorMessageId: 'em_forged_1', stream: 'transactional' })
+    const otherSecret = `whsec_${Buffer.from('some-other-key').toString('base64')}`
+
+    const response = await postResendEvent(backend, { type: 'email.bounced', emailId: 'em_forged_1', to: 'forged@example.test', bounceType: 'Permanent' }, 'msg_forged_1', otherSecret)
+
+    expect(response.status).toBe(400)
+    await expect(deliveryState(backend, deliveryId)).resolves.toBe('sent')
+    await expect(suppressionRows(backend)).resolves.toHaveLength(0)
+  })
+
+  it('never moves a bounced delivery back to delivered', async () => {
+    vi.stubEnv('RESEND_WEBHOOK_SECRET', WEBHOOK_SECRET)
+    const backend = await createNotificationBackend()
+    const deliveryId = await insertSentDelivery(backend, { vendorMessageId: 'em_order_1', stream: 'transactional' })
+
+    await postResendEvent(backend, { type: 'email.bounced', emailId: 'em_order_1', to: 'order@example.test', bounceType: 'Permanent' }, 'msg_order_1')
+    await postResendEvent(backend, { type: 'email.delivered', emailId: 'em_order_1', to: 'order@example.test' }, 'msg_order_2')
+
+    await expect(deliveryState(backend, deliveryId)).resolves.toBe('bounced')
+  })
+
+  it('logs a transient bounce without suppressing or changing the delivery', async () => {
+    vi.stubEnv('RESEND_WEBHOOK_SECRET', WEBHOOK_SECRET)
+    const backend = await createNotificationBackend()
+    const deliveryId = await insertSentDelivery(backend, { vendorMessageId: 'em_soft_1', stream: 'transactional' })
+
+    await expect(postResendEvent(backend, { type: 'email.bounced', emailId: 'em_soft_1', to: 'soft@example.test', bounceType: 'Transient' }, 'msg_soft_1'))
+      .resolves.toMatchObject({ status: 200 })
+    await expect(deliveryState(backend, deliveryId)).resolves.toBe('sent')
+    await expect(suppressionRows(backend)).resolves.toHaveLength(0)
+  })
+
+  it('records a complaint that stops alert and lifecycle mail but not required mail', async () => {
+    vi.stubEnv('RESEND_WEBHOOK_SECRET', WEBHOOK_SECRET)
+    const backend = await createNotificationBackend()
+    const lifecycleId = await insertSentDelivery(backend, { vendorMessageId: 'em_complaint_1', stream: 'lifecycle' })
+    const requiredId = await insertSentDelivery(backend, { vendorMessageId: 'em_complaint_2', stream: 'transactional' })
+    const operatorId = await insertSentDelivery(backend, { vendorMessageId: 'em_complaint_3', stream: 'operator' })
+
+    await postResendEvent(backend, { type: 'email.complained', emailId: 'em_complaint_1', to: 'complaint@example.test' }, 'msg_complaint_1')
+
+    const addressHash = await emailAddressHash('complaint@example.test')
+    await expect(backend.query(internal.notifications.readSendSuppression, { deliveryId: lifecycleId, addressHash })).resolves.toBe('complaint_suppressed')
+    await expect(backend.query(internal.notifications.readSendSuppression, { deliveryId: requiredId, addressHash })).resolves.toBeNull()
+    await expect(backend.query(internal.notifications.readSendSuppression, { deliveryId: operatorId, addressHash })).resolves.toBeNull()
   })
 })

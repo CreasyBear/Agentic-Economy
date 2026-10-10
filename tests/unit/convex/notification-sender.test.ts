@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { internal } from '../../../convex/_generated/api'
 import { emitJourneyEvent } from '../../../convex/lib/journey/events'
 import { postResendEmail } from '../../../convex/lib/principalAccount/notifications/resend'
+import { emailAddressHash } from '../../../convex/lib/principalAccount/notifications/suppression'
 import { createInteractiveAuthorityBackend } from '../../helpers/interactive-authority-runtime'
 import {
   INTERACTIVE_ACCOUNT_REF,
@@ -132,6 +133,40 @@ describe('sendDeliveryEmail', () => {
       to: ['owner@example.test'],
       text: expect.stringContaining('/agent-access'),
     })
+  })
+
+  it('suppresses a send to an address that hard-bounced before contacting Resend', async () => {
+    const { backend, deliveryId } = await pendingApprovalDelivery()
+    const addressHash = await emailAddressHash('owner@example.test')
+    await backend.run((ctx) => ctx.db.insert('emailSuppressions', {
+      addressHash,
+      domain: 'example.test',
+      reason: 'hard_bounce',
+      sourceDeliveryRef: 'notification:earlier-bounce',
+      createdAt: Date.now(),
+    }))
+    const sendEmail = vi.fn(async () => new Response(JSON.stringify({ id: 'never' }), { status: 200 }))
+    vi.stubGlobal('fetch', sendEmail)
+
+    await expect(backend.action(internal.notificationDelivery.sendDeliveryEmail, { deliveryId }))
+      .resolves.toEqual({ outcome: 'suppressed', code: 'hard_bounce_suppressed' })
+    expect(sendEmail).not.toHaveBeenCalled()
+  })
+
+  it('still sends required approval mail to an address with a complaint on file', async () => {
+    const { backend, deliveryId } = await pendingApprovalDelivery()
+    const addressHash = await emailAddressHash('owner@example.test')
+    await backend.run((ctx) => ctx.db.insert('emailSuppressions', {
+      addressHash,
+      domain: 'example.test',
+      reason: 'complaint',
+      sourceDeliveryRef: 'notification:earlier-complaint',
+      createdAt: Date.now(),
+    }))
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ id: 'resend-required-1' }), { status: 200 })))
+
+    await expect(backend.action(internal.notificationDelivery.sendDeliveryEmail, { deliveryId }))
+      .resolves.toEqual({ outcome: 'sent', vendorMessageId: 'resend-required-1' })
   })
 
   it('treats an accepted response without parseable JSON as sent', async () => {

@@ -3,10 +3,66 @@ import { v, type Infer } from 'convex/values'
 import { vOnCompleteArgs } from '@convex-dev/workpool'
 
 import { AUTHORITY_REQUEST_TTL_MS } from '../../capabilityExecution/callLifecycle/admissionApprovals'
+import { notificationDeliveryStateRank } from '@/modules/principal-account/account/convex-schema'
 import type { Id } from '../../../_generated/dataModel'
 import type { MutationCtx, QueryCtx } from '../../../_generated/server'
 import { resolveClerkUserIdForPrincipal } from '../workspace/directory'
 import { isStalledKind, readStalledDeliveryContext } from './stalled'
+import { recordSuppression, suppressionCode } from './suppression'
+
+export const readSendSuppressionArgs = { deliveryId: v.id('notificationDeliveries'), addressHash: v.string() }
+
+/** Checked at send time, where the Clerk address is known. Returns the suppression code, or null when the send may go. */
+export async function readSendSuppressionHandler(
+  ctx: QueryCtx,
+  args: { deliveryId: Id<'notificationDeliveries'>; addressHash: string },
+): Promise<string | null> {
+  const delivery = await ctx.db.get(args.deliveryId)
+  if (delivery === null) return 'delivery_missing'
+  return await suppressionCode(ctx.db, { addressHash: args.addressHash, stream: delivery.stream ?? 'transactional' })
+}
+
+export const resendEventArgs = {
+  svixId: v.string(),
+  type: v.string(),
+  emailId: v.string(),
+  addressHash: v.string(),
+  domain: v.string(),
+  permanentBounce: v.boolean(),
+}
+
+/** A replayed svix-id is a duplicate and changes nothing. Delivery states move only up the rank order, so a late
+ * "delivered" never overwrites a bounce. Suppressions do not depend on the delivery row, which can lag the send. */
+export async function applyResendEventHandler(
+  ctx: MutationCtx,
+  args: { svixId: string; type: string; emailId: string; addressHash: string; domain: string; permanentBounce: boolean },
+): Promise<'applied' | 'duplicate'> {
+  const seen = await ctx.db.query('emailWebhookEvents')
+    .withIndex('by_svixId', (query) => query.eq('svixId', args.svixId)).unique()
+  if (seen !== null) return 'duplicate'
+  const now = Date.now()
+  await ctx.db.insert('emailWebhookEvents', { svixId: args.svixId, receivedAt: now })
+
+  const delivery = await ctx.db.query('notificationDeliveries')
+    .withIndex('by_vendorMessageId', (query) => query.eq('vendorMessageId', args.emailId)).unique()
+  const sourceDeliveryRef = delivery?.deliveryRef ?? `resend:${args.emailId}`
+  const hardBounce = args.type === 'email.bounced' && args.permanentBounce
+  if (hardBounce) {
+    await recordSuppression(ctx.db, { addressHash: args.addressHash, domain: args.domain, reason: 'hard_bounce', sourceDeliveryRef })
+  }
+  if (args.type === 'email.complained') {
+    await recordSuppression(ctx.db, { addressHash: args.addressHash, domain: args.domain, reason: 'complaint', sourceDeliveryRef })
+  }
+
+  const target = args.type === 'email.delivered' ? 'delivered'
+    : args.type === 'email.complained' ? 'complained'
+      : hardBounce ? 'bounced'
+        : null
+  if (delivery !== null && target !== null && notificationDeliveryStateRank[delivery.state] < notificationDeliveryStateRank[target]) {
+    await ctx.db.patch(delivery._id, { state: target, lastEventAt: now, updatedAt: now })
+  }
+  return 'applied'
+}
 
 export const readNotificationContextArgs = { deliveryId: v.id('notificationDeliveries') }
 
