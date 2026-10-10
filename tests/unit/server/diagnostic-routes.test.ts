@@ -890,6 +890,36 @@ describe('production aggregate payment readiness', () => {
     env.AE_X402_PAYEE_SCREENING_POLICY = 'unknown'
     expect((await handleReadyRequest(request(), { env, fetch: readyFetch(), nodeMajor: 22 })).status).toBe(503)
   })
+  const sellableInputs = () => {
+    query.mockImplementation(async reference => getFunctionName(reference) === 'moneyReadiness:readForServer' ? paymentView
+      : { kind: 'ready', coverage: { generation: 'g1', completedAt: Date.now() - 3_600_000 }, refreshState: 'complete' })
+    toolSearchMocks.readCapabilityToolSearch.mockResolvedValueOnce({ kind: 'ok', schemaVersion: 'registry-tools:v3', query: '', items: [{} as never],
+      ranking: [], pagination: { limit: 1, hasMore: false }, navigation: [] })
+    return productionReadinessEnvironment()
+  }
+  it('reports sellable only while the payments gate is ready', async () => {
+    let body = await (await handleReadyRequest(request(), { env: sellableInputs(), fetch: readyFetch(), nodeMajor: 22 })).json()
+    expect(body.commercial.sellable).toBe(true)
+    paymentView = undefined
+    body = await (await handleReadyRequest(request(), { env: sellableInputs(), fetch: readyFetch(), nodeMajor: 22 })).json()
+    expect(body.checks.payments).toEqual({ status: 'failed', code: 'payments_unavailable' })
+    expect(body.commercial).toEqual({ catalogue: 'fresh', quoting: 'ready', funding: 'configured', sellable: false })
+  })
+  it('forces sellable false when production config fails, leaving the probed rails unchanged', async () => {
+    const env = sellableInputs()
+    env.CLERK_JWT_ISSUER_DOMAIN = 'not-a-url'
+    const result = await readServerReadiness({ env, fetch: readyFetch(), nodeMajor: 22 })
+    expect(result.checks.config).toEqual({ status: 'failed', code: 'deployment_manifest_invalid' })
+    expect(result.commercial).toEqual({ catalogue: 'fresh', quoting: 'ready', funding: 'configured', sellable: false })
+  })
+  it('keeps /api/ready 200 on a stale AUD reference rate but degrades quoting and sellable', async () => {
+    const view = readyPaymentView()
+    paymentView = { ...view, checks: { ...view.checks, reference_rate: { kind: 'failed', code: 'reference_rate_stale' } } }
+    const response = await handleReadyRequest(request(), { env: sellableInputs(), fetch: readyFetch(), nodeMajor: 22 })
+    expect(response.status).toBe(200)
+    const body = await response.json()
+    expect(body.commercial).toMatchObject({ quoting: 'unavailable', sellable: false })
+  })
   it.each(['missing', 'provider_failed', 'expired', 'incomplete', 'wrong_world', 'future_clock', 'invalid_clock'] as const)(
     'returns generic503 for %s evidence and preserves HEAD status without detailed checks', async defect => {
       const view = readyPaymentView()

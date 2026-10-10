@@ -10,6 +10,19 @@ export const PAYMENT_READINESS_CHECK_KEYS = [
   'sanctions', 'commercial_policy', 'treasury',
 ] as const
 
+/**
+ * The AUD reference rate only converts a fixed USDC target into the buyer's AUD
+ * price (`quoteReferenceBuyerAud`); it never sets the USDC settled on x402. It is
+ * still recorded, but a stale rate degrades quoting (see `/api/ready` commercial), not payments readiness.
+ */
+export const PAYMENT_READINESS_GATING_KEYS = PAYMENT_READINESS_CHECK_KEYS.filter(key => key !== 'reference_rate')
+
+/** Quoting needs a passed, unexpired reference rate; anything else degrades quoting. */
+export function referenceRateFresh(check: unknown, now: number): boolean {
+  return typeof check === 'object' && check !== null && 'kind' in check && check.kind === 'passed'
+    && 'validUntil' in check && typeof check.validUntil === 'number' && check.validUntil > now
+}
+
 export const paymentReadinessEnvironmentValue = v.union(v.literal('sandbox'), v.literal('production'))
 export const paymentReadinessCheckValue = v.union(
   v.object({ kind: v.literal('passed'), validUntil: v.number() }),
@@ -74,9 +87,12 @@ export function sealPaymentReadinessSnapshot(
   return { ...material, evidenceDigest: canonicalDigest({ format: 'ae.payment-readiness-evidence:v1', ...material }) }
 }
 
-/** Expiry is derived from the earliest passing evidence and the probe start, never completion. */
+/**
+ * Expiry is derived from the earliest passing gating evidence and the probe start, never completion.
+ * The reference rate is excluded by design: quoting enforces its own age, so a stale rate never expires payments readiness.
+ */
 export function paymentReadinessExpiresAt(startedAt: number, checks: PaymentReadinessChecks): number {
-  return PAYMENT_READINESS_CHECK_KEYS.reduce((expiresAt, key) => {
+  return PAYMENT_READINESS_GATING_KEYS.reduce((expiresAt, key) => {
     const check = checks[key]
     return check.kind === 'passed' || check.kind === 'deferred' ? Math.min(expiresAt, check.validUntil) : expiresAt
   }, startedAt + PAYMENT_READINESS_MAX_VALIDITY_MS)
