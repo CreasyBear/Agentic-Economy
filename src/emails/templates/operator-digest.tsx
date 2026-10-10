@@ -5,7 +5,7 @@ import { emailUrl } from '../links'
 
 export type OperatorDigestProps = { siteUrl: string; date: string; lines: string[] }
 
-export const subject = ({ date }: OperatorDigestProps) => `AE stalled accounts, ${date}`
+export const subject = ({ date }: OperatorDigestProps) => `aecon stalled accounts, ${date}`
 
 export default function OperatorDigestEmail({ siteUrl, date, lines }: OperatorDigestProps) {
   const campaign = 'operator_digest'
