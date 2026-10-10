@@ -31,8 +31,6 @@ export function AdminOverviewPage() {
       title={ADMIN_OVERVIEW_COPY.title}
       description={ADMIN_OVERVIEW_COPY.description}
       currentPath="/admin"
-      breadcrumbs={[{ label: ADMIN_OVERVIEW_COPY.adminBreadcrumb }]}
-      stickyHeader
     >
       {data.kind === 'refused' ? (
         <AePageState title={ADMIN_OVERVIEW_COPY.accessDeniedTitle} description={ADMIN_OVERVIEW_COPY.accessDeniedDescription} tone="danger" />

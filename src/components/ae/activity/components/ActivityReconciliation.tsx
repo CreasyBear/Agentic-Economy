@@ -5,7 +5,7 @@ import { Button } from '@/components/arc/button/button'
 import { BillingHistory } from '@/components/ae/shared/arc-pro/billing-overview/billing-overview'
 import { formatTimestamp } from '@/lib/ui/format-time'
 import { useMemo } from 'react'
-import { Badge } from '@/components/arc/badge/badge'
+import { Circle, CircleCheck, CircleX } from 'lucide-react'
 import { RecordTime } from '@/components/ae/operator/RecordTime'
 import type { ColumnDef } from '@tanstack/react-table'
 import { MetricsSummary } from '@/components/ae/shared/arc-pro/metrics-dashboard/metrics-dashboard'
@@ -25,6 +25,11 @@ function amount(units: string, currency: 'AUD' | 'USDC' = 'AUD') {
   const value = figure(units, currency)
   return value === 'Unavailable' ? value : `${currency} ${value}`
 }
+const measuredStates = {
+  included: { label: 'Included', icon: CircleCheck, colour: 'text-success' },
+  unsupported: { label: 'Excluded, unsupported', icon: Circle, colour: 'text-muted-foreground' },
+  reverted: { label: 'Excluded, reverted', icon: CircleX, colour: 'text-danger' },
+} as const
 const bridgeLabels = { before_period: 'Calls created before this period', in_period: 'Calls created in this period', after_period: 'Calls created after this period', unattributed: 'Unattributed entries' } as const
 export function ActivityReconciliation({ result, retryPending, onRetry, returnScope, sourceFactsCapturedAt }: { result: UsageReconciliation; retryPending: boolean; onRetry: () => void; returnScope: ActivityReturnScope; sourceFactsCapturedAt?: number }) {
   const columns = useMemo<ColumnDef<AeRecordTableFeatures, Credential, unknown>[]>(() => [
@@ -39,7 +44,7 @@ export function ActivityReconciliation({ result, retryPending, onRetry, returnSc
   const entryColumns = useMemo<ColumnDef<AeRecordTableFeatures, Summary['entries'][number], unknown>[]>(() => [
     { accessorKey: 'transactionId', header: 'Ledger transaction', meta: { truncate: true }, cell: ({ row }) => <span className="font-mono">{row.original.transactionId}</span> },
     { accessorKey: 'kind', header: 'Entry' },
-    { id: 'status', header: 'Measured', cell: ({row}) => row.original.kind === 'unsupported' ? <Badge tone="neutral">Excluded, unsupported</Badge> : row.original.reverted ? <Badge tone="neutral">Excluded, reverted</Badge> : <Badge tone="success">Included</Badge> },
+    { id: 'status', header: 'Measured', cell: ({row}) => { const { label, icon: Icon, colour } = measuredStates[row.original.kind === 'unsupported' ? 'unsupported' : row.original.reverted ? 'reverted' : 'included']; return <span className="inline-flex items-center gap-1.5 text-muted-foreground"><Icon size={16} aria-hidden="true" className={colour} />{label}</span> } },
     { id: 'amount', header: 'Amount', meta: { numeric: true }, cell: ({row}) => row.original.units === null || row.original.currency === null ? 'Unknown' : amount(row.original.units, row.original.currency) },
     { id: 'effective', header: 'Effective', cell: ({row}) => <RecordTime at={row.original.occurredAt} /> },
     { id: 'recorded', header: 'Recorded', cell: ({row}) => <RecordTime at={row.original.recordedAt} /> },

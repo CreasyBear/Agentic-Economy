@@ -49,11 +49,6 @@ export function AdminProvidersListPage(props: AdminProvidersListPageProps) {
       title={PROVIDERS_LIST_COPY.title}
       description={PROVIDERS_LIST_COPY.description}
       currentPath="/admin/providers"
-      breadcrumbs={[
-        { label: PROVIDERS_LIST_COPY.breadcrumbs.admin, href: '/admin' },
-        { label: PROVIDERS_LIST_COPY.breadcrumbs.providers },
-      ]}
-      stickyHeader
     >
       {content}
     </AeOperatorPage>

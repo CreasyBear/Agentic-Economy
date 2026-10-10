@@ -4,7 +4,7 @@ export type SettingsNavItem = Readonly<{ label: string; href: string; title?: st
 export type SettingsNavGroup = Readonly<{ label: string; shortLabel: string; items: readonly SettingsNavItem[] }>
 
 export const settingsNavigation: readonly SettingsNavGroup[] = [
-  { label: 'Workspace', shortLabel: 'Workspace', items: [
+  { label: 'Account', shortLabel: 'Account', items: [
     { label: 'Business profile', href: '/owner/settings/workspace' },
     { label: 'Team & roles', href: '/owner/settings/team' },
   ] },

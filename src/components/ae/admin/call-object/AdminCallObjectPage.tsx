@@ -55,12 +55,6 @@ function AdminCallObjectFound({ view }: AdminCallObjectFoundProps) {
       description=""
       contentOwnsHeading
       currentPath={`/admin/calls/${encodeURIComponent(view.ref)}`}
-      stickyHeader
-      breadcrumbs={[
-        { label: ADMIN_CALL_OBJECT_COPY.adminBreadcrumb, href: '/admin' },
-        { label: ADMIN_CALL_OBJECT_COPY.callsBreadcrumb, href: '/admin/search' },
-        { label: view.ref },
-      ]}
     >
       <PageHeader
         title={ADMIN_CALL_OBJECT_COPY.title}

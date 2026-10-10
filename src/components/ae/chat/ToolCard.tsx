@@ -18,7 +18,6 @@ import {
   chatBrowseMarket,
   chatChoiceLinkName,
   chatShowingTools,
-  chatToolStatus,
 } from '@/lib/public/chat-ia'
 import {
   toolCardState,
@@ -27,6 +26,8 @@ import {
   type ToolCardProjection,
   type ToolChoiceRow,
 } from '@/modules/chat/tool-card'
+import { AeStatusBadge } from '@/components/ae/status/AeStatusBadge'
+import type { AeStatus } from '@/lib/ui/status-presentation'
 import { NeedSaveAction } from './need-save-action/NeedSaveAction'
 import { PaidCallReportControl } from '@/components/ae/call-receipt/PaidCallReportControl'
 import { CallFeedbackControl } from '@/components/ae/call-receipt/CallFeedbackControl'
@@ -277,14 +278,14 @@ function ExecuteNextAction({ projection }: Readonly<{
     : <AeCopyCommand compact label={suggestedNextAction.label} code={suggestedNextAction.command} />
 }
 
-const STATUS_VARIANT = {
-  complete: 'success',
-  working: 'info',
-  pending: 'info',
-  attention: 'warning',
-  refused: 'warning',
-  error: 'danger',
-} as const
+const toolCardStatus: Record<ReturnType<typeof toolCardState>, AeStatus> = {
+  working: 'call_working',
+  pending: 'call_working',
+  complete: 'call_done',
+  attention: 'call_needs_you',
+  refused: 'refused',
+  error: 'call_failed',
+}
 
 /** Requires: a current typed Tool projection; actions and reporting callbacks are caller-owned.
  * Ensures: main recovery, refusal, cursor, reporting, trust and next-action behavior survives Arc composition.
@@ -308,7 +309,7 @@ export function ToolCard({ projection, onContinueSearch, onRepeatSearch, signedT
     <DecisionPanel data-tool-card={projection.toolId} className="arc-tool-result">
       <header className="arc-tool-result-header">
         <h3>{projection.title}</h3>
-        <Badge tone={STATUS_VARIANT[state]}>{chatToolStatus[state]}</Badge>
+        <AeStatusBadge status={toolCardStatus[state]} density="cell" />
       </header>
       <div className="arc-tool-result-body">
         {cardBody(projection, onAddCredit, reportOwner, returnScope)}

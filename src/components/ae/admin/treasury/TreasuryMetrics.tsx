@@ -112,11 +112,6 @@ export function TreasuryMetrics({ view }: { view: AdminTreasuryView }) {
           <SourceTime label="Latest CDP wallet observation" at={view.observation.observedAt} />
         </>}
         {ledger?.kind !== 'available' ? unavailable('Ledger balances') : <>
-          <AeFactList density="compact" className="grid-cols-1 sm:grid-cols-3" facts={[
-            { label: 'Available for spending', value: treasuryMoney(ledger.availableUnits) },
-            { label: 'Committed to Calls', value: treasuryMoney(ledger.committedUnits) },
-            { label: 'Protected buffer', value: treasuryMoney(ledger.bufferUnits) },
-          ]} />
           <SourceTime label="Native ledger snapshot" at={ledger.observedAt} />
         </>}
         {chain?.kind !== 'available' ? unavailable('Finalized chain balance') : <>

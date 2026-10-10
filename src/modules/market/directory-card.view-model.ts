@@ -6,7 +6,7 @@ import { directoryProviderKey, directorySlugBase, minimumDirectoryUsdPrice } fro
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
 import { x402DirectoryFunctionalTitle } from '@/modules/market/x402-directory-title'
 import type { SavedDirectoryTool, SavedToolListItem, SavedToolSaveInput } from '@/modules/market/saved-tools.contracts'
-import { formatDisplayPrice } from '@/modules/money/public'
+import { formatCurrencyAmount, formatDisplayPrice, parseDecimalExactAmount } from '@/modules/money/public'
 import { degrade } from '@/lib/observability/degrade'
 
 import { directoryCardCopy } from './internal/directory-card-copy'
@@ -16,8 +16,8 @@ export { directoryLede, readableCardText } from './internal/directory-card-copy'
 
 /** Readiness in plain words, the same on every card, row and tool page: only aecon-callable tools run through aecon today. */
 export const DIRECTORY_READINESS = {
-  ae_callable: { label: 'Ready to call', tone: 'success' },
-  setup_required: { label: 'Needs setup', tone: 'warning' },
+  ae_callable: { label: 'Ready now', tone: 'success' },
+  setup_required: { label: 'Setup required', tone: 'warning' },
   unavailable: { label: 'Unavailable', tone: 'neutral' },
 } as const
 
@@ -51,14 +51,25 @@ function selectedDirectoryUsdPrice(entry: X402DirectoryEntry) {
   return price === undefined ? undefined : { amount, price }
 }
 
+/** Exact USDC from a published decimal; undefined when malformed, negative, or finer than 6 places. */
+function exactUsdc(raw: string): ReturnType<typeof parseDecimalExactAmount> {
+  let amount: Decimal
+  try { amount = new Decimal(raw) } catch (cause) {
+    captureRouteException(cause, { site: 'exactUsdc' }, 'warning')
+    return undefined
+  }
+  if (!amount.isFinite() || amount.isNegative()) return undefined
+  return parseDecimalExactAmount('USDC', raw, Math.max(6, amount.decimalPlaces()))
+}
+
 /** A fresh AUD estimate first; exact USDC translated to US dollars otherwise. */
 export function directoryPrice(entry: X402DirectoryEntry): string {
   const selected = selectedDirectoryUsdPrice(entry)
   if (selected === undefined) return ''
   const prefix = selected.price.scheme === 'upto' ? 'up to ' : ''
   if (entry.audEstimate !== undefined) return `${prefix}${entry.audEstimate}`
-  const amount = formatListedAmount(selected.amount)
-  return amount === undefined ? '' : `${prefix}US$${amount}`
+  const exact = exactUsdc(selected.amount)
+  return exact === undefined ? '' : `${prefix}${formatCurrencyAmount(exact)}`
 }
 
 /** Format the published source amount without rounding away settlement precision. */
@@ -97,8 +108,8 @@ function groupDigits(whole: string): string {
 function directoryListedPrice(entry: X402DirectoryEntry): string | undefined {
   const selected = selectedDirectoryUsdPrice(entry)
   if (selected === undefined) return undefined
-  const formattedSource = formatListedAmount(selected.amount)
-  return formattedSource === undefined ? undefined : `${selected.price.scheme === 'upto' ? 'up to ' : ''}${formattedSource} USDC`
+  const exact = exactUsdc(selected.amount)
+  return exact === undefined ? undefined : `${selected.price.scheme === 'upto' ? 'up to ' : ''}${formatCurrencyAmount(exact)}`
 }
 
 export function directoryPriceContext(entry: X402DirectoryEntry): string {
@@ -187,8 +198,8 @@ function countLabel(value: number | undefined): string | undefined {
 /** Buyer-facing USD from a published source USDC amount. */
 export function directoryUsdLabel(decimalAmount: string | undefined): string {
   if (decimalAmount === undefined) return '—'
-  const formatted = formatListedAmount(decimalAmount)
-  return formatted === undefined ? '—' : `US$${formatted}`
+  const exact = exactUsdc(decimalAmount)
+  return exact === undefined ? '—' : formatCurrencyAmount(exact)
 }
 
 export type DirectoryProviderRowModel = Readonly<{
@@ -211,7 +222,7 @@ export function toDirectoryProviderRow(provider: X402DirectoryFacet): DirectoryP
   const title = calls === undefined ? undefined : provider.leadTitle?.trim()
   const slug = calls === undefined ? undefined : provider.leadSlug?.trim()
   const sourcePrice = calls === undefined ? '—' : directoryUsdLabel(provider.leadPrice)
-  const sourceAmount = sourcePrice === '—' ? undefined : sourcePrice.slice(3)
+  const sourceAmount = sourcePrice === '—' ? undefined : sourcePrice
   return {
     key: provider.key,
     initials: directoryInitials(provider.key),
@@ -220,7 +231,7 @@ export function toDirectoryProviderRow(provider: X402DirectoryFacet): DirectoryP
     callsLabel: calls ?? '—',
     payersLabel: payers ?? '—',
     priceLabel: sourcePrice === '—' ? '' : sourcePrice,
-    ...(sourceAmount === undefined ? {} : { priceSourceLabel: `Provider lists ${sourceAmount} USDC per Call` }),
+    ...(sourceAmount === undefined ? {} : { priceSourceLabel: `Provider lists ${sourceAmount} per Call` }),
     ...(title === undefined || title.length === 0 ? {} : { leadTitle: title }),
     ...(slug === undefined || slug.length === 0 ? {} : { leadSlug: slug }),
   }

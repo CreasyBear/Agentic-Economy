@@ -92,7 +92,7 @@ describe('AeToolEconomics', () => {
       price: { kind: 'fixed', amount: { currency: 'USDC', units: '10000', exponent: 6 } },
     })
     const view = render(<AeToolDecision tool={tool} model={toToolInspectorModel(tool)} />)
-    expect(view.getByText('US$0.01 per Call')).toBeTruthy()
+    expect(view.getByText('0.01 USDC per Call')).toBeTruthy()
   })
 
   it('uses the fresh AUD display estimate instead of the source USDC amount', () => {
@@ -108,7 +108,7 @@ describe('AeToolEconomics', () => {
     })
     const view = render(<AeToolDecision tool={tool} model={toToolInspectorModel(tool)} />)
     expect(view.getByText('A$0.012 per Call')).toBeTruthy()
-    expect(view.queryByText('US$0.01 per Call')).toBeNull()
+    expect(view.queryByText('0.01 USDC per Call')).toBeNull()
   })
 
   it('uses the USDC Call price when an AUD display estimate is stale', () => {
@@ -123,7 +123,7 @@ describe('AeToolEconomics', () => {
       },
     })
     const view = render(<AeToolDecision tool={tool} model={toToolInspectorModel(tool)} />)
-    expect(view.getByText('US$0.01 per Call')).toBeTruthy()
+    expect(view.getByText('0.01 USDC per Call')).toBeTruthy()
     expect(view.queryByText('A$0.012 per Call')).toBeNull()
   })
 

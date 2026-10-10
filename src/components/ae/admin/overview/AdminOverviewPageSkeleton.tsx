@@ -9,8 +9,6 @@ export function AdminOverviewPageSkeleton() {
       title={ADMIN_OVERVIEW_COPY.title}
       description={ADMIN_OVERVIEW_COPY.description}
       currentPath="/admin"
-      breadcrumbs={[{ label: ADMIN_OVERVIEW_COPY.adminBreadcrumb }]}
-      stickyHeader
       pending
     >
       <div className="arc-market arc-admin-loading" aria-busy="true" aria-label={ADMIN_OVERVIEW_COPY.title}>

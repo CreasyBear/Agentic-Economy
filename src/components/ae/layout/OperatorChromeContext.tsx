@@ -1,7 +1,6 @@
 'use client'
 
 import { createContext, use, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import type { OperatorBreadcrumbItem } from './AeOperatorBreadcrumbs'
 import type { OperatorRole } from '@/lib/operator/roles'
 
 export type OperatorPageChrome = {
@@ -10,10 +9,8 @@ export type OperatorPageChrome = {
   description: string
   actions?: ReactNode
   secondaryBar?: ReactNode
-  stickyHeader?: boolean
   currentPath: string
   mainContentId?: string
-  breadcrumbs?: readonly OperatorBreadcrumbItem[]
   suppressSurfaceNavigation?: boolean
   /** The page body owns the h1, so the frame title stays chrome. */
   contentOwnsHeading?: boolean

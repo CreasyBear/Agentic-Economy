@@ -23,11 +23,6 @@ export function AeConnectionHandoff({ loaded }: AeConnectionHandoffProps) {
       title={page.title}
       description={page.description}
       currentPath="/owner/operations/new"
-      breadcrumbs={[
-        { label: 'Tools', href: '/owner/operations' },
-        { label: 'Add Tool', href: '/owner/operations/new' },
-        { label: 'Connect Provider' },
-      ]}
     >
       <AeSettingsStack>
         {page.environmentLabel === undefined ? null : (

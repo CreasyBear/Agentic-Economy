@@ -9,11 +9,6 @@ export function AdminAuditPageSkeleton() {
       title={AUDIT_COPY.title}
       description={AUDIT_COPY.description}
       currentPath="/admin/audit-events"
-      breadcrumbs={[
-        { label: AUDIT_COPY.breadcrumbs.admin, href: '/admin' },
-        { label: AUDIT_COPY.breadcrumbs.audit },
-      ]}
-      stickyHeader
       pending
     >
       <div className="arc-market arc-admin-loading" aria-busy="true" aria-label={AUDIT_COPY.title}>

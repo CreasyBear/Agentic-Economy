@@ -27,12 +27,6 @@ export function QuoteObjectView({ view }: QuoteObjectViewProps) {
       title={copy.title}
       description=""
       contentOwnsHeading
-      breadcrumbs={[
-        { label: ADMIN_OBJECT_PAGE_COPY.adminBreadcrumb, href: '/admin' },
-        { label: copy.section, href: '/admin/search?kind=quote' },
-        { label: view.ref },
-      ]}
-      stickyHeader
     >
       <PageHeader
         title={copy.title}

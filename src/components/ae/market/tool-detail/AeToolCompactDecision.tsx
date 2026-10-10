@@ -1,6 +1,7 @@
 import { Link } from '@tanstack/react-router'
 import { AeToolPrice } from '@/components/ae/market/AeToolPrice'
-import { Badge } from '@/components/arc/badge/badge'
+import { AeStatusBadge } from '@/components/ae/status/AeStatusBadge'
+import type { AeStatus } from '@/lib/ui/status-presentation'
 import { AeCopyValue } from '@/components/ae/shared/copy-value/AeCopyValue'
 import { DecisionPanel } from '@/components/ae/shared/arc-pro/chat/DecisionPanel'
 import type { PublicToolDescriptor } from '@/modules/capability-supply/public'
@@ -30,7 +31,8 @@ export function AeToolCompactDecision({
       <header className="arc-decision-header">
         <div className="arc-decision-heading-group">
           <h3 className="arc-decision-heading">
-            <Badge tone={decisionVariant(model)}>{model.decisionLabel}</Badge>
+            <AeStatusBadge status={decisionStatus(model)} density="cell" />
+            <span className="ml-2 text-sm font-normal text-muted-foreground">{model.decisionLabel}</span>
           </h3>
           <p className="text-sm text-muted-foreground">
             {model.nextActionDescription}
@@ -64,10 +66,8 @@ export function AeToolCompactDecision({
   )
 }
 
-function decisionVariant(model: ToolInspectorModel): 'success' | 'warning' | 'neutral' {
-  if (model.nextAction.label === 'request for Agent') return 'success'
-  if (model.availabilityPosture === 'setup_required') {
-    return 'warning'
-  }
-  return 'neutral'
+function decisionStatus(model: ToolInspectorModel): AeStatus {
+  if (model.nextAction.label === 'request for Agent') return 'ready_now'
+  if (model.availabilityPosture === 'setup_required') return 'setup_required'
+  return 'not_live'
 }

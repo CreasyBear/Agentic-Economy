@@ -10,11 +10,6 @@ export function AdminMetricsPageSkeleton() {
       title={ADMIN_METRICS_COPY.title}
       description={ADMIN_METRICS_COPY.description}
       currentPath="/admin/metrics"
-      breadcrumbs={[
-        { label: ADMIN_METRICS_COPY.adminBreadcrumb, href: '/admin' },
-        { label: ADMIN_METRICS_COPY.title },
-      ]}
-      stickyHeader
       pending
     >
       <div className="arc-market arc-admin-loading" role="status" aria-busy="true" aria-label="Loading metrics">

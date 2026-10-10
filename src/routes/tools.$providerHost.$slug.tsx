@@ -1,7 +1,6 @@
 import { directoryProviderKey } from '@/modules/market/x402-directory-index'
 import { Link, createFileRoute, redirect, useRouter } from '@tanstack/react-router'
 import { useCallback } from 'react'
-import { CloudOffIcon } from 'lucide-react'
 
 import { DirectoryToolPage } from '@/components/ae/market/public-tool-detail/DirectoryToolPage'
 import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
@@ -70,5 +69,5 @@ function DirectoryToolRoute() {
 
 function DirectoryToolError() {
   const router = useRouter()
-  return <ToolPageState icon={<CloudOffIcon aria-hidden="true" />} title="Tool details are unavailable" description={`${BRAND_NAME} can't read this directory listing right now.`} action={<><Button type="button" variant="primary" className="min-h-touch" onClick={() => { void router.invalidate() }}>Try again</Button><Link to="/market" className={`${actionLinkClassName('secondary', 'md')} min-h-touch`}>Browse tools</Link></>} />
+  return <ToolPageState title="Tool details are unavailable" description={`${BRAND_NAME} can't read this directory listing right now.`} action={<><Button type="button" variant="primary" className="min-h-touch" onClick={() => { void router.invalidate() }}>Try again</Button><Link to="/market" className={`${actionLinkClassName('secondary', 'md')} min-h-touch`}>Browse tools</Link></>} />
 }

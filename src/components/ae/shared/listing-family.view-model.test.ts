@@ -15,7 +15,7 @@ describe('shared Tool view model', () => {
     expect(view.href).toBeUndefined()
     expect(view.identity).toEqual({ kind: 'directory_host', name: 'api.example', href: '/providers/api.example' })
     expect(view.listing.canonicalToolRef.kind).toBe('absent')
-    expect(view.price?.label).not.toContain('USDC')
+    expect(view.price?.label).toBe('0.10 USDC per Call')
     expect(view.listing.facts.price.kind === 'present' && view.listing.facts.price.value.currency).toBe('USDC')
     expect(view.readiness.label).toBe('Readiness unknown')
   })
@@ -29,7 +29,7 @@ describe('shared Tool view model', () => {
       prices: [{ scheme: 'exact', decimalAmount: '0.10', symbol: 'USDC' }],
     })
     const rate = { source: 'coinbase' as const, base: 'USDC' as const, quote: 'AUD' as const, rate: '1.239', fetchedAt: 1_000 }
-    expect(projectToolObject(listing, undefined, 1_001).price?.label).toBe('US$0.1 per Call')
+    expect(projectToolObject(listing, undefined, 1_001).price?.label).toBe('0.10 USDC per Call')
     expect(projectToolObject(listing, undefined, 1_001, rate).price?.label).toBe('A$0.13 per Call')
   })
 

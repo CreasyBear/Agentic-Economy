@@ -9,7 +9,6 @@ export function AdminCallObjectPageSkeleton() {
       title={ADMIN_CALL_OBJECT_COPY.loadingTitle}
       description={ADMIN_CALL_OBJECT_COPY.loadingDescription}
       currentPath="/admin/calls/loading"
-      stickyHeader
       pending
     >
       <div className="arc-market arc-admin-loading" aria-busy="true" aria-label={ADMIN_CALL_OBJECT_COPY.loadingTitle}>

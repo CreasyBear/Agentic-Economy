@@ -137,7 +137,6 @@ describe('operator shell nested chrome', () => {
     expect(await screen.findByText('Action two')).toBeTruthy()
     expect(screen.queryByText('Action one')).toBeNull()
     expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull()
-    expect(screen.queryByText('Second crumb')).toBeNull()
   })
 
   it('uses the existing operator shell for unmatched assistant descendants', async () => {
@@ -409,9 +408,6 @@ describe('owner account identity', () => {
 function OperatorShellHarness() {
   const [version, setVersion] = useState<'one' | 'two'>('one')
   const actions = useMemo(() => <button type="button">Action {version}</button>, [version])
-  const breadcrumbs = useMemo(() => [
-    { label: version === 'one' ? 'First crumb' : 'Second crumb', href: `/admin/${version}` },
-  ], [version])
 
   return (
         <AeOperatorPage
@@ -427,7 +423,6 @@ function OperatorShellHarness() {
             description="Nested shell description"
             currentPath="/admin/audit-events"
             actions={actions}
-            breadcrumbs={breadcrumbs}
           >
             <div>Nested content</div>
           </AeOperatorPage>

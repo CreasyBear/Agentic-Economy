@@ -33,7 +33,7 @@ export const AGENT_INSTRUCTION: AgentPasteInstruction = {
   label: 'agent setup instruction',
   code: 'Search the catalog for my task. Show the best matches, total price, required inputs, and the next valid action.',
   copyText:
-    'Read $ORIGIN/llms.txt. Preserve my full task, find viable capabilities, show the real differences, total price, required inputs, and the next valid action. Connect only if a callable capability requires it.',
+    'Read $ORIGIN/llms.txt. Preserve my full task, find viable tools, show the real differences, total price, required inputs, and the next valid action. Connect only if a callable tool requires it.',
 }
 
 /** Agent/Runtime door on `/` (routes to /for-agents). */
@@ -63,7 +63,7 @@ export const AGENT_PAGE = {
     {
       question: 'Is AUD Credit a crypto wallet?',
       answer:
-        'No. AUD Credit belongs to the Business account. It is separate from the settlement mechanics used by x402 Tools.',
+        'No. AUD Credit belongs to the account. It is separate from the settlement mechanics used by x402 Tools.',
     },
     {
       question: 'When can I connect an Agent?',

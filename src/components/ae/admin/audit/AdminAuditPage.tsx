@@ -27,11 +27,6 @@ export function AdminAuditPage(props: AdminAuditPageProps) {
       title={AUDIT_COPY.title}
       description={AUDIT_COPY.description}
       currentPath="/admin/audit-events"
-      breadcrumbs={[
-        { label: AUDIT_COPY.breadcrumbs.admin, href: '/admin' },
-        { label: AUDIT_COPY.breadcrumbs.audit },
-      ]}
-      stickyHeader
     >
       {children}
     </AeOperatorPage>

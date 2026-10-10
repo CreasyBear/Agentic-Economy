@@ -30,7 +30,7 @@ export function ToolSearchStatus({
       <p className="arc-market arc-command-status">
         {recentCount > 0
           ? `Recently inspected · ${recentCount}`
-          : 'Search the Tool catalog by job, provider, or capability.'}
+          : 'Search the Tool catalog by task, provider, or tool.'}
       </p>
     )
   }

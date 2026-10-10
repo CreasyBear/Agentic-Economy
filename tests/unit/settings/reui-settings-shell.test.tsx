@@ -14,7 +14,7 @@ describe('REUI routed settings composition', () => {
   it('keeps one page heading and five horizontal groups with only the active sections', async () => {
     render(<SettingsShell pathname="/owner/settings/workspace"><SettingsPage title="Business profile" description="Workspace identity">Workspace name editor</SettingsPage></SettingsShell>)
     expect(screen.getAllByRole('heading', { level: 1 }).map(heading => heading.textContent)).toEqual(['Business profile'])
-    expect(within(screen.getByRole('navigation', { name: 'Settings groups' })).getAllByRole('link').map(link => link.textContent)).toEqual(['Workspace', 'Agents & Tools', 'Billing', 'Preferences', 'Security'])
+    expect(within(screen.getByRole('navigation', { name: 'Settings groups' })).getAllByRole('link').map(link => link.textContent)).toEqual(['Account', 'Agents & Tools', 'Billing', 'Preferences', 'Security'])
     expect(within(screen.getByRole('navigation', { name: 'Settings sections' })).getAllByRole('link').map(link => link.textContent)).toEqual(['Business profile', 'Team & roles'])
     expect(screen.queryByRole('link', { name: 'Tax' })).toBeNull()
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Business profile' })).toHaveFocus())
@@ -37,7 +37,7 @@ describe('REUI routed settings composition', () => {
     screen.getByRole('link', { name: 'Team & roles' }).focus()
     view.rerender(<SettingsShell pathname="/owner/settings/team"><SettingsPage title="Team & roles" description="People">Members</SettingsPage></SettingsShell>)
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Team & roles' })).toHaveFocus())
-    expect(screen.getByRole('link', { name: 'Workspace' })).toHaveAttribute('href', '/owner/settings/team')
+    expect(screen.getByRole('link', { name: 'Account' })).toHaveAttribute('href', '/owner/settings/team')
   })
 
   it('does not steal focus from navigation used before heading focus settles', async () => {

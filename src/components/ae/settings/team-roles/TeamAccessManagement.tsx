@@ -15,7 +15,7 @@ import type { useInviteTeamMember } from './useInviteTeamMember'
 type Decision = Readonly<{ kind: 'member'; member: TeamAccessMember; action: 'admin' | 'member' | 'remove' }>
   | Readonly<{ kind: 'invitation'; invitation: PendingTeamInvitation; action: 'cancel' | 'resend' }>
 const refusalCopy = {
-  forbidden: 'Your current workspace role cannot make this change.',
+  forbidden: 'Your current account role cannot make this change.',
   stale: 'Access changed since this page was read. Refresh the team before making another change.',
   mfa_reverification_required: 'Verify with two-factor authentication to change access.',
   last_admin: 'The identity organisation must retain an admin. Promote another member first.',
@@ -72,7 +72,7 @@ export function TeamAccessManagement({ onRecordedRead, accountRef, members = [],
       const next = await readTeamAccessServer({ data: kind === 'members' ? { memberOffset: offset } : { invitationOffset: offset } })
       if (request !== requestGeneration.current) return
       if (next.accountRef !== view.accountRef || next.accountRevision !== view.accountRevision || next.ownershipRevision !== view.ownershipRevision || next.canManageMembers !== view.canManageMembers || next.canManageInvitations !== view.canManageInvitations) {
-        setReadFailed(true); setProblem('Workspace access changed during pagination. Refresh before making a change.'); return
+        setReadFailed(true); setProblem('Account access changed during pagination. Refresh before making a change.'); return
       }
       const combined = kind === 'members' ? { ...view, members: [...new Map([...view.members, ...next.members].map(member => [member.membershipRef, member])).values()], membersComplete: next.membersComplete, nextMemberOffset: next.nextMemberOffset }
         : { ...view, invitations: [...new Map([...view.invitations, ...next.invitations].map(invitation => [invitation.invitationId, invitation])).values()], invitationsComplete: next.invitationsComplete, nextInvitationOffset: next.nextInvitationOffset }
@@ -116,8 +116,8 @@ export function TeamAccessManagement({ onRecordedRead, accountRef, members = [],
   }
   const disabled = pending || readFailed
   const description = decision?.kind === 'member'
-    ? decision.action === 'remove' ? `Remove ${decision.member.name} from this workspace. Their workspace access ends after the identity change is recorded. Agent keys and Provider connections have their own controls.`
-      : `Change ${decision.member.name} to ${decision.action === 'admin' ? 'Admin' : 'Member'}. Admins manage workspace settings. The workspace owner remains protected.`
+    ? decision.action === 'remove' ? `Remove ${decision.member.name} from this account. Their account access ends after the identity change is recorded. Agent keys and Provider connections have their own controls.`
+      : `Change ${decision.member.name} to ${decision.action === 'admin' ? 'Admin' : 'Member'}. Admins manage account settings. The account owner remains protected.`
     : decision?.action === 'resend' ? `Cancel the waiting invitation to ${decision.invitation.email} and send a replacement with the same role. If sending fails, refresh before sending a new invitation.`
       : `Cancel the waiting invitation to ${decision?.invitation.email ?? ''}. It will no longer grant membership.`
   // The directory owns names/roles. Owner-read members supply controls only when
@@ -142,9 +142,9 @@ export function TeamAccessManagement({ onRecordedRead, accountRef, members = [],
       return access ? <div className="flex flex-wrap gap-2">
         <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={event => choose({ kind: 'member', member: access, action: access.role === 'admin' ? 'member' : 'admin' }, event)}>Make {access.role === 'admin' ? 'Member' : 'Admin'}</Button>
         <Button type="button" variant="ghost" size="sm" className="text-destructive" disabled={disabled} onClick={event => choose({ kind: 'member', member: access, action: 'remove' }, event)}>Remove member</Button>
-      </div> : <span className="text-xs text-muted-foreground">{member.role === 'Owner' ? 'Workspace owner' : 'No access changes available'}</span>
+      </div> : <span className="text-xs text-muted-foreground">{member.role === 'Owner' ? 'Account owner' : 'No access changes available'}</span>
     }} footer={<div className="grid gap-3 text-sm text-muted-foreground">
-      <p>Only the workspace owner can change recorded members. Changes require two-factor verification.</p>
+      <p>Only the account owner can change recorded members. Changes require two-factor verification.</p>
       {view && !view.membersComplete ? <p>Member controls are a partial list. Load more to review later members.</p> : null}
       {view?.nextMemberOffset != null ? <Button type="button" variant="outline" disabled={disabled} onClick={() => void loadMore('members')}>Load more members</Button> : null}
     </div>} />
@@ -156,7 +156,7 @@ export function TeamAccessManagement({ onRecordedRead, accountRef, members = [],
         <Button type="button" variant="ghost" size="sm" className="text-destructive" disabled={disabled} onClick={event => choose({ kind: 'invitation', invitation: item, action: 'cancel' }, event)}>Cancel invitation</Button>
       </div>}
       footer={view.nextInvitationOffset !== null ? <Button type="button" variant="outline" disabled={disabled} onClick={() => void loadMore('invitations')}>Load more invitations</Button> : undefined} />
-      : <div className="grid gap-3"><h2 className="text-lg font-medium">Invitations unavailable</h2><p className="text-sm text-muted-foreground">{inviteReason ?? 'Pending invitations are available to workspace owners and admins after the Business identity organisation is set up.'}</p></div>}
+      : <div className="grid gap-3"><h2 className="text-lg font-medium">Invitations unavailable</h2><p className="text-sm text-muted-foreground">{inviteReason ?? 'Pending invitations are available to account owners and admins after the Business identity organisation is set up.'}</p></div>}
     {inviteReason && view?.canManageInvitations !== false ? <p className="text-sm text-muted-foreground">{inviteReason}</p> : null}
     <AeConfirmDialog open={decision !== undefined} onOpenChange={open => { if (!pending && !open) setDecision(undefined) }}
       returnFocusRef={decisionTriggerRef} returnFocusFallbackRefs={[refreshRef]}

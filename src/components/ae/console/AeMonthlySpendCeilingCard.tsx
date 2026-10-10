@@ -58,7 +58,7 @@ function MonthlySpendCapView({ enabled, spend, ceiling, percent, tone, notice, o
   const summary = enabled === undefined ? <span>Monthly spending cap unavailable.</span>
     : !enabled ? <span>Off. Prepaid credit and Agent policies still apply.</span>
       : <><strong>{spend ?? ceiling}</strong><span>{spend === undefined ? 'Monthly cap; monthly spend is unavailable.' : `spent of ${ceiling} monthly cap (${percent}%)`}</span></>
-  return <SettingsGroup title="Monthly spending cap" description="Limit paid Calls across your workspace; Agent spending policies still apply.">
+  return <SettingsGroup title="Monthly spending cap" description="Limit paid Calls across your account; Agent spending policies still apply.">
     <UsageBillingMeter
       summary={<><p className="arc-monthly-label">Current limit</p><p role="status" aria-live="polite" className="arc-monthly-value">{summary}</p></>}
       action={enabled === undefined ? null : <Button type="button" variant="secondary" onClick={onEdit}>{enabled ? 'Edit limit' : 'Set limit'}</Button>}
@@ -233,7 +233,7 @@ export function AeMonthlySpendCeilingCard({
           }
         }}
       >
-        <DrawerContent title="Organization monthly spending cap" description="Set a workspace-wide monthly limit for paid Calls. Agent spending policies still apply." side="right">
+        <DrawerContent title="Account monthly spending cap" description="Set an account-wide monthly limit for paid Calls. Agent spending policies still apply." side="right">
           <div className="arc-monthly-editor">
           <fieldset className="grid gap-2">
             <legend className="text-sm font-medium">Quick setup</legend>

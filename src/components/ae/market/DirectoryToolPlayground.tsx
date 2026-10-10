@@ -2,7 +2,6 @@ import { formatCount } from '@/lib/ui/format-time'
 import { useAuth } from '@clerk/tanstack-react-start'
 import { Link, useLocation } from '@tanstack/react-router'
 import { useId, useMemo, useState, type ReactNode } from 'react'
-import { FileJsonIcon } from 'lucide-react'
 import type { RJSFSchema, UiSchema } from '@rjsf/utils'
 
 import { Alert } from '@/components/arc/alert/alert'
@@ -122,7 +121,7 @@ export function DirectoryToolPlayground({ run, input, sampleOutputJson, inputNot
         <h2 id={`${id}-output`}>Sample response</h2>
       </div>
       {output === undefined
-        ? <EmptyState icon={<FileJsonIcon aria-hidden="true" />} title="No sample output yet" description={callable ? "The provider hasn't published a sample response. Run it to see a real one." : "The provider hasn't published a sample response."} titleAs="p" />
+        ? <EmptyState title="No sample output yet" description={callable ? "The provider hasn't published a sample response. Run it to see a real one." : "The provider hasn't published a sample response."} titleAs="p" />
         : <><p className={styles.muted}>{callable ? 'Published by the provider. Your run returns a fresh response.' : 'Published by the provider.'}</p><JsonViewer data={output} rootName="response" label="Sample response" defaultExpandDepth={2} maxHeight={380} /></>}
     </section>
 

@@ -60,8 +60,9 @@ export function AdminActivityPage({ search, onSearchChange }: Readonly<{
 
   return (
     <AeOperatorPage
-      operatorRole="admin" title="Purchases" description="Follow demand through delivery, payment and recovery."
-      currentPath="/admin/activity" breadcrumbs={[{ label: 'Admin', href: '/admin' }, { label: 'Purchases' }]} stickyHeader
+      operatorRole="admin" title="Purchases"
+      description="Follow demand through delivery, payment and recovery."
+      currentPath="/admin/activity"
     >
       <div className="grid min-w-0 gap-section pb-page">
         <AdminSearchNotice rejected={rejected} />

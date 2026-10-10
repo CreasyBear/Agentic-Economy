@@ -1,6 +1,5 @@
 import { Link, useRouter } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
-import { CloudOffIcon, TimerIcon } from 'lucide-react'
 import { recordProductJourney } from '@/lib/observability/product-journey'
 
 import { AeToolLatencyChart } from '@/components/ae/market/tool-detail/AeToolLatencyChart'
@@ -9,7 +8,7 @@ import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLi
 import { Alert } from '@/components/arc/alert/alert'
 import { Button } from '@/components/arc/button/button'
 import { EmptyState } from '@/components/arc/empty-state/empty-state'
-import type { BadgeTone } from '@/components/arc/badge/badge'
+import type { AeStatus } from '@/lib/ui/status-presentation'
 import { BRAND_NAME } from '@/content/brand-copy'
 import { REASON_COPY, REASON_COPY_FALLBACK } from '@/content/reason-copy'
 import { projectAdmittedListing } from '@/modules/registry/public'
@@ -47,7 +46,7 @@ export function PublicToolDetail({ result, baseUrl, search, onSearchChange }: Pu
   if (result.kind !== 'found') {
     const presentation = toolUnavailablePresentation(result)
     if (result.kind === 'source_unavailable') {
-      return <ToolPageState icon={<CloudOffIcon aria-hidden="true" />} title={presentation.title} description={presentation.description} action={<><Button type="button" variant="primary" className="min-h-touch" onClick={retry}>Try again</Button><Link to="/market" className={`${actionLinkClassName('secondary', 'md')} min-h-touch`}>Browse tools</Link></>} />
+      return <ToolPageState title={presentation.title} description={presentation.description} action={<><Button type="button" variant="primary" className="min-h-touch" onClick={retry}>Try again</Button><Link to="/market" className={`${actionLinkClassName('secondary', 'md')} min-h-touch`}>Browse tools</Link></>} />
     }
     return <ToolPageState title={presentation.title} description={presentation.description} action={<Link to={presentation.action.to} className={`${actionLinkClassName('primary', 'md')} min-h-touch`}>{presentation.action.label}</Link>} />
   }
@@ -64,7 +63,7 @@ export function PublicToolDetail({ result, baseUrl, search, onSearchChange }: Pu
   const run: ToolRun = routeable ? { kind: 'callable', toolRef: tool.toolRef }
     : !recipientUnverified && tool.availability.posture === 'setup_required'
       ? { kind: 'elsewhere', label: 'Connect an agent', href: `/agent-access?resumeTool=${encodeURIComponent(tool.toolRef)}`, reason: 'This tool runs once an agent is connected to your account.' }
-      : { kind: 'elsewhere', label: 'See similar tools', href: alternativeHref, reason: recipientUnverified ? `The provider hasn’t said who receives your input, so ${BRAND_NAME} won’t run it.` : 'This tool can’t run right now.' }
+      : { kind: 'elsewhere', label: 'See similar tools', href: alternativeHref, reason: recipientUnverified ? `The provider hasn’t said who receives your input, so ${BRAND_NAME} won’t run it.` : posture === undefined ? 'We couldn’t confirm whether this tool can run right now.' : 'This tool can’t run right now.' }
   const price = priceWithoutUnit(view.price?.label)
   const priceNote = sourcePriceNote(listing, price)
   const example = tool.contract.inputExamples?.[0]
@@ -74,9 +73,9 @@ export function PublicToolDetail({ result, baseUrl, search, onSearchChange }: Pu
     ...(view.identity === undefined ? {} : { provider: { name: view.identity.name, ...('href' in view.identity ? { href: view.identity.href } : {}) } }),
     ...(price === undefined ? {} : { price }),
     ...(priceNote === undefined ? {} : { priceNote }),
-    readiness: readinessBadge(recipientUnverified, posture),
+    readiness: READINESS_BADGE[readinessBadge(recipientUnverified, posture)],
     ...(latency === undefined || latency.sampleSize <= 0 ? {} : { activity: latency.kind === 'measured' ? `${latency.sampleSize} completed calls in 30 days` : `${latency.sampleSize} completed ${latency.sampleSize === 1 ? 'call' : 'calls'} so far` }),
-    ...(run.kind === 'callable' ? { reference: { label: 'Tool ref', value: tool.toolRef } } : {}),
+    ...(run.kind === 'callable' ? { reference: { label: 'Tool ID', value: tool.toolRef } } : {}),
     run,
     baseUrl,
     inputSchemaJson: JSON.stringify(tool.contract.inputJsonSchema),
@@ -84,7 +83,7 @@ export function PublicToolDetail({ result, baseUrl, search, onSearchChange }: Pu
     ...(example === undefined ? {} : { sampleInputJson: JSON.stringify(example.input) }),
     inputNotice: <InputRecipient tool={tool} />,
     trackRecord: latency === undefined
-      ? <EmptyState icon={<TimerIcon aria-hidden="true" />} title="Timing history is unavailable" description="The call history for this tool can't be read right now." titleAs="p" action={<Button type="button" variant="secondary" size="sm" onClick={retry}>Try again</Button>} />
+      ? <EmptyState title="Timing history is unavailable" description="The call history for this tool can't be read right now." titleAs="p" action={<Button type="button" variant="secondary" size="sm" onClick={retry}>Try again</Button>} />
       : <>
         <AeToolLatencyChart latency={latency} />
         <p className={styles.muted}>{latency.kind === 'measured' ? `Median ${latency.display}, p95 ${formatToolDuration(latency.p95Ms)} across ${latency.sampleSize} completed calls in the last 30 days.` : `${latency.sampleSize} completed ${latency.sampleSize === 1 ? 'call' : 'calls'} so far. Median and p95 appear after ${latency.minimumSampleSize}.`}</p>
@@ -93,12 +92,22 @@ export function PublicToolDetail({ result, baseUrl, search, onSearchChange }: Pu
   }} />
 }
 
-function readinessBadge(recipientUnverified: boolean, posture: string | undefined): Readonly<{ label: string; tone: BadgeTone }> {
-  if (recipientUnverified) return { label: 'Input recipient not named', tone: 'warning' }
-  if (posture === 'routeable') return { label: 'Ready to call', tone: 'success' }
-  if (posture === 'setup_required') return { label: 'Needs a connected agent', tone: 'warning' }
-  if (posture === undefined) return { label: 'Readiness unknown', tone: 'neutral' }
-  return { label: 'Not available right now', tone: 'warning' }
+type ReadinessStatus = 'ready_now' | 'setup_required' | 'input_recipient_not_named' | 'readiness_unknown' | 'not_available_right_now'
+
+const READINESS_BADGE: Readonly<Record<ReadinessStatus, AeStatus>> = {
+  ready_now: 'ready_now',
+  setup_required: 'setup_required',
+  input_recipient_not_named: 'needs_attention',
+  readiness_unknown: 'unavailable',
+  not_available_right_now: 'not_live',
+}
+
+function readinessBadge(recipientUnverified: boolean, posture: string | undefined): ReadinessStatus {
+  if (recipientUnverified) return 'input_recipient_not_named'
+  if (posture === 'routeable') return 'ready_now'
+  if (posture === 'setup_required') return 'setup_required'
+  if (posture === undefined) return 'readiness_unknown'
+  return 'not_available_right_now'
 }
 
 function InputRecipient({ tool }: Readonly<{ tool: PublicToolDescriptor }>) {

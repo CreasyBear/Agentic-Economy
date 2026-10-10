@@ -3,17 +3,21 @@ import { Check, Heart } from 'lucide-react'
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 
 import { Avatar } from '@/components/arc/avatar/avatar'
-import { Badge } from '@/components/arc/badge/badge'
+import { AeStatusBadge } from '@/components/ae/status/AeStatusBadge'
+import { type AeStatus } from '@/lib/ui/status-presentation'
 import { Button } from '@/components/arc/button/button'
 import { Card } from '@/components/arc/card/card'
 import { SortableDataTable, type DataColumn, type SortState } from '@/components/arc/sortable-data-table/sortable-data-table'
 import { PUBLIC_SURFACE } from '@/content/brand-copy'
-import { DIRECTORY_READINESS, PRICE_UNAVAILABLE, toDirectoryToolCardModel, type DirectoryToolCardModel } from '@/modules/market/directory-card.view-model'
+import { PRICE_UNAVAILABLE, toDirectoryToolCardModel, type DirectoryToolCardModel } from '@/modules/market/directory-card.view-model'
 import type { SavedDirectoryTool } from '@/modules/market/saved-tools.contracts'
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
 import { minimumDirectoryUsdPrice } from '@/modules/market/x402-directory-index'
 import { MARKET_LINK_STATE } from './market-return-context'
 import './MarketComposition.css'
+
+/** Directory readiness shown as the shared status badge, so the card, row and tool page read the same. */
+const ACCESS_STATUS: Record<DirectoryToolCardModel['access'], AeStatus> ={ ae_callable: 'ready_now', setup_required: 'setup_required', unavailable: 'unavailable' }
 
 /** Server orders a header can ask for. Keyword search ranks by relevance only, so it passes no handler. */
 type ServerSort = 'price_asc'
@@ -85,7 +89,7 @@ function ToolCard({ row, controls }: Readonly<{ row: ToolRow; controls?: Directo
       </span>}
     >
       {/* Every card states its readiness, as the table does: a missing badge would read as "probably fine". */}
-      <Badge className="ae-tool-card-badge" tone={DIRECTORY_READINESS[model.access].tone} size="sm">{DIRECTORY_READINESS[model.access].label}</Badge>
+      <div className="ae-tool-card-badge"><AeStatusBadge status={ACCESS_STATUS[model.access]} density="cell" /></div>
     </Card>
     <Link to="/tools/$providerHost/$slug" params={{ providerHost: model.providerHost, slug: model.slug }} state={MARKET_LINK_STATE} className="ae-tool-card-link"
       aria-label={`${row.title}, ${model.providerLine}, ${priceLine(model)}`} />
@@ -142,7 +146,7 @@ function DirectoryToolTable({ rows, onSave, isSaved, saveDisabled = false, saveU
         </div>
       </div>,
     },
-    { key: 'access', label: 'Access', sortable: false, render: (_value, row) => { const { label, tone } = DIRECTORY_READINESS[row.model.access]; return <Badge tone={tone} size="sm">{label}</Badge> } },
+    { key: 'access', label: 'Access', sortable: false, render: (_value, row) => <AeStatusBadge status={ACCESS_STATUS[row.model.access]} density="cell" /> },
     { key: 'price', label: 'Price per call', sortable: serverSorted('price'), numeric: true, render: (_value, row) => <span {...(row.model.priceContext === '' ? {} : { title: row.model.priceContext })}>{row.model.priceLabel === '' ? PRICE_UNAVAILABLE : shownPrice(row.model)}</span> },
     { key: 'calls', label: 'Calls in 30 days', sortable: false, numeric: true, render: (_value, row) => <span {...(row.model.activityTitle === undefined ? {} : { title: row.model.activityTitle })}>{row.model.callsLabel ?? 'Not reported'}</span> },
     {
