@@ -111,6 +111,7 @@ export function AeOwnerToolDetailPage({ toolRef, identity, status, inventoryQuer
       title={name}
       description="Current publication, source health, delivery and Qualified Use."
       currentPath={`/owner/operations/${encodeURIComponent(toolRef)}`}
+      actions={<Link to={returnHref} className={actionLinkClassName('secondary', 'md')}>Tools</Link>}
     >
       <AeSection title={OWNER_TOOL_DETAIL_COPY.overviewTitle} className="arc-owner-tool-overview">
         <AeFactList

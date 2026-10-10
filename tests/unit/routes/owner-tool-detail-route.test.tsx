@@ -25,11 +25,11 @@ vi.mock('@/components/ae/offerings/provider-workspace.functions', () => ({
   readProviderWorkspaceIdentityDetailServer: vi.fn(),
 }))
 vi.mock('@/components/ae/layout/AeOperatorPage', () => ({
-  AeOperatorPage: ({ children, title, breadcrumbs }: { children: ReactNode; title: string; breadcrumbs?: readonly { label: string; href?: string }[] }) => createElement(
+  AeOperatorPage: ({ children, title, actions }: { children: ReactNode; title: string; actions?: ReactNode }) => createElement(
     'main',
     null,
     createElement('h1', null, title),
-    ...((breadcrumbs ?? []).filter(item => item.href !== undefined).map(item => createElement('a', { href: item.href, key: item.label }, item.label))),
+    actions,
     children,
   ),
 }))
