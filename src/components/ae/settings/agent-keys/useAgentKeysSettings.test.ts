@@ -64,6 +64,9 @@ vi.mock('@/components/ae/agent-access/home/useAeAgentAccessHome', () => ({
     showSetup: false,
   }),
 }))
+vi.mock('@/components/ae/agent-access/home/components/useHomeIntentQuestion', () => ({
+  useHomeIntentQuestion: () => ({ intent: undefined, answer: vi.fn() }),
+}))
 
 import { useAgentKeysSettings } from './useAgentKeysSettings'
 import { AeAgentKeysSettings } from './AeAgentKeysSettings'

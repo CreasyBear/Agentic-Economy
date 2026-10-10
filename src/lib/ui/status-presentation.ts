@@ -717,6 +717,11 @@ export function getStatusPresentation(status: AeStatus): AeStatusPresentation {
   return aeStatusPresentation[status]
 }
 
+/** Badge tone for a stored value that may be a canonical status; anything else stays neutral. */
+export function statusToneOf(value: string | null): AeStatusPresentation['tone'] {
+  return value !== null && Object.hasOwn(aeStatusPresentation, value) ? aeStatusPresentation[value as AeStatus].tone : 'neutral'
+}
+
 /**
  * Canonical tone -> Badge variant map for row badges in list surfaces.
  * Lives here (not in a component file) so Fast Refresh stays safe and every

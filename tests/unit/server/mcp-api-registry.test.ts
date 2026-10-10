@@ -7,6 +7,14 @@ import {
 } from '@/modules/registry/tools.actions'
 import { toolChoiceSearchOutputSchema, type RegistryNextAction } from '@/modules/registry/tool-choice-contracts'
 import { marketRequestCreateAction } from '@/modules/market-demand/market-demand.actions'
+import { recordRefusal, recordSearchOutcome } from '@/lib/observability/refusal-event'
+import { PublicToolRegistrySchemaVersion } from '@/modules/capability-supply/tool-schemas'
+
+vi.mock('@/lib/observability/refusal-event', async importOriginal => ({
+  ...await importOriginal<typeof import('@/lib/observability/refusal-event')>(),
+  recordRefusal: vi.fn(),
+  recordSearchOutcome: vi.fn(),
+}))
 
 function noMatch(
   next: readonly RegistryNextAction[],
@@ -262,6 +270,31 @@ describe('MCP host adapter registry', () => {
       for (const value of expected) expect(JSON.stringify(result.content)).toContain(value)
       expect(result.structuredContent).toMatchObject({ result: { next: expect.any(Array) } })
     }
+    run.mockRestore()
+  })
+
+  it('emits ae_search_outcome for zero-result and unavailable searches', async () => {
+    vi.mocked(recordSearchOutcome).mockClear()
+    const run = vi.spyOn(registryToolsSearchAction, 'run')
+    run.mockResolvedValueOnce(noMatch([]))
+    run.mockResolvedValueOnce(toolChoiceSearchOutputSchema.parse({ ...noMatch([]), kind: 'unavailable', reason: 'source_unavailable', assessed: { source: 'all', scope: 'page', examined: 0, coverage: 'partial' } }))
+    for (const id of [51, 52]) {
+      await readMcpBody(await postMcp({ jsonrpc: '2.0', id, method: 'tools/call', params: { name: 'ae_registry_tools_search', arguments: { query: 'plumbing' } } }))
+    }
+    expect(recordSearchOutcome).toHaveBeenCalledTimes(2)
+    expect(recordSearchOutcome).toHaveBeenNthCalledWith(1, { surface: 'mcp', resultKind: 'noMatch', resultCount: 0, callableCount: 0, externalListingCount: 0 })
+    expect(recordSearchOutcome).toHaveBeenNthCalledWith(2, { surface: 'mcp', resultKind: 'unavailable', resultCount: 0, callableCount: 0, externalListingCount: 0 })
+    run.mockRestore()
+  })
+
+  it('never uses the per-request correlation id as the refusal actor', async () => {
+    vi.mocked(recordRefusal).mockClear()
+    const toolRef = `operation:v1:${'b'.repeat(64)}`
+    const run = vi.spyOn(registryToolsDescribeAction, 'run')
+    run.mockResolvedValueOnce({ kind: 'not_found', schemaVersion: PublicToolRegistrySchemaVersion, toolRef })
+    await readMcpBody(await postMcp({ jsonrpc: '2.0', id: 53, method: 'tools/call', params: { name: 'ae_registry_tools_describe', arguments: { toolRef } } }))
+    expect(recordRefusal).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(recordRefusal).mock.calls[0]?.[0].actor).toBeUndefined()
     run.mockRestore()
   })
 

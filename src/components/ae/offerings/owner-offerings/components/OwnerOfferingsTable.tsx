@@ -6,7 +6,6 @@ import { appendOwnerInventoryReturnContext } from '@/lib/operator/owner-inventor
 import { AeOperatorSortableHeader, AeRecordTable } from '@/components/ae/operator/AeOperatorDataTable'
 import {
   ownerToolLifecycleVariant,
-  ownerToolProtocolBadgeVariant,
   type OwnerOfferingSummary,
 } from '@/components/ae/offerings/provider-workspace-projection'
 import { Badge } from '@/components/arc/badge/badge'
@@ -57,6 +56,7 @@ export function OwnerOfferingsTable({
         <div className="arc-owner-inventory-tool">
           <span className="arc-owner-inventory-name" title={row.original.offering.name}>{row.original.offering.name}</span>
           <span className="arc-owner-inventory-summary" title={row.original.offering.summary}>{row.original.offering.summary}</span>
+          {row.original.protocolLabel === undefined ? null : <span className="arc-owner-inventory-blocker">{row.original.protocolLabel}</span>}
         </div>
       ),
     },
@@ -71,7 +71,7 @@ export function OwnerOfferingsTable({
     },
     {
       id: 'price',
-      meta: { label: 'Price' },
+      meta: { label: 'Price', numeric: true },
       accessorFn: (item) => item.pricingLabel ?? '—',
       enableGlobalFilter: false,
       // This projection supplies display text, not a comparable exact price.
@@ -144,19 +144,7 @@ function OwnerOfferingStatusCluster({
   return (
     <div className="arc-market arc-owner-inventory-status">
       <Badge tone={lifecycle.variant}>{lifecycle.label}</Badge>
-      {availability === undefined ? null : (
-        <Badge tone={availability.variant} className="gap-1.5">
-          {availability.hasDot ? (
-            <span
-              className={`size-1.5 rounded-full ${availability.variant === 'success' ? 'bg-success' : 'bg-destructive'}`}
-            />
-          ) : null}
-          {availability.label}
-        </Badge>
-      )}
-      {item.protocolLabel === undefined ? null : (
-        <Badge tone={ownerToolProtocolBadgeVariant(item.protocolLabel)}>{item.protocolLabel}</Badge>
-      )}
+      {availability === undefined ? null : <span className="arc-owner-inventory-blocker">{availability.label}</span>}
       {showBlocker && item.blocker !== undefined ? (
         <span className="arc-owner-inventory-blocker">{item.blocker}</span>
       ) : null}

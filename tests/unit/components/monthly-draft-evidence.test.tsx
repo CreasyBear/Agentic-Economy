@@ -115,7 +115,7 @@ describe('actual Arc monthly draft and receipt evidence',()=>{
     render(<CallAttemptEvidence evidence={{kind:'available',source:'durable_action_execution',complete:true,authoritativeForConsequences:false,
       attempts:[{attemptRef:'attempt:one',attemptNumber:1,effectGeneration:1,release:'possibly_released',outcome:'uncertain',errorDigest:null,recordedAt:1000}],
       history:[{executionVersion:2,kind:'late_observation',current:true,commandDigest:null,evidenceDigest:null,recordedAt:2000}]}} />)
-    expect(screen.getByText('possibly_released')).toBeInTheDocument()
+    expect(screen.getByText('Possibly released')).toBeInTheDocument()
     expect(screen.getByText('Inspect 1 audit transitions').parentElement).not.toHaveAttribute('open')
     expect(screen.getByText(/Version 2: late_observation/)).toBeInTheDocument()
     expect(screen.getByText(/Release evidence does not confirm financial settlement/)).toBeVisible()

@@ -340,7 +340,7 @@ describe('treasury snapshot cutoff reconciliation', () => {
     await f.reconcile()
     expect(Object.values((await f.report())!.checks).every(check => check.kind === 'matched')).toBe(true)
     expect(await f.alerts()).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'reconciliation_unavailable', state: 'resolved', resolvedAt: NOW + 3 })]))
-    expect(await f.backend.query(internal.moneyReadiness.readSourceChecks, { environment: 'sandbox', now: NOW + 3 }))
+    expect(await f.backend.query(internal.moneyReadiness.readSourceChecks, { environment: 'sandbox' }))
       .toMatchObject({ treasury: { kind: 'passed', validUntil: NOW + 10 * 60_000 } })
   })
 
@@ -380,7 +380,7 @@ describe('treasury snapshot cutoff reconciliation', () => {
     await f.reconcile()
     expect(await f.report()).toMatchObject({ snapshotAt: NOW, chain: { kind: 'unavailable', code: 'treasury_chain_observation_stale' },
       checks: { cash: { kind: 'unavailable', code: 'treasury_chain_observation_stale' } } })
-    expect(await f.backend.query(internal.moneyReadiness.readSourceChecks, { environment: 'sandbox', now: NOW }))
+    expect(await f.backend.query(internal.moneyReadiness.readSourceChecks, { environment: 'sandbox' }))
       .toMatchObject({ treasury: { kind: 'failed', code: 'treasury_reconciliation_required' } })
   })
 
@@ -428,7 +428,7 @@ describe('treasury snapshot cutoff reconciliation', () => {
         expect(await f.report()).toMatchObject({ snapshotAt: NOW,
           chain: { kind: 'available', observedAt: NOW, blockNumber: '110', blockHash: hash(110), blockTimestamp: NOW - 60_000, totalUnits: '15000000' },
           checks: { cash: { kind: 'matched' }, settlements: { kind: 'matched' }, funding: { kind: 'matched' }, reservations: { kind: 'matched' } } })
-        expect(await f.backend.query(internal.moneyReadiness.readSourceChecks, { environment: 'sandbox', now: NOW }))
+        expect(await f.backend.query(internal.moneyReadiness.readSourceChecks, { environment: 'sandbox' }))
           .toMatchObject({ treasury: { kind: 'passed' } })
       } else {
         expect(await f.report()).toMatchObject({ chain: { kind: 'unavailable' }, checks: { cash: { kind: 'unavailable' } } })

@@ -1,7 +1,9 @@
 import { useRouter } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
+import { useConvexConnectionState, useQuery } from 'convex/react'
 import { useEffect, useRef, useState } from 'react'
 
+import { api } from '../../convex/_generated/api'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   cancelOwnerCallServer,
@@ -45,8 +47,6 @@ export function useCallStatusRecovery(loadedResult: CallStatusPageResult): Reado
   const [cancelPending, setCancelPending] = useState(false)
   const [reconcilePending, setReconcilePending] = useState(false)
   const [feedback, setFeedback] = useState<CallStatusPageActions['feedback']>()
-  const [updateError, setUpdateError] = useState<string>()
-  const [pollPending, setPollPending] = useState(false)
   const requestInFlight = useRef(false)
   const readStatus = useServerFn(readOwnerCallStatusServer)
   const cancel = useServerFn(cancelOwnerCallServer)
@@ -60,47 +60,31 @@ export function useCallStatusRecovery(loadedResult: CallStatusPageResult): Reado
     setLocalStatus({ source: loadedResult, current })
   }
 
-  // Status observation is read-only. Keep the last useful result on an outage,
-  // pause in hidden tabs, and never overlap a read with a recovery command.
+  // Status observation is read-only: a reactive subscription tells us when the
+  // Call row moved, and the route loader re-reads the full status once.
   const autoRefresh = result.kind === 'found'
     && ['authorized', 'leased', 'in_progress', 'reconciliation_required'].includes(result.state)
-  const observedState = result.kind === 'found' ? result.state : undefined
+  const watched = useQuery(api.capabilityCalls.watchOwnerCallState, autoRefresh ? { callRef: result.callRef } : 'skip')
+  const connection = useConvexConnectionState()
+  // The shown version is the row's updatedAt, so the loaded status is the
+  // baseline: any newer row, including the first emission, re-reads once.
+  const watchedVersion = watched?.updatedAt
+  const shownVersion = result.kind === 'found' ? result.version : undefined
+  const reReadFor = useRef<number | undefined>(undefined)
+  const [reReadFailed, setReReadFailed] = useState(false)
   useEffect(() => {
-    if (!autoRefresh) return
-    let disposed = false
-    let nextReadAt = Date.now() + 5_000
-    let failures = 0
-    async function poll() {
-      if (disposed) return
-      if (document.visibilityState === 'hidden' || requestInFlight.current || Date.now() < nextReadAt) return
-      requestInFlight.current = true
-      setPollPending(true)
-      try {
-        const current = await readStatus({ data: { callRef: result.callRef } })
-        if (!disposed) {
-          failures = 0
-          setUpdateError(undefined)
-          if (current.kind !== 'unchanged') setLocalStatus({ source: loadedResult, current })
-        }
-      } catch (cause) {
-        captureClientExceptionOnClient(cause)
-        if (!disposed) {
-          failures += 1
-          setUpdateError('Updates are delayed. Your last recorded status is still shown; we will check again.')
-        }
-      } finally {
-        requestInFlight.current = false
-        setPollPending(false)
-        nextReadAt = Date.now() + Math.min(30_000, 5_000 * 2 ** failures)
-      }
-    }
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') { nextReadAt = 0; void poll() }
-    }
-    const timer = setInterval(() => { void poll() }, 5_000)
-    document.addEventListener('visibilitychange', onVisible)
-    return () => { disposed = true; clearInterval(timer); document.removeEventListener('visibilitychange', onVisible) }
-  }, [autoRefresh, loadedResult, readStatus, result.callRef, observedState])
+    if (watchedVersion === undefined || shownVersion === undefined || watchedVersion <= shownVersion
+      || reReadFor.current === watchedVersion) return
+    reReadFor.current = watchedVersion
+    router.invalidate().then(() => setReReadFailed(false), (cause: unknown) => {
+      captureClientExceptionOnClient(cause)
+      setReReadFailed(true)
+    })
+  }, [watchedVersion, shownVersion, router])
+  const livePaused = autoRefresh && (reReadFailed || (connection.hasEverConnected && !connection.isWebSocketConnected))
+  const shownFeedback = feedback ?? (livePaused
+    ? { kind: 'error' as const, message: 'Live updates are paused. Your last recorded status is still shown.' }
+    : undefined)
 
   async function refreshCurrentStatus() {
     if (requestInFlight.current || refreshPending || cancelPending || reconcilePending || !canRefreshCallStatus(result)) return
@@ -248,14 +232,14 @@ export function useCallStatusRecovery(loadedResult: CallStatusPageResult): Reado
     result,
     actions: {
       onRefresh: refreshCurrentStatus,
-      refreshPending: refreshPending || pollPending,
+      refreshPending,
       autoRefresh,
       onCancel: cancelCurrentCall,
       cancelPending,
       onReconcile: (input) => { void reconcileCurrentCall(input) },
       reconcilePending,
       ...(retainedReconciliation === undefined ? {} : { reconciliationDraft: retainedReconciliation.draft }),
-      ...(feedback !== undefined ? { feedback } : updateError === undefined ? {} : { feedback: { kind: 'error' as const, message: updateError } }),
+      ...(shownFeedback !== undefined ? { feedback: shownFeedback } : {}),
     },
   }
 }

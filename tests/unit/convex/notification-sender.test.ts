@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { internal } from '../../../convex/_generated/api'
+import { emitJourneyEvent } from '../../../convex/lib/journey/events'
+import { postResendEmail } from '../../../convex/lib/principalAccount/notifications/resend'
 import { createInteractiveAuthorityBackend } from '../../helpers/interactive-authority-runtime'
 import {
   INTERACTIVE_ACCOUNT_REF,
@@ -226,5 +228,96 @@ describe('sendApprovalEmail', () => {
       .resolves.toEqual({ outcome: 'suppressed', code: 'opted_out' })
     expect(clerkMocks.getUser).not.toHaveBeenCalled()
     expect(sendEmail).not.toHaveBeenCalled()
+  })
+})
+
+describe('sendOperatorDigest', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-10-09T22:00:00.000Z'))
+    process.env.RESEND_API_KEY = 'resend-secret-test'
+    process.env.NOTIFICATION_FROM_EMAIL = 'no-reply@example.test'
+    process.env.OPERATOR_EMAIL = 'operator@example.test'
+  })
+
+  afterEach(() => {
+    delete process.env.OPERATOR_EMAIL
+    for (const key of envKeys) {
+      const value = previousEnv[key]
+      if (value === undefined) delete process.env[key]
+      else process.env[key] = value
+    }
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+    vi.useRealTimers()
+  })
+
+  it('posts one digest to the operator with a date-based idempotency key', async () => {
+    const backend = createInteractiveAuthorityBackend()
+    vi.setSystemTime(new Date('2026-10-07T00:00:00.000Z'))
+    await backend.run((ctx) => emitJourneyEvent(ctx, 'acc_stalled_digest', 'signed_up'))
+    vi.setSystemTime(new Date('2026-10-09T22:00:00.000Z'))
+    const sendEmail = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify({ id: 'resend-digest-1' }), { status: 200 }))
+    vi.stubGlobal('fetch', sendEmail)
+
+    await expect(backend.action(internal.notificationDelivery.sendOperatorDigest, {})).resolves.toBeNull()
+    const resendCalls = sendEmail.mock.calls.filter(([url]) => String(url) === 'https://api.resend.com/emails')
+    expect(resendCalls).toHaveLength(1)
+    const [, request] = resendCalls[0] ?? []
+    if (request === undefined || typeof request.body !== 'string') throw new Error('resend_request_missing')
+    // 22:00 UTC on 9 October is 09:00 on 10 October in Sydney, where the operator reads it.
+    expect(request.headers).toMatchObject({ 'Idempotency-Key': 'operator-digest:2026-10-10' })
+    expect(JSON.parse(request.body)).toMatchObject({
+      to: ['operator@example.test'],
+      text: expect.stringContaining('acc_stalled_digest'),
+    })
+  })
+
+  it('posts a zero digest so a missing email means the job failed', async () => {
+    const backend = createInteractiveAuthorityBackend()
+    const sendEmail = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response('{}', { status: 200 }))
+    vi.stubGlobal('fetch', sendEmail)
+
+    await expect(backend.action(internal.notificationDelivery.sendOperatorDigest, {})).resolves.toBeNull()
+    expect(sendEmail).toHaveBeenCalledTimes(1)
+    const [, request] = sendEmail.mock.calls[0] ?? []
+    expect(JSON.parse(String(request?.body))).toMatchObject({
+      subject: 'AE stalled accounts, 2026-10-10',
+      text: expect.stringContaining('Signed up, not funded: 0 total'),
+    })
+  })
+
+  it('throws on a Resend 503 so the workpool retries the digest', async () => {
+    const backend = createInteractiveAuthorityBackend()
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 503 })))
+    await expect(backend.action(internal.notificationDelivery.sendOperatorDigest, {})).rejects.toThrow('resend_retryable_status_503')
+  })
+
+  it('suppresses without credentials before reading the digest or contacting Resend', async () => {
+    const backend = createInteractiveAuthorityBackend()
+    delete process.env.OPERATOR_EMAIL
+    const sendEmail = vi.fn(async () => new Response('{}', { status: 200 }))
+    vi.stubGlobal('fetch', sendEmail)
+
+    await expect(backend.action(internal.notificationDelivery.sendOperatorDigest, {})).resolves.toBeNull()
+    expect(sendEmail).not.toHaveBeenCalled()
+  })
+})
+
+describe('postResendEmail', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('passes List-Unsubscribe headers through to Resend', async () => {
+    const sendEmail = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response('{}', { status: 200 }))
+    vi.stubGlobal('fetch', sendEmail)
+    await postResendEmail({
+      apiKey: 'k', from: 'a@example.test', to: 'b@example.test', subject: 's', text: 't', idempotencyKey: 'i',
+      headers: { 'List-Unsubscribe': '<https://x.test/u?d=1>', 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' },
+    })
+    const [, request] = sendEmail.mock.calls[0] ?? []
+    expect(JSON.parse(String(request?.body)).headers).toEqual({
+      'List-Unsubscribe': '<https://x.test/u?d=1>', 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+    })
   })
 })

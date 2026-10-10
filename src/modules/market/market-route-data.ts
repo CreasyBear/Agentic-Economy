@@ -35,7 +35,7 @@ export async function loadCanonicalMarketSearch(search: MarketSearch, options: M
   const signal = options.signal === undefined ? deadline : AbortSignal.any([options.signal, deadline])
   try {
     const result = await searchMarketToolsServer({ data: input, signal })
-    recordProductJourney({ action: 'search_observed', phase: result.kind === 'unavailable' ? 'failed' : 'observed', surface: 'market', queryLength: input.query.length, resultCount: result.kind === 'unavailable' || result.kind === 'noMatch' ? 0 : result.results.length })
+    recordProductJourney({ action: 'search_observed', phase: result.kind === 'unavailable' ? 'failed' : 'observed', surface: 'market', queryLength: input.query.length, resultCount: result.kind === 'unavailable' || result.kind === 'noMatch' ? 0 : result.results.length, callableCount: result.kind === 'unavailable' || result.kind === 'noMatch' ? 0 : result.results.filter(r => r.access === 'ae_callable').length })
     return { input, result }
   } catch (cause) {
     // A reader who left the page cancelled this search; that is not a failed search.

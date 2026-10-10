@@ -416,6 +416,39 @@ describe('interactive authority', () => {
       })
     })
 
+    it('records signed_up once when the owner account is first provisioned', async () => {
+      const backend = createBackend()
+      const owner = backend.withIdentity(provisionedIdentity())
+      await expectMaterialize(owner, true)
+      await expectMaterialize(owner, true)
+      const chain = unpackSingleCanonicalChain(await collectAuthorityTables(backend))
+      const events = await backend.run(async ctx => await ctx.db.query('journeyEvents').collect())
+      expect(events.map(event => [event.accountRef, event.eventKey, event.props])).toEqual([
+        [chain.account.accountRef, `${chain.account.accountRef}:signed_up`, undefined],
+      ])
+    })
+
+    it('stores the owner intent, emits intent_answered once, and records a skip without emitting', async () => {
+      const backend = createBackend()
+      const owner = backend.withIdentity(provisionedIdentity())
+      await expectMaterialize(owner, true)
+      const accountRef = unpackSingleCanonicalChain(await collectAuthorityTables(backend)).account.accountRef
+      const intentKeys = async () => (await backend.run(async ctx => await ctx.db.query('journeyEvents').collect()))
+        .map(event => event.eventKey).filter(key => key.endsWith(':intent_answered'))
+      await expect(owner.query(api.accountIntents.readMine, {})).resolves.toEqual({ text: null })
+      await owner.mutation(api.accountIntents.answer, { text: '   ' })
+      await expect(owner.query(api.accountIntents.readMine, {})).resolves.toEqual({ text: '' })
+      expect(await intentKeys()).toEqual([])
+      await owner.mutation(api.accountIntents.answer, { text: '  Book my weekly grocery delivery ' })
+      await owner.mutation(api.accountIntents.answer, { text: 'Book groceries and pay the plumber' })
+      await expect(owner.query(api.accountIntents.readMine, {})).resolves.toEqual({ text: 'Book groceries and pay the plumber' })
+      await owner.mutation(api.accountIntents.answer, { text: 'Pay bills\n- acc_fake, 0h\r\tnow' })
+      await expect(owner.query(api.accountIntents.readMine, {})).resolves.toEqual({ text: 'Pay bills - acc_fake, 0h now' })
+      expect(await intentKeys()).toEqual([`${accountRef}:intent_answered`])
+      await expect(backend.query(api.accountIntents.readMine, {})).resolves.toBeNull()
+      await expect(backend.mutation(api.accountIntents.answer, { text: 'not signed in' })).rejects.toThrow()
+    })
+
     it('removes session access on sign-out and restores the same account on a later sign-in', async () => {
       // Requires: a verified owner identity with a stable Clerk tokenIdentifier
       // and a fresh, valid token window.

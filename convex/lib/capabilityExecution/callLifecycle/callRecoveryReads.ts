@@ -29,6 +29,8 @@ export const listAgentCallSummariesArgs = {
   paginationOpts: paginationOptsValidator,
 } as const
 export const readRecoveryResult = v.union(recoveryValue, v.null())
+export const watchOwnerCallStateArgs = { callRef: v.string() } as const
+export const watchOwnerCallStateResult = v.union(v.null(), v.object({ state: callState, updatedAt: v.number() }))
 export const readOwnerReceiptContextResult = v.union(ownerCallContextValue, v.null())
 
 type CallRow = Doc<'capabilityCalls'>
@@ -237,4 +239,17 @@ function recordedTariff(row:CallRow):Pick<OwnerCallContext,'recordedTariff'>{
   const tool=parsePublishedToolSnapshot(row.toolJson)
   if(tool===undefined||pricingConfigDigest(tool.pricingConfig)!==tool.priceDigest)return {}
   return {recordedTariff:{basis:'call_snapshot',pricingConfig:tool.pricingConfig,priceDigest:tool.priceDigest}}
+}
+
+export async function watchOwnerCallStateHandler(
+  ctx: QueryCtx,
+  args: { callRef: string },
+): Promise<Infer<typeof watchOwnerCallStateResult>> {
+  // Reactive owner observation: same owner rule as authorizeOwnerRecovery; a
+  // missing identity, missing row or another owner all read as null.
+  const identity = await ctx.auth.getUserIdentity()
+  if (identity === null || identity.tokenIdentifier.trim().length === 0) return null
+  const row = await ctx.db.query('capabilityCalls')
+    .withIndex('by_callRef', (q) => q.eq('callRef', args.callRef)).unique()
+  return row === null || row.ownerId !== identity.tokenIdentifier ? null : { state: row.state, updatedAt: row.updatedAt }
 }

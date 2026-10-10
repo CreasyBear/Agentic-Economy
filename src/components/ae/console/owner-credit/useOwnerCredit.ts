@@ -27,7 +27,17 @@ import {
 import type { AccountHistoryResult } from '@/modules/money/public'
 import type { AccountFundingBalance, AccountFundingConstraints } from '@/modules/money/server'
 
-export function useOwnerCredit(): AeOwnerCreditProps {
+type Page<T> = Readonly<{ page: readonly T[] }>
+export type OwnerCreditReads = Readonly<{
+  balance: Promise<AccountFundingBalance>
+  history: Promise<AccountHistoryResult>
+  constraints: Promise<AccountFundingConstraints>
+  documents: Promise<Page<MoneyDocumentView>>
+  reconciliation: Promise<Page<MoneyReconciliationCaseView>>
+  obligations: Promise<Page<MoneyProviderObligationView>>
+}>
+
+export function useOwnerCredit(reads?: OwnerCreditReads): AeOwnerCreditProps {
   const beginAccountFunding = useServerFn(beginAccountFundingServer)
   const readAccountFunding = useServerFn(readAccountFundingServer)
   const readAccountBalance = useServerFn(readAccountFundingBalanceServer)
@@ -70,11 +80,11 @@ export function useOwnerCredit(): AeOwnerCreditProps {
     constraints: false,
   })
 
-  const loadBalance = useCallback(async () => {
+  const loadBalance = useCallback(async (source?: OwnerCreditReads['balance']) => {
     const request = ++balanceRequest.current
     setBalanceLoading(true)
     try {
-      const nextBalance = await readAccountBalance()
+      const nextBalance = await (source ?? readAccountBalance())
       if (request !== balanceRequest.current) return
       setAccountBalance((current) => nextBalance.kind === 'available' ? nextBalance : current ?? nextBalance)
       setUnavailable((current) => ({ ...current, balance: nextBalance.kind !== 'available' }))
@@ -93,11 +103,11 @@ export function useOwnerCredit(): AeOwnerCreditProps {
     return () => window.clearTimeout(timer)
   }, [accountBalance, loadBalance])
 
-  const loadHistory = useCallback(async () => {
+  const loadHistory = useCallback(async (source?: OwnerCreditReads['history']) => {
     const request = ++historyRequest.current
     setHistoryLoading(true)
     try {
-      const nextHistory = await readAccountHistory({ data: {} })
+      const nextHistory = await (source ?? readAccountHistory({ data: {} }))
       if (request !== historyRequest.current) return
       setAccountHistory((current) => nextHistory.kind === 'available' ? nextHistory : current ?? nextHistory)
       setUnavailable((current) => ({ ...current, history: nextHistory.kind !== 'available' }))
@@ -110,11 +120,11 @@ export function useOwnerCredit(): AeOwnerCreditProps {
   }, [readAccountHistory])
 
 
-  const loadConstraints = useCallback(async () => {
+  const loadConstraints = useCallback(async (source?: OwnerCreditReads['constraints']) => {
     const request = ++constraintsRequest.current
     setConstraintsLoading(true)
     try {
-      const nextConstraints = await readFundingConstraints()
+      const nextConstraints = await (source ?? readFundingConstraints())
       if (request !== constraintsRequest.current) return
       setFundingConstraints(nextConstraints)
       setUnavailable((current) => ({ ...current, constraints: false }))
@@ -126,13 +136,13 @@ export function useOwnerCredit(): AeOwnerCreditProps {
     }
   }, [readFundingConstraints])
 
-  const loadAdministration = useCallback(async () => {
+  const loadAdministration = useCallback(async (source?: Pick<OwnerCreditReads, 'documents' | 'reconciliation' | 'obligations'>) => {
     const request = ++administrationRequest.current
     setAdministrationLoading(true)
     const [nextDocuments, nextReconciliation, nextObligations] = await Promise.allSettled([
-      readDocuments({ data: {} }),
-      readReconciliation({ data: {} }),
-      readObligations({ data: {} }),
+      source?.documents ?? readDocuments({ data: {} }),
+      source?.reconciliation ?? readReconciliation({ data: {} }),
+      source?.obligations ?? readObligations({ data: {} }),
     ])
     for (const result of [nextDocuments, nextReconciliation, nextObligations]) {
       if (result.status === 'rejected') captureClientExceptionOnClient(result.reason)
@@ -150,20 +160,20 @@ export function useOwnerCredit(): AeOwnerCreditProps {
     setAdministrationLoading(false)
   }, [readDocuments, readObligations, readReconciliation])
 
-  const load = useCallback(async () => {
-    await Promise.all([loadBalance(), loadHistory(), loadConstraints(), loadAdministration()])
+  const load = useCallback(async (source?: OwnerCreditReads) => {
+    await Promise.all([loadBalance(source?.balance), loadHistory(source?.history), loadConstraints(source?.constraints), loadAdministration(source)])
   }, [loadAdministration, loadBalance, loadConstraints, loadHistory])
 
 
   useEffect(() => {
-    void load()
+    void load(reads)
     return () => {
       balanceRequest.current += 1
       historyRequest.current += 1
       constraintsRequest.current += 1
       administrationRequest.current += 1
     }
-  }, [load])
+  }, [load, reads])
 
   return {
     ...(accountBalance === undefined ? {} : { accountBalance }),
@@ -175,7 +185,7 @@ export function useOwnerCredit(): AeOwnerCreditProps {
     administrationLoading,
     accountFundingPort,
     ...(fundingConstraints === undefined ? {} : { fundingConstraints }),
-    onCreditRefresh: load,
+    onCreditRefresh: () => load(),
     documents,
     reconciliationCases,
     providerObligations,

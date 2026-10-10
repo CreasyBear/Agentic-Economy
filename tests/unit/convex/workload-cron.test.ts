@@ -36,6 +36,9 @@ import {
   reconcileTreasuryBalancesHandler,
   refreshPaymentReadinessHandler,
   refreshMarketFlowHandler,
+  retryJourneyEventForwardsHandler,
+  sendOperatorDigestHandler,
+  sendStalledStepEmailsHandler,
   snapshotMarketplaceMetricsDayHandler,
   reconcileBusinessSupplyProjectionsHandler,
 } from '../../../convex/lib/platform/workloadCron/scheduled'
@@ -86,6 +89,9 @@ const EXPECTED_BINDINGS = {
   'reconcile treasury balances': 'workloadCron:reconcileTreasuryBalances',
   'refresh payment readiness': 'workloadCron:refreshPaymentReadiness',
   'refresh market flow': 'workloadCron:refreshMarketFlow',
+  'retry journey event forwards': 'workloadCron:retryJourneyEventForwards',
+  'send operator stalled digest': 'workloadCron:sendOperatorDigest',
+  'send stalled step emails': 'workloadCron:sendStalledStepEmails',
   'snapshot marketplace metrics day': 'workloadCron:snapshotMarketplaceMetricsDay',
 } as const
 
@@ -100,6 +106,9 @@ const ACTION_HANDLERS = [
   reconcileTreasuryBalancesHandler,
   refreshPaymentReadinessHandler,
   refreshMarketFlowHandler,
+  retryJourneyEventForwardsHandler,
+  sendOperatorDigestHandler,
+  sendStalledStepEmailsHandler,
   snapshotMarketplaceMetricsDayHandler,
 ] as const
 
@@ -114,6 +123,9 @@ const ACTION_HANDLER_WORKLOAD_NAMES = [
   'reconcile treasury balances',
   'refresh payment readiness',
   'refresh market flow',
+  'retry journey event forwards',
+  'send operator stalled digest',
+  'send stalled step emails',
   'snapshot marketplace metrics day',
 ] as const
 
@@ -442,6 +454,18 @@ describe('System workload cron boundary', () => {
     await expect(expireStalePendingApprovalsHandler(context.mutation()))
       .rejects.toMatchObject({ code: 'workload_principal_missing' })
     expect(context.dispatches).toEqual([])
+  })
+
+  it('runs the operator digest and the stalled-step emails as separate workloads', async () => {
+    const digest = new FakeRuntimeContext(canonicalDb())
+    await expect(sendOperatorDigestHandler(digest.action())).resolves.toBeNull()
+    expect(digest.admissions).toEqual(['send operator stalled digest'])
+    expect(digest.dispatches).toEqual(['operatorDigest:enqueue'])
+
+    const emails = new FakeRuntimeContext(canonicalDb())
+    await expect(sendStalledStepEmailsHandler(emails.action())).resolves.toBeNull()
+    expect(emails.admissions).toEqual(['send stalled step emails'])
+    expect(emails.dispatches).toEqual(['notifications:sweepStalledStepEmails'])
   })
 
   it('preserves an unknown external target outcome instead of translating or retrying it', async () => {

@@ -9,6 +9,7 @@ export type NotificationPreferencesView = Readonly<{
   invoiceReady: boolean
   teamMembershipChanged: boolean
   agentApprovalRequested: boolean
+  stalledStepEmails: boolean
   usageAlertPolicy?: UsageAlertPolicy
   revision: number
 }>
@@ -21,11 +22,12 @@ export type NotificationPreferencePatch = Readonly<{
   invoiceReady?: boolean
   teamMembershipChanged?: boolean
   agentApprovalRequested?: boolean
+  stalledStepEmails?: boolean
   usageAlertPolicy?: UsageAlertPolicy
   expectedRevision: number
 }>
 
-export type PreferenceSwitchKey = 'agentApprovalRequested'
+export type PreferenceSwitchKey = 'agentApprovalRequested' | 'stalledStepEmails'
 
 export type NotificationUpdateDiagnostic = Rule4Diagnostic
 
@@ -37,6 +39,7 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferencesView = {
   invoiceReady: true,
   teamMembershipChanged: true,
   agentApprovalRequested: true,
+  stalledStepEmails: false,
   revision: 0,
 }
 
@@ -52,4 +55,5 @@ export const PREFERENCE_SWITCHES: ReadonlyArray<{
   description: string
 }> = [
   { key: 'agentApprovalRequested', label: 'Email when an Agent needs your approval', description: 'Get an email when an Agent is waiting for you to approve a request.' },
+  { key: 'stalledStepEmails', label: "Remind me when I'm stuck on a setup step", description: 'Get an email if a setup step has stalled and needs you to finish it.' },
 ]

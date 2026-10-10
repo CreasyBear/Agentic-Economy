@@ -3,7 +3,8 @@ import type { ColumnDef } from '@tanstack/react-table'
 
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeRecordTable } from '@/components/ae/operator/AeOperatorDataTable'
-import { Badge } from '@/components/arc/badge/badge'
+import { RecordTime } from '@/components/ae/operator/RecordTime'
+import { ProviderStatusBadge } from '../../provider-object/components/ProviderStatusBadge'
 import { Button } from '@/components/arc/button/button'
 import '../../RecordWorkspaceComposition.css'
 import {
@@ -17,29 +18,24 @@ const columns: ColumnDef<AeRecordTableFeatures, AdminProviderRowModel, unknown>[
     accessorKey: 'slug',
     header: PROVIDERS_LIST_COPY.columns.provider,
     cell: ({ row }) => (
-      <a
-        className="arc-admin-record-link"
-        href={row.original.href}
-      >
+      <a className="arc-admin-record-link" href={row.original.href}>
         {row.original.slug}
       </a>
     ),
   },
   {
-    accessorKey: 'publicStatusLabel',
+    accessorKey: 'publicStatus',
     header: PROVIDERS_LIST_COPY.columns.publicStatus,
-    cell: ({ row }) => <Badge tone="neutral" size="sm">{row.original.publicStatusLabel}</Badge>,
+    cell: ({ row }) => <ProviderStatusBadge value={row.original.publicStatus} />,
   },
   {
     accessorKey: 'trustTierLabel',
     header: PROVIDERS_LIST_COPY.columns.trustTier,
   },
   {
-    accessorKey: 'updatedAtLabel',
+    accessorKey: 'updatedAtIso',
     header: PROVIDERS_LIST_COPY.columns.updated,
-    cell: ({ row }) => (
-      <time dateTime={row.original.updatedAtIso}>{row.original.updatedAtLabel}</time>
-    ),
+    cell: ({ row }) => <RecordTime at={row.original.updatedAtIso} />,
   },
 ]
 
@@ -53,6 +49,7 @@ export function ProvidersTable({ rows, filtered, paginationStatus, onLoadMore }:
         hideFilter
         caption={PROVIDERS_LIST_COPY.tableTitle}
         emptyMessage={filtered ? PROVIDERS_LIST_COPY.noMatches : PROVIDERS_LIST_COPY.noRows}
+        countLabel="loaded Providers"
       />
       {paginationStatus === 'CanLoadMore' ? (
         <Button type="button" variant="secondary" size="md" className="justify-self-start" onClick={onLoadMore}>

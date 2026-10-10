@@ -63,7 +63,7 @@ describe('REUI Team composition', () => {
     expect(within(dialog).getByRole('button', { name: 'Sending…' })).toBeDisabled()
     expect(within(dialog).getByRole('button', { name: 'Close' })).toBeDisabled()
     finishRead({ accountRef: 'account:1', accountRevision: 1, ownershipRevision: 1, canManageMembers: false, canManageInvitations: true, members: [], invitations: [], membersComplete: true, nextMemberOffset: null, invitationsComplete: true, nextInvitationOffset: null })
-    await waitFor(() => expect(document.querySelector('table[aria-label="Pending invitations"]')).not.toBeNull())
+    await waitFor(() => expect(screen.queryByRole('table', { name: 'Pending invitations', hidden: true })).not.toBeNull())
     expect(within(screen.getByRole('dialog')).getByRole('button', { name: 'Sending…' })).toBeDisabled()
     resolve()
     await waitFor(() => expect(within(dialog).getByRole('status')).toHaveTextContent('Invitation sent to new@example.test. The member appears here after accepting.'))

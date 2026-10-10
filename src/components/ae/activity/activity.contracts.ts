@@ -1,6 +1,7 @@
 import type { OwnerPlanSummary } from '@/modules/capability-execution/plan/owner.contracts'
 import type { ActivityReturnScope } from '@/lib/call-recovery/activity-return-scope'
 import type { UsageReconciliation } from '@/modules/money/public'
+import type { readOwnerActivityReportsServer } from '@/lib/server/activity.functions'
 import type {
   readOwnerCallsServer,
   readOwnerSpendServer,
@@ -23,6 +24,8 @@ export type ActivityLoaderResult =
       spend: Readonly<{ kind: 'pending' }> | Awaited<ReturnType<typeof readOwnerSpendServer>> | Readonly<{ kind: 'unavailable'; code: 'source_unavailable' }> | Readonly<{ kind: 'not_requested' }>
       plans?: readonly OwnerPlanSummary[]
       reconciliation?: UsageReconciliation
+      /** Loader-started reports read (deferred data); absent when the hook must read for itself. */
+      reports?: Promise<Awaited<ReturnType<typeof readOwnerActivityReportsServer>>>
       periodStart: string
       periodStartAt: number
       periodEndAt: number
@@ -63,7 +66,6 @@ export type ActivityCallRowView = Readonly<{
   purchaseBadge: ActivityBadgeView
   purchaseLabel: string
   paymentStateLabel: string
-  whenLabel: string
   createdAt: number
   receiptHref: string
   receiptAccessibleLabel: string

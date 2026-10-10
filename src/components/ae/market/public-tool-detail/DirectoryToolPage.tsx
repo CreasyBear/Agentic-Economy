@@ -77,7 +77,7 @@ function DirectoryActivity({ activity }: Readonly<{ activity: X402DirectoryEntry
   const facts: ([string, ReactNode] | undefined)[] = [
     activity?.calls30d === undefined ? undefined : ['Paid calls, last 30 days', countFormat.format(activity.calls30d)],
     activity?.payers30d === undefined ? undefined : ['Buyers, last 30 days', countFormat.format(activity.payers30d)],
-    lastCalled === undefined || Number.isNaN(lastCalled.getTime()) ? undefined : ['Last paid call', <RelativeTime value={lastCalled} />],
+    lastCalled === undefined || Number.isNaN(lastCalled.getTime()) ? undefined : ['Last paid call', <RelativeTime key="last-called" value={lastCalled} />],
   ]
   const rows = facts.filter((row): row is [string, ReactNode] => row !== undefined)
   if (rows.length === 0) return <EmptyState icon={<ActivityIcon aria-hidden="true" />} title="No track record yet" description="The x402 directory hasn't recorded paid calls for this listing." titleAs="p" />

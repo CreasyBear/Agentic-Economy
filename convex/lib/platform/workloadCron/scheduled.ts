@@ -126,6 +126,24 @@ export async function refreshMarketFlowHandler(ctx: WorkloadCronActionContext): 
   return await runAdmittedAction(ctx, 'refresh market flow', internal.marketFlowRefresh.run, {})
 }
 
+export async function sendOperatorDigestHandler(ctx: WorkloadCronActionContext): Promise<null> {
+  await ctx.runQuery(internal.workloadCron.admit, { name: 'send operator stalled digest' })
+  await ctx.runMutation(internal.operatorDigest.enqueue, {})
+  return null
+}
+
+export async function sendStalledStepEmailsHandler(ctx: WorkloadCronActionContext): Promise<null> {
+  await ctx.runQuery(internal.workloadCron.admit, { name: 'send stalled step emails' })
+  await ctx.runAction(internal.notifications.sweepStalledStepEmails, {})
+  return null
+}
+
+export async function retryJourneyEventForwardsHandler(ctx: WorkloadCronActionContext): Promise<null> {
+  await ctx.runQuery(internal.workloadCron.admit, { name: 'retry journey event forwards' })
+  await ctx.runMutation(internal.journeyEvents.retryUnforwarded, {})
+  return null
+}
+
 export async function snapshotMarketplaceMetricsDayHandler(ctx: WorkloadCronActionContext): Promise<null> {
   await ctx.runQuery(internal.workloadCron.admit, { name: 'snapshot marketplace metrics day' })
   await ctx.runAction(internal.adminConsoleMetrics.refreshMarketplaceMetrics, {})

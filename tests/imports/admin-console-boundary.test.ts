@@ -31,6 +31,7 @@ describe('admin console boundary', () => {
     ]).filter((file) => ![
       'src/lib/observability/admin-event-props.ts',
       'src/lib/observability/posthog.server.ts',
+      'src/lib/observability/refusal-event.ts',
     ].includes(file)).map((file) => ({ file, source: readFileSync(file, 'utf8') }))
     expect(offenders(/\bcaptureServerEvent\s*\(/u, sources)).toEqual([])
   })

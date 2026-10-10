@@ -16,6 +16,17 @@ describe('metadata-only exploratory journey observations', () => {
       action: 'search_observed', phase: 'observed', surface: 'market', queryLength: 37, resultCount: 0, evidence: 'browser_observation',
     })
   })
+  it('accepts bounded callableCount and rejects unknown keys on the strict schema', () => {
+    vi.stubGlobal('window', {})
+    recordProductJourney({ action: 'search_observed', phase: 'observed', surface: 'market', resultCount: 3, callableCount: 0 })
+    expect(transport.captureClientProductEventOnClient).toHaveBeenLastCalledWith('ae_product_journey', {
+      action: 'search_observed', phase: 'observed', surface: 'market', resultCount: 3, callableCount: 0, evidence: 'browser_observation',
+    })
+    transport.captureClientProductEventOnClient.mockClear()
+    recordProductJourney({ action: 'search_observed', phase: 'observed', surface: 'market', unknownKey: 1 } as unknown as ProductJourneyEvent)
+    expect(transport.captureClientProductEventOnClient).not.toHaveBeenCalled()
+  })
+
   it('rejects caller-shaped content and does not let telemetry failure break an action', () => {
     vi.stubGlobal('window', {})
     const unsafe = { action: 'tool_viewed', phase: 'observed', surface: 'tool', prompt: 'private project', output: 'private answer' } as unknown as ProductJourneyEvent

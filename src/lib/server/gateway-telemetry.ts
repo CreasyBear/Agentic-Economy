@@ -1,6 +1,7 @@
 import type { ActionTimingSink } from '@/modules/common/action'
 import { currentRequestCorrelationId } from '@/lib/server/request-correlation'
 import { gatewayObservabilitySink } from './gateway-observability'
+import { IDENTIFIER_PATTERN, recordRefusal } from '@/lib/observability/refusal-event'
 
 export type GatewayPricingClass = 'free' | 'paid' | 'unknown'
 export type GatewayOutcome =
@@ -41,7 +42,6 @@ export type GatewayTelemetryEvent = Readonly<{
 }>
 
 
-const IDENTIFIER_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u
 const COST_UNITS_PATTERN = /^\d+(?:\.\d{0,18})?$/u
 const MAX_COST_UNITS_LENGTH = 96
 const MAX_DURATION_MS = 86_400_000
@@ -96,4 +96,16 @@ export function recordGatewayTelemetry(
     ...(event.concurrencyLimited === undefined ? {} : { concurrencyLimited: event.concurrencyLimited }),
   }
   try{(sink??gatewayObservabilitySink).record('gateway.operation', durationMs, metadata)}catch{/* A reporting outage cannot alter Call behavior. */}
+  if (event.refusalCode !== undefined && IDENTIFIER_PATTERN.test(event.refusalCode)) {
+    recordRefusal({
+      surface: event.transport ?? 'http',
+      code: event.refusalCode,
+      ...(event.operation === undefined ? {} : { operation: event.operation }),
+      ...(event.stage === undefined ? {} : { stage: event.stage }),
+      ...(event.retryable === undefined ? {} : { retryable: event.retryable }),
+      outcome: event.outcome,
+      // Correlation ids are per request, so they never stand in for an actor.
+      actor: event.principalId,
+    })
+  }
 }

@@ -5,6 +5,8 @@ import { Button } from '@/components/arc/button/button'
 import { BillingHistory } from '@/components/ae/shared/arc-pro/billing-overview/billing-overview'
 import { formatUtcTimestamp } from '@/lib/ui/format-time'
 import { useMemo } from 'react'
+import { Badge } from '@/components/arc/badge/badge'
+import { RecordTime } from '@/components/ae/operator/RecordTime'
 import type { ColumnDef } from '@tanstack/react-table'
 import { MetricsSummary } from '@/components/ae/shared/arc-pro/metrics-dashboard/metrics-dashboard'
 import { AeSection } from '@/components/ae/layout/AeSection'
@@ -14,30 +16,34 @@ import './ActivitySummaryComposition.css'
 
 type Summary = Extract<UsageReconciliation, { kind: 'available' }>
 type Credential = Summary['credentials'][number]
-function amount(units: string, currency: 'AUD' | 'USDC' = 'AUD') {
+function figure(units: string, currency: 'AUD' | 'USDC' = 'AUD') {
   const negative = units.startsWith('-')
   const value = formatExactAmount({ currency, exponent: 6, units: negative ? units.slice(1) : units })
-  return value === undefined ? 'Unavailable' : `${negative ? '−' : ''}${currency} ${value}`
+  return value === undefined ? 'Unavailable' : `${negative ? '−' : ''}${value}`
+}
+function amount(units: string, currency: 'AUD' | 'USDC' = 'AUD') {
+  const value = figure(units, currency)
+  return value === 'Unavailable' ? value : `${currency} ${value}`
 }
 const bridgeLabels = { before_period: 'Calls created before this period', in_period: 'Calls created in this period', after_period: 'Calls created after this period', unattributed: 'Unattributed entries' } as const
 export function ActivityReconciliation({ result, retryPending, onRetry, returnScope, sourceFactsCapturedAt }: { result: UsageReconciliation; retryPending: boolean; onRetry: () => void; returnScope: ActivityReturnScope; sourceFactsCapturedAt?: number }) {
   const columns = useMemo<ColumnDef<AeRecordTableFeatures, Credential, unknown>[]>(() => [
-    { accessorKey: 'credentialRef', header: 'Credential', cell: ({ row }) => <span className="block min-w-48 max-w-full whitespace-normal break-all">{row.original.credentialRef}</span> },
-    { accessorKey: 'createdCallCountUnits', header: 'Calls created' },
-    { accessorKey: 'linkedCallCountUnits', header: 'Calls linked to period entries' },
-    { id: 'gross', header: 'Purchased charges', cell: ({ row }) => amount(row.original.totals.grossChargeUnits) },
-    { id: 'refund', header: 'Refunds', cell: ({ row }) => amount(row.original.totals.refundUnits) },
-    { id: 'net', header: 'Net purchased cost', cell: ({ row }) => amount(row.original.totals.netChargeUnits) },
-    { id: 'promo', header: 'Net promotional use', cell: ({ row }) => amount(row.original.totals.netPromotionalUseUnits) },
+    { accessorKey: 'credentialRef', header: 'Credential', meta: { truncate: true }, cell: ({ row }) => <span className="font-mono">{row.original.credentialRef}</span> },
+    { accessorKey: 'createdCallCountUnits', header: 'Calls created', meta: { numeric: true } },
+    { accessorKey: 'linkedCallCountUnits', header: 'Linked Calls', meta: { numeric: true } },
+    { id: 'gross', header: 'Charges (AUD)', meta: { numeric: true }, cell: ({ row }) => figure(row.original.totals.grossChargeUnits) },
+    { id: 'refund', header: 'Refunds (AUD)', meta: { numeric: true }, cell: ({ row }) => figure(row.original.totals.refundUnits) },
+    { id: 'net', header: 'Net cost (AUD)', meta: { numeric: true }, cell: ({ row }) => figure(row.original.totals.netChargeUnits) },
+    { id: 'promo', header: 'Promotional use (AUD)', meta: { numeric: true }, cell: ({ row }) => figure(row.original.totals.netPromotionalUseUnits) },
   ], [])
   const entryColumns = useMemo<ColumnDef<AeRecordTableFeatures, Summary['entries'][number], unknown>[]>(() => [
-    { accessorKey: 'transactionId', header: 'Ledger transaction' },
-    { accessorKey: 'kind', header: 'Financial entry' },
-    { id: 'amount', header: 'Amount', cell: ({row}) => row.original.units === null || row.original.currency === null ? 'Unknown' : amount(row.original.units, row.original.currency) },
-    { id: 'effective', header: 'Effective (UTC)', cell: ({row}) => formatUtcTimestamp(row.original.occurredAt) },
-    { id: 'recorded', header: 'Recorded (UTC)', cell: ({row}) => row.original.recordedAt === null ? 'Unknown' : formatUtcTimestamp(row.original.recordedAt) },
-    { id: 'call', header: 'Call evidence', cell: ({row}) => row.original.callRef === null ? 'Unattributed' : <Link to="/calls/$callRef" params={{callRef:row.original.callRef}} search={returnScope} aria-label={`View Call for ledger transaction ${row.original.transactionId}`}>View Call</Link> },
-    { id: 'status', header: 'Included in measured amounts', cell: ({row}) => row.original.kind === 'unsupported' ? 'No — unsupported entry' : row.original.reverted ? 'No — reverted original' : 'Yes' },
+    { accessorKey: 'transactionId', header: 'Ledger transaction', meta: { truncate: true }, cell: ({ row }) => <span className="font-mono">{row.original.transactionId}</span> },
+    { accessorKey: 'kind', header: 'Entry' },
+    { id: 'status', header: 'Measured', cell: ({row}) => row.original.kind === 'unsupported' ? <Badge tone="neutral">Excluded, unsupported</Badge> : row.original.reverted ? <Badge tone="neutral">Excluded, reverted</Badge> : <Badge tone="success">Included</Badge> },
+    { id: 'amount', header: 'Amount', meta: { numeric: true }, cell: ({row}) => row.original.units === null || row.original.currency === null ? 'Unknown' : amount(row.original.units, row.original.currency) },
+    { id: 'effective', header: 'Effective', cell: ({row}) => <RecordTime at={row.original.occurredAt} /> },
+    { id: 'recorded', header: 'Recorded', cell: ({row}) => <RecordTime at={row.original.recordedAt} /> },
+    { id: 'call', header: 'Call', enableSorting: false, cell: ({row}) => row.original.callRef === null ? <span className="text-muted-foreground">Unattributed</span> : <Link to="/calls/$callRef" params={{callRef:row.original.callRef}} search={returnScope} aria-label={`View Call for ledger transaction ${row.original.transactionId}`}>View Call</Link> },
   ], [returnScope])
   if (result.kind !== 'available') return <AeSection title="Financial reconciliation"><p className="text-sm text-muted-foreground">Financial reconciliation is unavailable. Choose a shorter period or retry the read.</p><Button type="button" variant="secondary" loading={retryPending} onClick={onRetry}>{retryPending ? 'Refreshing…' : 'Retry reconciliation'}</Button></AeSection>
   return <AeSection title="Financial reconciliation" description="Financial entries use ledger effective dates. Call counts and recorded obligations use Call creation dates. All amounts retain six decimal places.">
