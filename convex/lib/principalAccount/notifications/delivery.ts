@@ -67,7 +67,15 @@ export async function applyResendEventHandler(
 export const readNotificationContextArgs = { deliveryId: v.id('notificationDeliveries') }
 
 export const readNotificationContextResult = v.union(
-  v.object({ kind: v.literal('ready'), deliveryRef: v.string(), clerkUserId: v.string(), subject: v.string(), text: v.string(), unsubscribeUrl: v.optional(v.string()) }),
+  // Props are rebuilt at send time; sendDeliveryEmail picks the template by eventKind and renders it.
+  v.object({
+    kind: v.literal('ready'),
+    deliveryRef: v.string(),
+    clerkUserId: v.string(),
+    stream: v.string(),
+    // Every template prop is a flat string or number, so the validator stays exact.
+    email: v.object({ eventKind: v.string(), props: v.record(v.string(), v.union(v.string(), v.number())) }),
+  }),
   v.object({ kind: v.literal('skip'), code: v.string() }),
 )
 
@@ -131,13 +139,13 @@ export async function readNotificationContextHandler(
   const agent = await ctx.db.query('principals')
     .withIndex('by_principalRef', (query) => query.eq('principalRef', call.principalId)).unique()
   const agentName = (agent?.displayName ?? 'Your Agent').replace(/[\r\n]+/gu, ' ').trim() || 'Your Agent'
-  const minutes = Math.round(AUTHORITY_REQUEST_TTL_MS / 60_000)
+  const expiresMinutes = Math.round(AUTHORITY_REQUEST_TTL_MS / 60_000)
   return {
     kind: 'ready',
     deliveryRef: delivery.deliveryRef,
     clerkUserId,
-    subject: `${agentName} needs your approval`,
-    text: `Your Agent "${agentName}" is waiting for your approval to run a paid Tool call.\n\nReview and approve or decline: ${siteUrl}/agent-access\n\nThis request expires ${minutes} minutes after it was made. If you do nothing, no money moves.\n`,
+    stream: delivery.stream ?? 'transactional',
+    email: { eventKind: 'agent_approval_requested', props: { siteUrl, agentName, expiresMinutes } },
   }
 }
 

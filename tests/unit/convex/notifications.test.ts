@@ -734,10 +734,10 @@ describe('approval notification deliveries', () => {
 
       const ready = await readContext()
       if (ready.kind !== 'ready') throw new Error(`notification_context_not_ready:${ready.code}`)
-      expect(`${ready.subject} ${ready.text}`).toContain('Sam canonical principal')
-      expect(ready.text).toContain('https://aecon.example.test/agent-access')
-      expect(`${ready.subject} ${ready.text}`).not.toContain('approval-email-tool-title')
-      expect(`${ready.subject} ${ready.text}`).not.toContain('$')
+      expect(ready).toMatchObject({ stream: 'transactional', email: { eventKind: 'agent_approval_requested' } })
+      expect(ready.email.props).toMatchObject({ siteUrl: 'https://aecon.example.test', agentName: expect.stringContaining('Sam canonical principal') })
+      expect(JSON.stringify(ready.email)).not.toContain('approval-email-tool-title')
+      expect(JSON.stringify(ready.email)).not.toContain('$')
 
       await backend.run(async (ctx) => {
         const owner = await ctx.db.query('accountOwnerships')
@@ -920,8 +920,28 @@ describe('stalled step notification deliveries', () => {
 
     const context = await backend.query(internal.notifications.readNotificationContext, { deliveryId: delivery._id })
     const unsubscribeUrl = `https://convex.example.test/notifications/unsubscribe?t=${encodeURIComponent(await signedToken('lifecycle'))}`
-    expect(context).toMatchObject({ kind: 'ready', unsubscribeUrl })
-    expect(context.kind === 'ready' ? context.text : '').toContain(`Stop these emails: ${unsubscribeUrl}`)
+    expect(context).toMatchObject({
+      kind: 'ready',
+      stream: 'lifecycle',
+      email: { eventKind: 'stalled_not_funded', props: { siteUrl: 'https://ae.example.test', unsubscribeUrl } },
+    })
+  })
+
+  it('keeps a delivered webhook state when the send completion arrives later', async () => {
+    const backend = await createNotificationBackend()
+    await seedAuthority(backend)
+    const callRef = 'operation-invocation:v1:notification-rank'
+    await insertPendingApprovalCall(backend, callRef)
+    await enqueueApprovalNotice(backend, callRef)
+    const row = (await listDeliveryRows(backend)).find((candidate) => candidate.sourceEventRef === callRef)
+    if (row?.workId === undefined) throw new Error('notification_work_fixture_missing')
+    await backend.run((ctx) => ctx.db.patch(row._id, { state: 'delivered', vendorMessageId: 'em_webhook_first' }))
+
+    await backend.mutation(internal.notifications.completeDelivery, {
+      workId: row.workId as WorkId, context: { deliveryId: row._id },
+      result: { kind: 'success', returnValue: { outcome: 'sent', vendorMessageId: 'em_late_send' } },
+    })
+    await expect(backend.run((ctx) => ctx.db.get(row._id))).resolves.toMatchObject({ state: 'delivered', vendorMessageId: 'em_webhook_first' })
   })
 
   it('ignores the retired deliveryRef unsubscribe form', async () => {

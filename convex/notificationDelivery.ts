@@ -4,6 +4,7 @@ import { createClerkClient } from '@clerk/backend'
 import { v, type Infer } from 'convex/values'
 
 import { degradeBackend } from '../src/lib/observability/degrade-backend'
+import { renderEmail, type EmailInput } from '../src/emails/render'
 import { internal } from './_generated/api'
 import { internalAction } from './_generated/server'
 import { sendDeliveryEmailResult } from './lib/principalAccount/notifications/delivery'
@@ -13,10 +14,6 @@ import { buildDigest, operatorDate } from './operatorDigest'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 /** The operator reads the digest in Sydney, so the subject and idempotency key use that calendar day. */
-
-/** Digest of the props an email is built from. Send compares it across two reads, so a change between them stops the send. */
-const propsDigest = (props: Record<string, unknown>) =>
-  canonicalDigest({ ...props, unsubscribeUrl: props.unsubscribeUrl ?? null })
 
 export const sendDeliveryEmail = internalAction({
   args: { deliveryId: v.id('notificationDeliveries') },
@@ -45,7 +42,8 @@ export const sendDeliveryEmail = internalAction({
 
     const fresh = await ctx.runQuery(internal.notifications.readNotificationContext, { deliveryId })
     if (fresh.kind === 'skip') return { outcome: 'suppressed', code: fresh.code }
-    if (propsDigest(fresh) !== propsDigest(context)) return { outcome: 'suppressed', code: 'notification_context_changed' }
+    // Props digest: a change in what the email is built from between the two reads stops the send.
+    if (canonicalDigest(fresh.email) !== canonicalDigest(context.email)) return { outcome: 'suppressed', code: 'notification_context_changed' }
 
     // The Clerk address is the one Resend will receive, so bounce and complaint records are matched here.
     const suppressed = await ctx.runQuery(internal.notifications.readSendSuppression, {
@@ -54,15 +52,24 @@ export const sendDeliveryEmail = internalAction({
     })
     if (suppressed !== null) return { outcome: 'suppressed', code: suppressed }
 
+    const rendered = await renderEmail(context.email as EmailInput)
+    // Only alert and lifecycle props carry an unsubscribe target; required mail has none.
+    const unsubscribeUrl = (context.email.props as { unsubscribeUrl?: string }).unsubscribeUrl
     return await postResendEmail({
       apiKey: resendApiKey,
       from: fromEmail,
       to: primaryEmail.emailAddress,
-      subject: context.subject,
-      text: context.text,
+      subject: rendered.subject,
+      text: rendered.text,
+      html: rendered.html,
       idempotencyKey: context.deliveryRef,
-      ...(context.unsubscribeUrl === undefined ? {} : {
-        headers: { 'List-Unsubscribe': `<${context.unsubscribeUrl}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' },
+      tags: [
+        { name: 'stream', value: context.stream },
+        { name: 'event_kind', value: context.email.eventKind },
+        { name: 'env', value: process.env.AE_DEPLOYMENT_ENVIRONMENT?.trim() || 'unknown' },
+      ],
+      ...(unsubscribeUrl === undefined ? {} : {
+        headers: { 'List-Unsubscribe': `<${unsubscribeUrl}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' },
       }),
     })
   },

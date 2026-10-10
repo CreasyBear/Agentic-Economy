@@ -4,9 +4,13 @@ export type ResendEmailInput = Readonly<{
   to: string
   subject: string
   text: string
+  /** Rendered HTML part. Omitted for the plain-text operator digest. */
+  html?: string
   idempotencyKey: string
   /** Extra message headers, e.g. RFC 8058 List-Unsubscribe and List-Unsubscribe-Post. */
   headers?: Readonly<Record<string, string>>
+  /** Resend tags for filtering in the Resend dashboard: stream, event_kind and env. */
+  tags?: ReadonlyArray<Readonly<{ name: string; value: string }>>
 }>
 
 export type ResendEmailResult =
@@ -28,7 +32,9 @@ export async function postResendEmail(input: ResendEmailInput): Promise<ResendEm
       },
       body: JSON.stringify({
         from: input.from, to: [input.to], subject: input.subject, text: input.text,
+        ...(input.html === undefined ? {} : { html: input.html }),
         ...(input.headers === undefined ? {} : { headers: input.headers }),
+        ...(input.tags === undefined ? {} : { tags: input.tags }),
       }),
     })
   } catch {

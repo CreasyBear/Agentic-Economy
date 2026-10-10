@@ -9,7 +9,9 @@ import { usageAlertEvidenceSchema } from '@/modules/principal-account/public'
 import { assertAdmission } from '../../platform/rateLimit'
 import { resolveClerkUserIdForPrincipal } from '../workspace/directory'
 import { enqueueEmail } from './enqueue'
+import { unsubscribeUrlFor } from './unsubscribe'
 const exact=/^(?:0|[1-9]\d*)$/u
+const MONTH_NAMES=['January','February','March','April','May','June','July','August','September','October','November','December']
 const monthAt=(at:number)=>new Date(at).toISOString().slice(0,7)
 
 export async function activeUsagePolicy(ctx:Pick<QueryCtx,'db'>,accountRef:string){
@@ -84,10 +86,22 @@ export async function readUsageDeliveryContext(ctx:QueryCtx,delivery:Doc<'notifi
   const parsed=usageAlertEvidenceSchema.safeParse(evidence)
   if(!parsed.success||parsed.data.kind!==delivery.eventKind)return {kind:'skip' as const,code:'usage_alert_evidence_invalid'}
   const site=process.env.AE_SITE_URL?.trim();if(!site)return {kind:'skip' as const,code:'site_url_missing'}
-  let url:URL
-  try{url=new URL('/owner/credit',site)}catch{return {kind:'skip' as const,code:'site_url_invalid'}}
-  if(!['https:','http:'].includes(url.protocol))return {kind:'skip' as const,code:'site_url_invalid'}
+  let siteUrl:string
+  try{
+    const url=new URL(site)
+    if(!['https:','http:'].includes(url.protocol))return {kind:'skip' as const,code:'site_url_invalid'}
+    siteUrl=url.origin
+  }catch{return {kind:'skip' as const,code:'site_url_invalid'}}
   const clerkUserId=await resolveClerkUserIdForPrincipal(ctx.db,delivery.recipientPrincipalRef)
   if(clerkUserId===null)return {kind:'skip' as const,code:'no_clerk_identity'}
-  return {kind:'ready' as const,deliveryRef:delivery.deliveryRef,clerkUserId,subject:parsed.data.kind==='invoice_ready'?'Monthly usage statement ready':'Account usage alert',text:`${parsed.data.text}\n\nObserved: ${new Date(parsed.data.observedAt).toISOString()}\nReview your Account: ${url.toString()}\n\nAn alert does not create charges or change authority. Delivery is limited to one alert of each kind per UTC month and policy revision; issued statements have their own notice.\n`}
+  const stream=delivery.stream??'transactional'
+  const data=parsed.data
+  if(data.kind==='invoice_ready'){
+    // Statements are required mail: no unsubscribe target.
+    const periodLabel=MONTH_NAMES[Number(data.month.slice(5,7))-1]??data.month
+    return {kind:'ready' as const,deliveryRef:delivery.deliveryRef,clerkUserId,stream,email:{eventKind:data.kind,props:{siteUrl,periodLabel}}}
+  }
+  const unsubscribeUrl=await unsubscribeUrlFor({principalRef:delivery.recipientPrincipalRef,accountRef:delivery.accountRef,stream:'alert'})
+  if(unsubscribeUrl===null)return {kind:'skip' as const,code:'unsubscribe_url_missing'}
+  return {kind:'ready' as const,deliveryRef:delivery.deliveryRef,clerkUserId,stream,email:{eventKind:data.kind,props:{siteUrl,body:data.text,observedAt:new Date(data.observedAt).toISOString(),unsubscribeUrl}}}
 }

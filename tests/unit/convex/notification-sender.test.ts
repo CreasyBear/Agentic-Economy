@@ -131,8 +131,16 @@ describe('sendDeliveryEmail', () => {
     expect(JSON.parse(request.body)).toMatchObject({
       from: 'no-reply@example.test',
       to: ['owner@example.test'],
+      subject: 'Sam canonical principal needs your approval',
+      html: expect.stringContaining('Review request'),
       text: expect.stringContaining('/agent-access'),
+      tags: expect.arrayContaining([
+        { name: 'stream', value: 'transactional' },
+        { name: 'event_kind', value: 'agent_approval_requested' },
+      ]),
     })
+    // Required mail carries no unsubscribe target.
+    expect(JSON.parse(request.body)).not.toHaveProperty('headers')
   })
 
   it('suppresses a send to an address that hard-bounced before contacting Resend', async () => {
@@ -342,6 +350,17 @@ describe('sendOperatorDigest', () => {
 
 describe('postResendEmail', () => {
   afterEach(() => vi.unstubAllGlobals())
+
+  it('passes the HTML body and tags through to Resend', async () => {
+    const sendEmail = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response('{}', { status: 200 }))
+    vi.stubGlobal('fetch', sendEmail)
+    await postResendEmail({
+      apiKey: 'k', from: 'a@example.test', to: 'b@example.test', subject: 's', text: 't', html: '<p>h</p>', idempotencyKey: 'i',
+      tags: [{ name: 'stream', value: 'alert' }],
+    })
+    const [, request] = sendEmail.mock.calls[0] ?? []
+    expect(JSON.parse(String(request?.body))).toMatchObject({ html: '<p>h</p>', tags: [{ name: 'stream', value: 'alert' }] })
+  })
 
   it('passes List-Unsubscribe headers through to Resend', async () => {
     const sendEmail = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response('{}', { status: 200 }))
