@@ -91,7 +91,8 @@ describe('payment readiness read-only refresh', () => {
     expect(Object.keys(snapshot.checks).sort()).toEqual([
       'base_rpc', 'cdp_custody', 'commercial_policy', 'formance', 'reference_rate', 'sanctions', 'treasury', 'web_configuration',
     ])
-    expect(snapshot).toMatchObject({ environment: 'sandbox', startedAt: NOW, completedAt: NOW, expiresAt: NOW + 20_000,
+    // reference_rate never bounds expiry (paymentReadinessExpiresAt), so the earliest gating check sets it.
+    expect(snapshot).toMatchObject({ environment: 'sandbox', startedAt: NOW, completedAt: NOW, expiresAt: NOW + 30_000,
       configurationDigest: backendPaymentReadinessDigest(process.env), checks: {
         reference_rate: f.sources.reference_rate, commercial_policy: f.sources.commercial_policy, treasury: f.sources.treasury,
         base_rpc: { kind: 'passed', validUntil: NOW + 600_000 },
@@ -102,7 +103,7 @@ describe('payment readiness read-only refresh', () => {
     expect(validPaymentReadinessSnapshot(snapshot, NOW)).toBe(true)
     expect(f.runQuery).toHaveBeenCalledTimes(1)
     expect(getFunctionName(f.runQuery.mock.calls[0]![0])).toBe('moneyReadiness:readSourceChecks')
-    expect(f.runQuery.mock.calls[0]?.[1]).toEqual({ environment: 'sandbox', now: NOW })
+    expect(f.runQuery.mock.calls[0]?.[1]).toEqual({ environment: 'sandbox' })
     expect(f.runMutation).toHaveBeenCalledTimes(1)
     expect(getFunctionName(f.runMutation.mock.calls[0]![0])).toBe('moneyReadiness:publish')
     expect(JSON.stringify(snapshot)).not.toContain('private-')
