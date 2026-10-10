@@ -5,6 +5,7 @@ import { internal } from '../../../_generated/api'
 import { notificationWorkpool } from '../../../notificationWorkpool'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { usageReportSummarySchema } from '@/lib/export/usage-report-summary'
+import { formatCurrencyAmount } from '@/modules/money/public'
 import { usageAlertEvidenceSchema } from '@/modules/principal-account/public'
 import { assertAdmission } from '../../platform/rateLimit'
 import { resolveClerkUserIdForPrincipal } from '../workspace/directory'
@@ -58,8 +59,9 @@ export const usageMoneyEvidenceArgs={accountRef:v.string(),observedAt:v.number()
 export async function enqueueMoneyUsageAlertsHandler(ctx:MutationCtx,args:{accountRef:string;observedAt:number;availableCreditUnits?:string;grossSpendUnits?:string;month:string}):Promise<null>{
   const context=await activeUsagePolicy(ctx,args.accountRef);if(context===null)return null
   const now=Date.now();if(args.month!==monthAt(now)||args.observedAt>now||now-args.observedAt>60000)return null
-  const {prefs,policy}=context
-  if(args.availableCreditUnits!==undefined&&exact.test(args.availableCreditUnits)&&BigInt(args.availableCreditUnits)<=BigInt(prefs.lowCreditThresholdCents)*10000n)await enqueue(ctx,args.accountRef,{format:'ae.usage-alert:v1',kind:'low_credit_balance',month:args.month,sourceDigest:canonicalDigest({format:'ae.native-available-credit:v1',...args}),observedAt:args.observedAt,text:`Available credit is at or below your saved A$${prefs.lowCreditThresholdCents/100} threshold. Purchased and eligible promotional credit are included; the native balance may change after this observation.`},`${args.month}:low-credit`)
+  const {prefs,policy}=context,thresholdCents=prefs.lowCreditThresholdCents
+  if(!Number.isSafeInteger(thresholdCents)||thresholdCents<0)return null
+  if(args.availableCreditUnits!==undefined&&exact.test(args.availableCreditUnits)&&BigInt(args.availableCreditUnits)<=BigInt(thresholdCents)*10000n)await enqueue(ctx,args.accountRef,{format:'ae.usage-alert:v1',kind:'low_credit_balance',month:args.month,sourceDigest:canonicalDigest({format:'ae.native-available-credit:v1',...args}),observedAt:args.observedAt,text:`Available credit is at or below your saved ${formatCurrencyAmount({currency:'AUD',units:String(thresholdCents*10000),exponent:6})} threshold. Purchased and eligible promotional credit are included; the native balance may change after this observation.`},`${args.month}:low-credit`)
   const budget=await ctx.db.query('moneyMonthlySpendBudgets').withIndex('by_accountRef',q=>q.eq('accountRef',args.accountRef)).unique()
   if(budget?.enabled===true&&exact.test(budget.ceilingUnits)&&BigInt(budget.ceilingUnits)>0n&&args.grossSpendUnits!==undefined&&exact.test(args.grossSpendUnits)){
     const gross=BigInt(args.grossSpendUnits),ceiling=BigInt(budget.ceilingUnits),exceeded=gross>=ceiling

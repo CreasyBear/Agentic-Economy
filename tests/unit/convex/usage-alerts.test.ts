@@ -15,6 +15,7 @@ describe('owner policy-bound durable usage alerts',()=>{
     await f.configure();await f.configure();await f.backend.mutation(internal.notifications.enqueueMoneyUsageAlerts,args);await f.backend.mutation(internal.notifications.enqueueMoneyUsageAlerts,args)
     const deliveries=await rows(f);expect(deliveries).toHaveLength(1);expect(deliveries[0]).toMatchObject({state:'pending',eventKind:'low_credit_balance',preferenceRevision:1,workId:expect.any(String)})
     expect(JSON.stringify(deliveries)).not.toContain('emailAddress')
+    expect(JSON.stringify(deliveries)).toContain('A$25.00 threshold')
     const audit=await f.backend.run(ctx=>ctx.db.query('auditEvents').withIndex('by_eventType_and_createdAt',q=>q.eq('eventType','billing.usage_alert_policy_configured')).collect());expect(audit).toHaveLength(1)
     await f.configure(false,1);expect(await f.backend.query(internal.notifications.readNotificationContext,{deliveryId:deliveries[0]!._id})).toMatchObject({kind:'skip',code:'usage_alert_consent_changed'})
   })
