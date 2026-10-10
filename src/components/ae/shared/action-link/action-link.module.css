@@ -37,9 +37,9 @@ button.arcAction:focus-visible {
 }
 
 .primary {
-  color: var(--background);
-  background: var(--foreground);
-  border-color: var(--foreground);
+  color: var(--accent-foreground);
+  background: var(--accent);
+  border-color: var(--accent);
 }
 
 .secondary {

@@ -73,16 +73,21 @@ describe('AePublicPage', () => {
     const footer = screen.getByRole('contentinfo')
     expect(screen.getAllByRole('contentinfo')).toHaveLength(1)
     const navigation = within(footer).getByRole('navigation', { name: 'Footer' })
-    expect(['Resources', 'Help', 'Legal', 'Machines'].map(name =>
+    expect(['Product', 'Company', 'For agents'].map(name =>
       within(navigation).getByRole('heading', { level: 2, name }).textContent,
-    )).toEqual(['Resources', 'Help', 'Legal', 'Machines'])
+    )).toEqual(['Product', 'Company', 'For agents'])
+    const legal = within(within(footer).getByRole('list', { name: 'Legal' }))
     for (const [label, href] of [
-      ['API reference', '/developers/api'],
-      ['Support', '/support'],
-      ['Status', '/status'],
       ['Privacy', '/privacy'],
       ['Terms', '/terms'],
       ['Remove a listing', '/privacy/remove-business'],
+    ] as const) {
+      expect(legal.getByRole('link', { name: label }).getAttribute('href')).toBe(href)
+    }
+    for (const [label, href] of [
+      ['Docs', '/developers/api'],
+      ['Support', '/support'],
+      ['Status', '/status'],
       ['llms.txt', '/llms.txt'],
       ['SKILL.md', '/SKILL.md'],
       ['.well-known/ucp', '/.well-known/ucp'],
@@ -125,12 +130,14 @@ describe('AePublicPage', () => {
     expect(footer.queryByText('All systems normal')).toBeNull()
   })
 
-  it('omits only the optional closer while keeping the footer navigation', () => {
+  it('renders the one site footer with the header destinations, and none on minimal pages', () => {
     const view = render(<AePublicPage><h1>About</h1></AePublicPage>)
-    expect(screen.getByRole('region', { name: 'Take control of your Agentic future' })).toBeTruthy()
-    view.rerender(<AePublicPage hideFooterCloser><h1>About</h1></AePublicPage>)
-    expect(screen.queryByRole('region', { name: 'Take control of your Agentic future' })).toBeNull()
-    expect(within(screen.getByRole('contentinfo')).getByRole('navigation', { name: 'Footer' })).toBeTruthy()
+    const footer = within(screen.getByRole('contentinfo'))
+    expect(footer.getByRole('link', { name: 'Tools' }).getAttribute('href')).toBe('/market')
+    expect(footer.getByRole('link', { name: 'Docs' }).getAttribute('href')).toBe('/developers/api')
+    expect(footer.getByRole('link', { name: 'For providers' }).getAttribute('href')).toBe('/for-providers')
+    view.rerender(<AePublicPage footer="none"><h1>Sign in</h1></AePublicPage>)
+    expect(screen.queryByRole('contentinfo')).toBeNull()
   })
 
   it('promotes a workspace to the outer shell instead of nesting it in a document page', () => {

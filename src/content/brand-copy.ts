@@ -16,15 +16,6 @@ const CORE_SENTENCE =
 export const HOME = {
   metaTitle: 'The marketplace built for agents | Agentic Economy',
   metaDescription: CORE_SENTENCE,
-  heroHeading: 'The marketplace built for agents.',
-  heroSubhead:
-    'Search first. Inspect the price and access terms. Connect only when the selected call needs it.',
-  catalogHeading: 'Current Tools',
-  catalogBody: 'Price and readiness are shown before you choose.',
-  catalogUnavailable: 'The Tool catalog is temporarily unavailable',
-  catalogUnavailableBody: 'Try again shortly. Existing Tool links continue to work.',
-  catalogEmpty: 'No Tools are published yet',
-  catalogEmptyBody: 'Publish the first bounded job, or check again after Providers finish setup.',
 } as const
 
 export type AgentPasteInstruction = {
@@ -157,4 +148,49 @@ export const ABOUT = {
 export const FOOTER = {
   tagline: 'The marketplace built for agents.',
   copyright: (year: number) => `© ${year} Agentic Economy`,
+} as const
+
+/**
+ * Public surface (landing, browse, tool pages, site header and footer).
+ * Lead with what x402 opens up: breadth and things you can now do.
+ * Counts are never written here; pass live numbers in from data or omit them.
+ */
+export const BRAND_NAME = 'aecon'
+
+export const PUBLIC_SURFACE = {
+  /** Swap the headline here only. */
+  headline: 'Every paid API, one call at a time.',
+  subhead:
+    'Thousands of APIs, data feeds and services for AI agents, each paid per call. No subscription, and no account with each provider.',
+  searchLabel: 'Search tools',
+  /** `count` is a live, already formatted number from the registry (for example "15,214"). */
+  searchPlaceholder: (count?: string) => (count ? `Search ${count} tools` : 'Search tools'),
+  browseAll: 'Browse all tools',
+  pricePerCall: (price: string) => `${price} per call`,
+  sample: 'Sample',
+  signInToRun: 'Sign in to run it',
+} as const
+
+/** Public site header. Destinations live with the header; labels live here. */
+export const SITE_NAV = {
+  label: 'Main',
+  tools: 'Tools',
+  docs: 'Docs',
+  providers: 'For providers',
+  signIn: 'Sign in',
+} as const
+
+/** Public site footer. */
+export const SITE_FOOTER = {
+  tagline: PUBLIC_SURFACE.headline,
+  productTitle: 'Product',
+  companyTitle: 'Company',
+  agentsTitle: 'For agents',
+  about: 'About',
+  trust: 'Trust centre',
+  status: 'Status',
+  support: 'Support',
+  privacy: 'Privacy',
+  terms: 'Terms',
+  removeListing: 'Remove a listing',
 } as const

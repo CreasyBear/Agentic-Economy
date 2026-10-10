@@ -12,13 +12,12 @@ export function MarketSavedNeedAction({ input, signInSearch }: Props) {
   const owner = isLoaded && isSignedIn && userId ? userId : undefined
   const need = useMarketSavedNeed(input, owner)
   if (!isLoaded) return <p role="status">Checking account…</p>
-  if (!isSignedIn) return <Link to="/sign-in/$" params={{ _splat: '' }} search={signInSearch} className={actionLinkClassName('secondary', 'md')}>Sign in to save this need</Link>
+  if (!isSignedIn) return <Link to="/sign-in/$" params={{ _splat: '' }} search={signInSearch} className={actionLinkClassName('secondary', 'md')}>Sign in to request a tool</Link>
   const busy = need.phase !== 'ready'
   return <section aria-label="Saved need" className="flex flex-col gap-3">
-    <p className="text-sm">Save this exact need and its search filters. Matching runs for 30 days; saving does not buy a Tool.</p>
-    {need.requestRef === undefined ? null : <p className="text-sm">Request reference: <code className="break-all">{need.requestRef}</code></p>}
+    <p className="text-sm">We’ll look for a tool for this for 30 days. Saving doesn’t charge you.</p>
     {need.record === undefined ? null : <>
-      <p className="text-sm">{need.record.kind === 'matched' ? `${need.record.matchedCount} matching Tools` : 'Waiting for matching supply'}</p>
+      <p className="text-sm">{need.record.kind === 'matched' ? `${need.record.matchedCount} matching tools` : 'No match yet'}</p>
       {need.record.kind === 'matched' ? <ul>{need.record.tools.map(tool => <li key={tool.toolRef}><Link to="/tools/$toolRef" params={{ toolRef: tool.toolRef }} state={MARKET_LINK_STATE}>{tool.title}</Link></li>)}</ul> : null}
     </>}
     <div className="flex flex-wrap items-center gap-3">

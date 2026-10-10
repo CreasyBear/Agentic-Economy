@@ -1,0 +1,66 @@
+/* Layout only. Every surface inside is a stock Arc block or component; this file places them. */
+
+.page { background: var(--background); color: var(--foreground); }
+
+/* The hero hands straight on to the first row, so its prices sit above the fold on a laptop. */
+.hero > :first-child { padding-bottom: var(--space-8); }
+
+/* Hero search: the /market pill on the hero's centred axis, the /market chip row beneath, wider than the pill. */
+.search { display: grid; width: min(100%, 640px); grid-template-columns: minmax(0, 1fr); gap: var(--space-5); margin: var(--space-8) auto 0; text-align: left; }
+.search > form { max-width: none; }
+.search > nav { width: min(100vw - 2 * var(--space-8), 1120px); justify-self: center; }
+
+/* The popular grid and category rows share the blocks' 1120px measure and 32px gutter. */
+.rows { display: grid; gap: var(--space-16); max-width: 1120px; margin: 0 auto; padding: 0 var(--space-8) var(--space-8); }
+.rows + .rows { padding-top: var(--space-8); }
+.row { display: grid; gap: var(--space-5); }
+.rowHead { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
+.rowTitle { margin: 0; font-family: var(--font-display); font-size: var(--text-2xl); font-weight: 500; letter-spacing: var(--tracking-display); line-height: var(--leading-display); }
+/* "Show all" carries the brand colour the way Airbnb's links do, with a full-size touch target. */
+.rowLink { display: inline-flex; flex: none; min-height: 44px; align-items: center; border-radius: var(--radius-control); padding-inline: var(--space-2); color: var(--accent); font-size: var(--text-sm); font-weight: 500; text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent); text-underline-offset: 4px; transition: text-decoration-color var(--duration-fast) var(--ease-standard); }
+@media (hover: hover) and (pointer: fine) { .rowLink:hover { text-decoration-color: var(--accent); } }
+
+/* Desktop: four across, the popular grid in two rows. Narrow screens: a swipeable row, the next card peeking, like Airbnb on a phone. */
+.rail, .grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-4); margin: 0; padding: 0; list-style: none; }
+.rail > li, .grid > li { display: grid; min-width: 0; }
+.skeletonTitle { width: min(100%, 240px); min-height: 44px; }
+.skeletonCard { min-height: 196px; border: 1px solid var(--border); border-radius: var(--radius-panel); padding: var(--space-5); background: var(--surface); }
+
+/* Connect your client: Vercel and Clerk quickstart tabs, on the same measure as the rows, titled at the blocks' section scale. */
+.connect { display: grid; gap: var(--space-6); max-width: 1120px; margin: 0 auto; padding: var(--space-16) var(--space-8); container-type: inline-size; }
+.connectTitle { margin: 0; font-family: var(--font-display); font-size: clamp(1.75rem, 1rem + 3cqi, var(--text-4xl)); font-weight: 500; letter-spacing: var(--tracking-display); line-height: var(--leading-display); text-wrap: balance; }
+.connectHead { display: grid; gap: var(--space-2); }
+.connectText { max-width: 560px; margin: 0; color: var(--text-secondary); font-size: var(--text-base); line-height: var(--leading-body); }
+
+/* One line, centred while it fits; on a narrow laptop it scrolls sideways instead of clipping its first chip. */
+@media (max-width: 960px) {
+  .rail, .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .rows { gap: var(--space-12); padding-inline: var(--space-4); }
+  .rail, .grid {
+    grid-auto-columns: 82%; grid-auto-flow: column; grid-template-columns: none;
+    margin-inline: calc(-1 * var(--space-4)); padding: 2px var(--space-4) var(--space-2);
+    overflow-x: auto; overscroll-behavior-x: contain; scroll-padding-inline: var(--space-4); scroll-snap-type: x mandatory; scrollbar-width: none;
+  }
+  .rail::-webkit-scrollbar, .grid::-webkit-scrollbar { display: none; }
+  .rail > li, .grid > li { scroll-snap-align: start; }
+  .rowTitle { font-size: var(--text-xl); }
+  .search { margin-top: var(--space-6); }
+  .search > nav { width: auto; justify-self: stretch; }
+  .connect { padding: var(--space-12) var(--space-4); }
+}
+
+/* Task visual: the provider's own sample response, framed like a response pane. */
+.sample { margin: 0; display: grid; width: 100%; height: 100%; min-width: 0; contain: inline-size; grid-template-rows: auto 1fr; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface); text-align: left; }
+.sampleHead { margin: 0; border-bottom: 1px solid var(--border-subtle); padding: var(--space-2) var(--space-3); color: var(--text-muted); font-size: var(--text-xs); }
+.sampleBody { min-width: 0; overflow: hidden; }
+.request { margin: 0; overflow: hidden; padding: var(--space-2) var(--space-3); color: var(--text-secondary); font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: var(--text-xs); text-overflow: ellipsis; white-space: nowrap; }
+.code { margin: 0; overflow: hidden; padding: var(--space-2) var(--space-3) var(--space-3); color: var(--foreground); font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: var(--text-xs); line-height: 1.55; white-space: pre; }
+
+.empty { max-width: 1120px; margin: 0 auto; padding: var(--space-8); }
+
+@media (prefers-reduced-motion: reduce) {
+  .rowLink { transition: none; }
+  .rail, .grid { scroll-behavior: auto; }
+}

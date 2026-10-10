@@ -168,7 +168,7 @@ describe('AeAppShell', () => {
     expect(screen.getByTestId('skip-to-content').getAttribute('href')).toBe('#main-content')
 
     const nav = screen.getByRole('navigation', { name: 'Primary' })
-    expect(['Market', 'For agents', 'For providers']).toEqual(
+    expect(['Tools', 'Docs', 'For providers']).toEqual(
       Array.from(nav.querySelectorAll('a')).map((link) => link.textContent),
     )
     expect(screen.getByRole('link', { name: 'Sign in' }).className).toMatch(/md:inline-flex/)
@@ -186,7 +186,7 @@ describe('AeAppShell', () => {
     expect(slot).not.toBeNull()
     expect(brand.compareDocumentPosition(slot!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(slot!.parentElement?.className ?? '').not.toMatch(/ms-auto/)
-    expect(slot!.compareDocumentPosition(screen.getByRole('button', { name: 'Find Tools' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(slot!.compareDocumentPosition(screen.getByRole('button', { name: 'Find tools' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('keeps chat controls connected and the draft focused as authentication replaces the header slot', () => {
@@ -225,7 +225,7 @@ describe('AeAppShell', () => {
     expect(screen.queryByRole('link', { name: 'Agentic Economy home' })).toBeNull()
     const nav = within(drawer).getByRole('navigation', { name: 'Primary' })
     expect(within(nav).getAllByRole('link').map(link => [link.textContent, link.getAttribute('href')])).toEqual([
-      ['Market', '/market'], ['For agents', '/for-agents'], ['For providers', '/for-providers'],
+      ['Tools', '/market'], ['Docs', '/developers/api'], ['For providers', '/for-providers'],
     ])
     expect(within(drawer).getByRole('link', { name: 'Sign in' }).getAttribute('href')).toBe('/sign-in')
     const close = within(drawer).getByRole('button', { name: 'Close public menu' })

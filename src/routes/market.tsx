@@ -1,8 +1,11 @@
 import { createFileRoute, type ErrorComponentProps } from "@tanstack/react-router";
-import { AePageSkeleton, AePageState } from "@/components/ae/layout/AePageState";
+import { AePageState } from "@/components/ae/layout/AePageState";
+import { readLandingServer, type LandingRow } from "@/components/ae/home/landing.functions";
 import { AeMarketPage } from "@/components/ae/market/AeMarketPage";
 import { Button } from "@/components/arc/button/button";
-import { loadMarketPageRouteData, marketDocumentTitle, marketLoaderDeps, validateMarketSearch, type MarketCanonicalSearchPage } from '@/modules/market/market.functions';
+import { degrade } from "@/lib/observability/degrade";
+import { loadMarketPageRouteData, marketDocumentTitle, marketLoaderDeps, validateMarketSearch } from '@/modules/market/market.functions';
+import { marketShowsLandingRows } from '@/modules/market/market-route-data';
 import { buildPublicPageHead, buildSiteJsonLd } from "@/modules/seo/public";
 
 export { parseMarketCompareRefs, validateMarketSearch } from '@/modules/market/market.functions'
@@ -11,7 +14,7 @@ export type { MarketSearch } from '@/modules/market/market.functions'
 export const Route = createFileRoute("/market")({
   staticData: {
     nav: {
-      label: 'Market',
+      label: 'Tools',
       search: {},
       header: { order: 0, audience: 'always' },
       footer: { column: 'Market', order: 0 },
@@ -19,26 +22,28 @@ export const Route = createFileRoute("/market")({
   },
   validateSearch: validateMarketSearch,
   loaderDeps: ({ search }) => marketLoaderDeps(search),
-  beforeLoad: ({ matches, routeId }): { previousCanonicalSearch: MarketCanonicalSearchPage | undefined } => ({
-    previousCanonicalSearch: (matches.find(match => match.routeId === routeId)?.loaderData as Readonly<{ canonicalSearch?: MarketCanonicalSearchPage }> | undefined)?.canonicalSearch,
-  }),
-  loader: ({ deps, abortController, context }) => loadMarketPageRouteData(deps, { signal: abortController?.signal, previousCanonicalSearch: context?.previousCanonicalSearch }),
-  // Search can send query/candidate text to the disclosed recipient. Activate first.
+  // The keyword index is awaited; best-match ranking and the default browse's titled rows are
+  // deferred promises, so the grid never waits for them. The rows reuse the landing's cached read.
+  loader: async ({ deps, abortController }) => {
+    const landingRows = marketShowsLandingRows(deps)
+      ? readLandingServer().then(landing => landing.rows, cause => degrade<readonly LandingRow[]>(cause, [], { site: 'marketLandingRows', reason: 'source_unavailable' }))
+      : undefined;
+    const data = await loadMarketPageRouteData(deps, { signal: abortController?.signal });
+    return { ...data, landingRows };
+  },
+  // Ranking sends the query to the disclosed recipient. Activate first.
   preload: false,
   staleTime: 30_000,
   preloadStaleTime: 30_000,
-  // Keep the marketplace frame and tab controls mounted through navigation.
-  // AeMarketPage shows a requested tab's local loading state until its genuine
-  // catalogue commits; filter reloads retain their current rows.
+  // Keep the search bar and current rows mounted while the next view loads.
   pendingMs: Infinity,
-  pendingComponent: MarketPending,
   errorComponent: MarketError,
   head: ({ loaderData, match }) =>
     buildPublicPageHead({
       path: "/market",
       title: marketDocumentTitle(match.search.view),
       description:
-        "Explore agent capabilities, compare published prices and adoption, and find Tools for your next task.",
+        "Browse thousands of paid APIs, data feeds and services. Compare price per call and use any of them with no subscription.",
       ...(loaderData?.canonicalBaseUrl === undefined ? {} : {
         canonicalBaseUrl: loaderData.canonicalBaseUrl,
         jsonLd: buildSiteJsonLd(loaderData.canonicalBaseUrl),
@@ -47,18 +52,14 @@ export const Route = createFileRoute("/market")({
   component: MarketRoute,
 });
 
-function MarketPending() {
-  return <AePageSkeleton title="Updating the market view…" description="Loading current catalog facts…" shape="market" />;
-}
-
 function MarketError({ reset, error }: ErrorComponentProps) {
   const invalidSearch = typeof error === 'object' && error !== null && 'name' in error
     && (error.name === 'SearchParamError' || error.name === 'ZodError');
   return (
     <AePageState
       tone="danger"
-      title="The market view didn’t load"
-      description={invalidSearch ? "A directory search or filter is invalid. Check the address and try again. No broader search was run." : "Try again to fetch the current catalog and comparison. No Tool was called."}
+      title="Tools didn’t load"
+      description={invalidSearch ? "A search or filter in the address isn’t valid. Check it and try again." : "We couldn’t reach the tool index. Try again. Nothing was charged."}
       action={
         <Button type="button" className="min-h-touch" onClick={reset}>
           Try again

@@ -1,10 +1,8 @@
 import type { ReactNode } from 'react'
 
-import { AeAlert as Alert } from '@/components/ae/shared/alert/AeAlert'
 import { Button } from '@/components/arc/button/button'
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { AeSection } from '@/components/ae/layout/AeSection'
-import { AlphaLearningNotice } from '@/components/ae/shared/AlphaLearningNotice'
 import {
   Accordion,
   AccordionContent,
@@ -28,38 +26,6 @@ import { formatPaymentNetwork } from '@/modules/market/tool-view-model'
 
 import type { ToolInspectorModel } from './tool-inspector-model'
 import { toolLabel } from './tool-inspector-model'
-
-/** Place input release facts before any chat, connection, or Quote entry on public detail. */
-export function AeToolInputDisclosure({ tool }: Readonly<{ tool: PublicToolDescriptor }>) {
-  return (
-    <section aria-label="Input and recipient before Quote" className="grid min-w-0 gap-related">
-      <Alert tone="info" title="Your input and its recipient" role="presentation">
-        <div className="grid min-w-0 gap-related">
-          <p className="text-sm">Provider: <strong>{tool.business.name}</strong>. Your exact input is used to request a fresh Quote; a Call follows only after approval.</p>
-          {tool.dataUse.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No input transfer classes are declared for this Tool. Inspect its input schema before requesting a Quote.</p>
-          ) : (
-            <ul className="grid gap-intra text-sm">
-              {tool.dataUse.map(effect => (
-                <li key={`${effect.effectId}:${effect.inputPointer}:${effect.phase}`} className="break-words">
-                  <code>{effect.inputPointer}</code> · {toolLabel(effect.classification)} input · {effect.purposes.join(', ')} ·{' '}
-                  {effect.phase === 'preparation' ? 'preparation, before execution' : 'execution, after Quote approval'} ·{' '}
-                  {effect.recipient === 'selected_binding'
-                    ? `${tool.business.name} (selected Provider)`
-                    : effect.recipient === 'candidate_binding'
-                      ? 'candidate Provider binding'
-                      : 'recipient identity not published; do not send this input'}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </Alert>
-      <p className="text-xs text-muted-foreground">Input JSON Schema and exact data-use pointers are under Technical.</p>
-      <AlphaLearningNotice />
-    </section>
-  )
-}
 
 export function AeToolContractSections({
   tool,

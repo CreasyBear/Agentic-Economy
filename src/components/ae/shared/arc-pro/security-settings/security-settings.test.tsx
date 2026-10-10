@@ -64,7 +64,7 @@ describe('Arc security settings live composition', () => {
     renderAccountRoute()
 
     const security = screen.getByRole('region', { name: 'Security' })
-    expect(within(security).getAllByRole('heading', { level: 2 })).toHaveLength(1)
+    expect(within(security).getAllByRole('heading', { level: 1 })).toHaveLength(1)
     expect(within(security).getByRole('region', { name: 'Live Clerk content' })).toBeInTheDocument()
     expect(screen.getAllByRole('button').map(button => button.textContent)).toEqual(['Clerk security control'])
     expect(routeState.profileProps).toMatchObject({ routing: 'path', path: '/owner/settings/account' })
@@ -79,23 +79,15 @@ describe('Arc security settings live composition', () => {
         card: { boxShadow: 'none', background: 'transparent' },
       },
     })
-    expect(screen.getByRole('link', { name: 'Security' })).toHaveAttribute('aria-current', 'page')
-    expect(screen.getByRole('link', { name: 'Profile' })).not.toHaveAttribute('aria-current')
     expect(document.body.textContent).not.toMatch(/Fieldnote|246810|MacBook Pro|backup codes unused|Password updated/u)
   })
 
-  it('keeps Profile under the shared settings heading and both native page destinations', () => {
+  it('keeps Profile under the shared settings heading on the native profile page', () => {
     routeState.pathname = '/owner/settings/account'
     renderAccountRoute()
 
-    expect(screen.getByRole('heading', { level: 2, name: 'Profile' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'Profile' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Security' })).toBeNull()
-    const navigation = screen.getByRole('navigation', { name: 'Account pages' })
-    expect(within(navigation).getByRole('link', { name: 'Profile' }))
-      .toHaveAttribute('href', '/owner/settings/account')
-    expect(within(navigation).getByRole('link', { name: 'Security' }))
-      .toHaveAttribute('href', '/owner/settings/account/security')
-    expect(within(navigation).getByRole('link', { name: 'Profile' })).toHaveAttribute('aria-current', 'page')
     expect(routeState.profileProps).toMatchObject({ routing: 'path', path: '/owner/settings/account' })
   })
 

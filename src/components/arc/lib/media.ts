@@ -1,8 +1,3 @@
-/**
- * Shared demo media. Files live in `public/media/`, credits in `public/media/CREDITS.md`.
- * Portraits are 400 px squares; photos are 1600 px on the long side.
- */
-
 export interface MediaPerson {
   id: string;
   name: string;

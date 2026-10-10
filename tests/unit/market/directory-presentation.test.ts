@@ -107,11 +107,11 @@ it('shares one persisted Coinbase observation across priced rows, including upto
   expect(query).toHaveBeenCalledTimes(2)
   expect(query.mock.calls.map(([reference]) => getFunctionName(reference as never))).toContain('referenceRateRefresh:current')
   const [tiny, larger, zero, options, capped] = result.page.items.map(toDirectoryToolCardModel)
-  expect(tiny).toMatchObject({ priceLabel: 'A$0.01', priceContext: 'Indicative before Quote · Provider lists 0.001 USDC per Call', access: 'ae_callable', toolRef: ref, sourceRouteRef: 'coinbase:tiny' })
+  expect(tiny).toMatchObject({ priceLabel: 'A$0.0013', priceContext: 'Indicative before Quote · Provider lists 0.001 USDC per Call', access: 'ae_callable', toolRef: ref, sourceRouteRef: 'coinbase:tiny' })
   expect(larger).toMatchObject({ priceLabel: 'A$1.24', priceContext: 'Provider-listed estimate · Provider lists 1 USDC per Call', access: 'external_listing' })
   expect(zero).toMatchObject({ priceLabel: 'A$0.00', priceContext: 'Provider-listed estimate · Provider lists 0 USDC per Call' })
-  expect(options).toMatchObject({ priceLabel: 'A$0.01', priceContext: 'Provider-listed estimate · Provider lists 0.001 USDC per Call' })
-  expect(capped).toMatchObject({ priceLabel: 'up to A$0.04', priceContext: 'Provider-listed estimate · Provider lists up to 0.03 USDC per Call' })
+  expect(options).toMatchObject({ priceLabel: 'A$0.0013', priceContext: 'Provider-listed estimate · Provider lists 0.001 USDC per Call' })
+  expect(capped).toMatchObject({ priceLabel: 'up to A$0.038', priceContext: 'Provider-listed estimate · Provider lists up to 0.03 USDC per Call' })
   expect(larger?.toolRef).toBeUndefined()
 })
 
@@ -218,7 +218,7 @@ it('returns priced admitted and external Bazaar search rows from persisted FX', 
     context: { caller: 'ui' },
   })
   expect(result.results.map(row => [row.access, row.price])).toEqual([
-    ['ae_callable', { kind: 'indicative', label: 'A$0.01' }],
+    ['ae_callable', { kind: 'indicative', label: 'A$0.0013' }],
     ['external_listing', { kind: 'indicative', label: 'A$1.24' }],
     ['setup_required', { kind: 'unavailable' }],
     ['external_listing', { kind: 'unavailable' }],

@@ -28,7 +28,7 @@ const REFUSAL_COPY: Record<Extract<TrialResult, { kind: 'refused' }>['code'], st
 export function AeTrialPage() {
   const auth = useAuth()
   return (
-    <AePublicPage hideFooterCloser>
+    <AePublicPage>
       <div className="mx-auto grid w-full max-w-2xl gap-related px-page py-page">
         <h1 className="text-2xl font-semibold">Your Agentic Economy trial</h1>
         <AeSection title="A$10 to try Tools" description="Approved trials include A$10 promotional credit and 30 days of purchase access. No payment is required to activate.">

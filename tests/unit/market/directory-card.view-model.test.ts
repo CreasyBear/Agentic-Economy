@@ -24,7 +24,7 @@ it('carries the decision facts a listing page can show without a Call', () => {
   })
   expect(model.callsLabel).toBe('12')
   expect(model.payersLabel).toBe('2')
-  expect(model.useLine).toBe('12 calls in 30 days · 2 payers · last used 1 Sept 2026')
+  expect(model.useLine).toBe('12 calls · 2 buyers in 30 days')
   expect(model.returnsLabel).toBe('Returns matching documents')
   expect(model.payments).toEqual([{ network: 'Base', amount: '0.02 USDC' }])
   expect(toDirectoryToolPageModel({
@@ -88,7 +88,7 @@ it('groups a Provider and shows buyer prices for each indexed endpoint', () => {
   expect(surface.endpointCount).toBe('2 endpoints')
   expect(surface.endpoints.map(endpoint => endpoint.path)).toEqual(['/search', '/contents'])
   expect(surface.endpoints[0]?.current).toBe(true)
-  expect(surface.endpoints[0]?.activity).toBe('5,900 calls · 87 payers · last 30 days')
+  expect(surface.endpoints[0]?.activity).toBe('5,900 calls · 87 buyers in 30 days')
   expect(surface.endpoints.map(endpoint => endpoint.price)).toEqual(['US$0.001', 'US$0.007'])
   expect(toDirectoryServiceSurface(search, [], true).endpointCount).toBe('1+ endpoints')
 })
@@ -152,18 +152,18 @@ it('shows source usage, last payment and AUD price as facts without claiming an 
     activity: { calls30d: 12, payers30d: 2, lastCalledAt: paidAt },
     audEstimate: 'A$0.02',
   })
-  expect(model.factsLine).toBe('2 buyers · 12 calls this month · paid 2 hours ago · from A$0.02')
+  expect(model.factsLine).toBe('12 calls · 2 buyers in 30 days')
   expect(model.callsLabel).toBe('12')
   expect(model.payersLabel).toBe('2')
-  expect(model.activityTitle).toContain('Coinbase Bazaar volume, not an Agentic Economy Call.')
+  expect(model.activityTitle).toContain('Reported by the x402 directory.')
   expect(toDirectoryToolCardModel({ ...entry, activity: { calls30d: 168128, payers30d: 2 } })).toMatchObject({
-    factsLine: '2 buyers · 168,128 calls this month', callsLabel: '168,128', payersLabel: '2',
+    factsLine: '168,128 calls · 2 buyers in 30 days', callsLabel: '168,128', payersLabel: '2',
   })
-  expect(toDirectoryToolCardModel({ ...entry, activity: { calls30d: 0, payers30d: 0 } }).factsLine).toBe('0 calls this month')
-  expect(toDirectoryToolCardModel({ ...entry, activity: { payers30d: 1 } }).factsLine).toBe('1 buyers')
+  expect(toDirectoryToolCardModel({ ...entry, activity: { calls30d: 0, payers30d: 0 } }).factsLine).toBeUndefined()
+  expect(toDirectoryToolCardModel({ ...entry, activity: { payers30d: 1 } }).factsLine).toBe('1 buyer in 30 days')
   expect(toDirectoryToolCardModel(entry).factsLine).toBeUndefined()
   expect(toDirectoryToolCardModel({ ...entry, activity: { lastCalledAt: '2026-09-08T06:00:00.000Z' } }).activityTitle)
-    .toBe('Coinbase Bazaar volume, not an Agentic Economy Call. Last reported 8 Sept 2026.')
+    .toBe('Reported by the x402 directory. Last call 8 Sept 2026.')
 })
 
 it('keeps a service icon and two-letter mark for the card', () => {

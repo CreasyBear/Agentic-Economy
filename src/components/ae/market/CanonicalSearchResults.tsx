@@ -1,20 +1,18 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
-import { directoryProviderKey } from '@/modules/market/x402-directory-index'
-import { MARKET_LINK_STATE } from './market-return-context'
+import type { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
-import { Button as ArcButton } from "@/components/arc/button/button";
-import { Drawer, DrawerContent, DrawerTrigger } from '@/components/ae/shared/base-ui/drawer/drawer';
-import { AeSortableDataTable } from "@/components/ae/shared/sortable-data-table/AeSortableDataTable";
-import type { AeDataColumn } from "@/components/ae/shared/sortable-data-table/sortable-data-table.contracts";
-import type { SearchResult, SupplyProjectionFreshness } from "@/modules/registry/tool-choice-contracts";
-import { directoryDate } from "./directory-presentation";
+import { Badge } from "@/components/arc/badge/badge";
+import { SortableDataTable, type DataColumn } from "@/components/arc/sortable-data-table/sortable-data-table";
+import { PUBLIC_SURFACE } from "@/content/brand-copy";
+import { DIRECTORY_READINESS, PRICE_UNAVAILABLE } from '@/modules/market/directory-card.view-model'
+import { directoryProviderKey } from '@/modules/market/x402-directory-index'
+import type { SearchResult } from "@/modules/registry/tool-choice-contracts";
+import { MARKET_LINK_STATE } from './market-return-context'
 
 type CanonicalSearchResultsProps = {
   results: readonly SearchResult[];
   layout?: 'table' | 'grid';
-  sourceFreshness?: SupplyProjectionFreshness;
   renderActions: (item: SearchResult) => ReactNode;
 };
 
@@ -22,35 +20,21 @@ function identity(item: SearchResult): string {
   return JSON.stringify([item.source, item.id]);
 }
 
-function accessProjection(item: SearchResult): string {
-  if (item.access === "ae_callable") return `AE-callable · ${item.readiness}`;
-  if (item.access === "setup_required") return "Connect to call";
-  if (item.access === "unavailable") return "Currently unavailable · inspect";
-  return "External listing · not AE-callable";
+/** The directory's one readiness vocabulary, so a search row and a tool row say the same thing. */
+function Readiness({ item }: { item: SearchResult }) {
+  const { label, tone } = DIRECTORY_READINESS[item.access];
+  return <Badge tone={tone} size="sm">{label}</Badge>;
 }
 
-function priceProjection(item: SearchResult): string {
-  if (item.price.kind === "unavailable") return "Price unavailable";
-  return `${item.price.label.startsWith("A$") ? "Indicative AUD" : "Provider price"} · ${item.price.label}`;
-}
+const priceTitle = (item: SearchResult) => item.sourcePrice === undefined ? {} : { title: `Provider lists ${item.sourcePrice}` };
 
-function freshnessProjection(item: SearchResult, sourceFreshness?: SupplyProjectionFreshness): string {
-  const freshness = item.freshness ?? (item.source === "current" ? sourceFreshness : undefined);
-  const index = item.source === "coinbase" ? "Coinbase Bazaar index" : "AE supply projection";
-  if (freshness === undefined) return `${index} · freshness unavailable`;
-  const refreshed = freshness.completedAt === undefined
-    ? "completion unavailable"
-    : `refreshed ${directoryDate(new Date(freshness.completedAt).toISOString())}`;
-  return `${index} · ${freshness.state} · ${refreshed}`;
-}
-
-function CellText({ children }: { children: string }) {
-  return <span className="arc-canonical-cell" title={children}>{children}</span>;
+function price(item: SearchResult): string {
+  return item.price.kind === "unavailable" ? PRICE_UNAVAILABLE : PUBLIC_SURFACE.pricePerCall(item.price.label);
 }
 
 function ToolDestination({ item, children }: { item: SearchResult; children: ReactNode }) {
   if (item.toolRef !== undefined && item.access !== "external_listing") {
-    return <Link to="/tools/$toolRef" params={{ toolRef: item.toolRef }} state={{ fromMarket: true }}>{children}</Link>;
+    return <Link to="/tools/$toolRef" params={{ toolRef: item.toolRef }} state={MARKET_LINK_STATE}>{children}</Link>;
   }
   const host = item.host ?? (item.sourceRouteRef !== undefined && URL.canParse(item.sourceRouteRef) ? new URL(item.sourceRouteRef).hostname : undefined);
   if (host !== undefined && /^registry:[a-f0-9]{64}$/u.test(item.id)) {
@@ -59,108 +43,32 @@ function ToolDestination({ item, children }: { item: SearchResult; children: Rea
   return <a href={item.detailRef}>{children}</a>;
 }
 
-export function CanonicalSearchResults({ results, renderActions, sourceFreshness, layout = 'table' }: CanonicalSearchResultsProps) {
-  const [selectedIdentity, setSelectedIdentity] = useState<string | null>(null);
-  const selected = selectedIdentity === null
-    ? undefined
-    : results.find(item => identity(item) === selectedIdentity);
-
-  // Clear a selection as soon as its record leaves the current canonical page;
-  // a later page containing the same identity must not reopen the drawer.
-  if (selectedIdentity !== null && selected === undefined) setSelectedIdentity(null);
-
-  const rows = [...results];
-  const columns: AeDataColumn<SearchResult>[] = [
-    {
-      key: "title",
-      label: "Tool",
-      width: 240,
-      sortable: false,
-      render: (_value, item) => <ToolDestination item={item}><CellText>{item.title}</CellText></ToolDestination>,
-    },
-    {
-      key: "provider",
-      label: "Provider or Host",
-      width: 120,
-      sortable: false,
-      render: (_value, item) => <CellText>{item.provider}</CellText>,
-    },
-    {
-      key: "access",
-      label: "Access",
-      width: 180,
-      sortable: false,
-      render: (_value, item) => <CellText>{accessProjection(item)}</CellText>,
-    },
-    {
-      key: "price",
-      label: "Price",
-      width: 140,
-      sortable: false,
-      render: (_value, item) => <CellText>{priceProjection(item)}</CellText>,
-    },
-    {
-      key: "freshness",
-      label: "Freshness",
-      width: 160,
-      sortable: false,
-      render: (_value, item) => <CellText>{freshnessProjection(item, sourceFreshness)}</CellText>,
-    },
-    {
-      key: "actions",
-      label: "Actions",
-      width: 320,
-      sortable: false,
-      render: (_value, item) => <div className="arc-canonical-actions">
-        {renderActions(item)}
-        <DrawerTrigger
-          onClick={() => setSelectedIdentity(identity(item))}
-          render={<ArcButton type="button" variant="secondary" size="sm" aria-label={`Inspect ${item.title}`}>Inspect</ArcButton>}
-        />
-      </div>,
-    },
+/**
+ * Best matches in the tool table's columns: tool and provider, readiness, price, then actions.
+ * Rows keep relevance order, so no column sorts.
+ */
+export function CanonicalSearchResults({ results, renderActions, layout = 'table' }: CanonicalSearchResultsProps) {
+  const columns: DataColumn<SearchResult>[] = [
+    { key: "title", label: "Tool", sortable: false, render: (_value, item) => <div className="ae-tool-row-text">
+      <ToolDestination item={item}><span title={item.title}>{item.title}</span></ToolDestination>
+      <span title={item.provider}>{item.provider}</span>
+    </div> },
+    { key: "access", label: "Access", sortable: false, render: (_value, item) => <Readiness item={item} /> },
+    { key: "price", label: "Price per call", sortable: false, numeric: true, render: (_value, item) => <span {...priceTitle(item)}>{item.price.kind === "unavailable" ? PRICE_UNAVAILABLE : item.price.label}</span> },
+    { key: "actions", label: "Save or compare", sortable: false, render: (_value, item) => <div className="ae-tool-row-actions">{renderActions(item)}</div> },
   ];
 
   return <div className="arc-canonical-results">
-    <Drawer
-      open={selected !== undefined}
-      onOpenChange={open => { if (!open) setSelectedIdentity(null); }}
-    >
-      {layout === 'grid' ? <ul className="ae-market-result-cards" aria-label="Tool search results">{results.map(item => <li key={identity(item)}>
-        <article className="ae-market-result-card">
-          <p className="ae-market-result-provider">{item.provider}</p>
-          <h3><ToolDestination item={item}>{item.title}</ToolDestination></h3>
-          <p className="ae-market-result-summary">{item.summary}</p>
-          <dl><div><dt>Access</dt><dd>{accessProjection(item)}</dd></div><div><dt>Price</dt><dd>{priceProjection(item)}</dd></div></dl>
-          <div className="ae-market-result-actions">{renderActions(item)}<DrawerTrigger onClick={() => setSelectedIdentity(identity(item))} render={<ArcButton type="button" variant="secondary" size="sm" aria-label={`Inspect ${item.title}`}>Inspect</ArcButton>} /></div>
-        </article>
-      </li>)}</ul> : <AeSortableDataTable
-        rows={rows}
-        columns={columns}
-        rowKey={identity}
-        caption="Canonical search results"
-        mobileLayout="scroll"
-        ariaLabel="Canonical search results"
-
-        tableClassName="arc-canonical-search-table"
-        rowClassName="arc-canonical-search-row"
-      />}
-      <DrawerContent
-        title={selected?.title ?? ""}
-        description={selected?.summary ?? ""}
-      >
-        {selected === undefined ? null : <dl className="arc-canonical-facts">
-          <dt>{selected.access === "external_listing" ? "Directory Host" : "Provider"}</dt><dd>{selected.provider}</dd>
-          <dt>Access</dt><dd>{accessProjection(selected)}</dd>
-          <dt>Price</dt><dd>{priceProjection(selected)}</dd>
-          {selected.sourcePrice === undefined ? null : <><dt>Provider-listed source</dt><dd>{selected.sourcePrice}</dd></>}
-          <dt>Freshness</dt><dd>{freshnessProjection(selected, sourceFreshness)}</dd>
-          <dt>Source</dt><dd>{selected.source}</dd>
-          <dt>ID</dt><dd>{selected.id}</dd>
-          {selected.toolRef === undefined ? null : <><dt>Tool reference</dt><dd>{selected.toolRef}</dd></>}
-          <dt>Detail</dt><dd><ToolDestination item={selected}>Open Tool detail</ToolDestination></dd>
-        </dl>}
-      </DrawerContent>
-    </Drawer>
+    {layout === 'grid' ? <ul className="ae-market-result-cards" aria-label="Best matches">{results.map(item => <li key={identity(item)}>
+      <article className="ae-market-result-card">
+        <p className="ae-market-result-provider">{item.provider}</p>
+        <h3><ToolDestination item={item}>{item.title}</ToolDestination></h3>
+        <p className="ae-market-result-summary">{item.summary}</p>
+        <div className="ae-market-result-facts"><Readiness item={item} /><p {...priceTitle(item)}>{price(item)}</p></div>
+        <div className="ae-market-result-actions">{renderActions(item)}</div>
+      </article>
+    </li>)}</ul> : <div className="ae-tool-table">
+      <SortableDataTable<SearchResult> rows={[...results]} columns={columns} rowKey={identity} caption="Best matches" itemName={{ one: "tool", other: "tools" }} />
+    </div>}
   </div>;
 }

@@ -1,11 +1,6 @@
-import { Skeleton } from '@/components/ui/skeleton'
+import { Skeleton } from '@/components/arc/skeleton/skeleton'
 
-/** Matches `ChartContainer`'s `h-56 min-h-56 w-full aspect-auto` box. */
+/** Holds `ChartContainer`'s `h-56` box while the chart code loads. */
 export function AeToolLatencyChartSkeleton() {
-  return (
-    <Skeleton
-      aria-hidden="true"
-      className="h-56 min-h-56 w-full rounded-none aspect-auto"
-    />
-  )
+  return <div className="h-56 min-h-56 w-full"><Skeleton lines={6} label="Loading chart" /></div>
 }

@@ -25,7 +25,7 @@
 @font-face {
   font-family: "Manrope Variable";
   font-style: normal;
-  font-weight: 200 800;
+  font-weight: 400 500;
   font-display: swap;
   src: url("/fonts/manrope-latin.woff2") format("woff2");
 }
@@ -78,29 +78,23 @@
   --font-display: var(--ae-font-display);
   --font-mono: var(--ae-font-mono);
 
-  /* Discover grammar (DirectoryHero / DirectoryHomeDiscovery / DirectoryToolCard). */
+  /* Type scale for public pages; theme-token-parity pins it to the ae-* values. */
   --text-caption: var(--ae-text-caption);
-  --text-eyebrow: var(--ae-text-eyebrow);
   --text-deck: var(--ae-text-deck);
   --text-body: var(--ae-text-body);
   --text-title: var(--ae-text-title);
   --text-title-lg: var(--ae-text-title-lg);
   --text-display: var(--ae-text-display);
   --leading-caption: var(--ae-leading-caption);
-  --leading-eyebrow: var(--ae-leading-eyebrow);
   --leading-deck: var(--ae-leading-deck);
   --leading-body: var(--ae-leading-body);
   --leading-title: var(--ae-leading-title);
   --leading-title-lg: var(--ae-leading-title-lg);
   --leading-display: var(--ae-leading-display);
-  --tracking-eyebrow: var(--ae-tracking-eyebrow);
   --tracking-caption: var(--ae-tracking-caption);
   --tracking-display: var(--ae-tracking-display);
-  --font-weight-eyebrow: var(--ae-weight-eyebrow);
-  --font-weight-extralight: var(--ae-weight-extralight);
   --font-weight-regular: var(--ae-weight-regular);
   --font-weight-medium: var(--ae-weight-medium);
-  --font-weight-semibold: var(--ae-weight-semibold);
 
   --radius-card: 0.875rem;
   --radius-nav: 0.625rem;
@@ -150,32 +144,33 @@
 :root {
   color-scheme: light;
 
+  /* Two weights only (Arc): regular 400 and medium 500. Heavier and lighter
+     utilities resolve onto them so no surface can reach 200, 600 or 700. */
+  --font-weight-thin: 400;
+  --font-weight-extralight: 400;
+  --font-weight-light: 400;
   --font-weight-normal: 400;
   --font-weight-medium: 500;
-  --font-weight-semibold: 600;
-  --font-weight-bold: 700;
-  --ae-weight-extralight: 200;
+  --font-weight-semibold: 500;
+  --font-weight-bold: 500;
+  --font-weight-extrabold: 500;
+  --font-weight-black: 500;
   --ae-weight-regular: 400;
   --ae-weight-medium: 500;
-  --ae-weight-semibold: 600;
-  --ae-weight-eyebrow: 700;
   --ae-text-caption: 0.75rem;
-  --ae-text-eyebrow: 0.75rem;
   --ae-text-deck: 0.875rem;
   --ae-text-body: 1rem;
   --ae-text-title: 1.5rem;
   --ae-text-title-lg: 1.875rem;
   --ae-text-display: 2.75rem;
   --ae-leading-caption: 1.35;
-  --ae-leading-eyebrow: 1.35;
   --ae-leading-deck: 1.625;
   --ae-leading-body: 1.55;
   --ae-leading-title: 1.25;
   --ae-leading-title-lg: 1.2;
   --ae-leading-display: 1.02;
-  --ae-tracking-eyebrow: 0.16em;
   --ae-tracking-caption: 0.14em;
-  --ae-tracking-display: -0.055em;
+  --ae-tracking-display: -0.02em;
   --font-family-body:
     "Manrope Variable", ui-sans-serif, system-ui, sans-serif;
   --font-family-display: var(--font-family-body);
@@ -198,29 +193,31 @@
   --ae-border: #c5c1b8;
   --ae-border-strong: #918e87;
 
-  /* Neutral controls; forest belongs to identity and focus. */
-  --ae-primary: var(--ae-fg);
-  --ae-primary-fg: #e8e4da;
+  /* Brand kit: Forest is primary, ring and link; Chalk sits on it. Stone is
+     the only second chart colour. Gold appears only in the logo artwork. */
   --ae-brand: #24543d;
-  --ae-brand-strong: #24543d;
+  --ae-brand-strong: #1b3f2e;
   --ae-brand-muted: rgba(36, 84, 61, 0.08);
   --ae-on-brand: #e8e4da;
+  --ae-stone: #aaa89e;
+  --ae-primary: var(--ae-brand);
+  --ae-primary-fg: var(--ae-on-brand);
   --ae-ring: var(--ae-brand);
 
-  --ae-success: oklch(0.5423 0.1222 157.98);
-  --ae-success-foreground: oklch(0.32 0.085 150);
-  --ae-success-ring: oklch(0.53 0.12 150 / 0.32);
-  --ae-success-subtle: oklch(0.95 0.025 150);
-  --ae-warning: oklch(0.5948 0.1401 58.96);
-  --ae-warning-foreground: oklch(0.35 0.08 70);
-  --ae-warning-ring: oklch(0.69 0.13 78 / 0.38);
-  --ae-warning-subtle: oklch(0.96 0.035 82);
-  --ae-danger: oklch(0.5408 0.176 27.61);
+  --ae-success: var(--ae-brand);
+  --ae-success-foreground: var(--ae-brand);
+  --ae-success-ring: rgba(36, 84, 61, 0.32);
+  --ae-success-subtle: var(--ae-brand-muted);
+  --ae-warning: #8a5a0b;
+  --ae-warning-foreground: #8a5a0b;
+  --ae-warning-ring: rgba(138, 90, 11, 0.32);
+  --ae-warning-subtle: #f1e4c6;
+  --ae-danger: #9b2c2c;
   --ae-danger-foreground: var(--ae-danger);
-  --ae-danger-ring: oklch(0.53 0.18 28 / 0.32);
-  --ae-danger-subtle: oklch(0.95 0.03 28);
+  --ae-danger-ring: rgba(155, 44, 44, 0.32);
+  --ae-danger-subtle: #f3deda;
   --ae-info: var(--ae-brand);
-  --ae-info-foreground: #24543d;
+  --ae-info-foreground: var(--ae-brand);
   --ae-info-ring: rgba(36, 84, 61, 0.32);
   --ae-info-subtle: var(--ae-brand-muted);
 
@@ -295,12 +292,16 @@
   --ae-fg: #e8e4da;
   --ae-muted-fg: #aaa89e;
   --ae-fg-subtle: #aaa89e;
-  --ae-surface: #1c1c1c;
   --ae-surface-sunken: #0f0f0f;
   --ae-surface-raised: #242424;
-  --ae-container: #1c1c1c;
   --ae-border: #383838;
   --ae-border-strong: #595854;
+  --ae-brand: #6fa587;
+  --ae-brand-strong: #8bb9a0;
+  --ae-brand-muted: rgba(111, 165, 135, 0.14);
+  --ae-on-brand: #141414;
+  --ae-surface: #1e1e1c;
+  --ae-container: #1e1e1c;
 
   --background: var(--ae-bg);
   --foreground: var(--ae-fg);
@@ -309,8 +310,8 @@
   --card-foreground: var(--ae-fg);
   --popover: var(--ae-surface);
   --popover-foreground: var(--ae-fg);
-  --primary: var(--ae-fg);
-  --primary-foreground: var(--ae-bg);
+  --primary: var(--ae-brand);
+  --primary-foreground: var(--ae-on-brand);
   --secondary: var(--ae-surface);
   --secondary-foreground: var(--ae-fg);
   --muted: var(--ae-surface-sunken);
@@ -319,11 +320,11 @@
   --accent-foreground: var(--ae-fg);
   --border: var(--ae-border);
   --input: var(--ae-border);
-  --ae-ring: #b7e7cc;
+  --ae-ring: var(--ae-brand);
   --ring: var(--ae-ring);
   --ae-focus-ring: 0 0 0 2px var(--ae-ring);
   --ae-danger-foreground: oklch(0.8 0.11 27.61);
-
+  --ae-success-ring: rgba(111, 165, 135, 0.32);
 }
 
 /* At browser/text zoom, keep all four destinations reachable without colliding labels. */
@@ -425,7 +426,8 @@
 
   .font-display {
     font-family: var(--ae-font-display);
-    font-weight: 200;
+    font-weight: 400;
+    letter-spacing: var(--ae-tracking-display);
     font-synthesis-weight: none;
   }
 

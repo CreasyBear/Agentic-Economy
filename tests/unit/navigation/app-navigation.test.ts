@@ -31,8 +31,8 @@ describe('app navigation', () => {
 
   it('keeps the public destinations in their canonical order', () => {
     expect(PUBLIC_NAVIGATION).toEqual([
-      { id: 'market', label: 'Market', to: '/market' },
-      { id: 'for-agents', label: 'For agents', to: '/for-agents' },
+      { id: 'market', label: 'Tools', to: '/market' },
+      { id: 'docs', label: 'Docs', to: '/developers/api' },
       { id: 'for-providers', label: 'For providers', to: '/for-providers' },
     ])
   })

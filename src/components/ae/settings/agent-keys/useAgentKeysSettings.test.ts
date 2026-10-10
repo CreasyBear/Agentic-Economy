@@ -180,6 +180,7 @@ describe('Agent keys settings revocation', () => {
     }))
 
     fireEvent.change(screen.getByLabelText('Agent name'), { target: { value: 'Research bot' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Set spending limits' }))
     fireEvent.click(screen.getByRole('button', { name: 'Review access' }))
     fireEvent.click(screen.getByRole('button', { name: 'Issue key' }))
 
