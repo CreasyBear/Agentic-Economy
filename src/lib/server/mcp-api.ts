@@ -31,6 +31,7 @@ import {
 } from '@/lib/server/agent-access-auth'
 import { runWithRequestCorrelation, withRequestCorrelationHeader } from '@/lib/server/request-correlation'
 import { recordGatewayTelemetry, type GatewayTelemetryEvent } from '@/lib/server/gateway-telemetry'
+import { recordRefusal, recordSearchOutcome } from '@/lib/observability/refusal-event'
 import { isRecord } from '@/modules/common/is-record'
 import { describeActionMcpMetadata, journeyProblemSchema, mcpActionNextSchema, isToolMarketReadAction, listMcpActions, mcpToolName, mcpToolsetAdmitted, projectMcpActionNext, projectMcpJourneyProblem, type AnyAction } from '@/modules/actions'
 import { MARKET_TOOLS_CALL_SCOPE } from '@/modules/agent-access/contract'
@@ -660,8 +661,32 @@ export function createAeMcpServer(
             selectedAccess.authenticated && !selectedAccess.readOnly && access.principal?.scopes.includes(MARKET_TOOLS_CALL_SCOPE) === true)
         : outputValidation.data
       recordMcpGatewayTelemetry(action.id, data, result, access, startedAt)
+      if (action.id === 'registry.tools.search' && isRecord(output) && typeof output.kind === 'string') {
+        const found = Array.isArray(output.results) ? output.results.filter(isRecord) : []
+        recordSearchOutcome({
+          surface: 'mcp',
+          ...(access.principal === undefined ? {} : { actor: access.principal.principalId }),
+          resultKind: output.kind,
+          resultCount: found.length,
+          callableCount: found.filter(item => item.access === 'ae_callable').length,
+          externalListingCount: found.filter(item => item.access === 'external_listing').length,
+        })
+      }
       const refusal = mcpToolRefusal(action, output)
-      if (refusal !== undefined) return mcpToolRefusalResult(action, output, refusal, origin)
+      if (refusal !== undefined) {
+        // Gateway-classified actions are already counted by recordMcpGatewayTelemetry; this covers market reads only.
+        if (mcpGatewayEvent(action.id, data, result) === undefined) {
+          recordRefusal({
+            surface: 'mcp',
+            code: refusal.code,
+            operation: action.id,
+            ...(refusal.retryable === undefined ? {} : { retryable: refusal.retryable }),
+            // Correlation ids are per request, so they never stand in for an actor.
+            ...(access.principal === undefined ? {} : { actor: access.principal.principalId }),
+          })
+        }
+        return mcpToolRefusalResult(action, output, refusal, origin)
+      }
       return {
         content: [{ type: 'text' as const, text: mcpSuccessSummary(action, output, origin) }],
         structuredContent: { result: output, next: projectMcpActionNext(action.id, output, origin) },

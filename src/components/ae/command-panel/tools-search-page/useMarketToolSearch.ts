@@ -136,7 +136,7 @@ export function useMarketToolSearch({
           recordProductJourney({ action: 'search_requested', phase: 'attempted', surface: 'command_search', queryLength: trimmed.length })
           const result = await searchTools(searchInput)
           if (!current) return
-          recordProductJourney({ action: 'search_observed', phase: result.kind === 'unavailable' ? 'failed' : 'observed', surface: 'command_search', queryLength: trimmed.length, resultCount: result.kind === 'unavailable' || result.kind === 'noMatch' ? 0 : result.results.length })
+          recordProductJourney({ action: 'search_observed', phase: result.kind === 'unavailable' ? 'failed' : 'observed', surface: 'command_search', queryLength: trimmed.length, resultCount: result.kind === 'unavailable' || result.kind === 'noMatch' ? 0 : result.results.length, callableCount: result.kind === 'unavailable' || result.kind === 'noMatch' ? 0 : result.results.filter(r => r.access === 'ae_callable').length })
           const next = result.pagination.hasMore ? result.next.find((action) => action.action === 'registry.tools.search' && action.args.cursor !== undefined) : undefined
           const nextPage = next?.action === 'registry.tools.search' && next.args.cursor !== undefined
             ? { query: next.args.query, cursor: next.args.cursor }

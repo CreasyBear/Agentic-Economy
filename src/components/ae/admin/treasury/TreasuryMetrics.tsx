@@ -8,7 +8,8 @@ import { AeApproximateQuotaMeter } from '@/components/ae/shared/usage-meter/AeAp
 import type { ColumnDef } from '@tanstack/react-table'
 import { formatCount, formatRelativeTime, formatTimestamp } from '@/lib/ui/format-time'
 import type { AdminTreasuryView, TreasuryCheck } from '@/modules/money/treasury-report'
-import { sumTreasuryUnits, treasuryMoney, treasuryRatios } from './treasury-view-model'
+import { sumTreasuryUnits, treasuryFigure, treasuryMoney, treasuryRatios } from './treasury-view-model'
+import { RecordTime } from '@/components/ae/operator/RecordTime'
 import Decimal from 'decimal.js'
 import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 
@@ -28,26 +29,29 @@ const amountSort = (left: string, right: string) => new Decimal(left).comparedTo
 
 function BookedRefills({ deposits, environment }: { deposits: readonly BookedRefill[]; environment: AdminTreasuryView['environment'] }) {
   const columns: ColumnDef<AeRecordTableFeatures, BookedRefill, unknown>[] = [
-    { id: 'amount', accessorKey: 'amountUnits', meta: { label: 'Amount', numeric: true },
-      header: ({ column }) => <AeOperatorSortableHeader label="Amount" column={column} />,
-      sortFn: (left, right) => amountSort(left.original.amountUnits, right.original.amountUnits),
-      cell: ({ row }) => <span className="whitespace-nowrap tabular-nums">{row.original.chainTransactionHash === null ? 'Opening balance · ' : ''}{treasuryMoney(row.original.amountUnits)}</span> },
-    { id: 'booked', accessorKey: 'bookedAt', meta: { label: 'Booked' },
-      header: ({ column }) => <AeOperatorSortableHeader label="Booked" column={column} />,
-      cell: ({ row }) => <time className="whitespace-nowrap" dateTime={new Date(row.original.bookedAt).toISOString()}>{formatTimestamp(row.original.bookedAt)}</time> },
     { id: 'transfer', accessorFn: row => `${row.transactionRef} ${row.chainTransactionHash ?? ''}`, header: 'Transfer', meta: { label: 'Transfer' }, enableSorting: false,
       cell: ({ row }) => {
         const hash = row.original.chainTransactionHash
-        return <details className="min-w-0">
-          <summary className="cursor-pointer text-sm">Transfer details</summary>
-          <p className="mt-intra break-all text-xs" title={row.original.transactionRef}>{row.original.transactionRef}</p>
-          {hash === null ? null : <p className="mt-intra break-all text-xs" title={hash}>{hash}</p>}
-          {hash !== null && /^0x[0-9a-fA-F]{64}$/.test(hash) ? <a
-            className={`${actionLinkClassName('ghost', 'sm')} mt-intra`} target="_blank" rel="noopener noreferrer"
-            href={`https://${environment === 'production' ? 'basescan.org' : 'sepolia.basescan.org'}/tx/${hash}`}
-          >View transfer<span className="sr-only"> on {environment === 'production' ? 'Base' : 'Base Sepolia'} (opens a new tab)</span></a> : null}
-        </details>
+        return <div className="grid min-w-0 gap-1">
+          <span className="block min-w-0 truncate font-mono text-xs" title={row.original.transactionRef}>{hash === null ? 'Opening balance' : row.original.transactionRef}</span>
+          <details className="min-w-0">
+            <summary className="cursor-pointer text-sm">Transfer details</summary>
+            <p className="mt-intra break-all font-mono text-xs">{row.original.transactionRef}</p>
+            {hash === null ? null : <p className="mt-intra break-all font-mono text-xs">{hash}</p>}
+            {hash !== null && /^0x[0-9a-fA-F]{64}$/.test(hash) ? <a
+              className={`${actionLinkClassName('ghost', 'sm')} mt-intra`} target="_blank" rel="noopener noreferrer"
+              href={`https://${environment === 'production' ? 'basescan.org' : 'sepolia.basescan.org'}/tx/${hash}`}
+            >View transfer<span className="sr-only"> on {environment === 'production' ? 'Base' : 'Base Sepolia'} (opens a new tab)</span></a> : null}
+          </details>
+        </div>
       } },
+    { id: 'amount', accessorKey: 'amountUnits', meta: { label: 'Amount (USDC)', numeric: true },
+      header: ({ column }) => <AeOperatorSortableHeader label="Amount (USDC)" column={column} />,
+      sortFn: (left, right) => amountSort(left.original.amountUnits, right.original.amountUnits),
+      cell: ({ row }) => treasuryFigure(row.original.amountUnits) },
+    { id: 'booked', accessorKey: 'bookedAt', meta: { label: 'Booked' },
+      header: ({ column }) => <AeOperatorSortableHeader label="Booked" column={column} />,
+      cell: ({ row }) => <RecordTime at={row.original.bookedAt} /> },
   ]
   return <AeRecordTable columns={columns} data={deposits} getRowId={row => row.transactionRef} caption="Recent booked refills"
     filterPlaceholder="Filter booked refills" countLabel="refills" emptyMessage="No booked refills match this filter." />
@@ -59,14 +63,13 @@ function InFlightCalls({ calls }: { calls: readonly InFlightCall[] }) {
       header: ({ column }) => <AeOperatorSortableHeader label="Call" column={column} />,
       cell: ({ row }) => <a className="block min-w-0 truncate underline underline-offset-4" title={row.original.callRef}
         href={`/admin/calls/${encodeURIComponent(row.original.callRef)}`}>{row.original.callRef}</a> },
-    { id: 'amount', accessorKey: 'amountUnits', meta: { label: 'Amount', numeric: true },
-      header: ({ column }) => <AeOperatorSortableHeader label="Amount" column={column} />,
+    { id: 'amount', accessorKey: 'amountUnits', meta: { label: 'Amount (USDC)', numeric: true },
+      header: ({ column }) => <AeOperatorSortableHeader label="Amount (USDC)" column={column} />,
       sortFn: (left, right) => amountSort(left.original.amountUnits, right.original.amountUnits),
-      cell: ({ row }) => <span className="whitespace-nowrap tabular-nums">{treasuryMoney(row.original.amountUnits)}</span> },
+      cell: ({ row }) => treasuryFigure(row.original.amountUnits) },
     { id: 'created', accessorKey: 'createdAt', meta: { label: 'Created' },
       header: ({ column }) => <AeOperatorSortableHeader label="Created" column={column} />,
-      cell: ({ row }) => <time className="whitespace-nowrap" title={formatTimestamp(row.original.createdAt)}
-        dateTime={new Date(row.original.createdAt).toISOString()}>{formatRelativeTime(row.original.createdAt)}</time> },
+      cell: ({ row }) => <RecordTime at={row.original.createdAt} /> },
   ]
   return <AeRecordTable columns={columns} data={calls} getRowId={row => row.callRef} caption="Unresolved Calls"
     filterPlaceholder="Filter unresolved Calls" countLabel="Calls" emptyMessage="No unresolved Calls match this filter." />

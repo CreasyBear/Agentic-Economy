@@ -16,6 +16,9 @@ import {
 import { formatCreditAmount } from '@/components/ae/console/owner-credit-format'
 import { Drawer, DrawerContent } from '@/components/ae/shared/base-ui/drawer/drawer'
 import { formatTimestamp, timestampIso } from '@/lib/ui/format-time'
+import { enumLabel } from '@/lib/ui/enum-label'
+import { RecordTime } from '@/components/ae/operator/RecordTime'
+import { Badge } from '@/components/arc/badge/badge'
 import { formatCurrencyAmount } from '@/modules/money/public'
 import type {
   MoneyProviderObligationView,
@@ -36,14 +39,10 @@ export type CreditProviderObligationRecordsProps = Readonly<{
   unavailable?: boolean
 }>
 
-function humanizeCode(value: string): string {
-  return value.replaceAll('_', ' ')
-}
-
 function reconciliationScope(record: MoneyReconciliationCaseView): string {
   return record.scopeType === undefined
     ? 'Legacy Account case'
-    : `${humanizeCode(record.scopeType)} · ${record.scopeRef ?? 'Unknown'}`
+    : `${enumLabel(record.scopeType)} · ${record.scopeRef ?? 'Unknown'}`
 }
 
 function referenceList(values: readonly string[] | undefined): string {
@@ -72,6 +71,10 @@ function searchIncludes(values: readonly string[], filterValue: unknown): boolea
   return query === '' || values.some((value) => value.toLowerCase().includes(query))
 }
 
+const obligationTone: Record<MoneyProviderObligationView['state'], 'success' | 'warning' | 'danger' | 'neutral' | 'info'> = {
+  accrued: 'neutral', held: 'warning', payable: 'info', settled: 'success', reversed: 'neutral', disputed: 'danger',
+}
+
 const reconciliationGlobalFilter: FilterFn<AeRecordTableFeatures, MoneyReconciliationCaseView> = (
   row,
   _columnId,
@@ -82,16 +85,16 @@ const reconciliationGlobalFilter: FilterFn<AeRecordTableFeatures, MoneyReconcili
     record.caseRef,
     record.accountRef,
     record.kind,
-    humanizeCode(record.kind),
+    enumLabel(record.kind),
     record.status,
     record.scopeType ?? '',
-    record.scopeType === undefined ? '' : humanizeCode(record.scopeType),
+    record.scopeType === undefined ? '' : enumLabel(record.scopeType),
     record.scopeRef ?? '',
     reconciliationScope(record),
     record.ownerPrincipalRef ?? '',
     record.transactionRef ?? '',
     record.reasonCode,
-    humanizeCode(record.reasonCode),
+    enumLabel(record.reasonCode),
     ...record.evidenceRefs,
     ...(record.resolutionEvidenceRefs ?? []),
     String(record.createdAt),
@@ -186,12 +189,12 @@ function reconciliationFacts(record: MoneyReconciliationCaseView) {
   return [
     { label: 'Case reference', value: record.caseRef, mono: true as const },
     { label: 'Account reference', value: record.accountRef, mono: true as const },
-    { label: 'Difference', value: humanizeCode(record.kind) },
+    { label: 'Difference', value: enumLabel(record.kind) },
     { label: 'Status', value: record.status },
     { label: 'Affected scope', value: reconciliationScope(record) },
     { label: 'Owner', value: record.ownerPrincipalRef ?? 'Unassigned', mono: true as const },
     { label: 'Transaction reference', value: record.transactionRef ?? 'Not recorded', mono: true as const },
-    { label: 'Reason', value: humanizeCode(record.reasonCode) },
+    { label: 'Reason', value: enumLabel(record.reasonCode) },
     { label: 'Evidence references', value: referenceList(record.evidenceRefs), mono: true as const },
     { label: 'Resolution evidence references', value: referenceList(record.resolutionEvidenceRefs), mono: true as const },
     timeFact('Created', record.createdAt),
@@ -249,11 +252,19 @@ export function CreditReconciliationRecords({
   } = useRecordInspection(rows, reconciliationCaseId, unavailable)
   const columns = useMemo<ColumnDef<AeRecordTableFeatures, MoneyReconciliationCaseView, unknown>[]>(() => [
     {
-      id: 'difference',
-      meta: { label: 'Difference' } as ColumnMeta<AeRecordTableFeatures, MoneyReconciliationCaseView, unknown>,
-      accessorFn: (record) => humanizeCode(record.kind),
-      header: ({ column }) => <AeOperatorSortableHeader label="Difference" column={column} />,
-      cell: ({ row }) => humanizeCode(row.original.kind),
+      id: 'case',
+      // Identity first. The case reference stays in the Inspect label and drawer, keeping the row compact.
+      meta: { label: 'Case' } as ColumnMeta<AeRecordTableFeatures, MoneyReconciliationCaseView, unknown>,
+      accessorFn: (record) => enumLabel(record.kind),
+      header: ({ column }) => <AeOperatorSortableHeader label="Case" column={column} />,
+      cell: ({ row }) => enumLabel(row.original.kind),
+    },
+    {
+      id: 'status',
+      meta: { label: 'Status' } as ColumnMeta<AeRecordTableFeatures, MoneyReconciliationCaseView, unknown>,
+      accessorKey: 'status',
+      header: ({ column }) => <AeOperatorSortableHeader label="Status" column={column} />,
+      cell: ({ row }) => <Badge tone={row.original.status === 'open' ? 'warning' : 'success'} size="sm">{enumLabel(row.original.status)}</Badge>,
     },
     {
       id: 'scope',
@@ -266,15 +277,8 @@ export function CreditReconciliationRecords({
       },
     },
     {
-      id: 'status',
-      meta: { label: 'Status' } as ColumnMeta<AeRecordTableFeatures, MoneyReconciliationCaseView, unknown>,
-      accessorKey: 'status',
-      header: ({ column }) => <AeOperatorSortableHeader label="Status" column={column} />,
-      cell: ({ row }) => row.original.status,
-    },
-    {
       id: 'updated',
-      meta: { label: 'Updated', numeric: true } as ColumnMeta<AeRecordTableFeatures, MoneyReconciliationCaseView, unknown>,
+      meta: { label: 'Updated' } as ColumnMeta<AeRecordTableFeatures, MoneyReconciliationCaseView, unknown>,
       accessorFn: (record) => record.updatedAt,
       sortFn: (left, right, columnId) => {
         const leftUpdatedAt = left.getValue<number>(columnId)
@@ -282,11 +286,7 @@ export function CreditReconciliationRecords({
         return leftUpdatedAt < rightUpdatedAt ? -1 : leftUpdatedAt > rightUpdatedAt ? 1 : 0
       },
       header: ({ column }) => <AeOperatorSortableHeader label="Updated" column={column} />,
-      cell: ({ row }) => (
-        <time className="arc-credit-administration-time" dateTime={timestampIso(row.original.updatedAt)}>
-          {formatTimestamp(row.original.updatedAt)}
-        </time>
-      ),
+      cell: ({ row }) => <RecordTime at={row.original.updatedAt} />,
     },
   ], [])
   const rowAction = useMemo<AeRecordTableRowAction<MoneyReconciliationCaseView>>(() => ({
@@ -371,6 +371,13 @@ export function CreditProviderObligationRecords({
       ),
     },
     {
+      id: 'state',
+      meta: { label: 'State' } as ColumnMeta<AeRecordTableFeatures, MoneyProviderObligationView, unknown>,
+      accessorKey: 'state',
+      header: ({ column }) => <AeOperatorSortableHeader label="State" column={column} />,
+      cell: ({ row }) => <Badge tone={obligationTone[row.original.state]} size="sm">{enumLabel(row.original.state)}</Badge>,
+    },
+    {
       id: 'buyerAmount',
       accessorFn: (record) => BigInt(record.buyerAmountUnits),
       sortFn: (left, right, columnId) => amountSort(
@@ -399,13 +406,6 @@ export function CreditProviderObligationRecords({
           {formatCurrencyAmount({ currency: 'USDC', exponent: 6, units: row.original.providerAmountUnits })}
         </span>
       ),
-    },
-    {
-      id: 'state',
-      meta: { label: 'State' } as ColumnMeta<AeRecordTableFeatures, MoneyProviderObligationView, unknown>,
-      accessorKey: 'state',
-      header: ({ column }) => <AeOperatorSortableHeader label="State" column={column} />,
-      cell: ({ row }) => row.original.state,
     },
   ], [])
   const rowAction = useMemo<AeRecordTableRowAction<MoneyProviderObligationView>>(() => ({

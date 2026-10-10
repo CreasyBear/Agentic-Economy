@@ -1,1 +1,1 @@
-export { observabilityTables } from './internal/schema'
+export { JourneyEventNameValues, observabilityTables } from './internal/schema'

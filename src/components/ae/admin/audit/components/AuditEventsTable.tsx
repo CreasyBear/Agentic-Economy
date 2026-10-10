@@ -15,27 +15,15 @@ import {
   type AuditEventsTableProps,
 } from '../audit.contracts'
 import { auditEventLabel, auditOutcomeLabel } from './audit-labels'
+import { statusToneOf } from '@/lib/ui/status-presentation'
+import { RecordTime } from '@/components/ae/operator/RecordTime'
 
 const columns: ColumnDef<AeRecordTableFeatures, AdminAuditRowModel, unknown>[] = [
-  {
-    accessorKey: 'createdAtLabel',
-    header: AUDIT_COPY.columnLabels.time,
-    meta: { truncate: true },
-    cell: ({ row }) => (
-      <time dateTime={row.original.createdAtIso}>{row.original.createdAtLabel}</time>
-    ),
-  },
   {
     accessorKey: 'eventType',
     header: AUDIT_COPY.columnLabels.event,
     meta: { truncate: true },
-    cell: ({ row }) => <span title={row.original.eventType}>{auditEventLabel(row.original.eventType)}</span>,
-  },
-  {
-    accessorKey: 'actorRef',
-    header: AUDIT_COPY.columnLabels.actor,
-    meta: { truncate: true },
-    cell: ({ row }) => <code title={row.original.actorRef}>{row.original.actorRef}</code>,
+    cell: ({ row }) => auditEventLabel(row.original.eventType),
   },
   {
     accessorKey: 'targetLabel',
@@ -48,14 +36,18 @@ const columns: ColumnDef<AeRecordTableFeatures, AdminAuditRowModel, unknown>[] =
   {
     accessorKey: 'outcomeRaw',
     header: AUDIT_COPY.columnLabels.outcome,
-    meta: { truncate: true },
-    cell: ({ row }) => <Badge tone="neutral" size="sm">{auditOutcomeLabel(row.original.outcomeRaw)}</Badge>,
+    cell: ({ row }) => <Badge tone={statusToneOf(row.original.outcomeRaw)} size="sm">{auditOutcomeLabel(row.original.outcomeRaw)}</Badge>,
   },
   {
-    accessorKey: 'correlationId',
-    header: AUDIT_COPY.columnLabels.correlation,
+    accessorKey: 'actorRef',
+    header: AUDIT_COPY.columnLabels.actor,
     meta: { truncate: true },
-    cell: ({ row }) => <code title={row.original.correlationId}>{row.original.correlationId}</code>,
+    cell: ({ row }) => <code>{row.original.actorRef}</code>,
+  },
+  {
+    accessorKey: 'createdAtIso',
+    header: AUDIT_COPY.columnLabels.time,
+    cell: ({ row }) => <RecordTime at={row.original.createdAtIso} />,
   },
 ]
 
@@ -120,7 +112,7 @@ function AuditEventDetails({ row }: { row: AdminAuditRowModel }) {
                   {row.targetRef === null ? null : <AeCopyReference label={AUDIT_COPY.columnLabels.target} value={row.targetRef} />}
                 </dd>
               </div>
-              <div className="arc-admin-source-fact"><dt>{AUDIT_COPY.columnLabels.outcome}</dt><dd><Badge tone="neutral" size="sm">{auditOutcomeLabel(row.outcomeRaw)}</Badge>{row.outcomeRaw === null ? null : <p><code>{row.outcomeRaw}</code></p>}</dd></div>
+              <div className="arc-admin-source-fact"><dt>{AUDIT_COPY.columnLabels.outcome}</dt><dd><Badge tone={statusToneOf(row.outcomeRaw)} size="sm">{auditOutcomeLabel(row.outcomeRaw)}</Badge>{row.outcomeRaw === null ? null : <p><code>{row.outcomeRaw}</code></p>}</dd></div>
               <div className="arc-admin-source-fact"><dt>{AUDIT_COPY.columnLabels.correlation}</dt><dd><AeCopyReference label={AUDIT_COPY.columnLabels.correlation} value={row.correlationId} /></dd></div>
               <AdminAuditDetails admin={row.admin} />
             </dl>

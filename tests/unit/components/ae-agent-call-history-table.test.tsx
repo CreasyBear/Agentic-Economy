@@ -142,14 +142,14 @@ describe('AeAgentCallHistoryTable (W-29)', () => {
     const firstDataRow = within(table).getAllByRole('row')[1]!
     const cells = within(firstDataRow).getAllByRole('cell')
     expect(cells.map((cell) => cell.getAttribute('data-label'))).toEqual([
-      'Tool / Task',
+      'Tool',
       'Provider',
-      'Amount',
       'Status',
-      'When',
+      'Amount',
+      'Started',
       'Receipt',
     ])
-    expect(cells[2]).toHaveClass('tabular-nums')
+    expect(cells[3]).toHaveClass('tabular-nums')
 
     const filter = screen.getByRole('searchbox', { name: 'Filter rows…' })
     fireEvent.change(filter, { target: { value: toolLabel } })

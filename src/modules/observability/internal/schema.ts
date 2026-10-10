@@ -13,7 +13,25 @@ import {
   AuditTargetTypeValues,
 } from '@/modules/common/audit-events'
 
+export const JourneyEventNameValues = [
+  'signed_up', 'intent_answered', 'funded', 'agent_connected', 'first_quote',
+  'first_call', 'activated', 'topped_up', 'retained_w1',
+] as const
+
 export const observabilityTables = {
+  journeyEvents: defineTable({
+    accountRef: v.string(),
+    name: literalUnion(JourneyEventNameValues),
+    eventKey: v.string(),
+    props: v.optional(v.record(v.string(), v.union(v.string(), v.number(), v.boolean()))),
+    createdAt: v.number(),
+    forwardedAt: v.optional(v.number()),
+  })
+    .index('by_eventKey', ['eventKey'])
+    .index('by_accountRef_and_name', ['accountRef', 'name'])
+    .index('by_name_and_createdAt', ['name', 'createdAt'])
+    .index('by_forwardedAt_and_createdAt', ['forwardedAt', 'createdAt']),
+
   auditEvents: defineTable({
     eventId: v.string(),
     eventType: literalUnion(AuditEventTypeValues),

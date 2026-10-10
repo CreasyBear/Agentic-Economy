@@ -6,7 +6,8 @@ import type { ActivityLoaderResult } from './activity.contracts'
 
 type AvailableActivity = Extract<ActivityLoaderResult, { kind: 'available' }>
 type Reports = Pick<AvailableActivity, 'usage' | 'spend' | 'reconciliation'>
-type ReportRequest = { controller: AbortController; promise: ReturnType<typeof readOwnerActivityReportsServer> }
+// A loader-started request has no controller: the router's loader signal owns its cancellation.
+type ReportRequest = { controller?: AbortController; promise: Promise<Reports> }
 
 /** The parent is keyed by Call page and scope, so a new scope starts a new report request. */
 export function useActivityReports(initial: AvailableActivity) {
@@ -25,7 +26,8 @@ export function useActivityReports(initial: AvailableActivity) {
     const current = ++lifetime.generation
     setRetryPending(true)
     try {
-      let request = reuseInitial ? lifetime.initialRequest : undefined
+      let request: ReportRequest | undefined = !reuseInitial ? undefined
+        : initial.reports !== undefined ? { promise: initial.reports } : lifetime.initialRequest
       if (request === undefined) {
         const controller = new AbortController()
         const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(BROWSER_READ_TIMEOUT_MS)])
@@ -33,8 +35,8 @@ export function useActivityReports(initial: AvailableActivity) {
           data: { periodStartAt: initial.periodStartAt, periodEndAt: initial.periodEndAt,
             ...(initial.filteredAgent === undefined ? {} : { principalRef: initial.filteredAgent }) }, signal,
         }), signal) }
+        if (reuseInitial) lifetime.initialRequest = request
       }
-      if (reuseInitial) lifetime.initialRequest = request
       lifetime.activeRequest = request
       const result = await request.promise
       if (current === lifetime.generation) setReports(result)
@@ -47,7 +49,7 @@ export function useActivityReports(initial: AvailableActivity) {
     } finally {
       if (current === lifetime.generation) { lifetime.inFlight = false; setRetryPending(false) }
     }
-  }, [initial.periodStartAt, initial.periodEndAt, initial.filteredAgent])
+  }, [initial.periodStartAt, initial.periodEndAt, initial.filteredAgent, initial.reports])
 
   useEffect(() => {
     const lifetime = lifetimeRef.current
@@ -59,7 +61,7 @@ export function useActivityReports(initial: AvailableActivity) {
       lifetime.inFlight = false
       // Effect replay happens synchronously. A genuine unmount remains unmounted next microtask.
       queueMicrotask(() => {
-        if (!lifetime.mounted) lifetime.activeRequest?.controller.abort(new DOMException('Activity request cancelled.', 'AbortError'))
+        if (!lifetime.mounted) lifetime.activeRequest?.controller?.abort(new DOMException('Activity request cancelled.', 'AbortError'))
       })
     }
   }, [initial.usage.kind, initial.spend.kind, read])

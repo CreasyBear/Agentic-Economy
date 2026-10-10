@@ -135,8 +135,7 @@
   font-size: var(--text-xs);
 }
 
-.arc-credit-document-amount,
-.arc-credit-document-time {
+.arc-credit-document-amount {
   display: block;
   min-width: 0;
   white-space: nowrap;
@@ -159,8 +158,7 @@
   padding-top: var(--space-4);
 }
 
-.arc-credit-history-amount,
-.arc-credit-history-time {
+.arc-credit-history-amount {
   display: block;
   min-width: 0;
   white-space: nowrap;

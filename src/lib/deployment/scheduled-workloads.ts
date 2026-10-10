@@ -42,6 +42,9 @@ export const SCHEDULED_WORKLOADS = [
   { name: 'cleanup expired agent access oauth grants', workloadKind: 'cron', handler: 'cleanupExpiredAgentAccessOAuthGrants', interval: { hours: 1 } },
   { name: 'snapshot marketplace metrics day', workloadKind: 'cron', handler: 'snapshotMarketplaceMetricsDay', daily: { hourUTC: 16, minuteUTC: 10 } },
   { name: 'refresh market flow', workloadKind: 'cron', handler: 'refreshMarketFlow', daily: { hourUTC: 1, minuteUTC: 15 } },
+  { name: 'send operator stalled digest', workloadKind: 'cron', handler: 'sendOperatorDigest', daily: { hourUTC: 22, minuteUTC: 0 } },
+  { name: 'send stalled step emails', workloadKind: 'cron', handler: 'sendStalledStepEmails', daily: { hourUTC: 22, minuteUTC: 30 } },
+  { name: 'retry journey event forwards', workloadKind: 'cron', handler: 'retryJourneyEventForwards', interval: { hours: 1 } },
   // Leave headroom for the five-minute readiness probe without extending source clocks.
   { name: 'reconcile treasury balances', workloadKind: 'reconciliation', handler: 'reconcileTreasuryBalances', interval: { minutes: 5 } },
   { name: 'observe x402 treasury', workloadKind: 'cron', handler: 'observeX402Treasury', interval: { minutes: 5 } },
@@ -69,5 +72,8 @@ export const SCHEDULED_WORKLOAD_JOB_NAMES = [
   'refresh USDC/AUD reference rate',
   'refresh market flow',
   'refresh payment readiness',
+  'retry journey event forwards',
+  'send operator stalled digest',
+  'send stalled step emails',
   'snapshot marketplace metrics day',
 ] as const satisfies readonly TimedWorkloadName[]

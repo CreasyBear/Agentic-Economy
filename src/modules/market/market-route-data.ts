@@ -44,7 +44,7 @@ export async function loadCanonicalMarketSearch(search: MarketSearch, options: M
     })
     const result = await Promise.race([searchMarketToolsServer({ data: input, signal: controller.signal }), canceled])
     controller.signal.throwIfAborted()
-    recordProductJourney({ action: 'search_observed', phase: result.kind === 'unavailable' ? 'failed' : 'observed', surface: 'market', queryLength: input.query.length, resultCount: result.kind === 'unavailable' || result.kind === 'noMatch' ? 0 : result.results.length })
+    recordProductJourney({ action: 'search_observed', phase: result.kind === 'unavailable' ? 'failed' : 'observed', surface: 'market', queryLength: input.query.length, resultCount: result.kind === 'unavailable' || result.kind === 'noMatch' ? 0 : result.results.length, callableCount: result.kind === 'unavailable' || result.kind === 'noMatch' ? 0 : result.results.filter(r => r.access === 'ae_callable').length })
     return result.kind === 'unavailable' && failedPage().refreshFailed === true ? failedPage() : { input, result }
   } catch (cause) {
     if (options.signal?.aborted) throw cause

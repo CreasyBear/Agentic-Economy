@@ -66,6 +66,7 @@ import {
   readOwnerRecoveryHandler, readOwnerReceiptContextHandler, listAgentCallSummariesHandler,
   readRecoveryHandler, readRecoveryArgs, readOwnerRecoveryArgs, readOwnerReceiptContextArgs,
   listAgentCallSummariesArgs, readRecoveryResult, readOwnerReceiptContextResult,
+  watchOwnerCallStateHandler, watchOwnerCallStateArgs, watchOwnerCallStateResult,
 } from './lib/capabilityExecution/callLifecycle/callRecoveryReads'
 import {
   listCallsArgs, cancelCallArgs, reconcileCallArgs, readOwnerCallStatusArgs,
@@ -135,6 +136,9 @@ export const readReplay = internalQuery({ args: readReplayArgs, returns: readRep
 export const readRecovery = internalQuery({ args: readRecoveryArgs, returns: readRecoveryResult, handler: readRecoveryHandler })
 export const readOwnerRecovery = internalQuery({
   args: readOwnerRecoveryArgs, returns: readRecoveryResult, handler: readOwnerRecoveryHandler,
+})
+export const watchOwnerCallState = query({
+  args: watchOwnerCallStateArgs, returns: watchOwnerCallStateResult, handler: watchOwnerCallStateHandler,
 })
 export const readOwnerReceiptContext = internalQuery({
   args: readOwnerReceiptContextArgs, returns: readOwnerReceiptContextResult, handler: readOwnerReceiptContextHandler,

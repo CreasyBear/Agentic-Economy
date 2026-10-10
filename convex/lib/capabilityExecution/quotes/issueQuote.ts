@@ -43,6 +43,7 @@ import {
   type QuoteResult,
 } from './contracts'
 import { env, type MutationCtx } from '../../../_generated/server'
+import { emitJourneyEvent } from '../../journey/events'
 
 export const issueQuoteArgs = {
   operationKey: v.string(),
@@ -336,6 +337,7 @@ export async function issueQuoteHandler(
     createdAt: now,
     updatedAt: now,
   })
+  await emitJourneyEvent(ctx, authority.principal.ownerId, 'first_quote')
   return {
     kind: 'committed',
     quoteRef,

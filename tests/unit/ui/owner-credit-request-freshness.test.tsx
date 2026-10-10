@@ -274,3 +274,51 @@ describe('owner credit read generations', () => {
     })
   }
 })
+
+describe('owner credit provided reads', () => {
+  it('shows provided reads without calling server reads on mount, and refresh calls the server fresh', async () => {
+    const reads = {
+      balance: Promise.resolve(values.balance(0)),
+      history: Promise.resolve(values.history(0)),
+      constraints: Promise.resolve(values.constraints(0)),
+      documents: Promise.resolve(emptyDocuments),
+      reconciliation: Promise.resolve(emptyReconciliation),
+      obligations: Promise.resolve(emptyObligations),
+    }
+    const { result } = renderHook(() => useOwnerCredit(reads))
+    await waitFor(() => expect(result.current.balanceLoading).toBe(false))
+    const balance = result.current.accountBalance
+    expect(balance?.kind === 'available' && balance.balance.units).toBe('12500000')
+    for (const read of [creditReads.balance, creditReads.history, creditReads.constraints, creditReads.documents, creditReads.reconciliation, creditReads.obligations]) {
+      expect(read).not.toHaveBeenCalled()
+    }
+    creditReads.balance.mockResolvedValueOnce(values.balance(2))
+    await act(async () => { await result.current.onCreditRefresh?.() })
+    expect(creditReads.balance).toHaveBeenCalledTimes(1)
+    const refreshed = result.current.accountBalance
+    expect(refreshed?.kind === 'available' && refreshed.balance.units).toBe('14500000')
+  })
+})
+
+describe('owner credit route loader', () => {
+  it('starts no money reads on a hover preload and starts them once on entry', async () => {
+    const { Route } = await import('@/routes/_operator/owner.credit')
+    const { createMemoryHistory, createRootRoute, createRoute, createRouter } = await import('@tanstack/react-router')
+    for (const read of [creditReads.balance, creditReads.history, creditReads.constraints, creditReads.documents, creditReads.reconciliation, creditReads.obligations]) {
+      read.mockResolvedValue({ kind: 'unavailable' })
+    }
+    const root = createRootRoute()
+    const credit = createRoute({ getParentRoute: () => root, path: '/owner/credit',
+      loader: Route.options.loader as () => unknown, ...(Route.options.preload === undefined ? {} : { preload: Route.options.preload }) })
+    const home = createRoute({ getParentRoute: () => root, path: '/' })
+    const router = createRouter({ routeTree: root.addChildren([home, credit]), defaultPreload: 'intent',
+      history: createMemoryHistory({ initialEntries: ['/'] }) })
+    await router.load()
+    await router.preloadRoute({ to: '/owner/credit' } as never)
+    expect(creditReads.balance).not.toHaveBeenCalled()
+    expect(creditReads.documents).not.toHaveBeenCalled()
+    await router.navigate({ to: '/owner/credit' } as never)
+    expect(creditReads.balance).toHaveBeenCalledTimes(1)
+    expect(creditReads.obligations).toHaveBeenCalledTimes(1)
+  })
+})

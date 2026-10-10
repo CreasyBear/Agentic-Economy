@@ -826,4 +826,24 @@ describe('Account Call projection', () => {
       recoveryRef: row.recoveryRef,
     })))
   })
+
+  it('lets only the owning identity watch a Call state, without leaking existence', async () => {
+    const backend = convexTestWithMarketComponents()
+    const owner = await publishedBusinessOwner(backend, 'watch-call-owner')
+    const stranger = await publishedBusinessOwner(backend, 'watch-call-stranger')
+    const now = Date.now()
+    await backend.run(async ctx => {
+      await ctx.db.insert('capabilityCalls', {
+        quoteRef: 'quote:watch', callRef: 'call:watch', principalId: 'principal:watch', ownerId: 'https://identity.example|user_watch-call-owner',
+        credentialId: 'credential:watch', applicationRef: 'agentic-economy', toolRef: 'tool:watch', idempotencyKey: 'watch-purchase', environment: 'sandbox' as const,
+        grantRef: 'grant:watch', grantGeneration: 1, policyDigest: 'sha256:policy', grantExpiresAt: now + 60_000,
+        toolJson: '{}', inputJson: '{}', inputDigest: 'sha256:input', requestDigest: 'sha256:request',
+        state: 'pending' as const, dispatchState: 'enqueued' as const, createdAt: now - 10, updatedAt: now,
+      })
+    })
+    expect(await owner.owner.query(api.capabilityCalls.watchOwnerCallState, { callRef: 'call:watch' })).toEqual({ state: 'pending', updatedAt: now })
+    expect(await stranger.owner.query(api.capabilityCalls.watchOwnerCallState, { callRef: 'call:watch' })).toBeNull()
+    expect(await owner.owner.query(api.capabilityCalls.watchOwnerCallState, { callRef: 'call:unknown' })).toBeNull()
+    expect(await backend.query(api.capabilityCalls.watchOwnerCallState, { callRef: 'call:watch' })).toBeNull()
+  })
 })
