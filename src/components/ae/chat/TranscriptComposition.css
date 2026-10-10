@@ -17,7 +17,7 @@
 .arc-market.arc-transcript-prose li::marker { color: var(--text-secondary); }
 .arc-market.arc-transcript-prose li > :where(p, ul, ol) { margin-block: 5px; }
 .arc-market.arc-transcript-prose a { color: var(--foreground); text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 3px; }
-.arc-market.arc-transcript-prose a:hover { text-decoration-color: currentColor; }
+@media (hover: hover) and (pointer: fine) { .arc-market.arc-transcript-prose a:hover { text-decoration-color: currentColor; } }
 .arc-market.arc-transcript-prose a:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
 .arc-market.arc-transcript-prose :not(pre) > code { padding: .1em .38em; border-radius: 6px; background: color-mix(in oklch, var(--foreground) 6.5%, transparent); font-family: var(--font-mono, ui-monospace, monospace); font-size: var(--text-sm); }
 .arc-market.arc-transcript-prose blockquote { padding-inline-start: 14px; border-inline-start: 2px solid var(--border); color: var(--text-secondary); }
@@ -37,7 +37,7 @@
 .arc-market .arc-answer-sources-heading { margin: 0; font-weight: 500; }
 .arc-market .arc-answer-sources-list { display: grid; min-width: 0; margin: 0; padding: var(--space-1); gap: 2px; border: 1px solid var(--border-subtle); border-radius: 16px; background: var(--surface); list-style: none; }
 .arc-market .arc-answer-source-row { display: flex; min-height: 44px; min-width: 0; align-items: center; gap: 10px; padding: var(--space-2) 10px; border-radius: 12px; color: inherit; text-decoration: none; }
-.arc-market .arc-answer-source-row:hover { color: var(--foreground); background: var(--surface-muted); }
+@media (hover: hover) and (pointer: fine) { .arc-market .arc-answer-source-row:hover { color: var(--foreground); background: var(--surface-muted); } }
 .arc-market .arc-answer-source-row:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .arc-market .arc-answer-source-index { flex: none; width: 1.2em; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .arc-market .arc-answer-source-text { display: grid; min-width: 0; flex: 1; gap: 2px; }

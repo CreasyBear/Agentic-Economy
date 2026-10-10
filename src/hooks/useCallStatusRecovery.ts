@@ -67,7 +67,7 @@ export function useCallStatusRecovery(loadedResult: CallStatusPageResult): Reado
   const watched = useQuery(api.capabilityCalls.watchOwnerCallState, autoRefresh ? { callRef: result.callRef } : 'skip')
   const connection = useConvexConnectionState()
   // The shown version is the row's updatedAt, so the loaded status is the
-  // baseline: any newer row, including the first emission, re-reads once.
+  // baseline: a newer row, including the first emission, re-reads once.
   const watchedVersion = watched?.updatedAt
   const shownVersion = result.kind === 'found' ? result.version : undefined
   const reReadFor = useRef<number | undefined>(undefined)

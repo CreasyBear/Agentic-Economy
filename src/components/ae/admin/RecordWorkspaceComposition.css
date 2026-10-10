@@ -25,7 +25,9 @@
   text-decoration: none;
   overflow-wrap: anywhere;
 }
-.arc-market .arc-admin-record-link:hover { text-decoration: underline; }
+@media (hover: hover) and (pointer: fine) {
+  .arc-market .arc-admin-record-link:hover { text-decoration: underline; }
+}
 .arc-market .arc-admin-record-link:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 3px;
