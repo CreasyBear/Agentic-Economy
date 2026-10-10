@@ -3902,7 +3902,7 @@
   {
     "visibility": "internal",
     "module": "notificationDelivery",
-    "method": "sendApprovalEmail",
+    "method": "sendDeliveryEmail",
     "kind": "action"
   },
   {

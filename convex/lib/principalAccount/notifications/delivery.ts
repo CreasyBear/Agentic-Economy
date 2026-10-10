@@ -15,7 +15,7 @@ export const readNotificationContextResult = v.union(
   v.object({ kind: v.literal('skip'), code: v.string() }),
 )
 
-export const sendApprovalEmailResult = v.union(
+export const sendDeliveryEmailResult = v.union(
   v.object({ outcome: v.literal('sent'), vendorMessageId: v.optional(v.string()) }),
   v.object({ outcome: v.literal('failed'), code: v.string() }),
   v.object({ outcome: v.literal('suppressed'), code: v.string() }),
@@ -23,7 +23,7 @@ export const sendApprovalEmailResult = v.union(
 
 export const completeDeliveryArgs = vOnCompleteArgs(
   v.object({ deliveryId: v.id('notificationDeliveries') }),
-  sendApprovalEmailResult,
+  sendDeliveryEmailResult,
 )
 
 type NotificationContext = Infer<typeof readNotificationContextResult>

@@ -8,6 +8,7 @@ import { usageReportSummarySchema } from '@/lib/export/usage-report-summary'
 import { usageAlertEvidenceSchema } from '@/modules/principal-account/public'
 import { assertAdmission } from '../../platform/rateLimit'
 import { resolveClerkUserIdForPrincipal } from '../workspace/directory'
+import { enqueueEmail } from './enqueue'
 const exact=/^(?:0|[1-9]\d*)$/u
 const monthAt=(at:number)=>new Date(at).toISOString().slice(0,7)
 
@@ -27,13 +28,7 @@ async function enqueue(ctx:MutationCtx,accountRef:string,evidence:unknown,source
   const allowed=data.kind==='low_credit_balance'?prefs.lowCreditBalance:data.kind==='call_failure_spike'?prefs.callFailureSpike:data.kind==='invoice_ready'?prefs.invoiceReady:prefs.spendCapWarning
   if(!allowed)return
   const sourceEventRef=canonicalDigest({format:'ae.usage-alert-episode:v1',sourceKey,preferenceRevision:prefs.revision,authorityRevisionAccount:account.revision})
-  const existing=await ctx.db.query('notificationDeliveries').withIndex('by_recipient_account_event_source',q=>q.eq('recipientPrincipalRef',prefs.principalRef).eq('accountRef',accountRef).eq('eventKind',data.kind).eq('sourceEventRef',sourceEventRef)).unique()
-  if(existing!==null)return
-  const rate=await assertAdmission(ctx,{name:'agent-approval-email',key:`usage:${accountRef}`}),now=Date.now()
-  const deliveryId=await ctx.db.insert('notificationDeliveries',{deliveryRef:`notification:${crypto.randomUUID()}`,recipientPrincipalRef:prefs.principalRef,accountRef,eventKind:data.kind,sourceEventRef,usageEvidenceJson:JSON.stringify(data),preferenceRevision:prefs.revision,authorityRevisionAccount:account.revision,state:rate.ok?'pending':'suppressed',...(rate.ok?{}:{suppressCode:'notification_rate_limited'}),createdAt:now,updatedAt:now})
-  if(!rate.ok)return
-  const workId=await notificationWorkpool.enqueueAction(ctx,internal.notificationDelivery.sendApprovalEmail,{deliveryId},{retry:true,onComplete:internal.notifications.completeDelivery,context:{deliveryId}})
-  await ctx.db.patch(deliveryId,{workId})
+  await enqueueEmail(ctx,{eventKind:data.kind,stream:data.kind==='invoice_ready'?'transactional':'alert',recipientPrincipalRef:prefs.principalRef,accountRef,sourceEventRef,evidence:{usageEvidenceJson:JSON.stringify(data),preferenceRevision:prefs.revision,authorityRevisionAccount:account.revision}})
 }
 export async function enqueueReportUsageAlerts(ctx:MutationCtx,reportRef:string){
   const row=await ctx.db.query('capabilityUsageReports').withIndex('by_reportRef',q=>q.eq('reportRef',reportRef)).unique()
@@ -53,7 +48,7 @@ export async function enqueueDocumentUsageAlert(ctx:MutationCtx,documentRef:stri
 }
 export async function enqueueMoneyAlertEvaluation(ctx:MutationCtx,accountRef:string,captureOperational=false){
   if(await activeUsagePolicy(ctx,accountRef)===null)return
-  const rate=await assertAdmission(ctx,{name:'agent-approval-email',key:`usage-evaluation:${accountRef}`})
+  const rate=await assertAdmission(ctx,{name:'email-alert',key:`usage-evaluation:${accountRef}`})
   if(!rate.ok)return
   await notificationWorkpool.enqueueAction(ctx,internal.notifications.evaluateUsageMoneyAlerts,{accountRef,captureOperational},{retry:true})
 }

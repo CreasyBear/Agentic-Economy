@@ -1,10 +1,9 @@
 import type { Doc } from '../../../_generated/dataModel'
 import type { MutationCtx, QueryCtx } from '../../../_generated/server'
-import { internal } from '../../../_generated/api'
-import { notificationWorkpool } from '../../../notificationWorkpool'
 import type { PaginationOptions } from 'convex/server'
 import { STALLED_STEPS as JOURNEY_STALLED_STEPS, readStalledPage, type StalledStep } from '../../journey/stalled'
 import { resolveClerkUserIdForPrincipal } from '../workspace/directory'
+import { enqueueEmail } from './enqueue'
 
 type StalledKind = 'stalled_not_funded' | 'stalled_no_agent' | 'stalled_never_called'
 
@@ -63,32 +62,13 @@ export async function enqueueStalledStepEmailsHandler(
   for (const { accountRef } of page.page) {
     const recipientPrincipalRef = await stalledRecipient(ctx, accountRef)
     if (recipientPrincipalRef === null) continue
-    const existing = await ctx.db.query('notificationDeliveries')
-      .withIndex('by_recipient_account_event_source', (query) => query
-        .eq('recipientPrincipalRef', recipientPrincipalRef)
-        .eq('accountRef', accountRef)
-        .eq('eventKind', eventKind)
-        .eq('sourceEventRef', accountRef)).unique()
-    if (existing !== null) continue
-
-    const now = Date.now()
-    const deliveryId = await ctx.db.insert('notificationDeliveries', {
-      deliveryRef: `notification:${crypto.randomUUID()}`,
+    await enqueueEmail(ctx, {
+      eventKind,
+      stream: 'lifecycle',
       recipientPrincipalRef,
       accountRef,
-      eventKind,
       sourceEventRef: accountRef,
-      state: 'pending',
-      createdAt: now,
-      updatedAt: now,
     })
-    const workId = await notificationWorkpool.enqueueAction(
-      ctx,
-      internal.notificationDelivery.sendApprovalEmail,
-      { deliveryId },
-      { retry: true, onComplete: internal.notifications.completeDelivery, context: { deliveryId } },
-    )
-    await ctx.db.patch(deliveryId, { workId })
   }
   return { isDone: page.isDone, continueCursor: page.continueCursor }
 }

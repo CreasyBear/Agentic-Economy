@@ -78,7 +78,7 @@ async function pendingApprovalDelivery() {
   return { backend, deliveryId, deliveryRef }
 }
 
-describe('sendApprovalEmail', () => {
+describe('sendDeliveryEmail', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-09-30T12:00:00.000Z'))
@@ -112,7 +112,7 @@ describe('sendApprovalEmail', () => {
       new Response(JSON.stringify({ id: 'resend-message-123' }), { status: 200 }))
     vi.stubGlobal('fetch', sendEmail)
 
-    await expect(backend.action(internal.notificationDelivery.sendApprovalEmail, { deliveryId }))
+    await expect(backend.action(internal.notificationDelivery.sendDeliveryEmail, { deliveryId }))
       .resolves.toEqual({ outcome: 'sent', vendorMessageId: 'resend-message-123' })
     expect(clerkMocks.getUser).toHaveBeenCalledWith('user_sam')
     expect(sendEmail).toHaveBeenCalledOnce()
@@ -138,7 +138,7 @@ describe('sendApprovalEmail', () => {
     const { backend, deliveryId } = await pendingApprovalDelivery()
     vi.stubGlobal('fetch', vi.fn(async () => new Response('not json', { status: 202 })))
 
-    await expect(backend.action(internal.notificationDelivery.sendApprovalEmail, { deliveryId }))
+    await expect(backend.action(internal.notificationDelivery.sendDeliveryEmail, { deliveryId }))
       .resolves.toEqual({ outcome: 'sent' })
   })
 
@@ -146,7 +146,7 @@ describe('sendApprovalEmail', () => {
     const { backend, deliveryId } = await pendingApprovalDelivery()
     vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 429 })))
 
-    await expect(backend.action(internal.notificationDelivery.sendApprovalEmail, { deliveryId }))
+    await expect(backend.action(internal.notificationDelivery.sendDeliveryEmail, { deliveryId }))
       .rejects.toThrow()
   })
 
@@ -154,7 +154,7 @@ describe('sendApprovalEmail', () => {
     const { backend, deliveryId } = await pendingApprovalDelivery()
     vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 503 })))
 
-    await expect(backend.action(internal.notificationDelivery.sendApprovalEmail, { deliveryId }))
+    await expect(backend.action(internal.notificationDelivery.sendDeliveryEmail, { deliveryId }))
       .rejects.toThrow()
   })
 
@@ -162,7 +162,7 @@ describe('sendApprovalEmail', () => {
     const { backend, deliveryId } = await pendingApprovalDelivery()
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('network unavailable') }))
 
-    await expect(backend.action(internal.notificationDelivery.sendApprovalEmail, { deliveryId }))
+    await expect(backend.action(internal.notificationDelivery.sendDeliveryEmail, { deliveryId }))
       .rejects.toThrow()
   })
 
@@ -170,7 +170,7 @@ describe('sendApprovalEmail', () => {
     const { backend, deliveryId } = await pendingApprovalDelivery()
     vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 400 })))
 
-    await expect(backend.action(internal.notificationDelivery.sendApprovalEmail, { deliveryId }))
+    await expect(backend.action(internal.notificationDelivery.sendDeliveryEmail, { deliveryId }))
       .resolves.toEqual({ outcome: 'failed', code: 'provider_rejected_400' })
   })
 
@@ -185,7 +185,7 @@ describe('sendApprovalEmail', () => {
     const sendEmail = vi.fn()
     vi.stubGlobal('fetch', sendEmail)
 
-    await expect(backend.action(internal.notificationDelivery.sendApprovalEmail, { deliveryId }))
+    await expect(backend.action(internal.notificationDelivery.sendDeliveryEmail, { deliveryId }))
       .resolves.toEqual({ outcome: 'failed', code: 'no_verified_email' })
     expect(sendEmail).not.toHaveBeenCalled()
   })
@@ -197,7 +197,7 @@ describe('sendApprovalEmail', () => {
     vi.stubGlobal('fetch', sendEmail)
     vi.spyOn(console, 'error').mockImplementation(() => {})
 
-    await expect(backend.action(internal.notificationDelivery.sendApprovalEmail, { deliveryId }))
+    await expect(backend.action(internal.notificationDelivery.sendDeliveryEmail, { deliveryId }))
       .resolves.toEqual({ outcome: 'suppressed', code: 'sender_not_configured' })
     expect(clerkMocks.getUser).not.toHaveBeenCalled()
     expect(sendEmail).not.toHaveBeenCalled()
@@ -224,7 +224,7 @@ describe('sendApprovalEmail', () => {
     const sendEmail = vi.fn()
     vi.stubGlobal('fetch', sendEmail)
 
-    await expect(backend.action(internal.notificationDelivery.sendApprovalEmail, { deliveryId }))
+    await expect(backend.action(internal.notificationDelivery.sendDeliveryEmail, { deliveryId }))
       .resolves.toEqual({ outcome: 'suppressed', code: 'opted_out' })
     expect(clerkMocks.getUser).not.toHaveBeenCalled()
     expect(sendEmail).not.toHaveBeenCalled()

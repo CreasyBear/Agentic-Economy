@@ -6,22 +6,27 @@ import { v, type Infer } from 'convex/values'
 import { degradeBackend } from '../src/lib/observability/degrade-backend'
 import { internal } from './_generated/api'
 import { internalAction } from './_generated/server'
-import { sendApprovalEmailResult } from './lib/principalAccount/notifications/delivery'
+import { sendDeliveryEmailResult } from './lib/principalAccount/notifications/delivery'
 import { postResendEmail } from './lib/principalAccount/notifications/resend'
 import { buildDigest, operatorDate } from './operatorDigest'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 /** The operator reads the digest in Sydney, so the subject and idempotency key use that calendar day. */
 
-export const sendApprovalEmail = internalAction({
+/** Digest of the props an email is built from. Send compares it across two reads, so a change between them stops the send. */
+const propsDigest = (props: Record<string, unknown>) =>
+  canonicalDigest({ ...props, unsubscribeUrl: props.unsubscribeUrl ?? null })
+
+export const sendDeliveryEmail = internalAction({
   args: { deliveryId: v.id('notificationDeliveries') },
-  returns: sendApprovalEmailResult,
-  handler: async (ctx, { deliveryId }): Promise<Infer<typeof sendApprovalEmailResult>> => {
+  returns: sendDeliveryEmailResult,
+  handler: async (ctx, { deliveryId }): Promise<Infer<typeof sendDeliveryEmailResult>> => {
     const resendApiKey = process.env.RESEND_API_KEY?.trim()
     const fromEmail = process.env.NOTIFICATION_FROM_EMAIL?.trim()
     const clerkSecretKey = process.env.CLERK_SECRET_KEY?.trim()
     if (!resendApiKey || !fromEmail || !clerkSecretKey) {
       degradeBackend(new Error('notification_sender_credentials_missing'), undefined, {
-        site: 'sendApprovalEmail',
+        site: 'sendDeliveryEmail',
         reason: 'source_unavailable',
       })
       return { outcome: 'suppressed', code: 'sender_not_configured' }
@@ -37,9 +42,9 @@ export const sendApprovalEmail = internalAction({
       return { outcome: 'failed', code: 'no_verified_email' }
     }
 
-    const fresh=await ctx.runQuery(internal.notifications.readNotificationContext,{deliveryId})
-    if(fresh.kind==='skip')return {outcome:'suppressed',code:fresh.code}
-    if(fresh.deliveryRef!==context.deliveryRef||fresh.clerkUserId!==context.clerkUserId||fresh.subject!==context.subject||fresh.text!==context.text||fresh.unsubscribeUrl!==context.unsubscribeUrl)return {outcome:'suppressed',code:'notification_context_changed'}
+    const fresh = await ctx.runQuery(internal.notifications.readNotificationContext, { deliveryId })
+    if (fresh.kind === 'skip') return { outcome: 'suppressed', code: fresh.code }
+    if (propsDigest(fresh) !== propsDigest(context)) return { outcome: 'suppressed', code: 'notification_context_changed' }
 
     return await postResendEmail({
       apiKey: resendApiKey,

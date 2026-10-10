@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { WorkId } from '@convex-dev/workpool'
 import { components, internal } from '../../../convex/_generated/api'
 import { AUTHORITY_REQUEST_TTL_MS } from '../../../convex/lib/capabilityExecution/callLifecycle/admissionApprovals'
+import { enqueueEmail } from '../../../convex/lib/principalAccount/notifications/enqueue'
 import { convexTestWithWorkers } from '../../helpers/convex-fixtures'
 import { samIdentity } from '../../helpers/interactive-authority-provisioning'
 import {
@@ -605,6 +606,29 @@ describe('approval notification deliveries', () => {
     }
   })
 
+  it('stamps approval deliveries with the transactional stream', async () => {
+    const backend = await createNotificationBackend()
+    await seedAuthority(backend)
+    const callRef = 'operation-invocation:v1:notification-stream'
+    await insertPendingApprovalCall(backend, callRef)
+
+    await expect(enqueueApprovalNotice(backend, callRef)).resolves.toEqual({ kind: 'enqueued' })
+    await expect(listDeliveryRows(backend)).resolves.toEqual([expect.objectContaining({ stream: 'transactional' })])
+  })
+
+  it('suppresses an approval while the transactional stream switch is off', async () => {
+    vi.stubEnv('AE_EMAIL_TRANSACTIONAL_ENABLED', 'false')
+    const backend = await createNotificationBackend()
+    await seedAuthority(backend)
+    const callRef = 'operation-invocation:v1:notification-kill-switch'
+    await insertPendingApprovalCall(backend, callRef)
+
+    await expect(enqueueApprovalNotice(backend, callRef)).resolves.toEqual({ kind: 'suppressed' })
+    const rows = await listDeliveryRows(backend)
+    expect(rows).toEqual([expect.objectContaining({ state: 'suppressed', suppressCode: 'stream_disabled', stream: 'transactional' })])
+    expect(rows[0]?.workId).toBeUndefined()
+  })
+
   it('atomically enqueues the approval when the reserved Call records its pending result', async () => {
     vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     vi.stubEnv('AE_FORMANCE_ENVIRONMENT', 'production')
@@ -733,6 +757,38 @@ describe('approval notification deliveries', () => {
   })
 })
 
+describe('alert email caps', () => {
+  it('allows one alert per kind and three alerts per recipient in a rolling day, suppressing the rest', async () => {
+    vi.useFakeTimers()
+    try {
+      vi.setSystemTime(NOW + 1_000)
+      const backend = await createNotificationBackend()
+      await seedAuthority(backend)
+      const send = (eventKind: 'low_credit_balance' | 'spend_cap_warning' | 'spend_cap_exceeded' | 'call_failure_spike', sourceEventRef: string) =>
+        backend.run((ctx) => enqueueEmail(ctx, {
+          eventKind,
+          stream: 'alert',
+          recipientPrincipalRef: PRINCIPAL_REF,
+          accountRef: ACCOUNT_REF,
+          sourceEventRef,
+        }))
+      await expect(send('low_credit_balance', 'month-1:low-credit')).resolves.toBe('enqueued')
+      await expect(send('low_credit_balance', 'month-2:low-credit')).resolves.toBe('suppressed')
+      await expect(send('spend_cap_warning', 'month-1:ceiling')).resolves.toBe('enqueued')
+      await expect(send('call_failure_spike', 'month-1:calls')).resolves.toBe('enqueued')
+      await expect(send('spend_cap_warning', 'month-1:ceiling-2')).resolves.toBe('suppressed')
+      await expect(send('spend_cap_exceeded', 'month-1:ceiling-exceeded')).resolves.toBe('suppressed')
+      const rows = await listDeliveryRows(backend)
+      expect(rows.filter((row) => row.state === 'suppressed').map((row) => row.suppressCode))
+        .toEqual(['alert_kind_daily_cap', 'alert_kind_daily_cap', 'alert_daily_cap'])
+      vi.setSystemTime(NOW + 2_000 + 24 * 60 * 60 * 1000)
+      await expect(send('low_credit_balance', 'month-3:low-credit')).resolves.toBe('enqueued')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
 describe('stalled step notification deliveries', () => {
   async function seedStalledOwner(backend: InteractiveAuthorityBackend, stalledStepEmails: boolean | undefined) {
     await seedAuthority(backend)
@@ -789,6 +845,27 @@ describe('stalled step notification deliveries', () => {
       state: 'pending',
       workId: expect.any(String),
     })
+  })
+
+  it('stamps stalled-step deliveries with the lifecycle stream', async () => {
+    vi.stubEnv('AE_STALLED_EMAILS_ENABLED', 'true')
+    const backend = await createNotificationBackend()
+    await seedStalledOwner(backend, true)
+
+    await enqueueStalled(backend)
+    await expect(listDeliveryRows(backend)).resolves.toEqual([expect.objectContaining({ stream: 'lifecycle', state: 'pending' })])
+  })
+
+  it('suppresses stalled-step mail while the lifecycle stream switch is off', async () => {
+    vi.stubEnv('AE_STALLED_EMAILS_ENABLED', 'true')
+    vi.stubEnv('AE_EMAIL_LIFECYCLE_ENABLED', 'false')
+    const backend = await createNotificationBackend()
+    await seedStalledOwner(backend, true)
+
+    await enqueueStalled(backend)
+    const rows = await listDeliveryRows(backend)
+    expect(rows).toEqual([expect.objectContaining({ state: 'suppressed', suppressCode: 'stream_disabled', stream: 'lifecycle' })])
+    expect(rows[0]?.workId).toBeUndefined()
   })
 
   it('reaches every stalled step in one run, so a later step is not starved by an earlier one', async () => {
