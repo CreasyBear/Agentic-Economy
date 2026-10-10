@@ -24,6 +24,9 @@ const HANDLERS: Record<ScheduledWorkloadName, FunctionReference<'mutation' | 'ac
   'observe x402 treasury': internal.workloadCron.observeX402Treasury,
   'snapshot marketplace metrics day': internal.workloadCron.snapshotMarketplaceMetricsDay,
   'refresh market flow': internal.workloadCron.refreshMarketFlow,
+  'send operator stalled digest': internal.workloadCron.sendOperatorDigest,
+  'send stalled step emails': internal.workloadCron.sendStalledStepEmails,
+  'retry journey event forwards': internal.workloadCron.retryJourneyEventForwards,
   'refresh payment readiness': internal.workloadCron.refreshPaymentReadiness,
 }
 

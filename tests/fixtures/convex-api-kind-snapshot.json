@@ -1,5 +1,17 @@
 [
   {
+    "visibility": "public",
+    "module": "accountIntents",
+    "method": "answer",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "accountIntents",
+    "method": "readMine",
+    "kind": "query"
+  },
+  {
     "visibility": "internal",
     "module": "actionExecutionControl",
     "method": "readAttempt",
@@ -2430,6 +2442,36 @@
     "kind": "mutation"
   },
   {
+    "visibility": "internal",
+    "module": "journeyEvents",
+    "method": "eraseAccount",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "journeyEvents",
+    "method": "forward",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "journeyEvents",
+    "method": "markForwarded",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "journeyEvents",
+    "method": "readEvent",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "journeyEvents",
+    "method": "retryUnforwarded",
+    "kind": "mutation"
+  },
+  {
     "visibility": "public",
     "module": "marketDemandSignals",
     "method": "list",
@@ -3859,6 +3901,12 @@
   },
   {
     "visibility": "internal",
+    "module": "notificationDelivery",
+    "method": "sendOperatorDigest",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
     "module": "notifications",
     "method": "completeDelivery",
     "kind": "mutation"
@@ -3873,6 +3921,12 @@
     "visibility": "internal",
     "module": "notifications",
     "method": "enqueueMoneyUsageAlerts",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "notifications",
+    "method": "enqueueStalledStepEmails",
     "kind": "mutation"
   },
   {
@@ -3912,6 +3966,18 @@
     "kind": "mutation"
   },
   {
+    "visibility": "internal",
+    "module": "notifications",
+    "method": "sweepStalledStepEmails",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "notifications",
+    "method": "unsubscribeStalled",
+    "kind": "mutation"
+  },
+  {
     "visibility": "public",
     "module": "notifications",
     "method": "updatePreferences",
@@ -3921,6 +3987,30 @@
     "visibility": "public",
     "module": "operatorContext",
     "method": "readCurrent",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "operatorDigest",
+    "method": "completeDigest",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "operatorDigest",
+    "method": "enqueue",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "operatorDigest",
+    "method": "intents",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "operatorDigest",
+    "method": "stalledPage",
     "kind": "query"
   },
   {
@@ -4293,6 +4383,24 @@
     "visibility": "internal",
     "module": "workloadCron",
     "method": "refreshReferenceRate",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "workloadCron",
+    "method": "retryJourneyEventForwards",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "workloadCron",
+    "method": "sendOperatorDigest",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "workloadCron",
+    "method": "sendStalledStepEmails",
     "kind": "action"
   },
   {

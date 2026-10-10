@@ -1066,7 +1066,7 @@ describe('canonical Market search', () => {
     expect(screen.getByRole('link', { name: 'Weather Forecast' })).toBeTruthy()
     expect(searchMarketToolsServer).toHaveBeenCalledTimes(1)
     expect(recordProductJourney.mock.calls.filter(([event]) => event.action === 'search_observed')).toEqual([
-      [{ action: 'search_observed', phase: 'observed', surface: 'market', queryLength: 7, resultCount: searchRows.length }],
+      [{ action: 'search_observed', phase: 'observed', surface: 'market', queryLength: 7, resultCount: searchRows.length, callableCount: searchRows.filter(row => row.access === 'ae_callable').length }],
     ])
   })
   it('cancels a departed pending query and starts a current read on return', async () => {

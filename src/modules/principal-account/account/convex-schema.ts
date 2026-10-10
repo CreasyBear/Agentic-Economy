@@ -109,6 +109,7 @@ export const userNotificationPreferenceValue = v.object({
   invoiceReady: v.boolean(),
   teamMembershipChanged: v.boolean(),
   agentApprovalRequested: v.optional(v.boolean()),
+  stalledStepEmails: v.optional(v.boolean()),
   revision: v.number(),
   updatedAt: v.number(),
   lastCorrelationRef: v.string(),
@@ -124,6 +125,9 @@ export const notificationEventKindValue = v.union(
   v.literal('invoice_ready'),
   v.literal('team_membership_changed'),
   v.literal('agent_approval_requested'),
+  v.literal('stalled_not_funded'),
+  v.literal('stalled_no_agent'),
+  v.literal('stalled_never_called'),
 )
 
 export const notificationDeliveryStateValue = v.union(
@@ -244,10 +248,18 @@ export const accountTables = {
     .index('by_accountRef_and_lifecycle', ['accountRef', 'lifecycle']),
   accountSecurityPolicies: defineTable(accountSecurityPolicyValue)
     .index('by_accountRef', ['accountRef']),
+  accountIntents: defineTable({
+    accountRef: v.string(),
+    text: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_accountRef', ['accountRef']),
   userNotificationPreferences: defineTable(userNotificationPreferenceValue)
     .index('by_principalRef_and_accountRef', ['principalRef', 'accountRef'])
     .index('by_accountRef', ['accountRef']),
   notificationDeliveries: defineTable(notificationDeliveryValue)
+    .index('by_deliveryRef', ['deliveryRef'])
     .index('by_recipient_account_event_source', [
       'recipientPrincipalRef',
       'accountRef',

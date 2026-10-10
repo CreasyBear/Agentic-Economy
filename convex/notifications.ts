@@ -3,6 +3,7 @@ import {usageHistoryArgs,usageHistoryResult,readUsageAlertHistoryHandler} from '
 import {activeUsagePolicy,usageMoneyEvidenceArgs,enqueueMoneyUsageAlertsHandler,evaluateUsageMoneyAlertsHandler} from './lib/principalAccount/notifications/usageAlerts'
 import { v } from 'convex/values'
 import { internalAction,internalQuery, query } from './_generated/server'
+import { degradeBackend } from '../src/lib/observability/degrade-backend'
 import { internalMutation, mutation } from './usageTrackedMutation'
 import {
   completeDeliveryArgs,
@@ -12,6 +13,14 @@ import {
   readNotificationContextResult,
 } from './lib/principalAccount/notifications/delivery'
 import { enqueueAgentApprovalRequestedHandler } from './lib/principalAccount/notifications/enqueue'
+import { paginationOptsValidator } from 'convex/server'
+import { internal } from './_generated/api'
+import { STALLED_STEP_NAMES, stalledStepValue } from './lib/journey/stalled'
+import {
+  enqueueStalledStepEmailsHandler,
+  stalledEmailsEnabled,
+  unsubscribeStalledHandler,
+} from './lib/principalAccount/notifications/stalled'
 import {
   readPreferencesArgs,
   readPreferencesHandler,
@@ -39,6 +48,46 @@ export const enqueueAgentApprovalRequested = internalMutation({
     kind: v.union(v.literal('enqueued'), v.literal('exists'), v.literal('skipped'), v.literal('suppressed')),
   }),
   handler: enqueueAgentApprovalRequestedHandler,
+})
+
+export const enqueueStalledStepEmails = internalMutation({
+  args: { step: stalledStepValue, now: v.number(), paginationOpts: paginationOptsValidator },
+  returns: v.object({ isDone: v.boolean(), continueCursor: v.string() }),
+  handler: enqueueStalledStepEmailsHandler,
+})
+
+const STALLED_EMAIL_PAGE_SIZE = 50
+
+/** Walks every stalled step to its last page, so each step gets its own pass and none starves another. */
+export const sweepStalledStepEmails = internalAction({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx): Promise<null> => {
+    if (!stalledEmailsEnabled()) return null
+    const now = Date.now()
+    for (const step of STALLED_STEP_NAMES) {
+      let cursor: string | null = null
+      try {
+        for (;;) {
+          const page: { isDone: boolean; continueCursor: string } = await ctx.runMutation(internal.notifications.enqueueStalledStepEmails, {
+            step, now, paginationOpts: { numItems: STALLED_EMAIL_PAGE_SIZE, cursor },
+          })
+          if (page.isDone) break
+          cursor = page.continueCursor
+        }
+      } catch (error) {
+        // One failing step is reported and the sweep moves on; the next daily run retries it.
+        degradeBackend(error, undefined, { site: `sweepStalledStepEmails.${step}`, reason: 'source_unavailable' })
+      }
+    }
+    return null
+  },
+})
+
+export const unsubscribeStalled = internalMutation({
+  args: { deliveryRef: v.string() },
+  returns: v.boolean(),
+  handler: unsubscribeStalledHandler,
 })
 
 export const readNotificationContext = internalQuery({
