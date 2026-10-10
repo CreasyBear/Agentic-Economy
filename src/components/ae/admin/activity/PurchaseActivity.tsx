@@ -90,7 +90,7 @@ function PurchaseActivityQuery({ search, compact = false }: PurchaseActivityProp
         </div>
       </div>
       {activity.results.length === 0 ? (
-        <div className="ae-arc rounded-card border border-border bg-card">
+        <div className="ae-arc rounded-lg border border-border bg-card">
           <AeEmptyState
             icon={<ShoppingBagIcon size={24} />}
             title={exhausted ? 'No matching purchases' : 'No matches in the records scanned'}

@@ -1,3 +1,4 @@
+import { formatTimestamp } from '@/lib/ui/format-time'
 import { Link } from '@tanstack/react-router'
 import { AeAccountFundingPanel } from '@/components/ae/console/AeCreditTopUpPanel'
 import { Card, CardContent } from '@/components/ui/card'
@@ -33,10 +34,7 @@ export function CreditFundPanel({
   const balance = accountBalance?.kind === 'available' ? accountBalance.totalBalance ?? accountBalance.balance : undefined
   const promotionalBalance = accountBalance?.kind === 'available' ? accountBalance.promotionalBalance : undefined
   const nextPromotionalExpiryAt = accountBalance?.kind === 'available' ? accountBalance.nextPromotionalExpiryAt : undefined
-  const expiryLabel = nextPromotionalExpiryAt == null ? undefined : new Intl.DateTimeFormat('en-AU', {
-    day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit',
-    timeZone: 'Australia/Perth', timeZoneName: 'short',
-  }).format(nextPromotionalExpiryAt)
+  const expiryLabel = nextPromotionalExpiryAt == null ? undefined : `${formatTimestamp(nextPromotionalExpiryAt, 'Australia/Perth')} AWST`
   const balanceUnavailable = accountBalance === undefined || accountBalance.kind === 'refused'
   const balanceRefreshUnavailable = unavailable.balance === true && accountBalance?.kind === 'available'
   const balanceLocked = accountBalance?.kind === 'available' && accountBalance.locked

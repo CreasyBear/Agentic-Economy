@@ -4,7 +4,7 @@ import { Button } from '@/components/arc/button/button'
 import { Input } from '@/components/arc/input/input'
 import { BillingHistory } from '@/components/ae/shared/arc-pro/billing-overview/billing-overview'
 import { AeFactList } from '@/components/ae/data/AeFactList'
-import { formatUtcTimestamp } from '@/lib/ui/format-time'
+import { formatTimestamp } from '@/lib/ui/format-time'
 import { downloadJson } from '@/lib/export/csv-export'
 import { createOwnerMonthlyUsageDraftServer, readOwnerMonthlyUsageDraftServer } from '@/lib/server/monthly-usage-draft.functions'
 import { monthlyDraftIntentSchema, readFrozenMonthlyDraft } from '@/modules/capability-execution/monthly-usage-draft'
@@ -61,8 +61,8 @@ export function ActivityMonthlyDraft({returnScope, draftRef}: {returnScope: Acti
     {frozen === null ? null : <>
       <AeFactList facts={[{label: 'UTC month / revision', value: `${frozen.snapshot.month} / ${frozen.snapshot.revision}`},
         {label: 'Financial source environment', value: frozen.snapshot.sourceIdentity.environment},
-        {label: 'Ledger recorded through (UTC)', value: formatUtcTimestamp(frozen.snapshot.ledgerSnapshotAt)},
-        {label: 'Call facts and measurement heads captured (UTC)', value: formatUtcTimestamp(frozen.snapshot.sourcesCapturedAt)},
+        {label: 'Ledger recorded through (UTC)', value: formatTimestamp(frozen.snapshot.ledgerSnapshotAt, 'UTC')},
+        {label: 'Call facts and measurement heads captured (UTC)', value: formatTimestamp(frozen.snapshot.sourcesCapturedAt, 'UTC')},
         {label: 'Historical deliveries measured in this month', value: String(frozen.snapshot.measurements.length)},
         {label: 'Deliveries supported at source capture', value: String(frozen.snapshot.measurements.filter(row => row.evidence.kind === 'available' && row.evidence.currentQuantityUnits === '1').length)},
         {label: 'Historical measurements with unknown current support', value: String(frozen.snapshot.measurements.filter(row => row.evidence.kind === 'available' && row.evidence.currentQuantityUnits === null).length)},

@@ -162,7 +162,7 @@ function AeActivityAvailable({
           onShowAccountPlans={vm.clearAgent} pending={vm.datePending} />
         <p className="text-xs text-muted-foreground">{vm.pagination.items.length} Calls loaded. Table status filters, sorting and loaded exports apply to loaded rows. Saved full-period reports read every page for the selected period, Agent and status, up to 366 days. Changed source records require a new report; incomplete reports cannot be downloaded.</p>
         <section aria-labelledby="activity-finance-title" className="grid min-w-0 gap-8 border-t border-border pt-8">
-          <div className="grid gap-1"><h2 id="activity-finance-title" className="text-lg font-semibold">Finance and reporting</h2>
+          <div className="grid gap-1"><h2 id="activity-finance-title" className="text-lg font-medium">Finance and reporting</h2>
             <p className="text-sm text-muted-foreground">Recorded totals, reconciliation, and exports for the selected Account or Agent scope.</p></div>
         {finance.pending ? <ActivityReportsSkeleton /> : <>
         <ActivityMonthlySummary

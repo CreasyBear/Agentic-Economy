@@ -5,7 +5,7 @@ import { AeMarketPage } from "@/components/ae/market/AeMarketPage";
 import { Button } from "@/components/arc/button/button";
 import { degrade } from "@/lib/observability/degrade";
 import { loadMarketPageRouteData, marketDocumentTitle, marketLoaderDeps, validateMarketSearch } from '@/modules/market/market.functions';
-import { marketShowsLandingRows } from '@/modules/market/market-route-data';
+import { marketShowsLandingRows, type MarketCanonicalSearchPage } from '@/modules/market/market-route-data';
 import { buildPublicPageHead, buildSiteJsonLd } from "@/modules/seo/public";
 
 export { parseMarketCompareRefs, validateMarketSearch } from '@/modules/market/market.functions'
@@ -24,11 +24,15 @@ export const Route = createFileRoute("/market")({
   loaderDeps: ({ search }) => marketLoaderDeps(search),
   // The keyword index is awaited; best-match ranking and the default browse's titled rows are
   // deferred promises, so the grid never waits for them. The rows reuse the landing's cached read.
-  loader: async ({ deps, abortController }) => {
+  // A failed ranking refresh keeps the committed ranking, so hand it to the next load.
+  beforeLoad: ({ matches, routeId }): { previousCanonicalSearch: Promise<MarketCanonicalSearchPage> | undefined } => ({
+    previousCanonicalSearch: (matches.find(match => match.routeId === routeId)?.loaderData as Readonly<{ canonicalSearch?: Promise<MarketCanonicalSearchPage> }> | undefined)?.canonicalSearch,
+  }),
+  loader: async ({ deps, abortController, context }) => {
     const landingRows = marketShowsLandingRows(deps)
       ? readLandingServer().then(landing => landing.rows, cause => degrade<readonly LandingRow[]>(cause, [], { site: 'marketLandingRows', reason: 'source_unavailable' }))
       : undefined;
-    const data = await loadMarketPageRouteData(deps, { signal: abortController?.signal });
+    const data = await loadMarketPageRouteData(deps, { signal: abortController?.signal, previousCanonicalSearch: context?.previousCanonicalSearch });
     return { ...data, landingRows };
   },
   // Ranking sends the query to the disclosed recipient. Activate first.

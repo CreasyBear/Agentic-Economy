@@ -1,5 +1,6 @@
 export const motionTokens = {
-  duration: { instant: 0.12, fast: 0.16, exit: 0.18, standard: 0.24, considered: 0.48 },
+  /** aecon caps motion at 150ms and exits at 120ms (spec: Foundations, Motion). */
+  duration: { instant: 0.08, fast: 0.12, exit: 0.12, standard: 0.15, considered: 0.15 },
   ease: {
     enter: [0.16, 1, 0.3, 1],
     exit: [0.7, 0, 0.84, 0],
@@ -8,14 +9,14 @@ export const motionTokens = {
     inOut: [0.65, 0, 0.35, 1],
   },
   spring: {
-    responsive: { type: "spring", stiffness: 520, damping: 38 },
-    gentle: { type: "spring", stiffness: 340, damping: 34 },
-    /** Presses, toggles, thumbs, and small indicators. Settles fast with a hint of life. */
-    snappy: { type: "spring", visualDuration: 0.26, bounce: 0.12 },
+    responsive: { type: "spring", visualDuration: 0.15, bounce: 0 },
+    gentle: { type: "spring", visualDuration: 0.15, bounce: 0 },
+    /** Presses, toggles, thumbs, and small indicators. No bounce. */
+    snappy: { type: "spring", visualDuration: 0.15, bounce: 0 },
     /** Panels, height changes, and layout shifts. Critically damped, never overshoots. */
-    smooth: { type: "spring", visualDuration: 0.4, bounce: 0 },
+    smooth: { type: "spring", visualDuration: 0.15, bounce: 0 },
     /** Shape morphs, shared layout highlights, and width changes that follow new content. */
-    morph: { type: "spring", visualDuration: 0.42, bounce: 0.16 },
+    morph: { type: "spring", visualDuration: 0.15, bounce: 0 },
   },
   /** Stagger steps in seconds. Keep total stagger under roughly 0.4s. */
   stagger: { char: 0.016, word: 0.04, line: 0.08, item: 0.035 },

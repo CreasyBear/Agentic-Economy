@@ -1,6 +1,6 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest';
 import { isRecord } from "@/modules/common/is-record";
-import { formatCurrencyAmount, type ExactAmount } from "@/modules/money/public";
+import { formatExactAmount, type ExactAmount } from "@/modules/money/public";
 
 import { admitBazaarDiscoveryInfo, type BazaarAdmission } from "./publication-importer-x402-bazaar";
 import type {
@@ -368,6 +368,11 @@ function exactAtomicAmount(units: bigint, exponent: number): ExactAmount | undef
     : { currency: "USDC", units: value, exponent };
 }
 
+/** Stored term value keeps its original "USDC 0.02" serialisation; display formatting must not rewrite persisted data. */
+function storedAmountLabel(amount: ExactAmount): string {
+  return `${amount.currency} ${formatExactAmount(amount) ?? "—"}`;
+}
+
 export function admittedFacilitatorDiscoveryDraft(
   normalized: CanonicalCapabilityPublicationDraft,
   decision: FacilitatorDiscoveryAdmitCandidate,
@@ -375,7 +380,7 @@ export function admittedFacilitatorDiscoveryDraft(
 ): FacilitatorDiscoveryAdmittedDraft {
   const materialTerms = [
     ...normalized.offering.presentation.materialTerms,
-    { termId: "provider-amount", label: "Listed Provider amount", value: formatCurrencyAmount(decision.price.provider) },
+    { termId: "provider-amount", label: "Listed Provider amount", value: storedAmountLabel(decision.price.provider) },
     { termId: "buyer-total", label: "Buyer total", value: "Confirmed in AUD by a binding Quote for your input." },
   ].slice(0, 64);
   const { price: _discoveredProviderPrice, ...presentationWithoutPrice } = normalized.offering.presentation;

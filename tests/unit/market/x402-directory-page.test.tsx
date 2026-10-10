@@ -785,6 +785,13 @@ describe('canonical Market search', () => {
     expect(status[0]!.textContent).toBe('Finding best matches')
     expect(status[0]!.querySelector('[aria-hidden="true"]')).toBeTruthy()
   })
+  it('keeps the last good best matches visible with an honest note and retry when a refresh fails', async () => {
+    const last = { ...searchMeta, kind: 'match', results: searchRows } satisfies ToolChoiceSearchOutput
+    show({ view: 'tools', query: 'weather' }, [], { page: indexedPage, catalogue: indexedCatalogue, overview }, () => ({ input: { query: 'weather', limit: 8 }, result: last, refreshFailed: true }))
+    expect(await screen.findByRole('link', { name: 'Weather Forecast' })).toBeTruthy()
+    expect(screen.getByText(/Best matches couldn’t refresh/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy()
+  })
   it('keeps a successful canonical result across a Providers view round trip without searching again', async () => {
     const first = { ...searchMeta, kind: 'match', results: searchRows } satisfies ToolChoiceSearchOutput
     searchMarketToolsServer.mockResolvedValue(first)

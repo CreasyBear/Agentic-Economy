@@ -32,7 +32,7 @@ export function ProviderConnectionReviewDialog({ open, onOpenChange, resourceUrl
       </ItemGroup>
       <ItemSeparator />
       <section className="grid gap-2" aria-label="Observed payment lane">
-        <h2 className="text-sm font-semibold">Observed payment lane</h2>
+        <h2 className="text-sm font-medium">Observed payment lane</h2>
         {inspection === undefined ? <p>The payment lane is no longer available. Inspect and prove this endpoint again.</p> : <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
           <dt>Amount</dt><dd className="break-all">{inspection.amount}</dd><dt>Network</dt><dd className="break-all">{inspection.network}</dd><dt>Asset</dt><dd className="break-all">{inspection.asset}</dd><dt>Payee</dt><dd className="break-all">{inspection.payTo}</dd>
         </dl>}

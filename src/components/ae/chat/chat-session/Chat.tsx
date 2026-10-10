@@ -11,6 +11,7 @@ import { ChatLayout } from './components/ChatLayout'
 import type { ChatPendingResume, ChatProps } from './chat-session.contracts'
 import { readAccountFundingBalanceServer } from '@/modules/money/money.functions'
 import { formatDisplayAmount } from '@/modules/money/public'
+import { formatTimestamp } from '@/lib/ui/format-time'
 import { parseRunRequest } from '@/modules/chat/run-request'
 
 export function Chat({ onNewChat: onStartNewChat, ...props }: ChatProps) {
@@ -103,10 +104,7 @@ export function Chat({ onNewChat: onStartNewChat, ...props }: ChatProps) {
         setBalanceDescription(undefined)
         setBalanceRefresh(value => value + 1)
       }, Math.min(2_147_483_647, Math.max(0, expiry - Date.now())))
-      const nextExpiry = expiry == null ? undefined : new Intl.DateTimeFormat('en-AU', {
-        day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit',
-        timeZone: 'Australia/Perth', timeZoneName: 'short',
-      }).format(expiry)
+      const nextExpiry = expiry == null ? undefined : formatTimestamp(expiry, 'Australia/Perth')
       setBalanceDescription(promotional !== undefined && promotionalUnits !== '0'
         ? `Purchased credit ${purchased}. Promotional credit ${formatDisplayAmount(promotional)}.${nextExpiry === undefined ? '' : ` Next promotional credit expiry ${nextExpiry}.`}`
         : `Purchased credit ${purchased}.`)

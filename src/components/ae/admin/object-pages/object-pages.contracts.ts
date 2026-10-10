@@ -1,3 +1,4 @@
+import { formatTimestamp } from '@/lib/ui/format-time'
 import { ADMIN_ACCESS_REFUSED_COPY, type AdminObjectRef } from '@/lib/operator/admin-console/contracts'
 import type {
   AdminAgentView,
@@ -87,16 +88,6 @@ export const ADMIN_OBJECT_PAGE_COPY = {
   },
 }
 
-const perthTimestampFormatter = new Intl.DateTimeFormat('en-AU', {
-  day: 'numeric',
-  month: 'short',
-  year: 'numeric',
-  hour: 'numeric',
-  minute: '2-digit',
-  timeZone: 'Australia/Perth',
-  timeZoneName: 'short',
-})
-
 export function formatPerthTimestamp(value: number): string {
-  return perthTimestampFormatter.format(value)
+  return `${formatTimestamp(value, 'Australia/Perth')} AWST`
 }

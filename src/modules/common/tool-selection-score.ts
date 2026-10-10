@@ -1,3 +1,5 @@
+import { formatCount } from '@/lib/ui/format-time'
+
 /**
  * One deterministic scorer for choosing a Tool on a buyer's behalf.
  *
@@ -53,7 +55,7 @@ export function toolSelectionReasons(evidence: ToolSelectionEvidence): readonly 
   if (evidence.usedBefore) reasons.push('you have used it before')
   const aeTotal = evidence.aeCompleted + evidence.aeFailed
   if (aeTotal > 0) reasons.push(`${Math.round((evidence.aeCompleted / aeTotal) * 100)}% of ${aeTotal} calls succeeded`)
-  if (evidence.payers30d !== undefined && evidence.payers30d > 0) reasons.push(`${evidence.payers30d.toLocaleString('en-AU')} buyers this month`)
+  if (evidence.payers30d !== undefined && evidence.payers30d > 0) reasons.push(`${formatCount(evidence.payers30d)} buyers this month`)
   if ((evidence.reportedByBuyers30d ?? 0) > 0) reasons.push(`${evidence.reportedByBuyers30d} buyers reported an answer this month`)
   return reasons
 }

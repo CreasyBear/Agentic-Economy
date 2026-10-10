@@ -1,3 +1,4 @@
+import { formatCount } from '@/lib/ui/format-time'
 import { Link } from '@tanstack/react-router'
 import { ArrowRightIcon, StoreIcon } from 'lucide-react'
 import { Avatar } from '@/components/arc/avatar/avatar'
@@ -20,7 +21,7 @@ type HostRow = {
   model: ReturnType<typeof toDirectoryProviderRow>
 }
 
-const toolCount = (count: number) => `${count.toLocaleString('en-AU')} ${count === 1 ? 'tool' : 'tools'}`
+const toolCount = (count: number) => `${formatCount(count)} ${count === 1 ? 'tool' : 'tools'}`
 
 /** Every provider in the host index with its whole-index tool count. Opening one shows the tools it lists. */
 export function DirectoryProvidersIndex({ result, search = {} }: DirectoryProvidersIndexProps) {

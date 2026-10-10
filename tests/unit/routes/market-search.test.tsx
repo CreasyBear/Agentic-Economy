@@ -458,6 +458,33 @@ describe('Router-owned canonical Market search', () => {
     await expect(pending).resolves.toMatchObject({ result: undefined })
     expect(signal.aborted).toBe(true)
   })
+  it('keeps the last good ranking, marked refreshFailed, when a refresh of the same search fails', async () => {
+    reads.search.mockResolvedValueOnce(result)
+    const deps = { view: 'tools', query: 'weather' } as const
+    const previous = await loadCanonicalMarketSearch(deps)
+    reads.search.mockRejectedValueOnce(new Error('lost'))
+    await expect(loadCanonicalMarketSearch(deps, { previousCanonicalSearch: Promise.resolve(previous) })).resolves.toEqual({ input: previous.input, result, refreshFailed: true })
+    reads.search.mockResolvedValueOnce({ kind: 'unavailable', reason: 'source_unavailable' })
+    await expect(loadCanonicalMarketSearch(deps, { previousCanonicalSearch: previous })).resolves.toEqual({ input: previous.input, result, refreshFailed: true })
+    reads.search.mockRejectedValueOnce(new Error('lost'))
+    await expect(loadCanonicalMarketSearch({ view: 'tools', query: 'storm' }, { previousCanonicalSearch: previous })).resolves.toEqual({ input: expect.objectContaining({ query: 'storm' }), result: undefined })
+  })
+  it('passes the committed ranking to the next Market load', async () => {
+    const page = { input: { query: 'weather', limit: 8 }, result }
+    const beforeLoad = Route.options.beforeLoad
+    if (typeof beforeLoad !== 'function') throw new Error('market_before_load_missing')
+    const context = await beforeLoad({ routeId: '/market', matches: [{ routeId: '/market', loaderData: { canonicalSearch: Promise.resolve(page) } }] } as never)
+    await expect((context as { previousCanonicalSearch: Promise<unknown> }).previousCanonicalSearch).resolves.toEqual(page)
+  })
+  it('ignores a superseded response even when the transport does not honour the abort', async () => {
+    const late = deferred<typeof result>()
+    reads.search.mockReturnValueOnce(late.promise)
+    const route = new AbortController()
+    const pending = loadCanonicalMarketSearch({ view: 'tools', query: 'weather' }, { signal: route.signal, previousCanonicalSearch: { input: { query: 'weather', limit: 8 }, result } as never })
+    route.abort()
+    await expect(pending).resolves.toEqual({ input: expect.objectContaining({ query: 'weather' }), result: undefined })
+    late.resolve(result)
+  })
   it('resolves with no result when the query cannot form a ranked search', async () => {
     await expect(loadCanonicalMarketSearch({ view: 'tools', query: '   ' })).resolves.toEqual({ input: undefined, result: undefined })
     expect(reads.search).not.toHaveBeenCalled()

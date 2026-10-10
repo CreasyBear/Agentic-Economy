@@ -23,27 +23,52 @@ import { recordProductJourney } from '@/lib/observability/product-journey'
 export type MarketCanonicalSearchPage = Readonly<{
   input: ReturnType<typeof toolCatalogSearchInputSchema.parse> | undefined
   result: ToolChoiceSearchOutput | undefined
+  /** The refresh failed; `result` is the last good ranking for the same input. */
+  refreshFailed?: true
 }>
-export type MarketRouteReadOptions = Readonly<{ signal?: AbortSignal | undefined }>
+export type MarketRouteReadOptions = Readonly<{
+  signal?: AbortSignal | undefined
+  /** The committed ranking, kept when a refresh of the same search fails. */
+  previousCanonicalSearch?: MarketCanonicalSearchPage | Promise<MarketCanonicalSearchPage> | undefined
+}>
 
-/** Bounded at 15s and by the route's own abort. A failure resolves with no result; the page keeps its keyword matches. */
+/**
+ * Bounded at 15s and by the route's own abort. A superseded search never publishes, even when the
+ * transport ignores the abort. A failed refresh keeps the last good ranking for the same input.
+ */
 export async function loadCanonicalMarketSearch(search: MarketSearch, options: MarketRouteReadOptions = {}): Promise<MarketCanonicalSearchPage> {
   const parsed = toolCatalogSearchInputSchema.safeParse(marketToolSearchInput(search))
   if (!parsed.success) return degrade(parsed.error, { input: undefined, result: undefined }, { site: 'marketCanonicalSearchInput', reason: 'invalid_response' })
   const input = parsed.data
   const deadline = AbortSignal.timeout(15_000)
   const signal = options.signal === undefined ? deadline : AbortSignal.any([options.signal, deadline])
+  let stopWaiting: (() => void) | undefined
+  const aborted = new Promise<never>((_resolve, reject) => {
+    stopWaiting = () => reject(signal.reason)
+    signal.addEventListener('abort', stopWaiting, { once: true })
+  })
   try {
-    const result = await searchMarketToolsServer({ data: input, signal })
+    signal.throwIfAborted()
+    const result = await Promise.race([searchMarketToolsServer({ data: input, signal }), aborted])
+    signal.throwIfAborted()
     recordProductJourney({ action: 'search_observed', phase: result.kind === 'unavailable' ? 'failed' : 'observed', surface: 'market', queryLength: input.query.length, resultCount: result.kind === 'unavailable' || result.kind === 'noMatch' ? 0 : result.results.length, callableCount: result.kind === 'unavailable' || result.kind === 'noMatch' ? 0 : result.results.filter(r => r.access === 'ae_callable').length })
-    return { input, result }
+    return result.kind === 'unavailable' ? await failedCanonicalMarketSearch(input, options.previousCanonicalSearch) : { input, result }
   } catch (cause) {
     // A reader who left the page cancelled this search; that is not a failed search.
     if (options.signal?.aborted) return { input, result: undefined }
     recordProductJourney({ action: 'search_observed', phase: 'failed', surface: 'market', queryLength: input.query.length })
     degrade(cause, undefined, { site: 'marketCanonicalSearch', reason: 'source_unavailable' })
-    return { input, result: undefined }
+    return await failedCanonicalMarketSearch(input, options.previousCanonicalSearch)
+  } finally {
+    if (stopWaiting !== undefined) signal.removeEventListener('abort', stopWaiting)
   }
+}
+
+async function failedCanonicalMarketSearch(input: NonNullable<MarketCanonicalSearchPage['input']>, previousSource: MarketRouteReadOptions['previousCanonicalSearch']): Promise<MarketCanonicalSearchPage> {
+  const previous = await previousSource
+  const retained = previous?.result !== undefined && previous.result.kind !== 'unavailable'
+    && JSON.stringify(previous.input) === JSON.stringify(input)
+  return retained ? { input, result: previous.result, refreshFailed: true } : { input, result: undefined }
 }
 
 /** Only pass refinements that the canonical mixed search applies before pagination. */

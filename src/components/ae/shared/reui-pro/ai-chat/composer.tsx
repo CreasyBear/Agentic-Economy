@@ -29,7 +29,7 @@ export function ReuiChatComposer(props: ReuiChatComposerProps) {
       field.current?.focus()
     }}>
       <FieldLabel className="sr-only" htmlFor={props.inputId}>{props.label}</FieldLabel>
-      <InputGroup className="h-auto rounded-3xl bg-background px-2 shadow-xs [&_[data-slot=button]]:rounded-full" data-invalid={props.invalid || undefined}>
+      <InputGroup className="h-auto rounded-xl bg-background px-2 [&_[data-slot=button]]:rounded-full" data-invalid={props.invalid || undefined}>
         <InputGroupTextarea id={props.inputId} ref={field} rows={1}
           value={props.value} onChange={event => props.onValueChange(event.target.value)}
           placeholder={props.placeholder} disabled={props.disabled} aria-invalid={props.invalid} aria-describedby={props.describedBy}

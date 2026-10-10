@@ -5,6 +5,7 @@ import { v } from 'convex/values'
 import { internal } from './_generated/api'
 import { internalMutation, internalQuery, type ActionCtx } from './_generated/server'
 import { degradeBackend } from '../src/lib/observability/degrade-backend'
+import { formatDateInputValue } from '../src/lib/ui/format-time'
 import { singleLineText } from './lib/journey/events'
 import {
   STALLED_STEP_NAMES,
@@ -69,7 +70,10 @@ async function collectStalled(ctx: Pick<ActionCtx, 'runQuery'>, now: number): Pr
   return stalled
 }
 
-export const OPERATOR_DATE = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Sydney', year: 'numeric', month: '2-digit', day: '2-digit' })
+/** Sydney calendar date, e.g. "2026-10-10". */
+export function operatorDate(at: number): string {
+  return formatDateInputValue(at, 'Australia/Sydney')
+}
 
 /** Hours under two days, whole days after, so rows compare at a glance. */
 function age(ms: number): string {
@@ -84,7 +88,7 @@ export function formatDigest(stalled: Stalled, intentText: ReadonlyMap<string, s
     const accounts = stalled[step]
     lines.push(`${title}: ${accounts.length} total`)
     for (const { accountRef, since } of accounts.slice(0, LIST_CAP)) {
-      lines.push(`- ${accountRef}, ${age(now - since)} (since ${OPERATOR_DATE.format(since)})`)
+      lines.push(`- ${accountRef}, ${age(now - since)} (since ${operatorDate(since)})`)
       const intent = singleLineText(intentText.get(accountRef) ?? '')
       if (intent.length > 0) {
         lines.push(`  intent: "${intent.length > INTENT_CHARS ? `${intent.slice(0, INTENT_CHARS)}...` : intent}"`)

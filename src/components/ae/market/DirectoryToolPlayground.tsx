@@ -1,3 +1,4 @@
+import { formatCount } from '@/lib/ui/format-time'
 import { useAuth } from '@clerk/tanstack-react-start'
 import { Link, useLocation } from '@tanstack/react-router'
 import { useId, useMemo, useState, type ReactNode } from 'react'
@@ -112,7 +113,7 @@ export function DirectoryToolPlayground({ run, input, sampleOutputJson, inputNot
         </ToolInputFormBoundary>
         : jsonEditor}
       {showForm && errors.length > 0 ? <Alert tone="warning" title={errors.length === 1 ? 'Fix this before running' : 'Fix these before running'}><ul>{errors.slice(0, 4).map((error, index) => <li key={`${index}:${error}`}>{error}</li>)}</ul></Alert> : null}
-      {tooLongForChat(run, input) ? <Alert tone="warning" title="Too long to run from chat">This input is over the {CHAT_PROMPT_LIMIT.toLocaleString('en-AU')} character limit for chat. Shorten it, or run it from your agent. <a href="#connect" className={styles.inlineLink}>Connect your agent</a></Alert> : null}
+      {tooLongForChat(run, input) ? <Alert tone="warning" title="Too long to run from chat">This input is over the {formatCount(CHAT_PROMPT_LIMIT)} character limit for chat. Shorten it, or run it from your agent. <a href="#connect" className={styles.inlineLink}>Connect your agent</a></Alert> : null}
       {inputNotice}
     </section>
 

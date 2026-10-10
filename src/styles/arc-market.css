@@ -1,13 +1,14 @@
 /*
- * AE edge bridge for the pristine Arc foundation. Vendor tokens are loaded
- * in the lowest layer; theme aliases, focus, and portal behavior live here.
+ * aecon overrides for the pristine Arc foundation. Vendor tokens load in the
+ * lowest layer; unlayered :root and scope overrides here map them onto the
+ * spec's tokens (type, controls, radii, shadow, motion), focus and portals.
  */
 @import "../components/arc/foundation.css" layer(arc-foundation);
 
 @layer arc-foundation {
   :root *:focus-visible {
     outline: 2px solid var(--ring) !important;
-    outline-offset: 3px;
+    outline-offset: 2px;
   }
 
   :is(main#main-content:focus, [data-programmatic-focus]:focus) {
@@ -32,7 +33,22 @@
 
 :root {
   --focus-ring: var(--ring);
-  --duration-spring: 580ms;
+  /* Arc tokens mapped onto aecon's (spec: Foundations). foundation.css stays unedited. */
+  --tracking-body: var(--ae-tracking-body);
+  --tracking-display: var(--ae-tracking-title);
+  --radius-control: var(--radius-sm);
+  --radius-panel: var(--radius-lg);
+  --radius-surface: var(--radius-xl);
+  --radius-pill: 9999px;
+  --shadow-resting: none;
+  --shadow-raised: none;
+  --shadow-floating: var(--ae-shadow-overlay);
+  --duration-instant: 80ms;
+  --duration-fast: 120ms;
+  --duration-standard: 150ms;
+  --duration-considered: 150ms;
+  --duration-spring: 150ms;
+  --ease-spring: var(--motion-ease-standard);
   /* Brand kit: charts use Forest and Stone only. Overrides the vendor series
      (blue, violet, orange) and its hue-rotating relative-colour set. */
   --series-1: var(--ae-brand);
@@ -45,12 +61,34 @@
   --arc-gradient: var(--ae-surface-sunken);
   --arc-gradient-foreground: var(--ae-fg);
   --arc-gradient-soft: var(--ae-surface);
-  --arc-gradient-line: var(--ae-border);
+  --arc-gradient-line: var(--ae-hairline);
   --arc-gradient-ink: var(--ae-fg);
 }
 
 :root.dark {
   --focus-ring: var(--ring);
+}
+
+/*
+ * Arc's type and control sizes, declared on the Arc scopes rather than :root:
+ * a custom property resolves where it is declared, so this is what lets an
+ * ancestor [data-density] reach them, and it keeps Tailwind's text-* scale
+ * (same names) out of the mapping.
+ */
+.arc-market,
+.ae-arc {
+  --text-xs: var(--ae-text-body);
+  --text-sm: var(--ae-text-body);
+  --text-base: var(--ae-text-body);
+  --text-lg: var(--ae-text-body);
+  --text-xl: var(--ae-text-title);
+  --text-2xl: var(--ae-text-title);
+  --text-3xl: var(--ae-text-title);
+  --text-4xl: var(--ae-text-title);
+  --text-5xl: var(--ae-text-title);
+  --control-height-sm: var(--ae-control);
+  --control-height-md: var(--ae-control);
+  --control-height-lg: var(--ae-control);
 }
 
 .arc-market,
@@ -66,11 +104,11 @@
   --foreground: var(--ae-fg);
   --text-secondary: var(--ae-muted-fg);
   --text-muted: var(--ae-muted-fg);
-  --border: var(--ae-border);
-  --border-subtle: color-mix(in srgb, var(--ae-border) 55%, var(--ae-surface));
+  --border: var(--ae-hairline);
+  --border-subtle: var(--ae-hairline);
   --border-strong: var(--ae-border-strong);
   --accent: var(--ae-brand);
-  --accent-strong: var(--ae-brand-strong);
+  --accent-strong: var(--ae-brand);
   --accent-subtle: color-mix(in srgb, var(--ae-brand) 10%, var(--ae-surface));
   --accent-foreground: var(--ae-on-brand);
   --focus-ring: var(--ae-ring);
@@ -78,22 +116,15 @@
   --control-fill: var(--control-on);
   --control-glyph: var(--ae-on-brand);
   --control-track: var(--ae-surface-sunken);
-  --control-track-hover: var(--ae-border);
+  --control-track-hover: var(--ae-border-strong);
   --control-thumb: #ffffff;
   --control-thumb-on: #ffffff;
   --control-on-subtle: var(--accent-subtle);
   --success: var(--ae-success-foreground);
   --warning: var(--ae-warning-foreground);
   --danger: var(--ae-danger-foreground);
-  --font-display: var(--ae-font-display);
+  --font-display: var(--ae-font-sans);
   --font-body: var(--ae-font-sans);
-  --control-height-sm: 2.75rem;
-  --control-height-md: 2.75rem;
-  --control-height-lg: 3.125rem;
-  --shadow-resting: var(--shadow-low);
-  --shadow-raised: var(--ae-shadow-overlay);
-  --shadow-floating: var(--shadow-med);
-  --duration-spring: 580ms;
   color: var(--foreground);
   font-family: var(--font-body);
   font-weight: 400;
@@ -109,7 +140,6 @@
   --control-thumb-shadow: 0 0 0 .5px oklch(0% 0 0 / .3), 0 1px 2px oklch(0% 0 0 / .35), 0 2px 6px oklch(0% 0 0 / .2);
   --success: var(--ae-brand);
   --warning: color-mix(in oklch, var(--ae-warning) 60%, var(--ae-fg));
-  --shadow-floating: var(--shadow-high);
 }
 
 .ae-arc {
@@ -118,10 +148,10 @@
   --surface-raised: var(--ae-surface);
   --text-secondary: var(--ae-muted-fg);
   --text-muted: var(--ae-muted-fg);
-  --border-subtle: var(--ae-border);
+  --border-subtle: var(--ae-hairline);
   --border-strong: var(--ae-border-strong);
   --accent: var(--ae-brand);
-  --accent-strong: var(--ae-brand-strong);
+  --accent-strong: var(--ae-brand);
   --accent-subtle: var(--ae-brand-muted);
   --accent-foreground: var(--primary-foreground);
   --success: var(--ae-success-foreground);
@@ -130,32 +160,9 @@
   --focus-ring: var(--ring);
   --font-body: var(--ae-font-sans);
   --font-display: var(--ae-font-sans);
-  --tracking-body: -0.01em;
-  --leading-body: 1.4;
-  --space-1: 0.25rem;
-  --space-2: 0.5rem;
-  --space-3: 0.75rem;
-  --space-4: 1rem;
-  --space-5: 1.25rem;
-  --space-6: 1.5rem;
-  --space-8: 2rem;
-  --space-12: 3rem;
-  --radius-control: var(--radius-lg);
-  --radius-panel: var(--radius-card);
-  --radius-pill: 9999px;
-  --control-height-sm: 2.25rem;
-  --control-height-md: 2.75rem;
-  --control-height-lg: 3.125rem;
-  --shadow-resting: var(--shadow-soft);
-  --shadow-floating: var(--ae-shadow-overlay);
-  --duration-instant: 120ms;
-  --duration-fast: 150ms;
-  --duration-standard: 220ms;
-  --duration-considered: 480ms;
-  --duration-spring: 580ms;
-  --ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
-  --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
+  --leading-body: var(--ae-leading-body);
+  --ease-enter: var(--motion-ease-standard);
+  --ease-standard: var(--motion-ease-standard);
 }
 
 .dark .ae-arc {
@@ -173,11 +180,11 @@
   --foreground: var(--ae-fg);
   --text-secondary: var(--ae-muted-fg);
   --text-muted: var(--ae-muted-fg);
-  --border: var(--ae-border);
-  --border-subtle: var(--ae-border);
+  --border: var(--ae-hairline);
+  --border-subtle: var(--ae-hairline);
   --border-strong: var(--ae-border-strong);
   --accent: var(--ae-brand);
-  --accent-strong: var(--ae-brand-strong);
+  --accent-strong: var(--ae-brand);
   --accent-subtle: var(--ae-brand-muted);
   --accent-foreground: var(--ae-on-brand);
   --focus-ring: var(--ring);
@@ -185,10 +192,7 @@
   --warning: var(--ae-warning-foreground);
   --danger: var(--ae-danger-foreground);
   --font-body: var(--ae-font-sans);
-  --font-display: var(--ae-font-display);
-  --radius-control: var(--radius-lg);
-  --radius-panel: var(--radius-card);
-  --shadow-floating: var(--ae-shadow-overlay);
+  --font-display: var(--ae-font-sans);
 }
 
 .dark [role="listbox"]:has([data-radix-select-viewport]) {

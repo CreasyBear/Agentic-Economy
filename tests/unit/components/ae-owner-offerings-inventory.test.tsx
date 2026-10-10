@@ -153,7 +153,7 @@ describe('AeOwnerOfferingsList (W-34)', () => {
         publicDisplay: 'on_request',
       },
       pricingLabel: 'Price on request',
-    })).toBe('USDC 0.010000 / call')
+    })).toBe('0.01 USDC / call')
   })
 
   it('T4: retains the accessible Tool destination and native focus', () => {

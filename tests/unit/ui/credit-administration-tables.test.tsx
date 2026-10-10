@@ -134,7 +134,7 @@ describe('compact Provider obligations', () => {
     expect(within(table).getAllByRole('columnheader')).toHaveLength(5)
     expect(within(within(table).getAllByRole('row')[1]!).getAllByRole('cell').map(cell => cell.getAttribute('data-label')))
       .toEqual(['Provider', 'State', 'Buyer amount', 'Provider amount', 'Inspect'])
-    expect(within(table).getByText('USDC 7.654321')).toBeTruthy()
+    expect(within(table).getByText('7.654321 USDC')).toBeTruthy()
     expect(within(table).queryByText('Amount unknown')).toBeNull()
     expect(within(table).queryByText(obligation.callRef)).toBeNull()
     fireEvent.click(within(table).getByRole('button', { name: `Inspect Provider obligation ${obligation.obligationRef}` }))
@@ -144,8 +144,8 @@ describe('compact Provider obligations', () => {
       obligation.reversalTransactionRef!, obligation.reversalStatusRef!]) {
       expect(within(details).getByText(value)).toBeTruthy()
     }
-    expect(within(details).getByText('AUD 1.234567')).toBeTruthy()
-    expect(within(details).getAllByText('USDC 7.654321').length).toBeGreaterThan(0)
+    expect(within(details).getByText('A$1.234567')).toBeTruthy()
+    expect(within(details).getAllByText('7.654321 USDC').length).toBeGreaterThan(0)
     expect(within(details).getByText('Ineligible for AE payout (managed x402)')).toBeTruthy()
     expect(within(details).queryByText(/settled by x402/iu)).toBeNull()
     expect(within(details).queryByRole('button', { name: /pay|resolve|retry/iu })).toBeNull()
@@ -189,7 +189,7 @@ describe('compact Provider obligations', () => {
     rerender(<CreditProviderObligationRecords rows={[refreshed]} />)
     const details = screen.getByRole('dialog')
     expect(within(details).getByText('provider:current')).toBeTruthy()
-    expect(within(details).getByText('AUD 3.000001')).toBeTruthy()
+    expect(within(details).getByText('A$3.000001')).toBeTruthy()
     expect(within(details).queryByText('provider:original')).toBeNull()
     fireEvent.keyDown(details, { key: 'Escape' })
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())

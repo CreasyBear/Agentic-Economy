@@ -4,6 +4,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 
 import { callPublicSourceQuery, sourceQuery } from '@/lib/server/convex-source'
+import { withSignal } from '@/lib/server/request-with-signal'
 import { degrade } from '@/lib/observability/degrade'
 import type { ToolDetailResult } from '@/modules/capability-supply/public'
 import type { ReferenceRate } from '@/modules/money/public'
@@ -55,7 +56,7 @@ export const readPublicToolDetailRouteServer = createServerFn()
       : price.kind === 'range' && price.minimum.currency === 'USDC')
     const [evidence, service, referenceRate] = await Promise.all([
       readOptional(() => readToolListingEvidence(result.tool, '30d', optionalOptions), 'toolListingEvidence'),
-      readOptional(() => registryServicesDetailAction.run({ data: { slug: result.tool.business.slug }, context: { caller: 'ui', request: new Request(request, { signal: optionalSignal }) } }), 'toolPublicBusiness'),
+      readOptional(() => registryServicesDetailAction.run({ data: { slug: result.tool.business.slug }, context: { caller: 'ui', request: withSignal(request, optionalSignal) } }), 'toolPublicBusiness'),
       needsRate ? readOptional(() => readPersistedReferenceRate(optionalOptions), 'toolReferenceRate') : undefined,
     ])
     request.signal.throwIfAborted()

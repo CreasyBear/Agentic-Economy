@@ -4,6 +4,7 @@
  * Invariant: filtered-empty recovery never changes sorting, row identity or authority.
  * On violation: existing loading, empty and non-selectable states remain explicit. */
 
+import { formatCount } from '@/lib/ui/format-time'
 import {
   filterFn_includesString,
   flexRender,
@@ -451,8 +452,8 @@ export function AeRecordTable<TData extends object>({
           {...(announceChanges ? {} : { role: 'status', 'aria-live': 'polite' })}
           className="arc-record-footer"
         >
-          {selectedVisibleCount.toLocaleString()} of{' '}
-          {selectableVisibleRows.length.toLocaleString()} selected
+          {formatCount(selectedVisibleCount)} of{' '}
+          {formatCount(selectableVisibleRows.length)} selected
           {selection.rowInteraction && selectedVisibleCount > 0 ? <Button type="button" variant="ghost" size="sm" className="ms-2" onClick={() => {
             table.resetRowSelection(true); setAnnouncement('Selection cleared')
             tableRootRef.current?.querySelector<HTMLElement>('thead [role="checkbox"]')?.focus()

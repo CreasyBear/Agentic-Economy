@@ -1,3 +1,4 @@
+import { formatCount } from '@/lib/ui/format-time'
 import { Link } from '@tanstack/react-router'
 import { useEffect, useState, type ReactNode } from 'react'
 import { ActivityIcon } from 'lucide-react'
@@ -73,13 +74,11 @@ export function DirectoryToolPage({ metadata, providerHost, slug, baseUrl, refer
   }} />
 }
 
-const countFormat = new Intl.NumberFormat('en-AU')
-
 function DirectoryActivity({ activity }: Readonly<{ activity: X402DirectoryEntry['activity'] }>) {
   const lastCalled = activity?.lastCalledAt === undefined ? undefined : new Date(activity.lastCalledAt)
   const facts: ([string, ReactNode] | undefined)[] = [
-    activity?.calls30d === undefined ? undefined : ['Paid calls, last 30 days', countFormat.format(activity.calls30d)],
-    activity?.payers30d === undefined ? undefined : ['Buyers, last 30 days', countFormat.format(activity.payers30d)],
+    activity?.calls30d === undefined ? undefined : ['Paid calls, last 30 days', formatCount(activity.calls30d)],
+    activity?.payers30d === undefined ? undefined : ['Buyers, last 30 days', formatCount(activity.payers30d)],
     lastCalled === undefined || Number.isNaN(lastCalled.getTime()) ? undefined : ['Last paid call', <RelativeTime key="last-called" value={lastCalled} />],
   ]
   const rows = facts.filter((row): row is [string, ReactNode] => row !== undefined)

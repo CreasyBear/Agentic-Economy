@@ -12,7 +12,7 @@ import { ProductListing } from '@/components/ae/shared/arc-pro/market/ProductLis
 import { AeComparisonTable } from '@/components/ae/shared/comparison-table/AeComparisonTable'
 import { Badge } from '@/components/arc/badge/badge'
 import { Spinner } from '@/components/ui/spinner'
-import { formatUtcTimestamp } from '@/lib/ui/format-time'
+import { formatTimestamp } from '@/lib/ui/format-time'
 import {
   chatBelowMatch,
   chatBrowseMarket,
@@ -123,7 +123,7 @@ function CompareTable({ choices }: { choices: readonly ToolChoiceRow[] }) {
       : []),
     ...(choices.some((choice) => choice.priceValidUntil !== undefined)
       ? [{ id: 'priceValidUntil', feature: 'Price valid until', values: valuesFor((choice) => choice.priceValidUntil === undefined
-        ? 'Not published' : `${formatUtcTimestamp(choice.priceValidUntil)} UTC`), retainWhenSame: true }]
+        ? 'Not published' : `${formatTimestamp(choice.priceValidUntil, 'UTC')} UTC`), retainWhenSame: true }]
       : []),
     ...(choices.some((choice) => choice.networkLabel !== undefined)
       ? [{ id: 'networkLabel', feature: 'Network', values: valuesFor((choice) => choice.networkLabel ?? 'Not published') }]

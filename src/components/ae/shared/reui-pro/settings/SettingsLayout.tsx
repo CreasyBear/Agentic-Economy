@@ -29,7 +29,7 @@ export function ProfileSettingsPage({ title, description, action, children, head
   return <section className="min-w-0 space-y-8">
     <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="min-w-0 space-y-1">
-        <h1 ref={headingRef} tabIndex={headingRef === undefined ? undefined : -1} className="text-2xl font-semibold tracking-tight">{title}</h1>
+        <h1 ref={headingRef} tabIndex={headingRef === undefined ? undefined : -1} className="text-2xl font-medium tracking-tight">{title}</h1>
         <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">{description}</p>
       </div>
       {action ? <div className="shrink-0">{action}</div> : null}
@@ -44,7 +44,7 @@ export function ProfileSettingsSection({ title, description, children }: {
   const id = useId()
   return <section aria-labelledby={id} className="flex min-w-0 flex-col gap-5">
     <header className="min-w-0 space-y-1">
-      <h2 id={id} className="text-lg font-semibold tracking-tight">{title}</h2>
+      <h2 id={id} className="text-lg font-medium tracking-tight">{title}</h2>
       {description ? <p className="text-sm leading-relaxed text-muted-foreground">{description}</p> : null}
     </header>
     <Card className="min-w-0 gap-0 p-0"><CardContent className="p-0">

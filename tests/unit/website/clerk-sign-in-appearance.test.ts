@@ -46,9 +46,9 @@ describe('Clerk sign-in appearance', () => {
     const variables = clerkAppearance.variables
     expect(variables).toMatchObject({
       colorPrimary: 'var(--foreground)',
-      colorBackground: 'var(--container)',
+      colorBackground: 'var(--card)',
       colorText: 'var(--foreground)',
-      colorInputBackground: 'var(--container)',
+      colorInputBackground: 'var(--card)',
       colorInputText: 'var(--foreground)',
       colorNeutral: 'var(--muted-foreground)',
       colorDanger: 'var(--destructive)',

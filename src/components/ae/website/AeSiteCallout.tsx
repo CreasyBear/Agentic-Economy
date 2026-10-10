@@ -22,7 +22,7 @@ export function AeSiteCallout({
 }: AeSiteCalloutProps) {
   return (
     <AeSiteSection labelledBy={headingId} scheme={scheme}>
-      <div className="relative bg-container p-page">
+      <div className="relative bg-card p-page">
         <AeCornerMarks />
         <div className="grid gap-section md:grid-cols-[fit-content(60%)_minmax(0,1fr)] md:items-center">
           <div className="grid gap-2">

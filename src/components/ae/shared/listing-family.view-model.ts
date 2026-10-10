@@ -1,4 +1,4 @@
-import { formatUtcTimestamp } from '@/lib/ui/format-time'
+import { formatTimestamp } from '@/lib/ui/format-time'
 import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import type { PublicToolDescriptor } from '@/modules/capability-supply/public'
 import type { ListingProjection, ListingPrice } from '@/modules/registry/public'
@@ -56,7 +56,7 @@ export function projectToolObject(listing: ListingProjection, href?: string, now
   const readiness = facts.readiness.kind === 'present' && facts.readiness.value.validUntil !== undefined && facts.readiness.value.validUntil <= nowMs
     ? { label: 'Readiness stale' }
     : facts.readiness.kind === 'present'
-      ? { label: `${facts.readiness.value.posture === 'routeable' ? 'Routeable' : getStatusPresentation(facts.readiness.value.posture === 'setup_required' ? 'setup_required' : 'unavailable').label} · observed ${formatUtcTimestamp(facts.readiness.value.observedAt)} UTC`, source: source(facts.readiness) }
+      ? { label: `${facts.readiness.value.posture === 'routeable' ? 'Routeable' : getStatusPresentation(facts.readiness.value.posture === 'setup_required' ? 'setup_required' : 'unavailable').label} · observed ${formatTimestamp(facts.readiness.value.observedAt, 'UTC')} UTC`, source: source(facts.readiness) }
       : { label: facts.readiness.reason === 'stale' ? 'Readiness stale' : 'Readiness unknown' }
   const identityLink = identity.providerName.kind === 'present'
     ? listing.providerPage.kind === 'present'

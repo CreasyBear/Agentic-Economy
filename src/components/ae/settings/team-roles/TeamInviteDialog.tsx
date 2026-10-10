@@ -33,7 +33,7 @@ export function TeamInviteDialog({ invitation, actionRef, onObserve, disabled = 
         </Field>
         <Field>
           <FieldLabel htmlFor={`${id}-role`}>Workspace role</FieldLabel>
-          <select id={`${id}-role`} className="min-h-11 w-full rounded-md border bg-background px-3 text-sm" value={invitation.role} disabled={invitation.pending || disabled}
+          <select id={`${id}-role`} className="min-h-11 w-full rounded-sm border bg-background px-3 text-sm" value={invitation.role} disabled={invitation.pending || disabled}
             aria-describedby={`${id}-role-help`} onChange={event => invitation.setRole(event.target.value === 'admin' ? 'admin' : 'member')}>
             <option value="member">Member</option><option value="admin">Admin</option>
           </select>

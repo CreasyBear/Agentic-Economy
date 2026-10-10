@@ -1,3 +1,4 @@
+import { formatCount } from '@/lib/ui/format-time'
 import { useNavigate } from '@tanstack/react-router'
 import { useEffect, useState, type FormEvent } from 'react'
 
@@ -32,7 +33,7 @@ export function AeLandingSearch({ data }: Readonly<{ data?: Promise<LandingData>
   return (
     <div className={styles.search}>
       <MarketSearchPill label={PUBLIC_SURFACE.searchLabel} value={query} onValueChange={setQuery} onSubmit={submit}
-        field={{ placeholder: PUBLIC_SURFACE.searchPlaceholder(toolCount === undefined ? undefined : toolCount.toLocaleString('en-AU')) }} />
+        field={{ placeholder: PUBLIC_SURFACE.searchPlaceholder(toolCount === undefined ? undefined : formatCount(toolCount)) }} />
       <MarketCategoryRow align="center" />
     </div>
   )

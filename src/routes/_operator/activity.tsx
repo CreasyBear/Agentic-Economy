@@ -7,7 +7,7 @@ import { AeActivity } from '@/components/ae/activity/AeActivity'
 import type { ActivityLoaderResult } from '@/components/ae/activity/activity.contracts'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 import { captureRouteException } from '@/lib/observability/capture-route-exception'
-import { formatUtcTimestamp } from '@/lib/ui/format-time'
+import { formatTimestamp } from '@/lib/ui/format-time'
 import { BROWSER_READ_TIMEOUT_MS, awaitBoundedRead } from '@/lib/bounded-read'
 import { readOwnerActivityPrimaryServer, readOwnerActivityReportsServer } from '@/lib/server/activity.functions'
 
@@ -50,8 +50,8 @@ export const Route = createFileRoute('/_operator/activity')({
           : dateRangeFilter === 'month' ? Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)
             : periodEndAt - (dateRangeFilter === '7d' ? 7 : 30) * 24 * 60 * 60 * 1_000
       const range = { periodStartAt, periodEndAt }
-      const periodStart = dateRangeFilter === 'all' ? `All recorded history through ${formatUtcTimestamp(periodEndAt)} UTC`
-        : `${formatUtcTimestamp(periodStartAt)} to ${formatUtcTimestamp(periodEndAt)} UTC`
+      const periodStart = dateRangeFilter === 'all' ? `All recorded history through ${formatTimestamp(periodEndAt, 'UTC')} UTC`
+        : `${formatTimestamp(periodStartAt, 'UTC')} to ${formatTimestamp(periodEndAt, 'UTC')} UTC`
       // The router aborts the loader signal when it discards this match; this
       // controller also lets a failed primary read cancel its sibling.
       const reportsController = new AbortController()

@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 
 import { AeFactList } from '@/components/ae/data/AeFactList'
-import { formatUtcTimestamp, timestampIso } from '@/lib/ui/format-time'
+import { formatTimestamp, timestampIso } from '@/lib/ui/format-time'
 import type { PublicToolDescriptor } from '@/modules/capability-supply/public'
 
 import type { ToolInspectorModel } from './tool-inspector-model'
@@ -52,7 +52,7 @@ export function AeToolFacts({
               ? 'Not published'
               : (
                   <time dateTime={timestampIso(model.lastVerifiedAt)}>
-                    {formatUtcTimestamp(model.lastVerifiedAt)} UTC
+                    {formatTimestamp(model.lastVerifiedAt, 'UTC')} UTC
                   </time>
                 ),
             mono: model.lastVerifiedAt !== undefined,

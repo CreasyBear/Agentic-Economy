@@ -108,7 +108,7 @@ function OverviewExceptionsContainer() {
     return <OverviewExceptionsSection state={state} />
   }
   return (
-    <details className="rounded-card border border-border p-related">
+    <details className="rounded-lg border border-border p-related">
       <summary className="min-h-touch cursor-pointer text-sm font-medium">Supply and policy reviews · no open cases observed</summary>
       <OverviewExceptionsSection state={state} />
     </details>

@@ -1,4 +1,4 @@
-import { formatRelativeTime } from '@/lib/ui/format-time'
+import { formatCount, formatRelativeTime } from '@/lib/ui/format-time'
 import { rankToolsForSelection, type ToolSelectionEvidence } from '@/modules/common/tool-selection-score'
 import type { SearchResult, SearchSignals } from './tool-choice-contracts'
 import { formatToolDuration } from './tool-latency'
@@ -75,6 +75,6 @@ export function formatSearchSignals(signals: SearchSignals, now = Date.now()): s
       : `${completedCalls(signals)} of ${signals.calls} AE ${signals.calls === 1 ? 'call' : 'calls'} completed`,
     ...(signals.latencyP50Ms === undefined ? [] : [`p50 ${formatToolDuration(signals.latencyP50Ms)}`]),
     ...(signals.lastVerifiedAt === undefined ? [] : [`verified ${formatRelativeTime(signals.lastVerifiedAt, now)}`]),
-    ...(signals.payers30d === undefined ? [] : [signals.payers30d < 2 ? 'new' : `${signals.payers30d.toLocaleString('en-AU')} payers`]),
+    ...(signals.payers30d === undefined ? [] : [signals.payers30d < 2 ? 'new' : `${formatCount(signals.payers30d)} payers`]),
   ].join(' · ')
 }

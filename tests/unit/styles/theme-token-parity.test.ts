@@ -119,7 +119,6 @@ describe('AE theme token parity (src/styles/globals.css)', () => {
     const semanticAliases = [
       'background',
       'foreground',
-      'container',
       'card',
       'card-foreground',
       'popover',
@@ -158,8 +157,8 @@ describe('AE theme token parity (src/styles/globals.css)', () => {
     const themeNames = new Set(themeDecls.map((d) => d.name))
     const problems: string[] = []
 
-    // Brand quartet.
-    for (const member of ['', '-strong', '-muted']) {
+    // Brand pair (spec: --ae-brand-strong deleted).
+    for (const member of ['', '-muted']) {
       if (!themeNames.has(`--color-brand${member}`)) problems.push(`missing --color-brand${member}`)
       if (!rootNames.has(`--ae-brand${member}`)) problems.push(`missing --ae-brand${member}`)
     }
@@ -167,8 +166,8 @@ describe('AE theme token parity (src/styles/globals.css)', () => {
     if (!rootNames.has('--ae-on-brand')) problems.push('missing --ae-on-brand')
 
     // Status families must expose IDENTICAL member shapes (the AE analogue of
-    // theme-vocabulary parity: success/warning/info each need base/ring/subtle/foreground).
-    const families = ['success', 'warning', 'info']
+    // theme-vocabulary parity: success/warning each need base/ring/subtle/foreground).
+    const families = ['success', 'warning']
     const members = ['', '-ring', '-subtle', '-foreground']
     for (const family of families) {
       const absent = members.filter(
@@ -194,101 +193,78 @@ describe('AE theme token parity (src/styles/globals.css)', () => {
     const problems: string[] = []
     for (const required of [
       '--font-sans',
-      '--font-display',
       '--font-mono',
-      '--text-caption',
-      '--text-eyebrow',
-      '--text-deck',
       '--text-body',
       '--text-title',
-      '--text-title-lg',
-      '--text-display',
-      '--tracking-eyebrow',
-      '--font-weight-eyebrow',
-      '--tracking-caption',
-      '--tracking-display',
-      '--leading-caption',
-      '--leading-eyebrow',
-      '--leading-deck',
       '--leading-body',
       '--leading-title',
-      '--leading-title-lg',
-      '--leading-display',
+      '--tracking-body',
+      '--tracking-title',
+      '--radius-sm',
+      '--radius-lg',
+      '--radius-xl',
+      '--radius-pill',
+      '--shadow-overlay',
+      '--duration-hover',
       '--duration-fast',
       '--duration-base',
-      '--duration-slow',
       '--ease-standard',
-      '--ease-emphasized',
+      '--spacing-region',
     ]) {
       if (!themeNames.has(required)) problems.push(`missing @theme ${required}`)
     }
     for (const required of [
       '--ae-font-sans',
-      '--ae-font-display',
       '--ae-font-mono',
-      '--ae-text-caption',
-      '--ae-text-eyebrow',
-      '--ae-text-deck',
       '--ae-text-body',
       '--ae-text-title',
-      '--ae-text-title-lg',
-      '--ae-text-display',
-      '--ae-tracking-eyebrow',
-      '--ae-weight-eyebrow',
-      '--ae-tracking-caption',
-      '--ae-tracking-display',
-      '--ae-leading-caption',
-      '--ae-leading-eyebrow',
-      '--ae-leading-deck',
       '--ae-leading-body',
       '--ae-leading-title',
-      '--ae-leading-title-lg',
-      '--ae-leading-display',
-      '--ae-weight-extralight',
-      '--ae-weight-regular',
-      '--ae-weight-medium',
-      '--ae-weight-semibold',
+      '--ae-tracking-body',
+      '--ae-tracking-title',
+      '--ae-hairline',
+      '--ae-shadow-overlay',
+      '--motion-duration-hover',
       '--motion-duration-fast',
       '--motion-duration-base',
-      '--motion-duration-slow',
       '--motion-ease-standard',
-      '--motion-ease-emphasized',
     ]) {
       if (!rootNames.has(required)) problems.push(`missing :root ${required}`)
     }
     expect(problems, problems.join('; ')).toEqual([])
   })
 
-  it('(b4) public type scale values match the marketing canon', () => {
+  it('(b4) public density, radii and motion values match the design system spec', () => {
     const rootByName = new Map(rootDecls.map((d) => [d.name, d.value]))
-    const expected: ReadonlyArray<readonly [string, string]> = [
-      ['--ae-text-caption', '0.75rem'],
-      ['--ae-text-eyebrow', '0.75rem'],
-      ['--ae-text-deck', '0.875rem'],
-      ['--ae-text-body', '1rem'],
-      ['--ae-text-title', '1.5rem'],
-      ['--ae-text-title-lg', '1.875rem'],
-      ['--ae-text-display', '2.75rem'],
-      ['--ae-leading-caption', '1.35'],
-      ['--ae-leading-eyebrow', '1.35'],
-      ['--ae-leading-deck', '1.625'],
-      ['--ae-leading-body', '1.55'],
-      ['--ae-leading-title', '1.25'],
-      ['--ae-leading-title-lg', '1.2'],
-      ['--ae-leading-display', '1.02'],
-      ['--ae-tracking-eyebrow', '0.16em'],
-      ['--ae-tracking-caption', '0.14em'],
-      ['--ae-tracking-display', '-0.055em'],
-      ['--ae-weight-extralight', '200'],
-      ['--ae-weight-eyebrow', '700'],
-      ['--ae-weight-regular', '400'],
-      ['--ae-weight-medium', '500'],
-      ['--ae-weight-semibold', '600'],
+    const themeByName = new Map(themeDecls.map((d) => [d.name, d.value]))
+    const expected: ReadonlyArray<readonly [Map<string, string>, string, string]> = [
+      [rootByName, '--ae-text-body', '16px'],
+      [rootByName, '--ae-leading-body', '1.5'],
+      [rootByName, '--ae-text-title', '24px'],
+      [rootByName, '--ae-leading-title', '1.25'],
+      [rootByName, '--ae-tracking-body', '-0.01em'],
+      [rootByName, '--ae-tracking-title', '-0.025em'],
+      [rootByName, '--ae-row', '40px'],
+      [rootByName, '--ae-control', '44px'],
+      [rootByName, '--ae-space-page', '48px'],
+      [rootByName, '--ae-space-region', '24px'],
+      [rootByName, '--ae-gutter-lg', '24px'],
+      [rootByName, '--motion-duration-hover', '80ms'],
+      [rootByName, '--motion-duration-fast', '120ms'],
+      [rootByName, '--motion-duration-base', '150ms'],
+      [rootByName, '--ae-primary', 'var(--ae-brand)'],
+      [rootByName, '--border', 'var(--ae-hairline)'],
+      [themeByName, '--radius-sm', '6px'],
+      [themeByName, '--radius-lg', '10px'],
+      [themeByName, '--radius-xl', '14px'],
     ]
     const mismatches = expected
-      .filter(([name, value]) => rootByName.get(name) !== value)
-      .map(([name, value]) => `${name}: expected ${value}, got ${rootByName.get(name) ?? 'missing'}`)
+      .filter(([source, name, value]) => source.get(name) !== value)
+      .map(([source, name, value]) => `${name}: expected ${value}, got ${source.get(name) ?? 'missing'}`)
     expect(mismatches, mismatches.join('; ')).toEqual([])
+    // Tailwind's default shadow and radius scales are cleared so they cannot return.
+    expect(themeBody).toMatch(/--shadow-\*:\s*initial;/)
+    expect(themeBody).toMatch(/--radius-\*:\s*initial;/)
   })
 
   it('(c1) no duplicate custom-property declarations inside a scope', () => {

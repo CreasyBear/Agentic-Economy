@@ -1,6 +1,6 @@
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeSection } from '@/components/ae/layout/AeSection'
-import { formatUtcTimestamp, timestampIso } from '@/lib/ui/format-time'
+import { formatTimestamp, timestampIso } from '@/lib/ui/format-time'
 import type { CallReceipt, CallUsageSummary } from '@/modules/capability-execution/call-contracts'
 import type { CallReceiptView } from '@/modules/capability-execution/call-receipt-view'
 import { formatCurrencyAmount, formatDisplayAmount } from '@/modules/money/public'
@@ -61,7 +61,7 @@ function ReceiptSettlementFacts({
             { label: "Charge", value: formatDisplayAmount(amount) },
             { label: "Exact amount", value: formatCurrencyAmount(amount) },
           ]),
-          { label: "Observed", value: <time dateTime={timestampIso(usage.observedAt)}>{formatUtcTimestamp(usage.observedAt)} UTC</time> },
+          { label: "Observed", value: <time dateTime={timestampIso(usage.observedAt)}>{formatTimestamp(usage.observedAt, 'UTC')} UTC</time> },
           ...(usage.durationMs === undefined ? [] : [{ label: "Duration", value: `${usage.durationMs} ms` }]),
         ]),
         ...(receipt === undefined ? [] : [

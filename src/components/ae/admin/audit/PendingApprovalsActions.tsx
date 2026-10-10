@@ -1,3 +1,4 @@
+import { formatTimestamp } from '@/lib/ui/format-time'
 import { useState } from 'react'
 import { useQuery } from 'convex/react'
 import { api } from '../../../../../convex/_generated/api'
@@ -37,7 +38,7 @@ export function PendingApprovalsActions({ proposals, now, role, actorRef, pagina
                   <AeCopyReference label={ADMIN_AUDIT_ACTION_COPY.proposal} value={proposal.proposalRef} />
                   <AeCopyReference label={AUDIT_COPY.columnLabels.proposer} value={proposal.proposerRef} />
                   <time dateTime={new Date(proposal.expiresAt).toISOString()}>
-                    {AUDIT_COPY.columnLabels.expires}: {new Date(proposal.expiresAt).toLocaleString('en-AU', { timeZone: 'Australia/Perth' })}
+                    {AUDIT_COPY.columnLabels.expires}: {formatTimestamp(proposal.expiresAt, 'Australia/Perth')}
                   </time>
                 </div>
                 {canApprove && material === null ? (
@@ -91,7 +92,7 @@ function approvalSheet(command: AdminCommandRequest, proposalRef: string, onOpen
       return <AdminActionSheet {...common} action={command.action} input={command.input} initialReasonCode={command.reasonCode} targetRefs={[
         { label: 'Workspace', value: command.input.accountRef },
         { label: 'Promotional credit', value: `A$${formatExactAmount({ currency: 'AUD', units: command.input.amountUnits, exponent: 6 }) ?? command.input.amountUnits}` },
-        { label: 'Expires', value: new Date(command.input.expiresAt).toLocaleString('en-AU', { timeZone: 'Australia/Perth' }) },
+        { label: 'Expires', value: formatTimestamp(command.input.expiresAt, 'Australia/Perth') },
       ]} />
     case 'grant_admin_membership':
       return <AdminActionSheet {...common} action={command.action} input={command.input} initialReasonCode={command.reasonCode} targetRefs={[{ label: ADMIN_AUDIT_ACTION_COPY.targetClerkUserId, value: command.input.targetClerkUserId }]} />

@@ -51,7 +51,7 @@ export function AeSupplierOnboardingWizard({
       completedSteps={view.step === 'first_tool' && onSaveProfile !== undefined ? [{ id: 'profile', title: 'Provider identity', detail: view.name, disabled: view.pending, onEdit: () => wizard.goToStep('profile') }] : []}
       busy={view.pending}
       progressLabel="Provider setup"
-      heading={<div className="grid gap-1"><h2 ref={headingRef} tabIndex={-1} className="text-lg font-semibold">Provider setup</h2><p className="text-sm text-muted-foreground">Set up your Provider profile, then add your first Tool.</p></div>}
+      heading={<div className="grid gap-1"><h2 ref={headingRef} tabIndex={-1} className="text-lg font-medium">Provider setup</h2><p className="text-sm text-muted-foreground">Set up your Provider profile, then add your first Tool.</p></div>}
       feedback={diagnosticSlot}
     >
       {view.step === 'profile' && (

@@ -7,7 +7,7 @@ import { alternativeToolSearchHref, projectToolObject } from '@/components/ae/sh
 import { projectAdmittedListing, projectDirectoryListing } from '@/modules/registry/public'
 import { REFERENCE_RATE_MAX_AGE_MS } from '@/modules/money/public'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { RouterContextProvider, createMemoryHistory, createRootRoute, createRoute, createRouter } from '@tanstack/react-router'
+import { RouterContextProvider, createMemoryHistory, createRootRoute, createRoute, createRouter, isRedirect } from '@tanstack/react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
@@ -272,7 +272,7 @@ describe('/tools/$toolRef', () => {
     expect(within(trackRecord).getByText('8')).toBeTruthy()
     expect(within(trackRecord).getByText('4.5')).toBeTruthy()
     expect(within(trackRecord).getByText('120 ms')).toBeTruthy()
-    expect(within(trackRecord).getByText('140 ms')).toBeTruthy()
+    expect(within(trackRecord).getByText('140ms')).toBeTruthy()
     const latencyChart = within(trackRecord).getByRole('region', { name: 'Time to result' })
     expect(latencyChart).toBeTruthy()
     expect(within(latencyChart).getByText('5 timed calls')).toBeTruthy()
@@ -675,7 +675,7 @@ describe('/tools/$toolRef', () => {
     expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Browse tools' }).getAttribute('href')).toBe('/market')
     expect(screen.queryByRole('link', { name: 'Check status' })).toBeNull()
-    expect(screen.queryByText(/US\$1.25|USD 1.25/)).toBeNull()
+    expect(screen.queryByText(/1\.25 USD|US\$1\.25|USD 1\.25/)).toBeNull()
   })
 
 })
@@ -726,6 +726,23 @@ describe('/tools/$providerHost/$slug', () => {
     await expect(loader({ params: { providerHost: 'other.test', slug: id }, location: { state: {} } } as never)).resolves.toEqual({ metadata: { kind: 'unavailable', reason: 'query_invalid' }, baseUrl: 'https://aecon.test' })
     canonicalUrlMock.mockRejectedValueOnce(new Error('canonical_base_url_configuration_required'))
     await expect(loader({ params: { providerHost: 'example.test', slug: id }, location: { state: {} } } as never)).resolves.toEqual({ metadata, referenceRate, baseUrl: undefined })
+  })
+
+  it('redirects to the admitted Tool only when its detail read is found, else keeps the directory listing', async () => {
+    const toolRef = `operation:v1:${'c'.repeat(64)}`
+    const metadata = { kind: 'found' as const, item: { entry, toolRef } }
+    readDirectoryDetailMock.mockResolvedValue({ metadata })
+    const loader = DirectoryRoute.options.loader as (input: unknown) => Promise<unknown>
+    const input = { params: { providerHost: 'example.test', slug: 'invoices' }, location: { state: {} } }
+
+    readDetailMock.mockResolvedValueOnce({ kind: 'not_found', toolRef })
+    await expect(loader(input)).resolves.toMatchObject({ metadata })
+    expect(readDetailMock).toHaveBeenLastCalledWith({ data: { toolRef } })
+
+    readDetailMock.mockResolvedValueOnce({ kind: 'found', tool: { toolRef } })
+    const thrown = await loader(input).then(() => undefined, (cause: unknown) => cause)
+    expect(isRedirect(thrown)).toBe(true)
+    expect((thrown as { options: { params: unknown } }).options.params).toEqual({ toolRef })
   })
 
   it('passes fresh source rate to a directory-only detail and never claims an AE input recipient', async () => {

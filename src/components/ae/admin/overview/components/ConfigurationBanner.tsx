@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Badge } from '@/components/arc/badge/badge'
-import { formatPerthTimestamp, timestampIso } from '@/lib/ui/format-time'
+import { formatTimestamp, timestampIso } from '@/lib/ui/format-time'
 import { PAYMENT_READINESS_CHECK_KEYS, PAYMENT_READINESS_GATING_KEYS, referenceRateFresh, type PaymentReadinessCheck, type PaymentReadinessView } from '@/modules/money/payment-readiness'
 import { ALPHA_X402_PAYEE_SCREENING_POLICY } from '@/modules/money/x402-spend-admission'
 import './OverviewMetricsComposition.css'
@@ -95,9 +95,9 @@ export function ConfigurationBanner({ readiness, compact = false }: Configuratio
           : readiness.environment === 'production' ? 'Environment: Production · Base' : 'Environment: Sandbox · Base Sepolia'}</p>
         {summary === null ? null : <p className="text-sm text-muted-foreground">{summary}</p>}
         <p className="text-xs text-muted-foreground">Checked: {readiness?.checkedAt == null ? 'No evidence'
-          : <time dateTime={timestampIso(readiness.checkedAt)}>{formatPerthTimestamp(readiness.checkedAt)}</time>}
+          : <time dateTime={timestampIso(readiness.checkedAt)}>{formatTimestamp(readiness.checkedAt, 'Australia/Perth')}</time>}
           {' · '}Valid until: {expiresAt === null ? 'No valid evidence'
-            : <time dateTime={timestampIso(expiresAt)}>{formatPerthTimestamp(expiresAt)}</time>}</p>
+            : <time dateTime={timestampIso(expiresAt)}>{formatTimestamp(expiresAt, 'Australia/Perth')}</time>}</p>
       </div>
       <details open={!compact}>
         <summary className="min-h-touch cursor-pointer py-intra text-sm font-medium">Inspect readiness evidence</summary>

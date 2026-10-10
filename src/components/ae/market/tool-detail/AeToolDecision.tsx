@@ -20,7 +20,7 @@ export function AeToolDecision({ tool, model }: AeToolDecisionProps) {
     >
       <div className="grid min-w-0 gap-6 px-gutter py-6 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
         <div className="min-w-0 max-w-2xl">
-          <h2 className="text-pretty text-lg font-semibold leading-7 tracking-tight text-foreground sm:text-xl sm:leading-8">
+          <h2 className="text-pretty text-lg font-medium leading-7 tracking-tight text-foreground sm:text-xl sm:leading-8">
             {model.summary}
           </h2>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">

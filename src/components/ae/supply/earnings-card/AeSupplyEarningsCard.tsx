@@ -1,3 +1,4 @@
+import { formatTimestamp } from '@/lib/ui/format-time'
 import { Button } from '@/components/arc/button/button'
 import { SUPPORT_EMAIL } from '@/components/ae/support/help/help.contracts'
 import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
@@ -32,12 +33,12 @@ export function AeSupplyEarningsCard({ readback, onRetry, onLoadMore, pending = 
             <span>Obligation reference: {obligation.obligationRef}</span>
             <span>Tool reference: {obligation.toolRef}</span>
             <a href={`${SUPPORT_EMAIL}?subject=${encodeURIComponent('Provider obligation help')}&body=${encodeURIComponent(`Call reference: ${obligation.callRef}\nObligation reference: ${obligation.obligationRef}\nTool reference: ${obligation.toolRef}\n\nWhat happened:\n`)}`}>Ask about this Call (opens email app)</a>
-            <span>Recorded: {new Date(obligation.createdAt).toLocaleString()}</span>
+            <span>Recorded: {formatTimestamp(obligation.createdAt)}</span>
             {obligation.settlementTransactionRef === undefined ? null : (
               <span>Settlement transaction: {obligation.settlementTransactionRef}</span>
             )}
-            {obligation.settledAt === undefined ? null : <span>Settled: {new Date(obligation.settledAt).toLocaleString()}</span>}
-            {obligation.reversedAt === undefined ? null : <span>Reversed: {new Date(obligation.reversedAt).toLocaleString()}</span>}
+            {obligation.settledAt === undefined ? null : <span>Settled: {formatTimestamp(obligation.settledAt)}</span>}
+            {obligation.reversedAt === undefined ? null : <span>Reversed: {formatTimestamp(obligation.reversedAt)}</span>}
             {obligation.state === 'settled' ? <span>Payout not yet observed</span> : null}
           </li>
         ))}
@@ -60,7 +61,7 @@ export function AeSupplyEarningsCard({ readback, onRetry, onLoadMore, pending = 
                   <span>Payout reference: {transfer.payoutRef}</span>
                   {transfer.stripeTransferId === undefined ? null : <span>Stripe transfer: {transfer.stripeTransferId}</span>}
                   {transfer.transferEvidenceDigest === undefined ? null : <span>Transfer evidence: {transfer.transferEvidenceDigest}</span>}
-                  {transfer.transferObservedAt === undefined ? null : <span>Observed: {new Date(transfer.transferObservedAt).toLocaleString()}</span>}
+                  {transfer.transferObservedAt === undefined ? null : <span>Observed: {formatTimestamp(transfer.transferObservedAt)}</span>}
                   <span>Payout not yet observed</span>
                 </li>
               )

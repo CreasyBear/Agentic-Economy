@@ -60,8 +60,31 @@ export default defineConfig({
     'unicorn/text-encoding-identifier-case': 'off',
     // Re-enable this after a dedicated, conflict-free mechanical migration.
     curly: 'off',
+    // Design system R9/R11: money and time are formatted only by
+    // formatCurrencyAmount (exact-amount.ts) and format-time.ts. Warning while
+    // the existing bypasses migrate; raise to error once the count is 0.
+    'no-restricted-properties': [
+      'warn',
+      { object: 'Intl', property: 'NumberFormat', message: 'Format money with formatCurrencyAmount and counts with format-time.ts.' },
+      { object: 'Intl', property: 'DateTimeFormat', message: 'Format dates and times with src/lib/ui/format-time.ts.' },
+      { property: 'toLocaleString', message: 'Use formatCurrencyAmount or src/lib/ui/format-time.ts.' },
+      { property: 'toLocaleDateString', message: 'Use src/lib/ui/format-time.ts.' },
+      { property: 'toLocaleTimeString', message: 'Use src/lib/ui/format-time.ts.' },
+    ],
   },
   overrides: [
+    {
+      // The formatters themselves, plus vendored Arc, Arc Pro and shadcn
+      // primitives, which stay unedited (design-system spec, vendored Arc files).
+      files: [
+        'src/lib/ui/format-time.ts',
+        'src/modules/money/internal/exact-amount.ts',
+        'src/components/arc/**/*',
+        'src/components/ae/shared/arc-pro/**/*',
+        'src/components/ui/**/*',
+      ],
+      rules: { 'no-restricted-properties': 'off' },
+    },
     {
       files: ['src/components/arc/**/*'],
       rules: {
@@ -74,6 +97,7 @@ export default defineConfig({
       rules: {
         '@typescript-eslint/no-explicit-any': 'off',
         'no-console': 'off',
+        'no-restricted-properties': 'off',
       },
     },
     {

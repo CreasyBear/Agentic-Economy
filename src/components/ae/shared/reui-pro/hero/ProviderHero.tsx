@@ -27,7 +27,7 @@ export function ProviderHero() {
           <p className="text-muted-foreground text-xs leading-5">For public x402 v2 endpoints on Base USDC.</p>
         </div>
       </div>
-      <div className="@container relative aspect-[16/10] w-full overflow-hidden rounded-2xl border border-border md:aspect-[12/5]">
+      <div className="@container relative aspect-[16/10] w-full overflow-hidden rounded-xl border border-border md:aspect-[12/5]">
         <img
           src="/brand/aecon-provider-market.webp"
           srcSet="/brand/aecon-provider-market-768.webp 768w, /brand/aecon-provider-market-1280.webp 1280w, /brand/aecon-provider-market.webp 1942w"

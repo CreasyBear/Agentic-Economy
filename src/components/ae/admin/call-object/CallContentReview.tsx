@@ -58,7 +58,7 @@ function SelectedCallContentReview({ callRef }: Readonly<{ callRef: string }>) {
       <Button type="button" variant="secondary" className="w-fit" onClick={() => { setResult(null); request.current = null }}>Close content</Button>
     </div> : <div className="grid gap-intra">
       <label className="grid max-w-sm gap-intra text-sm"><span>Review reason</span>
-        <select className="min-h-touch rounded-md border border-input bg-background px-3 text-foreground" value={reason} disabled={pending}
+        <select className="min-h-touch rounded-sm border border-input bg-background px-3 text-foreground" value={reason} disabled={pending}
           onChange={event => { setReason(event.target.value === 'failure_investigation' ? 'failure_investigation' : 'alpha_quality'); request.current = null }}>
           <option value="alpha_quality">Improve alpha quality</option><option value="failure_investigation">Investigate a failure</option>
         </select>
