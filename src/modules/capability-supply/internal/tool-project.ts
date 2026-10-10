@@ -12,7 +12,6 @@ import { isPublicToolRef, type PublicToolRef } from '@/modules/common/tool-ref'
 import { createPublicToolRef } from './public-tool-ref'
 import { availability as deriveAvailability } from "./availability";
 import { listingTier } from "./publication/provenance";
-import { paymentLaneAdmission } from "./x402-call-policy";
 import { projectPublicSchema } from "./tool-projection-wire-schema";
 import { CURRENT_TOOL_CALL_VIA } from "./tool-projection-types";
 import type {
@@ -27,16 +26,7 @@ import type {
   PublicToolPrice,
 } from "./tool-projection-types";
 
-const V1_PAYMENT_LANE_ADMISSION = paymentLaneAdmission({
-  rail: "ae_internal",
-  environment: "production",
-});
-if (
-  V1_PAYMENT_LANE_ADMISSION.kind !== "admitted" ||
-  V1_PAYMENT_LANE_ADMISSION.lane !== "brokered"
-)
-  throw new Error("v1_payment_lane_not_brokered");
-const V1_PAYMENT_LANE = V1_PAYMENT_LANE_ADMISSION.lane;
+const V1_PAYMENT_LANE = "brokered" as const;
 type ToolAccessMode = "authenticated_call" | "read_only";
 
 export function toolNavigation(

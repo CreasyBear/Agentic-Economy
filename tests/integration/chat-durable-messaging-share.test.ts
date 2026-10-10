@@ -534,7 +534,7 @@ describe.sequential('durable Tool chat messaging and shares', () => {
     const rows: IndexedSource[] = Array.from({ length: 9 }, (_, index) => index + 1).map(index => {
       const resource = `https://weather.example/tools/${index}`
       const raw = { resource, type: 'http', description: `Weather forecast Tool ${index}` }
-      return { resource, sourceJson: JSON.stringify(raw), sourceDigest: canonicalDigest(raw), entry: {
+      return { resource, sourceJson: JSON.stringify(raw), sourceDigest: canonicalDigest(raw), admission: { kind: 'quotable' as const }, entry: {
         resource, title: `Weather forecast Tool ${index}`, description: 'Weather forecast by city',
         protocol: 'http', provider: 'weather.example', metadataJson: '',
         category: 'Weather', tags: ['forecast'], activity: { calls30d: index, payers30d: 2 },
@@ -551,12 +551,11 @@ describe.sequential('durable Tool chat messaging and shares', () => {
       generation, offset: 100, reportedTotal: rows.length, observedAt: 3, runStartedAt: 1, workload, items: [],
     })
     const pageOne = await backend.query(internal.x402DirectoryIndex.searchCompactInternal, {
-      query: 'weather', paginationOpts: { cursor: null, numItems: 1 }, access: 'external_listing',
+      query: 'weather', paginationOpts: { cursor: null, numItems: 1 },
     })
     if (pageOne.kind !== 'ok' || pageOne.isDone || pageOne.page.length !== 1) throw new Error('first_page_missing')
     const pageTwo = await backend.query(internal.x402DirectoryIndex.searchCompactInternal, {
       query: 'weather', paginationOpts: { cursor: pageOne.continueCursor, numItems: 1 },
-      access: 'external_listing',
     })
     expect(pageTwo).toMatchObject({ kind: 'ok', page: [{ title: 'Weather forecast Tool 2' }] })
     const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'chat-next-page-owner')

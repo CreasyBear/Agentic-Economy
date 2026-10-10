@@ -98,5 +98,5 @@ it('refuses a pinned amount that does not match the published atomic units', () 
       sourceRequirement: { ...pricing.sourceRequirement, atomicUnits: '100' },
     },
   }, { query: 'Ada' }, 1_000)
-  expect(refused).toEqual({ kind: 'refused' })
+  expect(refused).toEqual({ kind: 'refused', reason: 'tool_unsupported' })
 })

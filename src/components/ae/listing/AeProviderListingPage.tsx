@@ -46,7 +46,7 @@ export function AeProviderListingPage({ catalog, agentJsonUrl, service, supply, 
     <div className="arc-provider-layout">
       <ProviderPortfolio offerings={offerings} otherOfferings={otherOfferings} />
       <aside aria-label="Provider information" className="arc-provider-aside">
-        <section><h2>About this Provider</h2><p>Published Business portfolio. A listed endpoint is not callable through AE unless it is exactly joined to an admitted Tool.</p>
+        <section><h2>About this Provider</h2><p>Published Business portfolio.</p>
           <AeFactList facts={[{ label: 'Category', value: catalog.category }, { label: 'Last indexed', value: <time dateTime={timestampIso(catalog.observedAt)}>{formatTimestamp(catalog.observedAt)}</time> }, ...(catalog.responseTimeMinutes === undefined ? [] : [{ label: 'Published response time', value: `${catalog.responseTimeMinutes} min` }])]} />
           {websiteHref === undefined ? null : <a href={websiteHref} target="_blank" rel="noreferrer" aria-label="Provider website (opens in a new tab)" className={cn(actionLinkClassName('secondary', 'md'), 'justify-between text-left')}>Provider website<ArrowUpRightIcon className="shrink-0" aria-hidden="true" /></a>}
           {catalog.businessContext.kind !== 'local_human' || catalog.businessContext.publishedPhone === undefined ? null : <a href={telUri(catalog.businessContext.publishedPhone)} className={cn(actionLinkClassName('secondary', 'md'))}>Phone provider</a>}

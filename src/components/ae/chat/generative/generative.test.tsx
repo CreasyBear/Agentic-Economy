@@ -29,7 +29,7 @@ describe('generative chat leaves', () => {
       const { container } = render(<ChatTranscript onSuggest={vi.fn()} messages={[{
         id: 'result', role: 'assistant', parts: [
           { type: 'tool-card', toolId: 'registry.tools.search', kind: 'choices', state: 'complete',
-            choices: [{ toolRef: `registry:${'c'.repeat(64)}`, title: 'Outside lookup', access: 'external_listing' }] },
+            choices: [{ toolRef: `registry:${'c'.repeat(64)}`, title: 'Outside lookup', access: 'unavailable' }] },
           { type: 'tool-card', toolId: 'tool.call', kind: 'execute', state, callRef: 'call:lookup',
             summary: 'Recorded Call status', paid: 'A$0.01' },
           { type: 'text', text: '**Your lookup answer.**' },
@@ -38,7 +38,7 @@ describe('generative chat leaves', () => {
       const answer = screen.getByRole('region', { name: 'Answer' })
       const call = container.querySelector('[data-tool-card="tool.call"]')
       const options = container.querySelector('[aria-label="Options"]')
-      const work = screen.getByRole('button', { name: /external listing.*to inspect/iu })
+      const work = screen.getByRole('button', { name: /Found 1 tool/iu })
       if (call === null || options === null) throw new Error('Missing result or evidence')
       expect(answer.compareDocumentPosition(call) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
       expect(call.compareDocumentPosition(options) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
@@ -56,7 +56,7 @@ describe('generative chat leaves', () => {
         expect(disclosure).toBeNull()
         expect(call).not.toHaveTextContent('A$0.01')
       }
-      expect(options).toHaveTextContent('External listing · not callable through Agentic Economy')
+      expect(options).toHaveTextContent('Outside lookup')
       expect(screen.queryByRole('button', { name: /Run|Review inputs/iu })).not.toBeInTheDocument()
     },
   )
@@ -216,9 +216,9 @@ describe('generative chat leaves', () => {
     expect(projectSourcesFromCards([card]).sources).toHaveLength(1)
     expect(projectWorkFromCards([card]).summary).toBe('Found 1 tool')
   })
-  it('shows scoped external listing details without pagination or purchase selection', () => {
+  it('shows scoped directory listing details without pagination or purchase selection', () => {
     const output = {
-      kind: 'scoped', results: [{ id: 'external-7', source: 'coinbase', access: 'external_listing',
+      kind: 'scoped', results: [{ id: 'external-7', source: 'coinbase', access: 'unavailable', reason: 'chain_unsupported',
         title: 'External Timezone', provider: 'Another provider' }],
       next: [{ action: 'registry.tools.search', args: { query: 'timezone', cursor: 'x402:next' }, authority: 'public' }],
     }
@@ -231,7 +231,7 @@ describe('generative chat leaves', () => {
     render(<ToolCard projection={card} />)
     expect(screen.getByRole('link', { name: /External Timezone/ })).toHaveAttribute('href',
       '/api/v1/registry/detail?id=external-7')
-    expect(screen.getByText(/not callable through AE/)).toBeInTheDocument()
+    expect(screen.getByText('unavailable')).toBeInTheDocument()
     expect(screen.queryByText('x402:next')).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Browse Tools in the Market' })).toBeNull()
     cleanup()
@@ -241,7 +241,7 @@ describe('generative chat leaves', () => {
     expect(onContinue).not.toHaveBeenCalled()
     expect(screen.queryByText('x402:next')).not.toBeInTheDocument()
     const view = projectOptionsFromCard(card)
-    expect(projectWorkFromCards([card]).summary).toContain('external listing')
+    expect(projectWorkFromCards([card]).summary).toBe('Found 1 tool')
     expect(projectSourcesFromCards([card]).sources[0]?.href).toBe('/api/v1/registry/detail?id=external-7')
     expect(view.options).toMatchObject([{ selectable: true, href: '/api/v1/registry/detail?id=external-7' }])
   })
@@ -252,10 +252,10 @@ describe('generative chat leaves', () => {
       output: {
         kind: 'scoped',
         results: [
-          { id: 'listing-one', source: 'coinbase', access: 'external_listing', title: 'Weather lookup',
+          { id: 'listing-one', source: 'coinbase', access: 'unavailable', title: 'Weather lookup',
             host: 'weather-one.example', resourcePath: '/v1/current', networkLabel: 'Base',
             sourcePrice: '0.002000 USDC', readiness: 'unverified' },
-          { id: 'listing-two', source: 'coinbase', access: 'external_listing', title: 'Weather lookup',
+          { id: 'listing-two', source: 'coinbase', access: 'unavailable', title: 'Weather lookup',
             host: 'weather-two.example', resourcePath: '/v2/forecast', networkLabel: 'Ethereum',
             sourcePrice: '0.003000 USDC', readiness: 'unverified' },
         ],

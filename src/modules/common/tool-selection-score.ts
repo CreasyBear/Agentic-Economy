@@ -41,7 +41,8 @@ export function scoreToolEvidence(evidence: ToolSelectionEvidence, preference: T
   const weights = WEIGHTS[preference]
   const reliability = (evidence.aeCompleted + 1) / (evidence.aeCompleted + evidence.aeFailed + 2)
   const adoption = Math.min(1, Math.log10(1 + Math.max(0, evidence.payers30d ?? 0)) / 4)
-  const price = evidence.minimumUsdPrice === undefined ? 0.5 : 1 / (1 + Math.max(0, evidence.minimumUsdPrice) * 100)
+  // An unknown price scores as the worst, never as cheap.
+  const price = evidence.minimumUsdPrice === undefined ? 0 : 1 / (1 + Math.max(0, evidence.minimumUsdPrice) * 100)
   const usual = evidence.usedBefore ? 1 : 0
   const reports = Math.max(0, evidence.reportedByBuyers30d ?? 0)
   // Bounded complaint signal: repeated reports by one buyer count once upstream.

@@ -1,7 +1,9 @@
 import { z } from 'zod'
-import { callPublicSourceQuery, sourceQuery } from '@/lib/server/convex-source'
+import { callPublicSourceQuery, createConvexServerFunctionAssertion, sourceQuery } from '@/lib/server/convex-source'
+import { isPublicToolRef } from '@/modules/common/tool-ref'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { projectToolLatency, type ToolLatencyEvidence } from '../tool-latency'
+import type { SearchEvidenceRow } from '../search-signals'
 
 const OBSERVATION_WINDOW_MS = 30 * 24 * 60 * 60 * 1_000
 const EVIDENCE_READ_TIMEOUT_MS = 2_000
@@ -40,4 +42,33 @@ export async function readToolLatencyEvidence(toolRefs: readonly string[]): Prom
     evidence.set(toolRef, { ...latency, measurement: 'admitted_to_completed', window })
   }
   return evidence
+}
+
+const SELECTION_EVIDENCE_OPERATION = 'marketListingEvidence.selectionEvidence'
+const selectionEvidenceQuery = sourceQuery<Record<string, unknown>, unknown>('marketListingEvidence:selectionEvidence')
+const selectionEvidenceRowsSchema = z.array(z.object({
+  toolRef: z.string(), aeCompleted: z.number(), aeFailed: z.number(), reportedByBuyers30d: z.number(), usedBefore: z.boolean(),
+  latencyP50Ms: z.number().optional(), lastVerifiedAt: z.number().optional(),
+}))
+
+/** AE outcomes for the published Tools on one search page. Evidence is an enhancement: an outage ranks by relevance alone. */
+export async function readSearchEvidence(toolRefs: readonly string[]): Promise<ReadonlyMap<string, SearchEvidenceRow>> {
+  const refs = [...new Set(toolRefs)].filter(isPublicToolRef)
+  if (refs.length === 0) return new Map()
+  try {
+    const command = { toolRefs: refs }
+    const serviceAuth = await createConvexServerFunctionAssertion({
+      operation: SELECTION_EVIDENCE_OPERATION, scope: 'market_selection:evidence', command,
+    })
+    const rows = selectionEvidenceRowsSchema.parse(await callPublicSourceQuery(selectionEvidenceQuery, { ...command, serviceAuth }, {
+      signal: AbortSignal.timeout(EVIDENCE_READ_TIMEOUT_MS),
+    }))
+    return new Map(rows.map(({ latencyP50Ms, lastVerifiedAt, ...row }) => [row.toolRef, {
+      ...row,
+      ...(latencyP50Ms === undefined ? {} : { latencyP50Ms }),
+      ...(lastVerifiedAt === undefined ? {} : { lastVerifiedAt }),
+    }] as const))
+  } catch (cause) {
+    return degradeBackend(cause, new Map(), { site: 'readSearchEvidence', reason: 'source_unavailable' })
+  }
 }

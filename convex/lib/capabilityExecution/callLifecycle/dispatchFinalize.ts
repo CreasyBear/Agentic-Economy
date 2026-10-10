@@ -6,7 +6,7 @@ import type { MutationCtx } from '../../../_generated/server'
 import { actionExecutionTransactArgs } from '../../../lib/actionExecution/control/contracts'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { isRecord } from '@/modules/common/is-record'
-import { recordMarketEvidenceFact } from '../../../marketEvidence'
+import { recordInvocationRefused, recordMarketEvidenceFact } from '../../../marketEvidence'
 import { emitJourneyEvent } from '../../journey/events'
 import { materializePurchaseResolutionRecord } from './purchaseResolutionMaterialize'
 import { assertCallResultJson, canonicalCommandReadbackMatches, commandMatchesDispatch, persistedDispatchMatches, type OpenDispatchValue } from './callIdentity'
@@ -90,8 +90,12 @@ export async function journeyForFinalization(
 async function recordFinalizationEvidence(
   ctx: MutationCtx,
   row: CallRow,
-  state: CallDispatchProjectionShape['state'],
+  projection: CallDispatchProjectionShape,
 ): Promise<void> {
+  const { state, result } = projection
+  if (state === 'refused' && result?.kind === 'refused') {
+    await recordInvocationRefused(ctx, row.callRef, row.toolRef, result.code, Date.now())
+  }
   if (state === 'completed') {
     const completedAt = Date.now()
     await recordMarketEvidenceFact(ctx, 'ae_invocation_completed', row.callRef, completedAt, {
@@ -146,7 +150,7 @@ export async function finalizeDispatchHandler(
   await upsertCallProjection(ctx, row, normalizedProjection, finalizedAt)
   await materializePurchaseResolutionRecord(ctx, row, normalizedProjection, finalizedAt)
   await journeyForFinalization(ctx, row, normalizedProjection, finalizedAt)
-  await recordFinalizationEvidence(ctx, row, normalizedProjection.state)
+  await recordFinalizationEvidence(ctx, row, normalizedProjection)
   // Commit recovery scheduling with the stopped Call. Closing the browser cannot
   // abandon this job; it reads the original nonce and never sends a new payment.
   // A signed pre-submit refusal also needs proof of unused expiry: not_settled

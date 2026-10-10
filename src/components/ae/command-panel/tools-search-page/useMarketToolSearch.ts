@@ -25,6 +25,7 @@ import {
   type ToolChoiceSearchResult,
 } from '../market-tools-client'
 import { isExhaustiveMarketNoMatch } from '@/modules/market-demand/market-demand.functions'
+import { REASON_COPY, REASON_COPY_FALLBACK } from '@/content/reason-copy'
 
 import {
   type CommandNavigationItem,
@@ -67,8 +68,8 @@ function usdSourcePrice(value: unknown): string | undefined {
 }
 
 function mapCatalogSearchItemToRowModel(item: CatalogSearchItem): ToolSearchResultRowModel {
-  const healthLabel = item.access === 'external_listing'
-    ? 'External listing, not callable through AE'
+  const healthLabel = item.access === 'unavailable'
+    ? REASON_COPY[item.reason ?? 'fallback'] ?? REASON_COPY_FALLBACK
     : item.readiness === 'ready'
       ? getStatusPresentation('operational').label
       : item.readiness === 'unavailable'

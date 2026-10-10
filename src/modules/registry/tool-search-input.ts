@@ -13,7 +13,7 @@ export const toolCatalogFiltersSchema = z.strictObject({
   objectClass: z.enum(['web', 'document', 'image', 'location', 'chain', 'data', 'other', 'unclassified']).optional(),
   category: z.string().max(80).optional(),
   provider: z.string().max(200).optional(),
-  access: z.enum(['ae_callable', 'external_listing']).optional(),
+  access: z.literal('ae_callable').optional(),
   priceBand: z.enum(['lt_0_01', '0_01_to_0_03', '0_03_to_0_10', '0_10_to_1', '1_to_10', '10_plus', 'unknown']).optional(),
   networkId: z.string().trim().min(1).max(200).optional(),
   location: z.string().trim().min(1).max(200).optional().describe('Requires qualified geographic evidence. Current public sources do not provide it; unknown location cannot satisfy this filter.'),

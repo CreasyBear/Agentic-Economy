@@ -3,6 +3,9 @@ import { randomUUID } from 'node:crypto'
 import { toolCatalogSearchInputSchema, toolChoiceSearchOutputSchema, type RegistryNextAction } from '@/modules/registry/tool-choice-contracts'
 import { TOOL_MARKET_SEARCH_PATH } from '@/modules/registry/tool-entry'
 import { SEARCH_QUERY_MAX_LENGTH } from '@/modules/common/search-query'
+import { parseCallableRef } from '@/modules/common/tool-ref'
+import { REASON_COPY, REASON_COPY_FALLBACK } from '@/content/reason-copy'
+import { formatSearchSignals } from '@/modules/registry/search-signals'
 
 import type { CliOptions } from '../lib/args'
 import { CliFailure, callJson, heading, line, printJson, requireOk } from '../lib/output'
@@ -106,15 +109,16 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
   if (result.kind === 'scoped') line('  Only assessed supply is shown; more Tools may exist.')
   if (result.kind === 'unavailable') line(`  Search unavailable: ${result.reason}`)
   for (const [index, tool] of result.results.entries()) {
-    const accessLabel = {
-      ae_callable: 'AE callable',
-      setup_required: 'Connect to call',
-      unavailable: 'Unavailable',
-      external_listing: 'External listing (not AE callable)',
-    }[tool.access]
+    const accessLabel = tool.access === 'ae_callable' ? 'AE callable'
+      : tool.access === 'setup_required' ? 'Connect to call'
+        : `Unavailable: ${REASON_COPY[tool.reason ?? 'fallback'] ?? REASON_COPY_FALLBACK}`
     line(`  ${index + 1}. ${tool.title} · ${accessLabel}`)
     line(`     ref: ${tool.toolRef ?? tool.detailRef}`)
+    if (tool.access === 'ae_callable' && parseCallableRef(tool.toolRef)?.kind === 'listing') {
+      line(`     quote · ae call ${tool.toolRef} --input '<json>'`)
+    }
     line(`     ${tool.readiness} · ${tool.price.kind === 'indicative' ? tool.price.label : 'Price unavailable'}`)
+    if (tool.signals !== undefined) line(`     ${formatSearchSignals(tool.signals)}`)
     for (const action of tool.next) {
       line(`     ${action.action} ${JSON.stringify(action.args)} · ${commandFor(action)}`)
     }

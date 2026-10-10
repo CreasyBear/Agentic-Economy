@@ -193,8 +193,8 @@ describe('MCP role toolsets', () => {
     expect(listed).toContain('ae_agentAccess_whoami')
     expect(listed).not.toContain('ae_tool_call')
     expect(listed).not.toContain('ae_agentAccess_balance')
-    // Exact Provider outputs with local refs measure 134,461 bytes.
-    expect(bytes(body.result?.tools)).toBeLessThan(140_000)
+    // Exact Provider outputs with local refs, including search row signals, measure 140,211 bytes.
+    expect(bytes(body.result?.tools)).toBeLessThan(141_000)
   })
 
   it('limits an authenticated read-only connection to discover and read-only account tools', async () => {

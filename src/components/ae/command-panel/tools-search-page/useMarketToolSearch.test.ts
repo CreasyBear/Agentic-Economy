@@ -11,6 +11,7 @@ import type * as MarketDemandFns from '@/modules/market-demand/market-demand.fun
 import { TOOLS_SEARCH_DEBOUNCE_MS } from './tools-search-page.contracts'
 import { useMarketToolSearch } from './useMarketToolSearch'
 import { ToolsSearchPage } from './ToolsSearchPage'
+import { REASON_COPY } from '@/content/reason-copy'
 
 const owner = vi.hoisted(() => ({
   signedIn: true,
@@ -282,7 +283,7 @@ describe('useMarketToolSearch', () => {
       results: [
         first,
         {
-          id: 'opaque-1', source: 'coinbase', access: 'external_listing',
+          id: 'opaque-1', source: 'coinbase', access: 'unavailable', reason: 'chain_unsupported',
           title: 'External Tool', summary: 'External lookup', provider: 'Outside',
           actionClass: 'retrieve', objectClass: 'data', readiness: 'unverified',
           price: { kind: 'indicative', label: 'USDC 0.000001' }, detailRef: '/api/v1/registry/detail?id=opaque-1',
@@ -305,7 +306,7 @@ describe('useMarketToolSearch', () => {
         {
           toolRef: '/api/v1/registry/detail?id=opaque-1',
           sourceKind: 'directory',
-          healthLabel: 'External listing, not callable through AE',
+          healthLabel: REASON_COPY.chain_unsupported,
           priceLabel: 'US$0.000001',
         },
       ],

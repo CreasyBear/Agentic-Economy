@@ -12,7 +12,7 @@ import { convexTestWithMarketComponents, type ConvexFixtureBackend } from '../he
 function source(index: number, overrides: Partial<IndexedSource['entry']> = {}): IndexedSource {
   const resource = `https://provider.test/tools/${index}`
   const raw = { resource, type: 'http', description: `Research tool ${index}`, ...(overrides.title === undefined ? {} : { title: overrides.title }) }
-  return { resource, sourceJson: JSON.stringify(raw), sourceDigest: canonicalDigest(raw), entry: {
+  return { resource, sourceJson: JSON.stringify(raw), sourceDigest: canonicalDigest(raw), admission: { kind: 'quotable' as const }, entry: {
     resource, title: `Research tool ${index}`, description: 'Search public research', protocol: 'http', provider: 'provider.test', metadataJson: '',
     category: 'Research', tags: ['search'],
     // Directory-eligible by default (payersOrder>=2 + a declared output shape):
@@ -206,9 +206,9 @@ describe('complete external directory index', () => {
     const { backend, workload } = await setup()
     const generation = 'coinbase-malformed-row'
     await seedRefresh(backend, generation)
-    const first = prepareIndexedDirectoryPage([{ resource: '', accepts: [{ scheme: 'exact', amount: '1' }] }, { resource: source(1).resource, description: 'Public research' }])
-    expect(first).toMatchObject({ skippedInvalidItems: 1, items: [{ resource: source(1).resource }] })
-    const invalidPayment = prepareIndexedDirectoryPage([{
+    const first = await prepareIndexedDirectoryPage([{ resource: '', accepts: [{ scheme: 'exact', amount: '1' }] }, { resource: source(1).resource, description: 'Public research' }])
+    expect(first).toMatchObject({ skippedInvalidItems: 1, items: [{ resource: source(1).resource, admission: { kind: 'unavailable', reason: 'resource_invalid' } }] })
+    const invalidPayment = await prepareIndexedDirectoryPage([{
       resource: 'https://invalid-provider.test/tools/payment',
       accepts: Array.from({ length: 129 }, (_, index) => ({ network: `eip155:${index + 100}`, scheme: 'exact', amount: '1' })),
     }])
@@ -265,7 +265,7 @@ describe('complete external directory index', () => {
     expect(first.kind).toBe('ok')
     if (first.kind !== 'ok') throw new Error('Reviewed directory unavailable')
     expect(first.page).toHaveLength(12)
-    expect(first.page.every(row => row.entry.provider === 'api.exa.ai' && row.choice?.access !== 'ae_callable')).toBe(true)
+    expect(first.page.every(row => row.entry.provider === 'api.exa.ai' && row.choice?.toolRef?.startsWith('registry:') === true)).toBe(true)
     expect(first.isDone).toBe(false)
     const next = await backend.query(api.x402DirectoryIndex.browse, { sort: 'popular', reviewedProvidersOnly: true, paginationOpts: { cursor: first.continueCursor, numItems: 12 } })
     expect(next).toMatchObject({ kind: 'ok', isDone: true, page: [{ entry: { provider: 'api.exa.ai' } }] })

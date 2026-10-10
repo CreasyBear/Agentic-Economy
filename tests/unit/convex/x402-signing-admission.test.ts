@@ -30,8 +30,8 @@ afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs() })
 describe('managed signing orchestration', () => {
   it('screens the signed recipient and typed data afresh on every invocation, then requires committed admission', async () => {
     const ctx = context()
-    expect(await admitManagedX402Signing(ctx as never, attempt, intent)).toBe(true)
-    expect(await admitManagedX402Signing(ctx as never, attempt, intent, 'forensic_replay')).toBe(true)
+    expect(await admitManagedX402Signing(ctx as never, attempt, intent)).toEqual({ kind: 'admitted' })
+    expect(await admitManagedX402Signing(ctx as never, attempt, intent, 'forensic_replay')).toEqual({ kind: 'admitted' })
     expect(provider.screen.mock.calls).toEqual([[request], [request]])
     const first = ctx.runMutation.mock.calls[0]!
     const second = ctx.runMutation.mock.calls[1]!
@@ -50,20 +50,20 @@ describe('managed signing orchestration', () => {
     const pending = admitManagedX402Signing(ctx as never, attempt, intent)
     expect(ctx.runMutation).not.toHaveBeenCalled()
     finish(clear)
-    expect(await pending).toBe(true)
+    expect(await pending).toEqual({ kind: 'admitted' })
   })
 
-  it('returns false on atomic cap refusal even when the provider cleared the payee', async () => {
+  it('names the atomic cap refusal even when the provider cleared the payee', async () => {
     const ctx = context()
     ctx.runMutation.mockResolvedValue({ kind: 'refused', code: 'spend_platform_cap_exceeded', screeningCheckRef: 'check:one' })
-    expect(await admitManagedX402Signing(ctx as never, attempt, intent)).toBe(false)
+    expect(await admitManagedX402Signing(ctx as never, attempt, intent)).toEqual({ kind: 'refused', reason: 'spend_platform_cap_exceeded' })
   })
 
   it('records provider exceptions as unavailable rather than a no-sign CDP response', async () => {
     provider.screen.mockRejectedValue({ statusCode: 403, errorType: 'policy_violation' })
     const ctx = context()
     ctx.runMutation.mockResolvedValue({ kind: 'refused', code: 'screening_not_clear', screeningCheckRef: 'check:one' })
-    expect(await admitManagedX402Signing(ctx as never, attempt, intent)).toBe(false)
+    expect(await admitManagedX402Signing(ctx as never, attempt, intent)).toEqual({ kind: 'refused', reason: 'screening_not_clear' })
     expect(ctx.runMutation.mock.calls[0]?.[1].screening).toMatchObject({ ...request,
       outcome: 'unavailable', reason: 'screening_provider_unavailable' })
   })

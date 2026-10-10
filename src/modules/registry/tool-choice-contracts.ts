@@ -21,7 +21,7 @@ import { formatDisplayAmount, formatDisplayPrice } from '@/modules/money/public'
 import { projectToolHealth } from '@/modules/capability-supply/tool-health'
 import { SEARCH_QUERY_MAX_LENGTH } from '@/modules/common/search-query'
 import { truncateText } from '@/modules/common/truncate-text'
-import { isPublicToolRef } from '@/modules/common/tool-ref'
+import { isPublicToolRef, parseCallableRef } from '@/modules/common/tool-ref'
 
 import { projectToolChoiceEvidence } from './tool-choice-evidence'
 import { searchVerdict } from './search-verdict'
@@ -120,12 +120,23 @@ export const toolChoiceListOutputSchema = z.union([
   }),
   catalogUnavailableSchema,
 ])
-const publicToolRefSchema = brandedStringSchema(z.string().regex(/^operation:v1:[0-9a-f]{64}$/), (ref) => ref as PublicToolRef)
+/** Evidence every search row shows; successRate is the observed completed/calls over Provider-side outcomes (no prior). */
+export const searchSignalsSchema = z.strictObject({
+  calls: z.number().nonnegative(),
+  successRate: z.number().min(0).max(1).optional(),
+  latencyP50Ms: z.number().nonnegative().optional(),
+  lastVerifiedAt: z.number().nonnegative().optional(),
+  payers30d: z.number().nonnegative().optional(),
+})
+export type SearchSignals = z.infer<typeof searchSignalsSchema>
 const searchResultSchema = z.strictObject({
   id: z.string(),
   source: z.enum(['current', 'coinbase']),
-  access: z.enum(['ae_callable', 'external_listing', 'setup_required', 'unavailable']),
-  toolRef: publicToolRefSchema.optional(),
+  access: z.enum(['ae_callable', 'setup_required', 'unavailable']),
+  // A Tool's operation ref, or a directory row's `registry:<hex>` listing ref that Quote resolves.
+  toolRef: z.string().refine(value => { const kind = parseCallableRef(value)?.kind; return kind === 'operation' || kind === 'listing' }).optional(),
+  // Why an unavailable row cannot be quoted; a key of `REASON_COPY`.
+  reason: z.string().max(80).optional(),
   sourceRouteRef: z.string().max(8192).optional(),
   sourcePrice: z.string().max(80).optional(),
   title: z.string().max(72),
@@ -144,6 +155,7 @@ const searchResultSchema = z.strictObject({
   ]),
   detailRef: z.string(),
   next: z.array(registryNextActionSchema).max(1),
+  signals: searchSignalsSchema.optional(),
   freshness: z.union([supplyProjectionFreshnessSchema, z.strictObject({
     source: z.literal('x402_directory'), state: z.enum(['absent', 'failed', 'stale', 'fresh']),
     completedAt: z.number().optional(), staleAfterMs: z.number(),
@@ -371,10 +383,8 @@ export function filterExternalSearchRows(rows: readonly SearchResult[], filters?
     if (selected.actionClass !== undefined && selected.actionClass !== row.actionClass) return false
     if (selected.objectClass !== undefined && selected.objectClass !== row.objectClass) return false
     if (selected.category !== undefined && selected.category !== row.category) return false
-    // Call access is a qualified publication join, not a health observation.
-    // External listings have no observed health and are explicitly unverified.
-    return selected.healthStatus === undefined
-      || (row.access === 'external_listing' && selected.healthStatus.includes('unverified'))
+    // Directory rows have no observed health until a Quote probes them.
+    return selected.healthStatus === undefined || selected.healthStatus.includes('unverified')
   })
 }
 

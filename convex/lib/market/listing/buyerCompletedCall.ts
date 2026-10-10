@@ -2,6 +2,8 @@ import { verifyCustomerRequestServiceAssertion, type CustomerRequestServiceAsser
 import type { Doc } from '../../../_generated/dataModel'
 import { env, type MutationCtx, type QueryCtx } from '../../../_generated/server'
 import { isPublicToolRef } from '@/modules/common/tool-ref'
+import { isProviderFault } from '@/modules/capability-execution/call-contracts'
+import { projectToolLatency } from '@/modules/registry/tool-latency'
 
 export async function assertBuyerCompletedCall(
   ctx: MutationCtx,
@@ -25,6 +27,10 @@ export type SelectionEvidenceRow = Readonly<{
   aeFailed: number
   reportedByBuyers30d: number
   usedBefore: boolean
+  /** Median admitted-to-completed time over the latest completed Calls; absent below the shared sample floor. */
+  latencyP50Ms?: number
+  /** The latest completed Call. */
+  lastVerifiedAt?: number
 }>
 
 const MAX_SELECTION_EVIDENCE_TOOL_REFS = 20
@@ -99,12 +105,16 @@ export async function readSelectionEvidence(
           .eq('toolRef', toolRef)
           .eq('state', 'completed'))
         .take(1)
+    const completed = completedRows.filter(isCompletedCall)
+    const latency = projectToolLatency(completed.map(row => row.updatedAt - row.createdAt))
     return {
       toolRef,
-      aeCompleted: Math.min(completedRows.filter(isCompletedCall).length, MAX_TERMINAL_CALLS_PER_TOOL),
+      aeCompleted: Math.min(completed.length, MAX_TERMINAL_CALLS_PER_TOOL),
       aeFailed: Math.min(refusedRows.filter(isProviderSideFailure).length, MAX_TERMINAL_CALLS_PER_TOOL),
       reportedByBuyers30d: new Set(reportRows.map(row => row.reporterRef)).size,
       usedBefore: priorCompletedRows.length > 0,
+      ...(latency.kind === 'measured' ? { latencyP50Ms: latency.medianMs } : {}),
+      ...(completed[0] === undefined ? {} : { lastVerifiedAt: completed[0].updatedAt }),
     }
   }))
 }
@@ -115,17 +125,12 @@ function isCompletedCall(row: Doc<'capabilityCalls'>): boolean {
     && row.result?.kind === 'completed'
 }
 
-// Count dispatched provider/operation refusals only; buyer input and authority
-// or spend refusals do not lower Tool standing.
+// Count dispatched Provider-side refusals only; buyer input, authority, spend and AE runtime faults never lower Tool standing.
 function isProviderSideFailure(row: Doc<'capabilityCalls'>): boolean {
   const result = row.result
-  if (row.state !== 'refused'
-    || row.dispatchState !== 'failed'
-    || row.attemptRef === undefined
-    || result?.kind !== 'refused') {
-    return false
-  }
-  return result.code.startsWith('provider_')
-    || result.code.startsWith('operation_transport_')
-    || result.code.startsWith('operation_worker_')
+  return row.state === 'refused'
+    && row.dispatchState === 'failed'
+    && row.attemptRef !== undefined
+    && result?.kind === 'refused'
+    && isProviderFault(result.code)
 }

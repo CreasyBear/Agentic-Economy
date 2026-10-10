@@ -75,6 +75,9 @@ export async function readForCallHandler(
           ...(row.x402RequirementDigest === undefined
             ? {}
             : { x402RequirementDigest: row.x402RequirementDigest }),
+          ...(row.x402RequirementJson === undefined
+            ? {}
+            : { x402RequirementJson: row.x402RequirementJson }),
         }
       : null
   } catch (cause) {

@@ -9,6 +9,8 @@ import { DIRECTORY_READINESS, PRICE_UNAVAILABLE } from '@/modules/market/directo
 import { directoryProviderKey } from '@/modules/market/x402-directory-index'
 import type { SearchResult } from "@/modules/registry/tool-choice-contracts";
 import { MARKET_LINK_STATE } from './market-return-context'
+import { REASON_COPY, REASON_COPY_FALLBACK } from '@/content/reason-copy'
+import { isPublicToolRef } from '@/modules/common/tool-ref'
 
 type CanonicalSearchResultsProps = {
   results: readonly SearchResult[];
@@ -23,7 +25,8 @@ function identity(item: SearchResult): string {
 /** The directory's one readiness vocabulary, so a search row and a tool row say the same thing. */
 function Readiness({ item }: { item: SearchResult }) {
   const { label, tone } = DIRECTORY_READINESS[item.access];
-  return <Badge tone={tone} size="sm">{label}</Badge>;
+  const reason = item.access === 'unavailable' && item.reason !== undefined ? REASON_COPY[item.reason] ?? REASON_COPY_FALLBACK : undefined;
+  return <Badge tone={tone} size="sm" {...(reason === undefined ? {} : { title: reason })}>{label}</Badge>;
 }
 
 const priceTitle = (item: SearchResult) => item.sourcePrice === undefined ? {} : { title: `Provider lists ${item.sourcePrice}` };
@@ -33,7 +36,7 @@ function price(item: SearchResult): string {
 }
 
 function ToolDestination({ item, children }: { item: SearchResult; children: ReactNode }) {
-  if (item.toolRef !== undefined && item.access !== "external_listing") {
+  if (isPublicToolRef(item.toolRef)) {
     return <Link to="/tools/$toolRef" params={{ toolRef: item.toolRef }} state={MARKET_LINK_STATE}>{children}</Link>;
   }
   const host = item.host ?? (item.sourceRouteRef !== undefined && URL.canParse(item.sourceRouteRef) ? new URL(item.sourceRouteRef).hostname : undefined);

@@ -179,7 +179,7 @@ describe('transcript projector', () => {
   it.each(['id with spaces', 'id\nwith-control', 'x'.repeat(201)])('excludes unbounded external identity %s from transport', id => {
     const messages = [{ id: 'bad-external', role: 'assistant' as const, parts: [{
       type: 'tool-registry_tools_search', state: 'output-available', output: {
-        kind: 'scoped', results: [{ id, source: 'coinbase', access: 'external_listing', title: 'Outside' }],
+        kind: 'scoped', results: [{ id, source: 'coinbase', access: 'unavailable', title: 'Outside' }],
       },
     }] }]
     expect(projectAnonymousTranscript(messages, true)).toEqual([])
@@ -189,7 +189,7 @@ describe('transcript projector', () => {
     const messages = [{ id: 'external-search', role: 'assistant' as const, parts: [{
       type: 'tool-registry_tools_search', state: 'output-available', output: {
         kind: 'scoped', results: [{ id: 'registry:keyword-gap', source: 'coinbase',
-          access: 'external_listing', title: 'Keyword gap', readiness: 'unverified' }],
+          access: 'unavailable', title: 'Keyword gap', readiness: 'unverified' }],
       },
     }] }]
     const [turn] = projectTranscriptTurns(messages)

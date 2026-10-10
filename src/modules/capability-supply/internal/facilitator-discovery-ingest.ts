@@ -1,9 +1,8 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest';
 import { isRecord } from "@/modules/common/is-record";
-import { isDirectoryEntryEligible } from "@/modules/capability-contract/public";
-import { formatCurrencyAmount, formatExactAmount, type ExactAmount } from "@/modules/money/public";
+import { formatExactAmount, type ExactAmount } from "@/modules/money/public";
 
-import type { BazaarAdmission } from "./publication-importer-x402-bazaar";
+import { admitBazaarDiscoveryInfo, type BazaarAdmission } from "./publication-importer-x402-bazaar";
 import type {
   CapabilityPublicationImport,
   CanonicalCapabilityPublicationDraft,
@@ -15,13 +14,8 @@ import {
 } from "./transport-adapters";
 import { degradeBackend } from "@/lib/observability/degrade-backend";
 import type { PaymentEnvironment } from '@/lib/deployment/environment';
-import { x402PaymentProfileForEnvironment, type X402PaymentProfile } from './x402-payment-profile';
+import { isX402PaymentRequirementForProfile, x402PaymentProfileForEnvironment, type X402PaymentProfile, type X402PaymentRequirementLike } from './x402-payment-profile';
 
-export const FACILITATOR_DISCOVERY_URLS = [
-  "https://api.cdp.coinbase.com/platform/v2/x402/discovery/resources",
-  "https://facilitator.payai.network/discovery/resources",
-] as const;
-export const FACILITATOR_DISCOVERY_DEFAULT_PAGE_SIZE = 20 as const;
 export const FACILITATOR_DISCOVERY_MAX_PAGE_SIZE = 100 as const;
 
 export const FACILITATOR_DISCOVERY_PUBLISHER_REF = "system:facilitator-discovery";
@@ -44,11 +38,14 @@ export const FACILITATOR_DISCOVERY_PAYMENT_PROFILES = Object.freeze([
 export const FACILITATOR_DISCOVERY_MAX_ACCEPTS = 20 as const;
 
 export const FACILITATOR_DISCOVERY_EVIDENCE_REF = "source:facilitator-discovery";
+// A resource with no Bazaar declaration is called as listed: GET on its exact
+// resource URL with no caller input, accepting any JSON output. Opaque input
+// envelopes fail the publication quality bar, so none is invented here.
+const PERMISSIVE_BAZAAR = admitBazaarDiscoveryInfo({}, { input: { type: "http", method: "GET", queryParams: {} }, output: undefined });
 const MAX_ATOMIC_DIGITS = 78;
 
 
 export type FacilitatorDiscoverySkipReason =
-  | "bazaar_missing"
   | "bazaar_discovery_invalid"
   | "schema_missing"
   | "transport_unsupported"
@@ -83,12 +80,6 @@ export type FacilitatorDiscoveryDecision =
   | FacilitatorDiscoverySkip
   | FacilitatorDiscoveryAdmitCandidate;
 
-export type FacilitatorDiscoveryPage = Readonly<{
-  items: readonly unknown[];
-  nextOffset?: number;
-  nextCursor?: string;
-}>;
-
 export type FacilitatorDiscoveryAdmittedDraft = Readonly<
   {
     offering: CanonicalCapabilityPublicationDraft["offering"] & Readonly<{
@@ -122,31 +113,6 @@ export type FacilitatorDiscoveryAdmissionResult = Readonly<{
   skipped: readonly FacilitatorDiscoverySkip[];
 }>;
 
-export function parseFacilitatorDiscoveryPage(
-  document: unknown,
-): FacilitatorDiscoveryPage | undefined {
-  if (!isRecord(document) || !Array.isArray(document.items)) return undefined;
-  if (document.items.length > FACILITATOR_DISCOVERY_MAX_PAGE_SIZE) return undefined;
-  const pagination = isRecord(document.pagination) ? document.pagination : undefined;
-  const offset = readNonNegativeSafeInteger(pagination?.offset ?? document.offset);
-  const limit = readPositiveSafeInteger(pagination?.limit ?? document.limit);
-  const total = readNonNegativeSafeInteger(pagination?.total ?? document.total);
-  const nextOffset =
-    offset !== undefined && limit !== undefined && total !== undefined &&
-    offset + document.items.length < total && Number.isSafeInteger(offset + document.items.length)
-      ? offset + document.items.length
-      : undefined;
-  const cursor = pagination?.nextCursor ?? pagination?.cursor ?? document.nextCursor;
-  const nextCursor = typeof cursor === "string" && cursor.length > 0 && cursor.length <= 2_000
-    ? cursor
-    : undefined;
-  return {
-    items: document.items,
-    ...(nextOffset === undefined ? {} : { nextOffset }),
-    ...(nextCursor === undefined ? {} : { nextCursor }),
-  };
-}
-
 export function decideFacilitatorDiscoveryItem(
   item: unknown,
   bazaar: BazaarAdmission = { kind: "absent" },
@@ -161,35 +127,23 @@ export function decideFacilitatorDiscoveryItem(
   const endpoint = resourceUrl === undefined ? undefined : admittedResourceUrl(resourceUrl);
   if (endpoint === undefined) return { kind: "skip", reason: "resource_invalid" };
 
-  if (bazaar.kind === "absent") return { kind: "skip", reason: "bazaar_missing" };
-  if (bazaar.kind === "refused") {
+  // No Bazaar metadata is not a refusal (see PERMISSIVE_BAZAAR). Payers and
+  // directory eligibility are ranking signals on the index row, never gates.
+  const declared = bazaar.kind === "absent" ? PERMISSIVE_BAZAAR : bazaar;
+  if (declared.kind !== "admitted") {
     return {
       kind: "skip",
-      reason: bazaar.reason === "selector_invalid"
-        ? "payment_terms_invalid"
-        : bazaar.reason,
+      reason: declared.kind === "refused" && declared.reason !== "selector_invalid"
+        ? declared.reason
+        : "payment_terms_invalid",
     };
   }
-
-  // Bazaar admission guarantees an output schema. Preserve the payer-floor
-  // refusal order before parsing payment, then check all signals once priced.
-  const payersOrder = discoveryQualityPayersOrder(item) ?? -1;
-  if (payersOrder < 2) return { kind: "skip", reason: "resource_invalid" };
-  const accept = firstSupportedAccept(paymentRequired.accepts, profile);
+  const accept = onlySupportedAccept(paymentRequired.accepts, profile);
   if (accept.kind === "refused") return { kind: "skip", reason: accept.reason };
   const price = priceBreakdown(accept.amount, accept.assetExponent);
   if (price === undefined) return { kind: "skip", reason: "amount_invalid" };
-  if (!isDirectoryEntryEligible({
-    hasOutputSchema: true,
-    hasOutputExample: false,
-    minimumUsdPrice: formatCurrencyAmount(price.provider),
-    payersOrder,
-  })) {
-    return { kind: "skip", reason: "resource_invalid" };
-  }
 
-
-  const identity = normalizedHttpIdentity(endpoint, bazaar.method, accept.network, accept.asset);
+  const identity = normalizedHttpIdentity(endpoint, declared.method, accept.network, accept.asset);
   const providerPrice: ExactAmount = {
     currency: "USDC",
     units: accept.amount,
@@ -204,7 +158,7 @@ export function decideFacilitatorDiscoveryItem(
     resource: {
       resourceUrl: endpoint,
       price: providerPrice,
-      method: bazaar.method,
+      method: declared.method,
       scheme: "exact",
       network: accept.network,
       asset: accept.asset,
@@ -212,29 +166,29 @@ export function decideFacilitatorDiscoveryItem(
       routeAmountExponent: accept.assetExponent,
       assetAmountExponent: accept.assetExponent,
       paymentRequired,
-      inputSchema: bazaar.inputSchema,
-      outputSchema: bazaar.outputSchema,
-      ...(bazaar.query === undefined ? {} : { query: bazaar.query }),
-      ...(bazaar.path === undefined ? {} : { path: bazaar.path }),
-      ...(bazaar.pathTemplate === undefined ? {} : { pathTemplate: bazaar.pathTemplate }),
-      ...(bazaar.bodyPointer === undefined ? {} : { bodyPointer: bazaar.bodyPointer }),
-      ...(bazaar.queryObjectPointer === undefined ? {} : { queryObjectPointer: bazaar.queryObjectPointer }),
+      inputSchema: declared.inputSchema,
+      outputSchema: declared.outputSchema,
+      ...(declared.query === undefined ? {} : { query: declared.query }),
+      ...(declared.path === undefined ? {} : { path: declared.path }),
+      ...(declared.pathTemplate === undefined ? {} : { pathTemplate: declared.pathTemplate }),
+      ...(declared.bodyPointer === undefined ? {} : { bodyPointer: declared.bodyPointer }),
+      ...(declared.queryObjectPointer === undefined ? {} : { queryObjectPointer: declared.queryObjectPointer }),
     },
     contract: {
       capabilityId,
       version: 1,
       name: offeringLabel,
       description: offeringSummary,
-      inputExamples: bazaar.inputExample === undefined ? [] : [{
-        label: "Provider example", input: bazaar.inputExample,
+      inputExamples: declared.inputExample === undefined ? [] : [{
+        label: "Provider example", input: declared.inputExample,
       }],
       customerAnnotations: [],
-      dataUse: Object.keys(bazaar.inputSchema.properties ?? {}).map((name) => ({
+      dataUse: Object.keys(declared.inputSchema.properties ?? {}).map((name) => ({
         effectId: "provider_data_use", inputPointer: `/${name.replace(/~/g, "~0").replace(/\//g, "~1")}`,
         classification: "public" as const, phase: "preparation" as const,
         recipient: { kind: "selected_binding" as const }, purposes: ["Perform the requested Tool"],
       })),
-      effects: Object.keys(bazaar.inputSchema.properties ?? {}).length === 0 ? [] : [{
+      effects: Object.keys(declared.inputSchema.properties ?? {}).length === 0 ? [] : [{
         effectId: "provider_data_use", class: "data_release", authority: "explicit", reversibility: "not_applicable",
       }],
       evidence: [],
@@ -293,10 +247,6 @@ export function parseFacilitatorDiscoverySourceImport(
   }
 }
 
-export function isAllowlistedFacilitatorDiscoveryUrl(value: string): boolean {
-  return (FACILITATOR_DISCOVERY_URLS as readonly string[]).includes(value);
-}
-
 export function paymentRequiredFromDiscoveryItem(
   item: unknown,
 ): Readonly<Record<string, unknown>> | undefined {
@@ -340,7 +290,7 @@ type AcceptResult =
     }>
   | Readonly<{ kind: "refused"; reason: FacilitatorDiscoverySkipReason }>;
 
-function firstSupportedAccept(value: unknown, profile: X402PaymentProfile): AcceptResult {
+function onlySupportedAccept(value: unknown, profile: X402PaymentProfile): AcceptResult {
   if (!Array.isArray(value) || value.length > FACILITATOR_DISCOVERY_MAX_ACCEPTS) {
     return { kind: "refused", reason: "payment_terms_invalid" };
   }
@@ -348,6 +298,8 @@ function firstSupportedAccept(value: unknown, profile: X402PaymentProfile): Acce
   let sawChain = false;
   let sawAsset = false;
   let sawAmount = false;
+  // More than one payable lane is ambiguous, as in the seller inspector's paymentSelection.
+  let selected: Readonly<{ amount: string; payTo: string }> | undefined;
   for (const candidate of value) {
     if (!isRecord(candidate) || candidate.scheme !== "exact") continue;
     sawExact = true;
@@ -370,11 +322,17 @@ function firstSupportedAccept(value: unknown, profile: X402PaymentProfile): Acce
       sawAmount = true;
       continue;
     }
-    if (typeof candidate.payTo !== "string" || candidate.payTo.trim().length === 0) continue;
+    // The same lane contract the call path enforces (0x payee, EIP-3009, timeout).
+    const lane = { ...candidate, extra: isRecord(candidate.extra) ? candidate.extra : {} };
+    if (!isX402PaymentRequirementForProfile(lane as X402PaymentRequirementLike, profile)) continue;
+    if (selected !== undefined) return { kind: "refused", reason: "payment_terms_invalid" };
+    selected = { amount: candidate.amount, payTo: candidate.payTo as string };
+  }
+  if (selected !== undefined) {
     return {
       kind: "valid",
-      amount: candidate.amount,
-      payTo: candidate.payTo,
+      amount: selected.amount,
+      payTo: selected.payTo,
       network: profile.network,
       asset: profile.asset,
       assetExponent: FACILITATOR_DISCOVERY_ASSET_EXPONENT,
@@ -598,18 +556,4 @@ export function mapFacilitatorDiscoveryImporterRefusal(
     case "commercial_metadata_inconsistent": return "payment_terms_invalid";
     default: return "source_invalid";
   }
-}
-
-/** undefined = no discovery `quality` telemetry at all; the caller treats this the same as the -1 sentinel (unreported/invalid) so a missing signal fails the payer floor rather than skipping it. */
-function discoveryQualityPayersOrder(item: unknown): number | undefined {
-  if (!isRecord(item) || !isRecord(item.quality)) return undefined;
-  const payers = item.quality.l30DaysUniquePayers;
-  return typeof payers === "number" && Number.isSafeInteger(payers) && payers >= 0 ? payers : -1;
-}
-
-function readNonNegativeSafeInteger(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : undefined;
-}
-function readPositiveSafeInteger(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : undefined;
 }

@@ -53,6 +53,8 @@ const selectionEvidenceValue = v.object({
   aeFailed: v.number(),
   reportedByBuyers30d: v.number(),
   usedBefore: v.boolean(),
+  latencyP50Ms: v.optional(v.number()),
+  lastVerifiedAt: v.optional(v.number()),
 })
 
 export const read = query({

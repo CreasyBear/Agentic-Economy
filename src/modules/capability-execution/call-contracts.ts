@@ -47,7 +47,9 @@ export const callRefusalCodeValues = [
   'provider_output_invalid',
   'pre_release_failed',
   'outcome_unknown',
-  'payment_lane_not_brokered',
+  'payment_unavailable',
+  'price_changed',
+  'payee_changed',
   'reconciliation_required',
   'invocation_not_found',
   'invocation_cancelled',
@@ -57,16 +59,95 @@ export const callRefusalCodeValues = [
 ] as const
 export const callRefusalCodeSchema = z.enum(callRefusalCodeValues)
 
+const priceChangedCodes = new Set(['payment_amount_mismatch', 'payment_exceeds_step_ceiling'])
+/** AE declined to sign or submit: custody, caps, screening, fences. Never the Provider's fault. */
+const paymentUnavailableCodes = new Set([
+  'payment_signature_unavailable', 'payment_custody_unavailable', 'payment_submission_fence_failed',
+  'payment_submission_fence_unavailable', 'credential_unavailable', 'signing_material_invalid',
+])
+/** Retry the same request: price_changed needs a new Quote first, so it is not retryable as-is. */
+const retryableRefusalCodes: ReadonlySet<CallRefusalCode> = new Set<CallRefusalCode>([
+  'rate_limited', 'concurrency_limited', 'treasury_capacity_unavailable',
+  'invocation_runtime_unavailable', 'authority_reader_unavailable', 'source_unavailable',
+])
+/** The Provider's endpoint answered badly or not at all (a gateway timeout is upstream, RFC 9110 15.6.5). */
+const providerFaultPattern = /^(provider_|operation_transport_)/u
+
 /**
- * Requires a transport or recorded refusal code, not a successful outcome.
- * Ensures an existing public category while private detail stays in audit.
+ * Maps a transport or recorded refusal code to its public category.
+ * Private detail stays in audit; AE-side faults never read as a Provider refusal.
  * Invariant: this projection changes no state, receipt, authority or retry fact.
- * On a private code: use the public refusal category; never broaden the schema.
  */
 export function publicCallRefusalCode(code: string | undefined): CallRefusalCode {
   if (code === 'payment_requirement_outside_authority') return 'pre_release_failed'
+  // An unrecorded cause is AE's recording gap, never blamed on the Provider.
+  if (code === undefined || /^operation_worker_/u.test(code)) return 'invocation_runtime_unavailable'
+  if (priceChangedCodes.has(code)) return 'price_changed'
+  if (paymentUnavailableCodes.has(code) || /^(spend|screening)_/u.test(code)) return 'payment_unavailable'
   const known = callRefusalCodeSchema.safeParse(code)
+  // Provider faults (providerFaultPattern) and other unlisted codes read as the Provider's refusal.
   return known.success ? known.data : 'provider_refused'
+}
+
+/** A Provider failure lowers that Provider's reliability; AE-side faults (worker, custody, caps, screening) never count. */
+export function isProviderFault(privateCode: string): boolean {
+  return providerFaultPattern.test(privateCode) || privateCode === 'payee_changed'
+}
+
+/** One fresh Quote can clear an expired Quote or a changed price; a receipt means payment began, so never re-quote. */
+export function requotableRefusal(result: Readonly<{ kind: string; code?: string; receipt?: unknown }>): boolean {
+  return result.kind === 'refused' && result.receipt === undefined
+    && (result.code === 'price_changed' || result.code === 'operation_not_current')
+}
+
+const paymentReasonCopy: Readonly<Record<string, string>> = {
+  spend_call_cap_exceeded: 'the per-Call custody cap',
+  spend_new_payee_cap_exceeded: 'the new-payee custody cap',
+  spend_payee_cap_exceeded: 'the daily per-payee custody cap',
+  spend_platform_cap_exceeded: 'the daily platform custody cap',
+}
+
+function refusalWhatHappened(code: CallRefusalCode, privateCode: string | undefined): string {
+  switch (code) {
+    case 'payment_unavailable': {
+      const cap = privateCode === undefined ? undefined : paymentReasonCopy[privateCode]
+      if (cap !== undefined) return `Agentic Economy did not sign the payment because it would exceed ${cap} (${privateCode})`
+      if (privateCode !== undefined && privateCode.startsWith('screening_')) return `Agentic Economy did not sign the payment because payee screening did not pass (${privateCode})`
+      return `Agentic Economy could not sign the payment${privateCode === undefined ? '' : ` (${privateCode})`}`
+    }
+    case 'price_changed': return "The Provider's live price no longer matches the Quote"
+    case 'payee_changed': return "The Provider's payment address no longer matches the Quote"
+    default: return `The Call was refused (${code})`
+  }
+}
+
+function refusalNextStep(code: CallRefusalCode, privateCode: string | undefined): string {
+  switch (code) {
+    case 'payment_unavailable':
+      return privateCode !== undefined && privateCode in paymentReasonCopy
+        ? 'Choose a cheaper Tool or try again after the cap resets.'
+        : 'Try again later or contact Help.'
+    case 'price_changed': return 'Request a new Quote at the current price.'
+    case 'payee_changed': return 'Check the Provider before requesting a new Quote.'
+    default: return retryableRefusalCodes.has(code) ? 'Retry shortly.' : 'Choose another Tool or contact Help.'
+  }
+}
+
+/**
+ * Builds the public refusal for a terminal Call: category, retryable derived from it,
+ * and one sentence saying what happened, whether anything was charged, and the next step.
+ */
+export function categorizedCallRefusal(
+  privateCode: string | undefined,
+  charged: boolean,
+): Readonly<{ code: CallRefusalCode; retryable: boolean; nextAction: string }> {
+  const code = publicCallRefusalCode(privateCode)
+  const detail = privateCode === code ? undefined : privateCode
+  return {
+    code,
+    retryable: !charged && retryableRefusalCodes.has(code),
+    nextAction: `${refusalWhatHappened(code, detail)}. ${charged ? 'This Call was charged; see its receipt.' : 'Nothing was charged.'} ${refusalNextStep(code, detail)}`,
+  }
 }
 const callRefPattern = /^operation-invocation:v1:[0-9a-f]{64}$/u
 const quoteRefPattern = /^operation-commitment:v1:[0-9a-f]{64}$/u

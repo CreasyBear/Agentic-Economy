@@ -14,7 +14,7 @@ import { projectCallRecoveryNext } from '@/modules/capability-execution/call-rec
 import { planReferenceNextSchema, type PlanReferenceNext } from '@/modules/capability-execution/plan/runtime.schemas'
 import { idempotencyKeySchema } from '@/modules/common/action'
 import type { Brand } from '@/modules/common/ids'
-import type { PublicToolRef } from '@/modules/common/tool-ref'
+import { parseCallableRef, type PublicToolRef } from '@/modules/common/tool-ref'
 import type { PrincipalRef } from '@/modules/principal-account/principal/public'
 import { registryNextActionSchema, type RegistryNextAction, type SearchResult } from '@/modules/registry/tool-choice-contracts'
 
@@ -160,6 +160,7 @@ export type JourneyProjectionOptions = Readonly<{
 }>
 
 const toolRefSchema = brandedStringSchema(z.string().regex(/^operation:v1:[0-9a-f]{64}$/u), (value) => value as PublicToolRef)
+const callableRefSchema = z.string().refine(ref => parseCallableRef(ref) !== undefined)
 const quoteRefSchema = brandedStringSchema(z.string().regex(/^operation-commitment:v1:[0-9a-f]{64}$/u), (value) => value as QuoteRef)
 const callRefSchema = brandedStringSchema(z.string().regex(/^operation-invocation:v1:[0-9a-f]{64}$/u), (value) => value as CallRef)
 const taskRefSchema = brandedStringSchema(z.string().regex(/^turn_[0-9a-f-]{36}$/u), (value) => value as TurnRef)
@@ -188,7 +189,7 @@ export const journeyNextSchema = z.union([
   fundingStatusNextSchema,
   fundingCreateNextSchema,
   agentAccountFundingContinuationSchema.shape.next,
-  z.strictObject({ action: z.literal('tool.quote'), args: z.strictObject({ toolRef: toolRefSchema, input: z.record(z.string(), jsonValueSchema) }), authority: z.literal('agent_key').exactOptional() }),
+  z.strictObject({ action: z.literal('tool.quote'), args: z.strictObject({ toolRef: callableRefSchema, input: z.record(z.string(), jsonValueSchema) }), authority: z.literal('agent_key').exactOptional() }),
   z.strictObject({ action: z.literal('tool.call'), args: z.strictObject({ quoteRef: quoteRefSchema, idempotencyKey: idempotencyKeySchema }), authority: z.literal('agent_key').exactOptional() }),
   z.strictObject({ action: z.literal('tool.procure'), args: toolProcureInputSchema, authority: z.literal('agent_key').exactOptional() }),
   journeyStatusReadNextSchema,

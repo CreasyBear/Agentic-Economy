@@ -4,11 +4,13 @@ import { components } from './_generated/api'
 import type { DataModel } from './_generated/dataModel'
 import type { MutationCtx, QueryCtx } from './_generated/server'
 import { insertToolEvidence } from './marketListingEvidence'
+import { isProviderFault, publicCallRefusalCode } from '../src/modules/capability-execution/call-contracts'
 
 export type MarketEvidenceKind =
   | 'ae_answer_reported'
   | 'ae_invocation'
   | 'ae_invocation_completed'
+  | 'ae_invocation_refused'
   | 'ae_settlement'
   | 'ae_qualified_use'
   | 'ae_reconciliation_required'
@@ -28,7 +30,7 @@ export async function recordMarketEvidenceFact(
   kind: MarketEvidenceKind,
   sourceRef: string,
   occurredAt: number,
-  listing?: Readonly<{ toolRef: string; durationMs?: number; reporterRef?: string }>,
+  listing?: Readonly<{ toolRef?: string; durationMs?: number; reporterRef?: string; refusalCode?: string }>,
 ): Promise<void> {
   const existing = await ctx.db.query('marketEvidenceFacts')
     .withIndex('by_kind_and_sourceRef', (query) => query.eq('kind', kind).eq('sourceRef', sourceRef))
@@ -41,7 +43,8 @@ export async function recordMarketEvidenceFact(
     ...(listing === undefined
       ? {}
       : {
-          toolRef: listing.toolRef,
+          ...(listing.toolRef === undefined ? {} : { toolRef: listing.toolRef }),
+          ...(listing.refusalCode === undefined ? {} : { refusalCode: listing.refusalCode }),
           ...(listing.reporterRef === undefined ? {} : { reporterRef: listing.reporterRef }),
           ...(listing.durationMs === undefined ? {} : { durationMs: listing.durationMs }),
         }),
@@ -63,3 +66,16 @@ export async function countMarketEvidence(
   })) ?? 0
 }
 
+/** Records a terminal refusal's public category. Only a Provider fault names the Tool, so AE-side faults never count against it. */
+export async function recordInvocationRefused(
+  ctx: MutationCtx,
+  callRef: string,
+  toolRef: string,
+  privateCode: string,
+  occurredAt: number,
+): Promise<void> {
+  await recordMarketEvidenceFact(ctx, 'ae_invocation_refused', callRef, occurredAt, {
+    ...(isProviderFault(privateCode) ? { toolRef } : {}),
+    refusalCode: publicCallRefusalCode(privateCode),
+  })
+}

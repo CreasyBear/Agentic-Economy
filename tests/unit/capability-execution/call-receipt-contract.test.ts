@@ -5,6 +5,10 @@ import {
   callReceiptPaymentProfile,
   callReceiptSchema,
   callResultSchema,
+  categorizedCallRefusal,
+  isProviderFault,
+  projectCallMachineResult,
+  requotableRefusal,
   type CallReceipt,
 } from '@/modules/capability-execution/call-contracts'
 import { buildBrokeredX402Receipt } from '@/modules/capability-execution/call-runtime'
@@ -316,6 +320,16 @@ describe('Call receipts', () => {
     { recordedCode: 'payment_requirement_outside_authority', publicCode: 'pre_release_failed' },
     { recordedCode: 'provider_http_500', publicCode: 'provider_refused' },
     { recordedCode: 'payment_provider_requirement_stale', publicCode: 'provider_refused' },
+    { recordedCode: 'payment_amount_mismatch', publicCode: 'price_changed' },
+    { recordedCode: 'payment_exceeds_step_ceiling', publicCode: 'price_changed' },
+    { recordedCode: 'price_changed', publicCode: 'price_changed' },
+    { recordedCode: 'payee_changed', publicCode: 'payee_changed' },
+    { recordedCode: 'spend_new_payee_cap_exceeded', publicCode: 'payment_unavailable' },
+    { recordedCode: 'screening_not_clear', publicCode: 'payment_unavailable' },
+    { recordedCode: 'payment_signature_unavailable', publicCode: 'payment_unavailable' },
+    { recordedCode: 'payment_custody_unavailable', publicCode: 'payment_unavailable' },
+    { recordedCode: 'operation_worker_TypeError', publicCode: 'invocation_runtime_unavailable' },
+    { recordedCode: 'operation_transport_TimeoutError', publicCode: 'provider_refused' },
   ])('round-trips receipts and recorded $recordedCode through public status without changing evidence', ({ recordedCode, publicCode }) => {
     const candidate = receipt()
     const row: RecoveryRow = {
@@ -354,5 +368,61 @@ describe('Call receipts', () => {
     expect(row).toEqual(original)
     expect(reconciliationResult(row, status, [], 'operation:opaque', { ...candidate, state: 'reconciliation_required' }))
       .toMatchObject({ receipt: { state: 'reconciliation_required' } })
+  })
+})
+
+describe('Call refusal categories', () => {
+  it('names the custody cap, says nothing was charged, and is not retryable as-is', () => {
+    const refusal = categorizedCallRefusal('spend_new_payee_cap_exceeded', false)
+    expect(refusal).toMatchObject({ code: 'payment_unavailable', retryable: false })
+    expect(refusal.nextAction).toMatch(/new-payee/u)
+    expect(refusal.nextAction).toMatch(/Nothing was charged/u)
+  })
+
+  it('derives retryable from the category and points a price change at a new Quote', () => {
+    const price = categorizedCallRefusal('payment_amount_mismatch', false)
+    expect(price).toMatchObject({ code: 'price_changed', retryable: false })
+    expect(price.nextAction).toMatch(/new Quote/u)
+    expect(categorizedCallRefusal('payee_changed', false)).toMatchObject({ code: 'payee_changed', retryable: false })
+    expect(categorizedCallRefusal('provider_http_500', false)).toMatchObject({ code: 'provider_refused', retryable: false })
+    expect(categorizedCallRefusal('operation_worker_TypeError', false)).toMatchObject({
+      code: 'invocation_runtime_unavailable', retryable: true,
+    })
+  })
+
+  it('names a transport failure as the Provider\'s, matching the evidence it counts toward', () => {
+    expect(categorizedCallRefusal('operation_transport_TimeoutError', false).code).toBe('provider_refused')
+    expect(isProviderFault('operation_transport_TimeoutError')).toBe(true)
+  })
+
+  it('never blames the Provider for a refusal with no recorded cause', () => {
+    expect(categorizedCallRefusal(undefined, false)).toMatchObject({ code: 'invocation_runtime_unavailable', retryable: true })
+  })
+
+  it('says when a refused Call was charged', () => {
+    expect(categorizedCallRefusal('provider_output_invalid', true).nextAction).toMatch(/charged/u)
+    expect(categorizedCallRefusal('provider_output_invalid', true).nextAction).not.toMatch(/Nothing was charged/u)
+  })
+
+  it('counts only Provider-side failures against the Provider', () => {
+    expect(['provider_http_500', 'provider_output_invalid', 'operation_transport_TimeoutError', 'payee_changed'].map(isProviderFault))
+      .toEqual([true, true, true, true])
+    expect(['operation_worker_TypeError', 'spend_new_payee_cap_exceeded', 'payment_unavailable', 'screening_unavailable', 'price_changed', 'input_invalid'].map(isProviderFault))
+      .toEqual([false, false, false, false, false, false])
+  })
+
+  it('re-quotes only a changed price or expired Quote that never reached signing', () => {
+    const price = { kind: 'refused', ...categorizedCallRefusal('payment_amount_mismatch', false) }
+    expect(requotableRefusal(price)).toBe(true)
+    expect(requotableRefusal({ kind: 'refused', code: 'operation_not_current' })).toBe(true)
+    expect(requotableRefusal({ ...price, receipt: { state: 'refunded' } })).toBe(false)
+    expect(requotableRefusal({ kind: 'refused', ...categorizedCallRefusal('payee_changed', false) })).toBe(false)
+    expect(requotableRefusal({ kind: 'completed', code: 'price_changed' })).toBe(false)
+  })
+
+  it('projects the refusal sentence as machine detail', () => {
+    const result = { kind: 'refused' as const, toolRef: 'operation:opaque', ...categorizedCallRefusal('payee_changed', false) }
+    expect(callResultSchema.parse(result)).toEqual(result)
+    expect(projectCallMachineResult(result)).toMatchObject({ code: 'payee_changed', detail: result.nextAction })
   })
 })

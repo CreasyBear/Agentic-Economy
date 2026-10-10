@@ -4,7 +4,7 @@ import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 
 import { api, internal } from "./_generated/api";
-import { recordMarketEvidenceFact } from "./marketEvidence";
+import { recordInvocationRefused, recordMarketEvidenceFact } from "./marketEvidence";
 import schema from "./schema";
 import { publishedBusinessOwner } from "../tests/helpers/convex-fixtures";
 
@@ -105,6 +105,55 @@ describe("market listing evidence Convex seam", () => {
       completedCalls: 6,
       latencySamplesMs: [150, 140, 130, 120, 110, 100],
     });
+  });
+
+  it("lowers reliability for Provider failures only and reports p50 latency and last verified", async () => {
+    const backend = backendWithAggregates();
+    const now = Date.now();
+    await backend.run(async (ctx) => {
+      const base = {
+        principalId: "principal:selection", ownerId: "acc_selection", credentialId: "credential:selection",
+        applicationRef: "application:selection", toolRef, environment: "sandbox" as const, grantRef: "grant:selection",
+        grantGeneration: 1, policyDigest: "sha256:selection", grantExpiresAt: now + 86_400_000,
+        inputDigest: "sha256:input", requestDigest: "sha256:request",
+      };
+      for (const [index, durationMs] of [400, 100, 300, 200, 500].entries()) {
+        const updatedAt = now - 10_000 + index;
+        await ctx.db.insert("capabilityCalls", {
+          ...base, callRef: `completed:${index}`, idempotencyKey: `completed:${index}`, state: "completed",
+          dispatchState: "completed", createdAt: updatedAt - durationMs, updatedAt,
+          result: { kind: "completed", callRef: `completed:${index}`, toolRef, output: {}, evidenceHash: "sha256:out" },
+        } as never);
+      }
+      for (const code of ["provider_http_500", "operation_transport_TimeoutError", "operation_worker_TypeError", "spend_new_payee_cap_exceeded", "payment_unavailable"]) {
+        await ctx.db.insert("capabilityCalls", {
+          ...base, callRef: `refused:${code}`, idempotencyKey: `refused:${code}`, state: "refused",
+          dispatchState: "failed", attemptRef: `attempt:${code}`, createdAt: now - 5_000, updatedAt: now - 5_000,
+          result: { kind: "refused", toolRef, code, retryable: false },
+        } as never);
+      }
+    });
+
+    const [evidence] = await backend.query(internal.marketListingEvidence.selectionEvidenceInternal, { toolRefs: [toolRef] });
+    expect(evidence).toEqual({
+      toolRef, aeCompleted: 5, aeFailed: 2, reportedByBuyers30d: 0, usedBefore: false,
+      latencyP50Ms: 300, lastVerifiedAt: now - 10_000 + 4,
+    });
+  });
+
+  it("records refusal categories and names the Tool only for a Provider fault", async () => {
+    const backend = backendWithAggregates();
+    await backend.run(async (ctx) => {
+      await recordInvocationRefused(ctx, "call:provider", toolRef, "provider_http_500", 1_000);
+      await recordInvocationRefused(ctx, "call:worker", toolRef, "operation_worker_TypeError", 1_001);
+      await recordInvocationRefused(ctx, "call:cap", toolRef, "spend_new_payee_cap_exceeded", 1_002);
+    });
+    const facts = await backend.run((ctx) => ctx.db.query("marketEvidenceFacts").collect());
+    expect(facts.map(({ sourceRef, toolRef: ref, refusalCode }) => ({ sourceRef, ref, refusalCode }))).toEqual([
+      { sourceRef: "call:provider", ref: toolRef, refusalCode: "provider_refused" },
+      { sourceRef: "call:worker", ref: undefined, refusalCode: "invocation_runtime_unavailable" },
+      { sourceRef: "call:cap", ref: undefined, refusalCode: "payment_unavailable" },
+    ]);
   });
 
   it("attributes Qualified Use evidence to the exact Tool only", async () => {

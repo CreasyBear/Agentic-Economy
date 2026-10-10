@@ -1,6 +1,6 @@
 import type { ActionCtx } from '../../../_generated/server'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { publicCallRefusalCode, type CallResult } from '@/modules/capability-execution/call-contracts'
+import { categorizedCallRefusal, type CallResult } from '@/modules/capability-execution/call-contracts'
 import { pricingConfigDecisionAmount, pricingConfigDigest } from '@/modules/money/public'
 import type { Infer } from 'convex/values'
 import { usageValue } from '@/modules/capability-execution/convex'
@@ -179,8 +179,7 @@ export async function projectOuterResult(
       result: {
         kind: 'refused',
         toolRef: dispatch.toolRef,
-        code: publicCallRefusalCode(observation.failureCode),
-        retryable: false,
+        ...categorizedCallRefusal(observation.failureCode, false),
       } satisfies CallResult,
       attemptRef,
       dispatchState: 'failed',

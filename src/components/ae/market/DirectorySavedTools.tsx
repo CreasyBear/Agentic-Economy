@@ -5,6 +5,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 
 import { degrade } from '@/lib/observability/degrade'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { isPublicToolRef } from '@/modules/common/tool-ref'
 import type { SavedToolsContextValue, SavedToolsLoadState, SavedToolsWriteError } from '@/modules/market/directory-card.view-model'
 import type { SavedDirectoryTool, SavedToolIdentity, SavedToolListItem, SavedToolSaveInput } from '@/modules/market/saved-tools.contracts'
 import { listSavedToolsForOwner, removeToolForOwner, saveToolForOwner } from '@/modules/market/market.functions'
@@ -29,7 +30,7 @@ function savedIdentityLookup(items: readonly SavedToolListItem[]): ReadonlyMap<s
 }
 
 function entryIdentity(tool: SavedDirectoryTool): SavedToolSaveInput {
-  return tool.entry.choice?.toolRef !== undefined && tool.entry.choice.access !== 'external_listing'
+  return isPublicToolRef(tool.entry.choice?.toolRef)
     ? { kind: 'ae_callable', toolRef: tool.entry.choice.toolRef }
     : { kind: 'external_listing', resource: tool.entry.resource }
 }

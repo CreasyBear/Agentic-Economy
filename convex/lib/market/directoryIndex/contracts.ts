@@ -29,10 +29,12 @@ export const directoryEntryValue = v.object({
   })),
 })
 export type DirectoryEntry = Infer<typeof directoryEntryValue>
-const directoryChoiceValue = v.object({
-  access: v.union(v.literal('external_listing'), v.literal('ae_callable'), v.literal('setup_required'), v.literal('unavailable')),
-  toolRef: v.optional(v.string()), sourceRouteRef: v.optional(v.string()),
+export const directoryChoiceValue = v.object({
+  access: v.union(v.literal('ae_callable'), v.literal('setup_required'), v.literal('unavailable')),
+  toolRef: v.optional(v.string()), sourceRouteRef: v.optional(v.string()), reason: v.optional(v.string()),
 })
+export const listingAdmissionValue = v.union(v.object({ kind: v.literal('quotable') }), v.object({ kind: v.literal('unavailable'), reason: v.string() }))
+export type ListingAdmission = Infer<typeof listingAdmissionValue>
 
 export const indexedEntryValue = v.object({
   entry: directoryEntryValue, category: v.string(),
@@ -81,7 +83,8 @@ export const pageValue = v.union(unavailableValue, v.object({
   ...paginationResultValidator(indexedEntryValue).fields,
 }))
 export const indexedSourceValue = v.object({
-  resource: v.string(), entry: directoryEntryValue, sourceJson: v.string(), sourceDigest: v.string(),
+  resource: v.string(), entry: directoryEntryValue, sourceJson: v.string(), sourceDigest: v.string(), admission: listingAdmissionValue,
+  sourceRouteRef: v.optional(v.string()),
 })
 export type IndexedSource = Infer<typeof indexedSourceValue>
 export const progressValue = v.object({

@@ -7,11 +7,12 @@ import {
   type CommercialPolicyRefusalReason,
 } from '@/modules/money/public'
 import { idempotencyKeySchema } from '@/modules/common/action'
+import { parseCallableRef } from '@/modules/common/tool-ref'
 
 export const TOOL_QUOTE_ACTION_ID = 'tool.quote' as const
 export const TOOL_QUOTE_PATH = '/api/v1/tools/quote' as const
 export const toolQuoteInputSchema = z.strictObject({
-  toolRef: z.string().regex(/^operation:v1:[0-9a-f]{64}$/u),
+  toolRef: z.string().refine(ref => parseCallableRef(ref) !== undefined),
   input: z.record(z.string(), jsonValueSchema),
 })
 

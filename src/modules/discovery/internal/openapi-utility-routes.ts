@@ -101,7 +101,8 @@ const registryBrowseSchema = z.strictObject({
   page: z.array(z.strictObject({
     id: z.string().regex(/^registry:[a-f0-9]{64}$/u),
     source: z.enum(['coinbase', 'provider']),
-    access: z.enum(['ae_callable', 'external_listing']),
+    access: z.enum(['ae_callable', 'setup_required', 'unavailable']),
+    reason: z.string().optional(),
     sourceRouteRef: z.string().optional(),
     toolRef: z.string().optional(),
     title: z.string(),
@@ -121,8 +122,8 @@ const registryDetailSchema = z.strictObject({
   schemaVersion: z.literal('api-registry-detail:v1'),
   kind: z.literal('found'),
   id: z.string().regex(/^registry:[a-f0-9]{64}$/u),
-  access: z.enum(['ae_callable', 'external_listing']),
-  warning: z.string().optional(),
+  access: z.enum(['ae_callable', 'setup_required', 'unavailable']),
+  reason: z.string().optional(),
   coverage: z.strictObject({ generation: z.string(), completedAt: z.number() }),
   item: z.looseObject({
     entry: z.looseObject({

@@ -4,6 +4,7 @@ import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
 import { callResultSchema, projectCallMachineResult } from '@/modules/capability-execution/call-contracts'
+import { REASON_COPY } from '@/content/reason-copy'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const childProcessMockState = vi.hoisted(() => ({
@@ -228,6 +229,15 @@ describe('external-agent Market Tool cold loop', () => {
     expect(output).not.toHaveProperty('nextCommand')
   })
 
+  it('prints completed calls, p50 latency, last verified and payers on each human search row', async () => {
+    const toolRef = operationRef('e')
+    const base = operationSearchResult('reference lookup', [operationDescriptor(toolRef)])
+    stubFetchJsonResponse({ ...base, results: base.results.map(row => ({ ...row,
+      signals: { calls: 9, successRate: 8 / 9, latencyP50Ms: 850, payers30d: 1 } })) })
+    const human = await withStdout(() => runSearchCommand(['reference lookup'], { ...options, json: false }))
+    expect(human).toContain('     8 of 9 AE calls completed · p50 850 ms · new')
+  })
+
   it('rejects --technical on compact search before requesting full metadata', async () => {
     const fetchMock = vi.fn<typeof fetch>()
     vi.stubGlobal('fetch', fetchMock)
@@ -252,15 +262,22 @@ describe('external-agent Market Tool cold loop', () => {
   })
   it('renders every mixed inspection action and assessed scope in plain output', async () => {
     const toolRef = operationRef('e')
+    const listingRef = `registry:${'f'.repeat(64)}`
     const matched = operationSearchResult('lookup', [operationDescriptor(toolRef)])
     if (matched.kind !== 'match') throw new Error('fixture_expected_match')
     const result = toolChoiceSearchOutputSchema.parse({
       ...matched,
       results: [...matched.results, {
-        id: 'opaque-1', source: 'coinbase', access: 'external_listing',
-        title: 'External lookup', summary: 'Unadmitted search', provider: 'Outside',
+        id: listingRef, source: 'coinbase', access: 'ae_callable', toolRef: listingRef,
+        title: 'External lookup', summary: 'Unpublished search', provider: 'Outside',
         actionClass: 'retrieve', objectClass: 'data', readiness: 'unverified',
-        price: { kind: 'unavailable' }, detailRef: '/api/v1/registry/detail?id=opaque-1',
+        price: { kind: 'unavailable' }, detailRef: `/api/v1/registry/detail?id=${listingRef}`,
+        next: [],
+      }, {
+        id: 'opaque-2', source: 'coinbase', access: 'unavailable', reason: 'chain_unsupported',
+        title: 'Solana lookup', summary: 'Other chain', provider: 'Outside',
+        actionClass: 'retrieve', objectClass: 'data', readiness: 'unavailable',
+        price: { kind: 'unavailable' }, detailRef: '/api/v1/registry/detail?id=opaque-2',
         next: [],
       }],
     })
@@ -269,8 +286,10 @@ describe('external-agent Market Tool cold loop', () => {
     expect(human).toContain('scope: all/complete')
     expect(human).toContain(`describe {"toolRef":"${toolRef}"} · ae describe ${toolRef}`)
     expect(human).not.toContain('describe-external')
-    expect(human).toContain('detail?id=opaque-1')
-    expect(human).toContain('External listing (not AE callable)')
+    expect(human).toContain(`External lookup · AE callable`)
+    expect(human).toContain(`quote · ae call ${listingRef} --input '<json>'`)
+    expect(human).toContain(`Solana lookup · Unavailable: ${REASON_COPY.chain_unsupported}`)
+    expect(human).toContain('ref: /api/v1/registry/detail?id=opaque-2')
     expect(human).not.toContain('Next:')
   })
 

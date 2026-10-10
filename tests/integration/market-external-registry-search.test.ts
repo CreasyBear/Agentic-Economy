@@ -14,7 +14,7 @@ import { handleApiRegistryDetailRequest } from '@/routes/api.v1.registry.detail'
 function source(index: number, overrides: Partial<IndexedSource['entry']> = {}): IndexedSource {
   const resource = `https://provider.test/tools/${index}`
   const raw = { resource, type: 'http', description: `Research tool ${index}`, ...(overrides.title === undefined ? {} : { title: overrides.title }) }
-  return { resource, sourceJson: JSON.stringify(raw), sourceDigest: canonicalDigest(raw), entry: {
+  return { resource, sourceJson: JSON.stringify(raw), sourceDigest: canonicalDigest(raw), admission: { kind: 'quotable' as const }, entry: {
     resource, title: `Research tool ${index}`, description: 'Search public research', protocol: 'http', provider: 'provider.test', metadataJson: '',
     category: 'Research', tags: ['search'],
     // Directory-eligible by default (payersOrder>=2 + a declared output shape):
@@ -106,10 +106,10 @@ describe('GET /api/v1/registry backed by the compact x402 directory index', () =
     expect(browseBody.page).toHaveLength(2)
     for (const row of browseBody.page) {
       expect(row.id).toMatch(/^registry:[a-f0-9]{64}$/u)
-      expect(row.access).toBe('external_listing')
+      expect(row.access).toBe('ae_callable')
+      expect(row.toolRef).toBe(row.id)
       expect(row.detailRef).toBe(`/api/v1/registry/detail?id=${encodeURIComponent(row.id)}`)
       expect(row).not.toHaveProperty('entry')
-      expect(row).not.toHaveProperty('toolRef')
     }
     expect(browseBody.pagination).toEqual({ limit: 8, hasMore: false })
     // Freshness reports the x402 directory source (review issue 4A / C16); the
@@ -138,8 +138,9 @@ describe('GET /api/v1/registry backed by the compact x402 directory index', () =
     const detail = await handleApiRegistryDetailRequest(new Request(`https://ae.test${browseBody.page[0].detailRef}`))
     expect(detail.status).toBe(200)
     const inspected = await detail.json()
-    expect(inspected.access).toBe('external_listing')
-    expect(inspected.warning).toContain('cannot Quote or Call')
+    expect(inspected.access).toBe('ae_callable')
+    expect(inspected.item.choice).toMatchObject({ access: 'ae_callable', toolRef: browseBody.page[0].id })
+    expect(inspected).not.toHaveProperty('warning')
     expect(inspected.item.entry.metadataJson).toContain('provider.test/tools/')
     expect(inspected.item.entry.output.schemaJson).toBe('{}')
     const searchResponse = await getRegistry({ query: 'Research tool 2' })

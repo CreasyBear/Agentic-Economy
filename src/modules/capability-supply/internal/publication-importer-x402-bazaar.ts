@@ -6,7 +6,6 @@ import {
 import { isRecord } from "@/modules/common/is-record";
 
 const JSON_SCHEMA = "https://json-schema.org/draft/2020-12/schema";
-const BAZAAR_KEY = "bazaar";
 const MAX_SCHEMA_PROPERTIES = 64;
 const PROPERTY_NAME = /^[A-Za-z][A-Za-z0-9_.-]{0,99}$/u;
 
@@ -43,22 +42,6 @@ export type BazaarDiscoveryInfo = Readonly<{
   input: Readonly<Record<string, unknown>>;
   output: unknown;
 }>;
-
-/**
- * Raw Bazaar extensions are admitted only by the Node discovery action. The
- * shared importer fails closed when it sees one so it cannot bypass that
- * runtime boundary.
- */
-export function admitBazaarFromPaymentRequired(
-  paymentRequired: unknown,
-): BazaarAdmission {
-  if (!isRecord(paymentRequired)) return { kind: "absent" };
-  const extensions = paymentRequired.extensions;
-  if (!isRecord(extensions) || !(BAZAAR_KEY in extensions)) {
-    return { kind: "absent" };
-  }
-  return { kind: "refused", reason: "bazaar_discovery_invalid" };
-}
 
 /**
  * Applies AE's bounded HTTP/schema profile to info already extracted by the

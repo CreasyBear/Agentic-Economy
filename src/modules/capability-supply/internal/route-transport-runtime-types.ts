@@ -69,6 +69,8 @@ export type RouteTransportRuntime = Readonly<{
   readX402PaymentAuthorization?: (
     prepared: X402PreparedAuthorization,
   ) => Promise<string | undefined>
+  /** Names why AE declined to sign the last authorization read (custody cap, screening). */
+  readX402SigningRefusal?: () => string | undefined
   /** Restores custody material by the persisted opaque digest after process loss. */
   readX402PaymentAuthorizationByDigest?: (
     prepared: X402PreparedAuthorization,

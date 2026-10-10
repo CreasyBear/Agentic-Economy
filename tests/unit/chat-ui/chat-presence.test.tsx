@@ -328,8 +328,8 @@ describe('ChatTranscript first-page gate', () => {
       state: 'complete',
       surface: 'compare',
       choices: [
-        { toolRef, detailHref: '/tools/lookup-a?source=chat', title: 'Lookup A', provider: 'Acme', price: 'A$1.25', sourcePrice: '0.01 USDC', priceValidUntil: Date.UTC(2030, 0, 2, 3, 4), readiness: 'ready', access: 'external_listing', belowMatch: true },
-        { toolRef: `${toolRef}:b`, title: 'Lookup B', provider: 'Acme', price: 'A$1.25', sourcePrice: '0.01 USDC', priceValidUntil: Date.UTC(2030, 0, 2, 3, 4), readiness: 'ready', access: 'external_listing', belowMatch: true },
+        { toolRef, detailHref: '/tools/lookup-a?source=chat', title: 'Lookup A', provider: 'Acme', price: 'A$1.25', sourcePrice: '0.01 USDC', priceValidUntil: Date.UTC(2030, 0, 2, 3, 4), readiness: 'ready', access: 'unavailable', belowMatch: true },
+        { toolRef: `${toolRef}:b`, title: 'Lookup B', provider: 'Acme', price: 'A$1.25', sourcePrice: '0.01 USDC', priceValidUntil: Date.UTC(2030, 0, 2, 3, 4), readiness: 'ready', access: 'unavailable', belowMatch: true },
       ],
       toolRefs: [toolRef, `${toolRef}:b`],
     }} />)
@@ -346,14 +346,14 @@ describe('ChatTranscript first-page gate', () => {
     expectFactForBothTools('Source price', '0.01 USDC')
     expectFactForBothTools('Price valid until', '2 Jan 2030, 3:04 am UTC')
     expectFactForBothTools('Readiness', 'Ready to use')
-    expectFactForBothTools('Access', 'External listing · not callable through AE')
+    expectFactForBothTools('Access', 'unavailable')
     expectFactForBothTools('Match', 'Below a match')
     fireEvent.click(screen.getByRole('switch', { name: 'Only differences' }))
     expectFactForBothTools('Price', 'A$1.25')
     expectFactForBothTools('Source price', '0.01 USDC')
     expectFactForBothTools('Price valid until', '2 Jan 2030, 3:04 am UTC')
     expectFactForBothTools('Readiness', 'Ready to use')
-    expectFactForBothTools('Access', 'External listing · not callable through AE')
+    expectFactForBothTools('Access', 'unavailable')
     expectFactForBothTools('Match', 'Below a match')
     expect(document.querySelector('[data-tool-card="registry.tools.search"]')).toBeTruthy()
   })

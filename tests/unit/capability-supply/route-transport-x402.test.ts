@@ -529,21 +529,21 @@ describe('registered route transport runtime', () => {
   })
 
   it.each([
-    ['amount', (challenge: MutableChallenge) => { challenge.accepts[0]!.amount = '1250001' }],
-    ['payee', (challenge: MutableChallenge) => { challenge.accepts[0]!.payTo = '0x0000000000000000000000000000000000000003' }],
-    ['network', (challenge: MutableChallenge) => { challenge.accepts[0]!.network = 'eip155:1' }],
-    ['asset', (challenge: MutableChallenge) => { challenge.accepts[0]!.asset = '0x0000000000000000000000000000000000000004' }],
-    ['scheme', (challenge: MutableChallenge) => { challenge.accepts[0]!.scheme = 'upto' }],
-    ['transfer method', (challenge: MutableChallenge) => { challenge.accepts[0]!.extra = { assetTransferMethod: 'permit2' } }],
-    ['resource', (challenge: MutableChallenge) => { challenge.resource.url = 'https://provider.example/other-resource' }],
-  ])('refuses fresh 402 %s drift before signing', async (_label, mutate) => {
+    ['amount', 'price_changed', (challenge: MutableChallenge) => { challenge.accepts[0]!.amount = '1250001' }],
+    ['payee', 'payee_changed', (challenge: MutableChallenge) => { challenge.accepts[0]!.payTo = '0x0000000000000000000000000000000000000003' }],
+    ['network', 'payment_provider_requirement_stale', (challenge: MutableChallenge) => { challenge.accepts[0]!.network = 'eip155:1' }],
+    ['asset', 'payment_provider_requirement_stale', (challenge: MutableChallenge) => { challenge.accepts[0]!.asset = '0x0000000000000000000000000000000000000004' }],
+    ['scheme', 'payment_provider_requirement_stale', (challenge: MutableChallenge) => { challenge.accepts[0]!.scheme = 'upto' }],
+    ['transfer method', 'payment_provider_requirement_stale', (challenge: MutableChallenge) => { challenge.accepts[0]!.extra = { assetTransferMethod: 'permit2' } }],
+    ['resource', 'payment_provider_requirement_stale', (challenge: MutableChallenge) => { challenge.resource.url = 'https://provider.example/other-resource' }],
+  ])('refuses fresh 402 %s drift before signing as %s', async (_label, failureCode, mutate) => {
     const target = 'https://provider.example/fresh-drift'
     const { observed, sign, send, fresh } = await refuseFreshChallengeDrift(target, mutate)
 
     expect(observed).toMatchObject({
       disposition: 'refused',
       releaseStarted: false,
-      failureCode: 'payment_provider_requirement_stale',
+      failureCode,
       paymentAuthorizationStatus: 'not_created',
       paymentSubmissionStatus: 'not_submitted',
       settlementEvidence: { kind: 'not_submitted' },
@@ -585,6 +585,31 @@ describe('registered route transport runtime', () => {
     expect(send).toHaveBeenCalledTimes(1)
     expect(sign).not.toHaveBeenCalled()
     expect(redirect.wasCanceled()).toBe(true)
+  })
+
+  it('names the custody refusal when AE declines to sign, before any paid request', async () => {
+    const requirement = x402PaymentRequired(X402_PAID_URL)
+    const custody = preparedX402Custody(vi.fn(async () => 'must-not-sign'))
+    const fetch = vi.fn<RouteTransportFetch>()
+    const observed = await invokeRouteTransport(
+      x402PaidInvocation({ challenge: requirement }),
+      {
+        send: fetch,
+        resolveCredential: resolveProviderCredential('credential'),
+        ...custody,
+        readX402PaymentAuthorization: async () => undefined,
+        readX402SigningRefusal: () => 'spend_new_payee_cap_exceeded',
+        markX402PaymentPossiblySubmitted: vi.fn(),
+      },
+    )
+    expect(observed).toMatchObject({
+      disposition: 'refused',
+      releaseStarted: false,
+      failureCode: 'spend_new_payee_cap_exceeded',
+      paymentSubmissionStatus: 'not_submitted',
+      settlementEvidence: { kind: 'not_submitted' },
+    })
+    expect(fetch).not.toHaveBeenCalled()
   })
 
   it('reconciles a returned 402 after one signed submit without retrying', async () => {

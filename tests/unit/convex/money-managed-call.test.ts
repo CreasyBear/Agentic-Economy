@@ -832,7 +832,7 @@ describe('paid Call with a lost response', () => {
     await expect(backend.run(async ctx => await ctx.db.query('capabilityCallProjections').collect()))
       .resolves.toMatchObject([{ state: 'refused', deliveryState: 'not_delivered', paymentState: 'settled' }])
     await expect(backend.run(async ctx => await ctx.db.query('marketEvidenceFacts').collect()))
-      .resolves.toHaveLength(0)
+      .resolves.toMatchObject([{ kind: 'ae_invocation_refused', sourceRef: callRef, toolRef, refusalCode: 'provider_output_invalid' }])
   })
 
   it('closes buyer credit and Provider settlement once without inventing delivery evidence', async () => {

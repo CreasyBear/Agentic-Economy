@@ -2,7 +2,7 @@ import { WorkflowManager, vWorkflowId } from '@convex-dev/workflow'
 import { vResultValidator } from '@convex-dev/workpool'
 import { v } from 'convex/values'
 import { isRecord } from '@/modules/common/is-record'
-import { components, internal, api } from './_generated/api'
+import { components, internal } from './_generated/api'
 import { internalAction, internalMutation } from './_generated/server'
 import { marketDispatchWorkpool } from './marketDispatchWorkpool'
 import { parseWorkloadCronSnapshot, workloadCronSnapshotValue } from './lib/platform/workloadCron/context'
@@ -61,7 +61,7 @@ export const onComplete = internalMutation({
       // paying for a full re-admission sweep.
       const resources = await ctx.runQuery(internal.x402DirectoryIndex.firstEligiblePage, { generation: args.result.returnValue.generation })
       if (resources.length > 0) {
-        await marketDispatchWorkpool.enqueueActionBatch(ctx, api.x402Directory.resolve, resources.map(resource => ({ resource })), { retry: true })
+        await marketDispatchWorkpool.enqueueActionBatch(ctx, internal.x402Directory.resolve, resources.map(resource => ({ resource })), { retry: true })
       }
       // Removal sweep only runs after a full, successful scan (never after a
       // partial/failed one - x402DirectoryIndexStore.fail leaves the live

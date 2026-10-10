@@ -19,7 +19,6 @@ export const DIRECTORY_READINESS = {
   ae_callable: { label: 'Ready to call', tone: 'success' },
   setup_required: { label: 'Needs setup', tone: 'warning' },
   unavailable: { label: 'Unavailable', tone: 'neutral' },
-  external_listing: { label: 'Preview only', tone: 'neutral' },
 } as const
 
 /** No listed price, in the same words on every card, row and comparison. */
@@ -109,7 +108,7 @@ export function directoryPriceContext(entry: X402DirectoryEntry): string {
     ? `${entry.prices.length} Provider payment options · source ${listed}`
     : `Provider lists ${listed} per Call`
   if (entry.audEstimate === undefined) return source
-  return `${entry.choice?.access === 'external_listing' || entry.choice === undefined ? 'Provider-listed estimate' : 'Indicative before Quote'} · ${source}`
+  return `${entry.choice?.access === 'ae_callable' ? 'Indicative before Quote' : 'Provider-listed estimate'} · ${source}`
 }
 
 export function directoryDate(value: string): string {
@@ -243,7 +242,7 @@ export type DirectoryToolCardModel = Readonly<{
   priceContext: string
   /** Set when `priceLabel` is an AUD estimate: the provider's listed price it was estimated from. */
   priceEstimateSource?: string
-  access: 'external_listing' | 'ae_callable' | 'setup_required' | 'unavailable'
+  access: 'ae_callable' | 'setup_required' | 'unavailable'
   accessLabel: string
   toolRef?: string
   sourceRouteRef?: string
@@ -284,8 +283,8 @@ export function toDirectoryToolCardModel(entry: X402DirectoryEntry): DirectoryTo
     title,
     providerHost,
     slug,
-    access: entry.choice?.access ?? 'external_listing',
-    accessLabel: DIRECTORY_READINESS[entry.choice?.access ?? 'external_listing'].label,
+    access: entry.choice?.access ?? 'unavailable',
+    accessLabel: DIRECTORY_READINESS[entry.choice?.access ?? 'unavailable'].label,
     ...(entry.choice?.toolRef === undefined ? {} : { toolRef: entry.choice.toolRef }),
     ...(entry.choice?.sourceRouteRef === undefined ? {} : { sourceRouteRef: entry.choice.sourceRouteRef }),
     providerLine,

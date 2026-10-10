@@ -28,10 +28,12 @@ export type X402DirectoryContract = Readonly<{
   fieldsTruncated?: true
 }>
 
+/** A directory row is callable by `toolRef` (an operation ref, or its `registry:<hex>` listing ref before publication) or unavailable for a named reason. */
 export type DirectoryChoice = Readonly<{
-  access: 'external_listing' | 'ae_callable' | 'setup_required' | 'unavailable'
+  access: 'ae_callable' | 'setup_required' | 'unavailable'
   toolRef?: string
   sourceRouteRef?: string
+  reason?: string
 }>
 
 export type X402DirectoryEntry = Readonly<{
@@ -114,11 +116,12 @@ export const x402DirectoryInputSchema = x402DirectoryFilterSchema.extend({
 })
 export const x402DirectoryResolveInputSchema = x402DirectoryInputSchema.extend({ resource: z.string().min(1).max(8192) })
 export type X402DirectoryInput = z.infer<typeof x402DirectoryInputSchema>
-export type X402DirectoryResolveInput = z.infer<typeof x402DirectoryResolveInputSchema>
 export type X402DirectoryResolutionReason =
   | 'query_invalid'
   | 'resource_filters_mismatch'
   | 'resource_not_found'
+  /** The URL answered without an x402 402 challenge. */
+  | 'resource_not_payable'
   | 'source_unavailable'
   | 'admission_unavailable'
   | 'tool_unavailable'

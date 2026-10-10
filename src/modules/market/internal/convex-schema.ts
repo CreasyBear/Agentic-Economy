@@ -194,6 +194,10 @@ export const marketTables = {
     // Lowest exact Base USDC payTo, stored on the '*' row only. Optional until
     // the next directory refresh writes it. Volume joins on this address.
     basePayTo: v.optional(v.string()),
+    // Whether Quote can admit this resource, decided at index time by the same
+    // admitFacilitatorDiscoveryItems path Quote runs. Optional until the next
+    // directory refresh writes it; Quote re-decides regardless.
+    admission: v.optional(v.union(v.object({ kind: v.literal('quotable') }), v.object({ kind: v.literal('unavailable'), reason: v.string() }))),
   })
     .index('by_generation_and_resource', ['generation', 'resource'])
     .index('by_generation_and_network_and_payersOrder', ['generation', 'network', 'payersOrder'])
@@ -266,6 +270,7 @@ export const marketTables = {
       v.literal('ae_invocation'),
       v.literal('ae_answer_reported'),
       v.literal('ae_invocation_completed'),
+      v.literal('ae_invocation_refused'),
       v.literal('ae_settlement'),
       v.literal('ae_qualified_use'),
       v.literal('ae_reconciliation_required'),
@@ -274,6 +279,8 @@ export const marketTables = {
     reporterRef: v.optional(v.string()),
     toolRef: v.optional(v.string()),
     durationMs: v.optional(v.number()),
+    // ae_invocation_refused only: the public refusal category.
+    refusalCode: v.optional(v.string()),
     occurredAt: v.number(),
   })
     .index('by_kind_and_sourceRef', ['kind', 'sourceRef'])

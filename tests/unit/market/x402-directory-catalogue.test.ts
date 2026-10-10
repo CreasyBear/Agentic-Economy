@@ -170,7 +170,7 @@ describe('indexed catalogue server boundary', () => {
     }
     const found = {
       kind: 'found' as const, coverage: { indexedTotal: 4000, generation: 'gen-1' },
-      item: { entry, category: 'weather', categorySource: 'provider_declared' as const, observedAt: 1, sourceDigest: 'digest', toolRef: `operation:v1:${'ab'.repeat(32)}`, choice: { access: 'external_listing' as const } },
+      item: { entry, category: 'weather', categorySource: 'provider_declared' as const, observedAt: 1, sourceDigest: 'digest', toolRef: `operation:v1:${'ab'.repeat(32)}`, choice: { access: 'unavailable' as const } },
     }
     const upstreamDetail = { kind: 'found_upstream' as const, item: { entry: { ...entry, prices: [{ network: 'eip155:8453', scheme: 'exact', amount: '0.001 USDC', decimalAmount: '0.001000', symbol: 'USDC' }] } } }
     query.mockImplementation(async (name: string) => name === 'referenceRateRefresh:current' ? rate : found)

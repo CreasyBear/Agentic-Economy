@@ -1,17 +1,16 @@
 import { cronJobs } from 'convex/server'
 import type { FunctionReference } from 'convex/server'
 
-import { SCHEDULED_WORKLOADS, type ScheduledWorkloadName } from '@/lib/deployment/scheduled-workloads'
+import { SCHEDULED_WORKLOADS, type TimedWorkloadName } from '@/lib/deployment/scheduled-workloads'
 import { internal } from './_generated/api'
 
-// Every scheduled workload must name its handler here; a missing or extra key
+// Every timed workload must name its handler here; a missing or extra key
 // is a type error. Cadence lives with the declaration in scheduled-workloads.
-const HANDLERS: Record<ScheduledWorkloadName, FunctionReference<'mutation' | 'action', 'internal'>> = {
+const HANDLERS: Record<TimedWorkloadName, FunctionReference<'mutation' | 'action', 'internal'>> = {
   'expire alpha content': internal.workloadCron.expireAlphaContent,
   'reconcile paid Call reports': internal.workloadCron.reconcilePaidCallReports,
   'reconcile promotional credit': internal.workloadCron.reconcilePromotionalCredit,
   'reconcile due facilitator invocations': internal.workloadCron.reconcileDueFacilitatorInvocations,
-  'refresh facilitator discovery': internal.workloadCron.refreshFacilitatorDiscovery,
   'refresh USDC/AUD reference rate': internal.workloadCron.refreshReferenceRate,
   'refresh Agentic Economy API registry': internal.workloadCron.refreshAgenticEconomyApiRegistry,
   'refresh current market presence': internal.workloadCron.refreshCurrentMarketPresence,

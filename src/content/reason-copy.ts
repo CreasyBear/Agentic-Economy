@@ -62,7 +62,9 @@ const TYPED_REASON_COPY = {
   provider_output_invalid: 'The Provider returned an invalid result for this Call. Retry, or contact Help if it keeps happening.',
   pre_release_failed: 'Agentic Economy could not safely release payment for this Call before running it. Retry, or contact Help if it keeps happening.',
   outcome_unknown: "Agentic Economy could not confirm whether this Call finished. Check the Call's status before retrying.",
-  payment_lane_not_brokered: "This Tool's payment lane is not brokered by Agentic Economy yet. Contact Help before calling it.",
+  payment_unavailable: 'Agentic Economy did not sign the payment for this Call. Try again later or contact Help.',
+  price_changed: "The Provider's live price changed since the Quote, so nothing was charged. Request a new Quote.",
+  payee_changed: "The Provider's payment address changed since the Quote, so nothing was charged. Check the Provider before requesting a new Quote.",
   reconciliation_required: "This Call's outcome needs confirmation before it can continue. Check its status to reconcile the result.",
   invocation_not_found: 'No Call matches that reference. Check the Call reference and try again.',
   invocation_cancelled: 'This Call was cancelled before it finished. Request a new Quote to try again.',
@@ -189,6 +191,16 @@ export const REASON_COPY: Record<string, string> = {
   under_review: 'This Tool is under review and is not yet available.',
   updated_terms_require_review: "This Tool's terms changed and require review before it can be used again.",
   not_supported_by_ae: 'Agentic Economy does not support calling this Tool.',
+
+  // Directory admission reasons (`FacilitatorDiscoverySkipReason`), stored on each
+  // index row and shown where a listing cannot be quoted.
+  scheme_unsupported: 'Agentic Economy pays with the x402 exact scheme only, and this listing asks for another scheme.',
+  chain_unsupported: 'Agentic Economy pays on Base only, and this listing asks for another network.',
+  asset_unsupported: 'Agentic Economy pays in USDC only, and this listing asks for another asset.',
+  amount_invalid: 'The listed price is not a valid USDC amount, so Agentic Economy cannot quote it.',
+  payment_terms_invalid: 'The x402 payment terms of this listing could not be read, so Agentic Economy cannot quote it.',
+  resource_invalid: "This listing's endpoint or payment requirement could not be read, so Agentic Economy cannot quote it.",
+  resource_not_payable: 'This endpoint did not answer with an x402 payment challenge (HTTP 402), so there is nothing to pay for.',
 
   // Published-business catalogue reads (`registry.services.detail`,
   // `registry.detail`; `internal/registry-action-contracts.ts`).

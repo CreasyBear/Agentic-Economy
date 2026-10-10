@@ -46,6 +46,7 @@ import type { PublicToolDetailProps } from '@/components/ae/market/public-tool-d
 import { DirectoryToolPage } from '@/components/ae/market/public-tool-detail/DirectoryToolPage'
 import { Route as DirectoryRoute } from '@/routes/tools.$providerHost.$slug'
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
+import { REASON_COPY_FALLBACK } from '@/content/reason-copy'
 
 const sourceRecord = {
   operationId: 'operation:invoice.extract',
@@ -745,6 +746,7 @@ describe('/tools/$providerHost/$slug', () => {
   })
 
   it('passes fresh source rate to a directory-only detail and never claims an AE input recipient', async () => {
+    const registryRef = `registry:${'c'.repeat(64)}`
     const metadata = { kind: 'found_upstream' as const, item: { entry } }
     const referenceRate = { source: 'coinbase' as const, base: 'USDC' as const, quote: 'AUD' as const, rate: '1.5', fetchedAt: Date.now() }
     readDirectoryDetailMock.mockResolvedValue({ metadata, referenceRate })
@@ -760,8 +762,8 @@ describe('/tools/$providerHost/$slug', () => {
     const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }) })
     render(<RouterContextProvider router={router}><DirectoryToolPage baseUrl="https://aecon.test" metadata={metadata} providerHost="example.test" slug="invoices" referenceRate={referenceRate} /></RouterContextProvider>)
     expect(screen.getAllByText('A$0.000002 per call').length).toBeGreaterThan(0)
-    expect(screen.getByText('Preview only')).toBeTruthy()
-    expect(screen.getAllByText('aecon can’t run this listing yet. You can still see what it takes and returns.').length).toBeGreaterThan(0)
+    expect(screen.getByText('Unavailable')).toBeTruthy()
+    expect(screen.getAllByText(`aecon can’t run this listing. ${REASON_COPY_FALLBACK}`).length).toBeGreaterThan(0)
     expect(screen.getAllByRole('link', { name: 'See similar tools' }).length).toBeGreaterThan(0)
     expect(screen.queryByRole('link', { name: /Run this call|Sign in to run it/ })).toBeNull()
     expect(screen.queryByText(/Your input goes to/)).toBeNull()
@@ -778,9 +780,11 @@ describe('/tools/$providerHost/$slug', () => {
       item: {
         entry, category: 'documents', categorySource: 'provider_declared',
         observedAt: 2_000, sourceDigest: 'digest', sourceRouteRef: `source-route:v1:${'b'.repeat(64)}`,
+        choice: { access: 'ae_callable', toolRef: registryRef },
       },
     }} providerHost="example.test" slug="invoices" referenceRate={referenceRate} /></RouterContextProvider>)
-    expect(screen.getAllByRole('link', { name: 'See similar tools' }).length).toBeGreaterThan(0)
+    expect(screen.getByText('Ready to call')).toBeTruthy()
+    expect(screen.queryByRole('link', { name: 'See similar tools' })).toBeNull()
 
     cleanup()
     render(<RouterContextProvider router={router}><DirectoryToolPage baseUrl="https://aecon.test" metadata={metadata} providerHost="example.test" slug="invoices" referenceRate={referenceRate} /></RouterContextProvider>)

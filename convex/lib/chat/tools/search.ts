@@ -11,7 +11,8 @@ import { projectToolListChoices, projectToolSearchChoices, type SearchResult, ty
 import { lexicalToolMatch } from '@/modules/registry/tool-reranker'
 import { isDeploymentToolChoice, suitableRankedToolRefs } from '@/modules/registry/public'
 import { registryToolsListContract, registryToolsSearchContract } from '@/modules/registry/tool-action-contracts'
-import { rankToolsForSelection, type ToolSelectionEvidence } from '@/modules/common/tool-selection-score'
+import { rankSearchRowsByEvidence } from '@/modules/registry/search-signals'
+import { isPublicToolRef } from '@/modules/common/tool-ref'
 import { api, internal } from '../../../_generated/api'
 import { env, type ActionCtx } from '../../../_generated/server'
 import { descriptionFor, failure, type ChatToolFailure, type ReserveChatSearch, type ReserveChatTool } from './contracts'
@@ -32,38 +33,6 @@ function operationSourceFilters(filters: z.infer<typeof registryToolsSearchContr
 }
 
 type SearchInput = z.infer<typeof registryToolsSearchContract.schema>
-
-function selectionEvidenceFor(
-  candidate: SearchResult,
-  evidenceByToolRef: ReadonlyMap<string, Pick<ToolSelectionEvidence, 'aeCompleted' | 'aeFailed' | 'usedBefore' | 'reportedByBuyers30d'>>,
-): ToolSelectionEvidence {
-  const projection = candidate as SearchResult & { payers30d?: number; minimumUsdPrice?: number }
-  const aeEvidence = candidate.toolRef === undefined ? undefined : evidenceByToolRef.get(candidate.toolRef)
-  return {
-    ...(typeof projection.payers30d === 'number' && Number.isFinite(projection.payers30d)
-      ? { payers30d: projection.payers30d } : {}),
-    aeCompleted: aeEvidence?.aeCompleted ?? 0,
-    aeFailed: aeEvidence?.aeFailed ?? 0,
-    reportedByBuyers30d: aeEvidence?.reportedByBuyers30d ?? 0,
-    ...(typeof projection.minimumUsdPrice === 'number' && Number.isFinite(projection.minimumUsdPrice)
-      ? { minimumUsdPrice: projection.minimumUsdPrice } : {}),
-    usedBefore: aeEvidence?.usedBefore ?? false,
-  }
-}
-
-function evidenceOrderedResults(
-  results: readonly SearchResult[],
-  evidenceByToolRef: ReadonlyMap<string, Pick<ToolSelectionEvidence, 'aeCompleted' | 'aeFailed' | 'usedBefore' | 'reportedByBuyers30d'>>,
-): SearchResult[] {
-  return [
-    ...rankToolsForSelection(results.filter(result => result.access === 'ae_callable'),
-      candidate => selectionEvidenceFor(candidate, evidenceByToolRef), 'balanced')
-      .map(({ candidate }) => candidate),
-    ...rankToolsForSelection(results.filter(result => result.access !== 'ae_callable'),
-      candidate => selectionEvidenceFor(candidate, evidenceByToolRef), 'balanced')
-      .map(({ candidate }) => candidate),
-  ]
-}
 
 /** Chat and Market must start from the same native indexed, query-scoped read. */
 async function admittedCandidates(ctx: SearchContext, data: SearchInput, filters: CapabilitySearchFilters | undefined): Promise<{
@@ -96,7 +65,7 @@ async function compactBazaarPage(ctx: SearchContext, data: SearchInput, targetNe
   generation?: string
   completedAt?: number
 }> {
-  if (data.source === 'current' || data.filters?.access === 'ae_callable') {
+  if (data.source === 'current') {
     return { rows: [], examined: 0, available: true, hasMore: false }
   }
   if (targetNetwork === undefined
@@ -112,21 +81,26 @@ async function compactBazaarPage(ctx: SearchContext, data: SearchInput, targetNe
       ...(data.filters?.objectClass === undefined ? {} : { objectClass: data.filters.objectClass }),
       ...(data.filters?.category === undefined ? {} : { category: data.filters.category }),
       ...(data.filters?.provider === undefined ? {} : { provider: data.filters.provider }),
-      access: data.filters?.access ?? 'external_listing',
+      ...(data.filters?.access === undefined ? {} : { access: data.filters.access }),
     }).catch(cause => degradeBackend(cause, { kind: 'unavailable' as const, reason: 'source_unavailable' }, {
       site: 'chatCompactBazaarSearch', reason: 'source_unavailable',
     }))
   if (page.kind === 'unavailable') return { rows: [], examined: 0, available: false, hasMore: false }
   const rows: SearchResult[] = page.page.flatMap(row => {
-    if (row.source !== 'coinbase' || row.toolRef !== undefined || row.network !== targetNetwork) return []
+    // A published row is already in the admitted results; an unpublished one is quoted by its listing ref.
+    if (row.source !== 'coinbase' || isPublicToolRef(row.toolRef) || row.network !== targetNetwork) return []
+    const access = row.choice?.access ?? 'unavailable'
     return [{
-      id: row.id, source: 'coinbase', access: 'external_listing',
+      id: row.id, source: 'coinbase', access,
+      ...(access === 'ae_callable' && row.toolRef !== undefined ? { toolRef: row.toolRef } : {}),
+      ...(row.choice?.reason === undefined ? {} : { reason: row.choice.reason }),
       title: row.title, summary: row.summary, provider: row.provider,
       actionClass: row.actionClass, objectClass: row.objectClass,
       ...(row.category === undefined ? {} : { category: row.category }),
       readiness: 'unverified', price: { kind: 'unavailable' },
       detailRef: `/api/v1/registry/detail?id=${encodeURIComponent(row.id)}`,
       next: [],
+      ...(row.payers30d === undefined ? {} : { signals: { calls: 0, payers30d: row.payers30d } }),
     }]
   })
   return {
@@ -265,7 +239,7 @@ async function executeChatSearch(
           query: data.query,
           source: data.source === 'current' ? 'current' : data.source === 'coinbase' ? 'coinbase' : 'all',
           complete: (data.source === 'coinbase' || admitted.complete)
-            && (data.source === 'current' || data.filters?.access === 'ae_callable'
+            && (data.source === 'current'
               || external.available && !external.hasMore),
           external: external.rows,
           externalExamined: external.examined,
@@ -273,12 +247,9 @@ async function executeChatSearch(
           ...(external.generation === undefined ? {} : { generation: external.generation }),
           ...(external.completedAt === undefined ? {} : { completedAt: external.completedAt }),
         })
-      const output = choices.kind === 'match' && admittedCount === 0
-        ? { ...choices, kind: 'scoped' as const, reason: 'External listings require inspection before choosing a Tool.' }
+      const orderedOutput = choices.kind === 'match' || choices.kind === 'scoped'
+        ? { ...choices, results: rankSearchRowsByEvidence(choices.results, evidenceByToolRef) }
         : choices
-      const orderedOutput = output.kind === 'match' || output.kind === 'scoped'
-        ? { ...output, results: evidenceOrderedResults(output.results, evidenceByToolRef) }
-        : output
       // The model-facing sanitizer expands angle brackets to UTF-8 glyphs.
       if (encoder.encode(JSON.stringify(orderedOutput).replace(/[<>]/gu, '‹')).byteLength <= 16 * 1024) {
         const signed = await signNextPage(ctx, orderedOutput, data, searchTurn)

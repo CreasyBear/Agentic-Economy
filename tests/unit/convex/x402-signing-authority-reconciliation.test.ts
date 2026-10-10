@@ -185,8 +185,8 @@ async function fixture() {
   const ctx: Pick<ActionCtx, 'runMutation'> = { runMutation: backend.mutation.bind(backend) as ActionCtx['runMutation'] }
   const signing = () => createCdpEvmX402PaymentSignature(request, { persistedIntent: intent, authorityExpiresAt: EXPIRES,
     aeEnvironment: 'sandbox', requestFingerprintContext: { method: 'GET', toolRef: TOOL, aeEnvironment: 'sandbox' },
-    createClient: () => client, admitSigning: async exact => await admitManagedX402Signing(ctx,
-      { custodyRef: payment.custodyRef, authorizationDigest: payment.authorizationDigest, custodyGeneration: 1 }, exact) })
+    createClient: () => client, admitSigning: async exact => (await admitManagedX402Signing(ctx,
+      { custodyRef: payment.custodyRef, authorizationDigest: payment.authorizationDigest, custodyGeneration: 1 }, exact)).kind === 'admitted' })
   const durable = () => backend.run(async ctx => ({ call: await ctx.db.get(ids.call), payment: await ctx.db.get(ids.attempt),
     reservations: await ctx.db.query('moneyX402SpendReservations').collect(), checks: await ctx.db.query('moneyX402PayeeScreeningChecks').collect() }))
   const policy = async (next: AgentAccessPolicy) => await backend.run(async ctx => {

@@ -11,6 +11,8 @@ import { preserveJsonSchemaTupleArity } from '@/modules/common/action'
 import { degrade } from '@/lib/observability/degrade'
 import { base64Codec, tryDecodeBase64Url } from '@/modules/common/base64-codec'
 import { REASON_COPY, REASON_COPY_FALLBACK } from '@/content/reason-copy'
+import { parseCallableRef } from '@/modules/common/tool-ref'
+import { toolQuoteAction } from '@/modules/capability-execution/quote.actions'
 import { buildProblem, gatewayFailureToProblem, type ProblemDetails, type ProblemKind } from '@/lib/errors'
 import { problem } from '@/lib/server/problem'
 import { resolveCanonicalOrigin } from '@/lib/server/canonical-url'
@@ -33,7 +35,8 @@ import { recordRefusal, recordSearchOutcome } from '@/lib/observability/refusal-
 import { isRecord } from '@/modules/common/is-record'
 import { describeActionMcpMetadata, journeyProblemSchema, mcpActionNextSchema, isToolMarketReadAction, listMcpActions, mcpToolName, mcpToolsetAdmitted, projectMcpActionNext, projectMcpJourneyProblem, type AnyAction } from '@/modules/actions'
 import { MARKET_TOOLS_CALL_SCOPE } from '@/modules/agent-access/contract'
-import { toolCatalogSearchInputSchema, toolChoiceSearchOutputSchema, withAuthorizedSaveNeed } from '@/modules/registry/tool-choice-contracts'
+import { searchSignalsSchema, toolCatalogSearchInputSchema, toolChoiceSearchOutputSchema, withAuthorizedSaveNeed } from '@/modules/registry/tool-choice-contracts'
+import { formatSearchSignals } from '@/modules/registry/search-signals'
 import {
   agentAuthorityScopeForMode,
   type AgentAccessAuthorityMode,
@@ -244,9 +247,14 @@ function mcpSuccessSummary(action: AnyAction, result: unknown, origin: string): 
   const lines = [`${summary}${assessed}.${recipient}`]
   for (const tool of tools) {
     if (!isRecord(tool)) continue
-    if (tool.access === 'external_listing' && typeof tool.detailRef === 'string' && tool.detailRef.startsWith('/api/v1/registry/detail?')) {
-      lines.push(`  Inspect ${tool.title}: ${new URL(tool.detailRef, origin).href}`)
+    if (tool.access === 'ae_callable' && parseCallableRef(tool.toolRef)?.kind === 'listing') {
+      lines.push(`  Quote ${tool.title}: ${mcpToolName(toolQuoteAction)}(${JSON.stringify({ toolRef: tool.toolRef })}) with caller-owned input.`)
     }
+    if (tool.access === 'unavailable' && typeof tool.reason === 'string') {
+      lines.push(`  ${tool.title} is unavailable: ${REASON_COPY[tool.reason] ?? REASON_COPY_FALLBACK}`)
+    }
+    const signals = searchSignalsSchema.safeParse(tool.signals)
+    if (signals.success) lines.push(`  ${tool.title}: ${formatSearchSignals(signals.data)}`)
     const itemActions = Array.isArray(tool.next) ? tool.next : []
     for (const next of itemActions) {
       const text = mcpSearchActionLine(next, origin)

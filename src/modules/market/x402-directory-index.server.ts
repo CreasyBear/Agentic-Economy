@@ -44,7 +44,7 @@ type CompactCardRow = Readonly<{
   slug?: string
   sourceRouteRef?: string
   toolRef?: string
-  choice?: DirectoryChoice
+  choice: DirectoryChoice
   title: string
   summary: string
   provider: string
@@ -189,11 +189,7 @@ function cardFromCompact(row: CompactCardRow): X402DirectoryEntry | undefined {
     }],
     ...(row.slug === undefined ? {} : { slug: row.slug }),
     ...(row.category === undefined ? {} : { category: row.category }),
-    choice: row.choice ?? {
-      access: 'external_listing',
-      ...(row.sourceRouteRef === undefined ? {} : { sourceRouteRef: row.sourceRouteRef }),
-      ...(row.toolRef === undefined ? {} : { toolRef: row.toolRef }),
-    },
+    choice: row.choice,
     ...(row.calls30d === undefined && row.payers30d === undefined ? {} : { activity: {
       ...(row.calls30d === undefined ? {} : { calls30d: row.calls30d }),
       ...(row.payers30d === undefined ? {} : { payers30d: row.payers30d }),
@@ -339,7 +335,7 @@ export async function readX402DirectoryCatalogue(input: X402DirectoryCatalogueIn
     const shoppable = provider === undefined ? result.page.filter(item => directoryStorefrontEntry(item.entry)) : result.page
     const items = await withAudEstimates(shoppable.map(item => toDirectoryCardEntry({
       ...item.entry,
-      choice: item.choice ?? { access: 'external_listing' as const },
+      ...(item.choice === undefined ? {} : { choice: item.choice }),
     })), options)
     // The persisted generation already has adoption, popularity and full-text order.
     // A live Jev call would hold this response for the model round-trip, so the page uses that order.

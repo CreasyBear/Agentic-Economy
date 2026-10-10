@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { validatePaymentRequired } from "@x402/core/schemas";
 
-import { admitFacilitatorDiscoveryItems } from "../../../convex/facilitatorDiscoveryAction";
+import { admitFacilitatorDiscoveryItems } from "@/modules/capability-supply/server";
 import timezonePaymentRequired20260819Fixture from "../../fixtures/x402-bazaar/timezone-payment-required-2026-08-19.json";
 const timezoneFixture = timezonePaymentRequired20260819Fixture
 import {

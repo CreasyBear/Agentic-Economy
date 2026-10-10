@@ -48,7 +48,7 @@ describe('GET /api/v1/registry hostile inputs', () => {
     return {
       resource,
       sourceJson: JSON.stringify(raw),
-      sourceDigest: canonicalDigest(raw),
+      sourceDigest: canonicalDigest(raw), admission: { kind: 'quotable' },
       entry: {
         resource, title: `Research tool ${index}`, description: 'Search public research', protocol: 'http',
         provider: 'provider.test', metadataJson: '', category: 'Research', tags: ['search'],

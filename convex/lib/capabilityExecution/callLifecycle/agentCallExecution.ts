@@ -4,8 +4,8 @@ import { internal } from '../../../_generated/api'
 import { env, type ActionCtx } from '../../../_generated/server'
 import type { TrustedChatAuthority } from '@/modules/chat/agent-turn.contracts'
 import { callResultValue, recoveryResultValue, statusResultValue } from '@/modules/capability-execution/convex'
-import { callResultSchema } from '@/modules/capability-execution/call-contracts'
-import { inspectLiveX402RequirementRef } from '../liveX402Requirement/requirementRef'
+import { callResultSchema, categorizedCallRefusal } from '@/modules/capability-execution/call-contracts'
+import { inspectLiveX402RequirementRef, liveX402RequirementDrift } from '../liveX402Requirement/requirementRef'
 import { cancelCallHandler, listAgentCallsHandler, reconcileCallHandler } from './callRecoveryActions'
 import { callHandler, projectCallResult } from './callReservationActions'
 import { callSummaryPageValue, type CallPrincipal } from './contracts'
@@ -94,6 +94,12 @@ export async function canonicalAgentCallCore(
     })
     if (live.kind !== 'observed'
       || live.requirement.requirementDigest !== material.x402RequirementDigest) {
+      const drift = live.kind === 'refused' && live.reason === 'payee_changed'
+        ? 'payee_changed'
+        : live.kind === 'observed' && material.x402RequirementJson !== undefined
+          ? liveX402RequirementDrift(material.x402RequirementJson, live.requirement.requirementJson)
+          : undefined
+      if (drift !== undefined) return { kind: 'refused', toolRef: material.toolRef, ...categorizedCallRefusal(drift, false) }
       return {
         kind: 'refused',
         toolRef: material.toolRef,

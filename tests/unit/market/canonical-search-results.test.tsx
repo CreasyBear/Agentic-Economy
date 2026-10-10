@@ -6,6 +6,7 @@ import '../../setup/jsdom-platform'
 import { CanonicalSearchResults } from '@/components/ae/market/CanonicalSearchResults'
 import type { SearchResult } from '@/modules/registry/tool-choice-contracts'
 import { type PublicToolRef } from '@/modules/capability-supply/public'
+import { REASON_COPY } from '@/content/reason-copy'
 
 const admittedRef = `operation:v1:${'a'.repeat(64)}` as PublicToolRef
 const externalId = `registry:${'b'.repeat(64)}`
@@ -24,6 +25,7 @@ const currentResult = {
   price: { kind: 'indicative', label: 'A$900719925474099.01' },
   detailRef: admittedRef,
   next: [{ action: 'registry.tools.describe', args: { toolRef: admittedRef }, authority: 'public' }],
+  signals: { calls: 4, successRate: 3 / 4, payers30d: 30 },
   freshness: {
     source: 'supply_projection',
     state: 'fresh',
@@ -35,7 +37,8 @@ const currentResult = {
 const externalResult = {
   id: externalId,
   source: 'coinbase',
-  access: 'external_listing',
+  access: 'unavailable',
+  reason: 'chain_unsupported',
   title: 'External Forecast',
   summary: 'Published weather endpoint',
   provider: 'example.com',
@@ -107,7 +110,7 @@ describe('canonical search results', () => {
     expect(within(rows[0]!).getByText('Ready to call')).toBeTruthy()
     expect(within(rows[0]!).getByText('Weather Co')).toBeTruthy()
     expect(within(rows[0]!).getByText('A$900719925474099.01')).toBeTruthy()
-    expect(within(rows[1]!).getByText('Preview only')).toBeTruthy()
+    expect(within(rows[1]!).getByText('Unavailable').closest('[title]')?.getAttribute('title')).toBe(REASON_COPY.chain_unsupported)
     expect(within(rows[1]!).getByText('US$1').getAttribute('title')).toBe('Provider lists 1 USDC')
     expect(within(rows[2]!).getByText('Price unavailable')).toBeTruthy()
     expect(table.querySelector('td[data-numeric]')?.textContent).toBe('A$900719925474099.01')
@@ -115,6 +118,12 @@ describe('canonical search results', () => {
 
     expect(within(rows[0]!).getByRole('link').getAttribute('href')).toBe(`/tools/${encodeURIComponent(admittedRef)}`)
     expect(within(rows[1]!).getByRole('link').getAttribute('href')).toBe(`/api/v1/registry/detail?id=${externalId}`)
+  })
+
+  it('leaves a reasonless unavailable row without a named reason', () => {
+    const { reason: _reason, ...reasonless } = externalResult
+    renderResults([reasonless])
+    expect(screen.getByText('Unavailable').closest('[title]')).toBeNull()
   })
 
   it('keeps equal IDs from different sources distinct and passes each exact row to caller actions', () => {

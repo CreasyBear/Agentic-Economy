@@ -7,6 +7,8 @@ import * as decisionEngine from '@/modules/decision-engine/public'
 import * as searchJourney from '@/lib/observability/journey'
 import { toolCatalogSearchInputSchema, type SearchEnvelope } from '@/modules/registry/tool-choice-contracts'
 import { registryToolsSearchAction } from '@/modules/registry/tools.actions'
+import { formatSearchSignals, rankSearchRowsByEvidence } from '@/modules/registry/search-signals'
+import type { SearchResult } from '@/modules/registry/tool-choice-contracts'
 import { TIMEZONE_QUERY, TOOL_CRYPTO_TX, TOOL_TIMEZONE, jevAnswersForTool, misorderedSearchResult, mockFailedJevFetch, mockSearchTool } from '../../helpers/tool-search-rerank-fixtures'
 
 vi.mock('@/modules/capability-supply/tool-source', () => ({
@@ -19,6 +21,7 @@ const noCandidates = (query: string) => ({
 })
 type DirectoryRow = {
   id: string
+  choice?: { access: 'ae_callable' | 'setup_required' | 'unavailable'; toolRef?: string; reason?: string }
   title: string
   summary: string
   provider: string
@@ -29,12 +32,14 @@ type DirectoryRow = {
   minimumUsdPrice?: string
   resource?: string
   network?: string
+  payers30d?: number
 }
 const directoryRow = (id: string): DirectoryRow => ({
   id, title: 'Timezone conversion', summary: 'Convert a time between cities', provider: 'Open source',
   actionClass: 'transform', objectClass: 'location', completedAt: Date.now(),
 })
 let directoryRows: DirectoryRow[] = []
+let evidenceRows: unknown[] = []
 let directoryAvailable = true
 let directoryRefreshState: 'complete' | 'failed' = 'complete'
 
@@ -103,6 +108,7 @@ describe('registry.tools.search mixed assessment', () => {
 
   beforeEach(() => {
     directoryRows = []
+    evidenceRows = []
     directoryAvailable = true
     directoryRefreshState = 'complete'
     const completedAt = Date.now() - 60_000
@@ -121,6 +127,7 @@ describe('registry.tools.search mixed assessment', () => {
             page: directoryRows.slice(start, end), continueCursor: String(end), isDone: end === directoryRows.length }
         }
         if (name === 'referenceRateRefresh:current') return null
+        if (name === 'marketListingEvidence:selectionEvidence') return evidenceRows
         throw new Error(`Unexpected source query ${name}`)
       }),
       mutation: vi.fn(), action: vi.fn(),
@@ -168,7 +175,7 @@ describe('registry.tools.search mixed assessment', () => {
     mockDirectoryAssessment()
     const result = await runSearch('timezone conversion')
     expect(result).toMatchObject({ kind: 'match', assessed: { source: 'all', coverage: 'partial' },
-      results: [{ id: 'directory-1', access: 'external_listing', sourcePrice: '0.002000 USDC',
+      results: [{ id: 'directory-1', access: 'unavailable', sourcePrice: '0.002000 USDC',
         host: 'weather.example', resourcePath: '/v2/current', networkLabel: 'Base',
         price: { kind: 'indicative', label: 'US$0.002' },
         next: [] }] })
@@ -200,11 +207,57 @@ describe('registry.tools.search mixed assessment', () => {
     expect(gateway).not.toHaveBeenCalled()
   })
 
-  it('retains an explicitly unverified external listing without interpreting a minimum price as a ceiling', async () => {
-    directoryRows = [directoryRow('unverified-listing')]
+  it('retains an unverified listing quotable by its listing ref without interpreting a minimum price as a ceiling', async () => {
+    const listingRef = `registry:${'1'.repeat(64)}`
+    directoryRows = [{ ...directoryRow('unverified-listing'), choice: { access: 'ae_callable', toolRef: listingRef } }]
     mockDirectoryAssessment()
     expect(await runSearch('timezone conversion', { source: 'coinbase', filters: { healthStatus: ['unverified'] } }))
-      .toMatchObject({ kind: 'match', results: [{ id: 'unverified-listing', readiness: 'unverified' }] })
+      .toMatchObject({ kind: 'match', results: [{ id: 'unverified-listing', access: 'ae_callable', toolRef: listingRef, readiness: 'unverified', next: [] }] })
+  })
+
+  it('ranks relevant rows by AE evidence and shows success, p50 latency, last verified and payers', async () => {
+    vi.stubEnv('AE_CONVEX_SERVER_FUNCTION_TOKEN', 'k'.repeat(40))
+    const flaky = `operation:v1:${'a'.repeat(64)}`
+    const steady = `operation:v1:${'b'.repeat(64)}`
+    const listing = `registry:${'c'.repeat(64)}`
+    directoryRows = [
+      { ...directoryRow('flaky'), choice: { access: 'ae_callable', toolRef: flaky }, payers30d: 1 },
+      { ...directoryRow('steady'), choice: { access: 'ae_callable', toolRef: steady }, payers30d: 340 },
+      { ...directoryRow('listing'), choice: { access: 'ae_callable', toolRef: listing } },
+    ]
+    evidenceRows = [
+      { toolRef: flaky, aeCompleted: 1, aeFailed: 6, reportedByBuyers30d: 0, usedBefore: false },
+      { toolRef: steady, aeCompleted: 20, aeFailed: 0, reportedByBuyers30d: 0, usedBefore: false, latencyP50Ms: 1200, lastVerifiedAt: 1_800_000_000_000 },
+    ]
+    mockDirectoryAssessment()
+    const result = await runSearch('timezone conversion', { source: 'coinbase' })
+    expect(result.results.map(row => [row.id, row.signals])).toEqual([
+      ['steady', { calls: 20, successRate: 1, latencyP50Ms: 1200, lastVerifiedAt: 1_800_000_000_000, payers30d: 340 }],
+      ['listing', { calls: 0 }],
+      ['flaky', { calls: 7, successRate: 1 / 7, payers30d: 1 }],
+    ])
+  })
+
+  it('shows the observed completed count after ranking, never the smoothed score', () => {
+    const toolRef = `operation:v1:${'a'.repeat(64)}`
+    const [ranked] = rankSearchRowsByEvidence([{ id: 'one', access: 'ae_callable', toolRef } as SearchResult],
+      new Map([[toolRef, { toolRef, aeCompleted: 1, aeFailed: 0, reportedByBuyers30d: 0, usedBefore: false }]]))
+    expect(formatSearchSignals(ranked!.signals!)).toBe('1 of 1 AE call completed')
+  })
+
+  it('ranks a priced Tool above an unpriced one when the evidence is otherwise equal', () => {
+    const rows = [
+      { id: 'unpriced', access: 'ae_callable' },
+      { id: 'priced', access: 'ae_callable', sourcePrice: '0.05 USDC' },
+    ] as SearchResult[]
+    expect(rankSearchRowsByEvidence(rows, new Map()).map(row => row.id)).toEqual(['priced', 'unpriced'])
+  })
+
+  it('formats search signals the same way for every surface', () => {
+    const now = 1_800_000_000_000
+    expect(formatSearchSignals({ calls: 20, successRate: 1, latencyP50Ms: 1200, lastVerifiedAt: now - 2 * 3_600_000, payers30d: 340 }, now))
+      .toBe('20 of 20 AE calls completed · p50 1.2 s · verified 2 hours ago · 340 payers')
+    expect(formatSearchSignals({ calls: 0, payers30d: 1 }, now)).toBe('No AE calls yet · new')
   })
 
   it('keeps a directory cursor after rejecting unknown facets so the next qualified row remains reachable', async () => {
@@ -322,7 +375,7 @@ describe('registry.tools.search mixed assessment', () => {
     mockDirectoryAssessment()
     const result = await runSearch('timezone conversion', { filters: { category: 'locations' } })
     expect(result).toMatchObject({ kind: 'match', assessed: { source: 'all', coverage: 'partial', examined: 2 },
-      results: [{ id: 'directory-category', access: 'external_listing', category: 'locations' }] })
+      results: [{ id: 'directory-category', access: 'unavailable', category: 'locations' }] })
   })
 
   it('continues a partial admitted search past a provider-filtered page instead of declaring no-match', async () => {

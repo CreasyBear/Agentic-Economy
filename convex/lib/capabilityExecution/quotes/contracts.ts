@@ -218,6 +218,7 @@ export const invocationMaterial = v.union(v.object({
   quoteRef: v.string(),
   evidenceDigest: v.string(),
   x402RequirementDigest: v.optional(v.string()),
+  x402RequirementJson: v.optional(v.string()),
 }), v.null())
 
 export const liveX402RequirementValue = v.object({

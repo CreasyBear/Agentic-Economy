@@ -91,18 +91,20 @@ async function admitItems(
 export type OfficialBazaarX402Materialization =
   | Readonly<{
       kind: "admitted";
-      discovery: Extract<BazaarAdmission, { kind: "admitted" }>;
+      discovery: Exclude<BazaarAdmission, { kind: "refused" }>;
       source: Extract<CapabilityPublicationImport, { kind: "x402" }>;
     }>
   | Readonly<{
       kind: "refused";
-      discovery: Exclude<BazaarAdmission, { kind: "admitted" }>;
+      discovery: Extract<BazaarAdmission, { kind: "refused" }>;
     }>;
 
 /**
- * Materializes an x402 import only after the raw Bazaar declaration embedded
+ * Materializes an x402 import only after any raw Bazaar declaration embedded
  * in that exact source passes the official SDK validator and AE admission.
- * Callers cannot use a detached prior admission to authorize stripping.
+ * A source with no declaration passes unchanged (its permissive schema is
+ * already on the resource). Callers cannot use a detached prior admission to
+ * authorize stripping.
  */
 export function materializeOfficialBazaarX402Import(
   input: Extract<CapabilityPublicationImport, { kind: "x402" }>,
@@ -113,7 +115,7 @@ export function materializeOfficialBazaarX402Import(
   const discovery = isRecord(paymentRequired)
     ? admitOfficialBazaarFromPaymentRequired(paymentRequired)
     : { kind: "absent" as const };
-  if (discovery.kind !== "admitted") return { kind: "refused", discovery };
+  if (discovery.kind === "refused") return { kind: "refused", discovery };
   return {
     kind: "admitted",
     discovery,

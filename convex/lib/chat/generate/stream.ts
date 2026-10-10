@@ -143,17 +143,29 @@ export async function streamDurableChatResponse(
       if (prompt === undefined) throw new Error('chat_generation_prompt_missing')
       const calls = new Set<string>()
       const results = new Set<string>()
-      for (const row of history.page) {
-        if (row.order !== prompt.order || row.message === undefined
-          || !Array.isArray(row.message.content)) continue
+      // A late SDK step save can store the same completed parts twice; keep
+      // successful rows first and drop failed copies instead of repairing them.
+      const duplicates: Array<(typeof history.page)[number]['_id']> = []
+      const turn = history.page.filter(row => row.order === prompt.order)
+        .sort((a, b) => Number(b.status === 'success') - Number(a.status === 'success'))
+      for (const row of turn) {
+        if (row.message === undefined || !Array.isArray(row.message.content)) continue
         const parts = row.message.content.filter(part => part.type === 'tool-call' || part.type === 'tool-result')
+        const completed = parts.length > 0 && parts.every(part => completedIds.has(part.toolCallId))
+        if (row.status !== 'success' && completed
+          && parts.every(part => (part.type === 'tool-call' ? calls : results).has(part.toolCallId))) {
+          duplicates.push(row._id)
+          continue
+        }
         for (const part of parts) (part.type === 'tool-call' ? calls : results).add(part.toolCallId)
-        if (row.status === 'success') continue
-        if (parts.length === 0 || !parts.every(part => completedIds.has(part.toolCallId))) continue
+        if (row.status === 'success' || !completed) continue
         if (abortSignal?.aborted) throw abortSignal.reason ?? new Error('chat_generation_deadline_exceeded')
         await ctx.runMutation(components.agent.messages.updateMessage, {
           messageId: row._id, patch: { status: 'success', error: '' },
         })
+      }
+      if (duplicates.length > 0) {
+        await ctx.runMutation(components.agent.messages.deleteByIds, { messageIds: duplicates })
       }
       const missing: ModelMessage[] = []
       for (const message of completedMessages) {

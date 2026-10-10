@@ -8,6 +8,7 @@ import { duplicateQueryParameterProblem, problem, zodIssueDetail } from '@/lib/s
 import { withHttpRateLimit } from '@/lib/server/rate-limit'
 import { runWithRequestCorrelation, withRequestCorrelationHeader } from '@/lib/server/request-correlation'
 import { readDirectoryFreshnessField } from '@/modules/market/x402-directory-index.server'
+import type { DirectoryChoice } from '@/modules/market/x402-directory'
 
 const detailQuery = z.strictObject({ id: z.string().regex(/^registry:[a-f0-9]{64}$/u) })
 const registryDetailQuery = sourceQuery<
@@ -17,7 +18,7 @@ const registryDetailQuery = sourceQuery<
   | Readonly<{
       kind: 'found'
       coverage: Readonly<{ generation: string; completedAt: number }>
-      item: Readonly<{ toolRef?: string; entry: Readonly<{ metadataJson: string }> }> & Readonly<Record<string, unknown>>
+      item: Readonly<{ toolRef?: string; choice?: DirectoryChoice; entry: Readonly<{ metadataJson: string }> }> & Readonly<Record<string, unknown>>
     }>
 >('x402DirectoryIndex:detailById')
 
@@ -49,13 +50,13 @@ export async function handleApiRegistryDetailRequest(request: Request): Promise<
             ? problem({ status: 400, kind: 'INVALID_ARGUMENT', code: 'invalid_query_parameter' })
             : problem({ status: 503, kind: 'UNAVAILABLE', code: 'registry_unavailable' }, { 'Retry-After': '30' })
         }
-        const external = result.item.toolRef === undefined
+        const choice = result.item.choice ?? { access: 'unavailable' as const }
         return Response.json({
           schemaVersion: 'api-registry-detail:v1',
           kind: 'found',
           id: parsed.data.id,
-          access: external ? 'external_listing' : 'ae_callable',
-          ...(external ? { warning: 'External listing only. AE cannot Quote or Call this entry.' } : {}),
+          access: choice.access,
+          ...(choice.reason === undefined ? {} : { reason: choice.reason }),
           coverage: result.coverage,
           item: result.item,
           freshness: await readDirectoryFreshnessField(),

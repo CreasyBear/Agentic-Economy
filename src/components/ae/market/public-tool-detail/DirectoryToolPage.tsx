@@ -9,6 +9,7 @@ import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLi
 import { RelativeTime } from '@/components/ae/shared/RelativeTime'
 import { EmptyState } from '@/components/arc/empty-state/empty-state'
 import { BRAND_NAME } from '@/content/brand-copy'
+import { REASON_COPY, REASON_COPY_FALLBACK } from '@/content/reason-copy'
 import { DIRECTORY_READINESS, directoryActivityLabel, directoryLede, toDirectoryToolCardModel } from '@/modules/market/directory-card.view-model'
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
 import type { X402DirectoryCatalogueResource } from '@/modules/market/x402-directory-catalogue'
@@ -37,7 +38,9 @@ export function DirectoryToolPage({ metadata, providerHost, slug, baseUrl, refer
   const card = toDirectoryToolCardModel(entry)
   const listing = projectDirectoryListing({ ...entry, title: card.title })
   const view = projectToolObject(listing, `/tools/${encodeURIComponent(providerHost)}/${encodeURIComponent(slug)}`, readAt, referenceRate)
-  const indexedSourceRouteRef = metadata.kind === 'found' ? metadata.item.choice?.sourceRouteRef ?? metadata.item.sourceRouteRef : undefined
+  const choice = metadata.kind === 'found' ? metadata.item.choice : undefined
+  const callableRef = choice?.access === 'ae_callable' ? choice.toolRef : undefined
+  const indexedSourceRouteRef = metadata.kind === 'found' ? choice?.sourceRouteRef ?? metadata.item.sourceRouteRef : undefined
   const capability = entry.description || entry.category || entry.tags?.join(' ') || ''
   const alternativeHref = capability.trim().length === 0 ? '/market' : alternativeToolSearchHref(listing, capability, indexedSourceRouteRef)
   const price = priceWithoutUnit(view.price?.label)
@@ -52,15 +55,15 @@ export function DirectoryToolPage({ metadata, providerHost, slug, baseUrl, refer
     provider: { name: providerName, ...(providerName === providerHost ? {} : { host: providerHost }), ...(providerHref === undefined ? {} : { href: providerHref }), ...(entry.iconUrl === undefined ? {} : { iconUrl: entry.iconUrl }) },
     ...(price === undefined ? {} : { price }),
     ...(priceNote === undefined ? {} : { priceNote }),
-    readiness: DIRECTORY_READINESS.external_listing,
+    readiness: DIRECTORY_READINESS[callableRef === undefined ? 'unavailable' : 'ae_callable'],
     ...(activity === undefined ? {} : { activity }),
     endpoint: entry.resource,
     ...(entry.method === undefined ? {} : { method: entry.method.toUpperCase() }),
-    run: {
+    run: callableRef !== undefined ? { kind: 'callable', toolRef: callableRef } : {
       kind: 'elsewhere',
       label: capability.trim().length === 0 ? 'Browse tools' : 'See similar tools',
       href: alternativeHref,
-      reason: `${BRAND_NAME} can’t run this listing yet. You can still see what it takes and returns.`,
+      reason: `${BRAND_NAME} can’t run this listing. ${REASON_COPY[choice?.reason ?? 'fallback'] ?? REASON_COPY_FALLBACK}`,
     },
     baseUrl,
     ...(entry.input?.schemaJson === undefined ? {} : { inputSchemaJson: entry.input.schemaJson }),

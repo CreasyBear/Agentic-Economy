@@ -357,7 +357,7 @@ it('keeps Provider price evidence secondary and settlement networks off Tool row
   expect(screen.getByRole('columnheader', { name: 'Access' })).toBeTruthy()
   expect(screen.queryByRole('columnheader', { name: 'Volume' })).toBeNull()
   const row = toolOpener('Tool 0').closest('tr')
-  expect(row?.textContent).toContain('Preview only')
+  expect(row?.textContent).toContain('Unavailable')
   const priceCell = row?.querySelectorAll('td')[2]
   expect(priceCell?.textContent).toBe('US$1')
   expect(priceCell?.textContent).not.toContain('USDC')
@@ -373,7 +373,7 @@ it('labels every grid card with its readiness and marks an AUD estimate visibly 
   ] as X402DirectoryEntry[]
   show({ offset: 20, layout: 'grid' }, cards)
   const card = (title: string) => toolOpener(title).closest('.ae-tool-card')?.textContent ?? ''
-  expect(card('Tool 0')).toContain('Preview only')
+  expect(card('Tool 0')).toContain('Unavailable')
   expect(card('Tool 0')).toContain('est. A$1.52')
   expect(card('Tool 0')).toContain('1 USDC per call')
   expect(toolOpener('Tool 0').getAttribute('aria-label')).toContain('est. A$1.52 per call')
@@ -758,7 +758,7 @@ const searchRows = [
     freshness: { source: 'supply_projection', state: 'fresh', completedAt: Date.UTC(2026, 8, 27), staleAfterMs: 10800000 },
   },
   {
-    id: directoryId, source: 'coinbase', access: 'external_listing',
+    id: directoryId, source: 'coinbase', access: 'unavailable',
     title: 'External Forecast', summary: 'Published weather endpoint', provider: 'example.com',
     actionClass: 'retrieve', objectClass: 'data', readiness: 'unverified',
     sourcePrice: '1 USDC',
@@ -824,7 +824,7 @@ describe('canonical Market search', () => {
     expect(toolHref(screen.getByRole('link', { name: 'External Forecast' })).pathname).toBe('/api/v1/registry/detail')
     const matches = within(screen.getByRole('list', { name: 'Best matches' }))
     expect(matches.getByText('Ready to call')).toBeTruthy()
-    expect(matches.getByText('Preview only')).toBeTruthy()
+    expect(matches.getByText('Unavailable')).toBeTruthy()
     expect(matches.getByText('A$0.01 per call')).toBeTruthy()
     expect(matches.getByText('US$1 per call').getAttribute('title')).toBe('Provider lists 1 USDC')
     expect(searchMarketToolsServer).toHaveBeenNthCalledWith(1, expect.objectContaining({ data: { query: 'weather', limit: 8, filters: { category: 'research', provider: 'example.com', networkId: 'eip155:8453', priceBand: 'lt_0_01' } } }))
@@ -868,7 +868,7 @@ describe('canonical Market search', () => {
     expect(within(setupRow).getByText('Needs setup')).toBeTruthy()
     expect(within(setupRow).getByText('A$0.01').getAttribute('title')).toBe('Provider lists 0.000001 USDC')
     const externalRow = within(table).getByRole('row', { name: /External Forecast/ })
-    expect(within(externalRow).getByText('Preview only')).toBeTruthy()
+    expect(within(externalRow).getByText('Unavailable')).toBeTruthy()
     expect(within(externalRow).queryByText('Needs setup')).toBeNull()
     expect(within(externalRow).getByText('US$1').getAttribute('title')).toBe('Provider lists 1 USDC')
     expect(screen.getByText(/Your search is sent to TypeSafe \(custom-gateway.example\) to sort results/)).toBeTruthy()

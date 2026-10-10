@@ -1,7 +1,7 @@
 // Run requests trust only validated refs and exact JSON; copied from the card quote parser contract.
 import { isRecord } from '../common/is-record'
 import type { JsonValue } from '../common/bounded-json'
-import { isPublicToolRef } from '../common/tool-ref'
+import { isPublicToolRef, parseCallableRef } from '../common/tool-ref'
 
 export type RunIntent = Readonly<{ toolRef: string; title: string; input: Readonly<Record<string, JsonValue>> }>
 
@@ -11,8 +11,8 @@ const RUN_PREFIX = 'Run Tool '
 const INPUT_INTRO = ' with this exact JSON input: '
 
 export function isDetailToolRef(value: unknown): value is string {
-  return typeof value === 'string' && value.trim() === value
-    && (isPublicToolRef(value) || /^registry:[0-9a-f]{64}$/u.test(value))
+  const kind = parseCallableRef(value)?.kind
+  return kind === 'operation' || kind === 'listing'
 }
 
 /** Exact selection carries an untrusted lookup hint; it never grants purchase authority. */

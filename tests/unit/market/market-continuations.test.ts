@@ -25,14 +25,14 @@ describe('exact comparison and selected save identity', () => {
     expect(parseMarketCompareRefs(encoded)).toEqual([first, toolRef])
     expect(validateMarketSearch({ compare: encoded }).compare).toBe(encoded)
   })
-  it('uses admitted identity only for a qualified join, never for an external listing', () => {
+  it('compares by an operation ref only, never by an unpublished listing ref', () => {
     expect(directoryCompareReference({ ...entry, choice: { access: 'ae_callable', toolRef } })).toBe(toolRef)
-    expect(directoryCompareReference({ ...entry, choice: { access: 'external_listing', toolRef } })).toBe(resource)
+    expect(directoryCompareReference({ ...entry, choice: { access: 'ae_callable', toolRef: `registry:${'d'.repeat(64)}` } })).toBe(resource)
     expect(directoryCompareReference({ ...entry, choice: { access: 'ae_callable', toolRef: 'invalid' } })).toBe(resource)
   })
   it('retains compact external identity without deriving an endpoint', () => {
     const id = `registry:${'b'.repeat(64)}`
-    expect(searchCompareReference({ id, access: 'external_listing', sourceRouteRef: `source-route:v1:${'c'.repeat(64)}` } as SearchResult)).toBe(id)
+    expect(searchCompareReference({ id, access: 'unavailable', sourceRouteRef: `source-route:v1:${'c'.repeat(64)}` } as SearchResult)).toBe(id)
     expect(searchCompareReference({ id, access: 'ae_callable', toolRef } as SearchResult)).toBe(toolRef)
   })
   it('accepts only an identity hint and rejects injected authority or invalid identifiers', () => {

@@ -20,6 +20,7 @@ import { cn } from '@/lib/utils'
 import { SEARCH_QUERY_MAX_LENGTH } from '@/modules/common/search-query'
 import type { DirectoryExplorerFilterPatch } from '@/modules/market/directory-filters.contracts'
 import { toSavedDirectoryRowModel } from '@/modules/market/directory-card.view-model'
+import { isPublicToolRef } from '@/modules/common/tool-ref'
 import { carryMarketCompare, marketCompareParam, parseMarketCompareRefs, toggleMarketCompareRef, validateMarketSearch, marketToolSearchInput, marketUsesCanonicalSearch, type MarketCompareEntry, type MarketCanonicalSearchPage } from '@/modules/market/market-route-data'
 import type { SavedDirectoryTool, SavedToolListItem, SavedToolSaveInput } from '@/modules/market/saved-tools.contracts'
 import type { X402DirectoryEntry, X402DirectoryInput, X402DirectoryPage } from '@/modules/market/x402-directory'
@@ -339,7 +340,7 @@ function DirectoryMarketplace({ canonicalSearch: rankedSource, landingRows, load
         </p> : null}
       </header>
       <CanonicalSearchResults layout={layout} results={result.results} renderActions={item => {
-        const identity = item.toolRef !== undefined && item.access !== 'external_listing'
+        const identity = isPublicToolRef(item.toolRef)
           ? { kind: 'ae_callable' as const, toolRef: item.toolRef }
           : { kind: 'external_listing' as const, id: item.id }
         const compareRef = searchCompareReference(item)

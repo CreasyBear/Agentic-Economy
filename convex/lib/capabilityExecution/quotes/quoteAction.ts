@@ -1,4 +1,7 @@
+import type { ToolCtx } from '@convex-dev/agent'
 import type { Infer } from 'convex/values'
+import { parseCallableRef } from '@/modules/common/tool-ref'
+import type { X402DirectoryResolution } from '@/modules/market/x402-directory'
 import { planNodeValue } from '../plans/nodeMaterial'
 import { MANAGED_CALL_FORMANCE_SCHEMA_VERSION } from '@/modules/money/public'
 import { recordJourneyOutcome, recordQuoteJourney } from '@/lib/observability/journey'
@@ -21,15 +24,45 @@ export const quoteArgs = quoteActionArgsShape
 
 export const quoteActionResult = quoteResult
 
+/**
+ * Resolve what a caller named to the operation ref Quote and Call key on. A listing id or an
+ * https URL is published as observed_external by the existing directory reconcile path.
+ */
+export async function resolveCallableRef(ctx: ToolCtx | ActionCtx, ref: string): Promise<X402DirectoryResolution> {
+  const parsed = parseCallableRef(ref)
+  if (parsed === undefined) return { kind: 'unavailable', reason: 'resource_not_found' }
+  if (parsed.kind === 'operation') return { kind: 'ready', toolRef: ref }
+  return await ctx.runAction(internal.x402Directory.resolve, { resource: ref })
+}
+
+function unresolvedRefusal(reason: string): Readonly<{ code: 'tool_not_found' | 'inspection_unavailable' | 'tool_unsupported'; retryable: boolean }> {
+  switch (reason) {
+    case 'resource_not_found': case 'query_invalid': case 'resource_filters_mismatch': return { code: 'tool_not_found', retryable: false }
+    case 'source_unavailable': case 'admission_unavailable': case 'tool_unavailable': return { code: 'inspection_unavailable', retryable: true }
+    default: return { code: 'tool_unsupported', retryable: false }
+  }
+}
+
 export async function quoteActionHandler(
   ctx: ActionCtx,
   args: QuoteArgs,
 ): Promise<QuoteResult> {
+  if (parseCallableRef(args.toolRef)?.kind === 'operation') {
+    return await quoteActionCore(ctx, args, await ctx.runMutation(internal.capabilityQuotes.prepareFinancialSubjects, args))
+  }
+  // Resolution probes and can publish, so the nonce is consumed and the grant checked first.
+  const admission = await ctx.runMutation(internal.capabilityQuotes.admitCallableResolve, args)
+  if (admission.kind === 'refused') return refuse(args, admission.code, false, admission.reason === undefined ? {} : { reason: admission.reason })
+  const resolution = await resolveCallableRef(ctx, args.toolRef)
+  if (resolution.kind === 'unavailable') {
+    const { code, retryable } = unresolvedRefusal(resolution.reason)
+    return refuse(args, code, retryable, { reason: resolution.reason })
+  }
   const subjects: FinancialSubjectsResult = await ctx.runMutation(
     internal.capabilityQuotes.prepareFinancialSubjects,
-    args,
+    { ...args, resolvedToolRef: resolution.toolRef },
   )
-  return await quoteActionCore(ctx, args, subjects)
+  return await quoteActionCore(ctx, { ...args, toolRef: resolution.toolRef }, subjects)
 }
 
 /** Shared public and trusted-chat Quote path after transactional admission. */
@@ -86,7 +119,7 @@ async function evaluateQuoteAction(
     return refuse(args, 'tool_unsupported', false)
   }
   if (live.kind === 'refused' || (persistedQuote && live.kind !== 'observed')) {
-    return refuse(args, 'tool_not_ready', !persistedQuote)
+    return refuse(args, 'tool_not_ready', !persistedQuote, live.kind === 'refused' ? { reason: live.reason } : {})
   }
   if (subjects.financialMode === 'none') {
     const organizationMonthlySpend = await readOrganizationMonthlySpendSnapshotForQuote(ctx, subjects)
