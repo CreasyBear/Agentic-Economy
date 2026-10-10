@@ -291,9 +291,9 @@ function DirectoryMarketplace({ canonicalSearch: rankedSource, landingRows, load
         return <li key={key} className="ae-browse-saved-card">
           <p className="text-xs text-muted-foreground">{model.provider}</p>
           {model.toolRef !== undefined
-            ? <Link to="/tools/$toolRef" params={{ toolRef: model.toolRef }} state={MARKET_LINK_STATE} className="break-words font-medium underline-offset-4 hover:underline">{model.title}</Link>
+            ? <Link to="/tools/$toolRef" params={{ toolRef: model.toolRef }} state={MARKET_LINK_STATE} className="flex min-h-touch items-center break-words font-medium underline-offset-4 hover:underline">{model.title}</Link>
             : model.providerHost !== undefined && model.slug !== undefined
-              ? <Link to="/tools/$providerHost/$slug" params={{ providerHost: model.providerHost, slug: model.slug }} state={MARKET_LINK_STATE} className="break-words font-medium underline-offset-4 hover:underline">{model.title}</Link>
+              ? <Link to="/tools/$providerHost/$slug" params={{ providerHost: model.providerHost, slug: model.slug }} state={MARKET_LINK_STATE} className="flex min-h-touch items-center break-words font-medium underline-offset-4 hover:underline">{model.title}</Link>
               : <p className="break-words font-medium">{model.title}</p>}
           <p className="text-xs text-muted-foreground">{model.access}</p>
           <p className="mt-auto text-sm font-medium tabular-nums">{model.price}</p>

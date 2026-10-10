@@ -12,7 +12,7 @@ export function UnansweredQuestion({
   onEdit?: (question: string) => void
 }>) {
   return (
-    <MessageScrollerItem messageId="unanswered" className="col-span-12 md:col-start-3 md:col-span-8">
+    <MessageScrollerItem messageId="unanswered" className="col-span-12" style={{ width: 'min(100%, 42rem)', marginInline: 'auto' }}>
       <DecisionPanel role="status">
         <p className="text-sm text-muted-foreground">This question has no answer yet.</p>
         <div className="arc-decision-actions">

@@ -84,3 +84,7 @@
   gap: var(--space-4);
   font-size: var(--text-sm);
 }
+
+.arc-credit-fund__links > a {
+  min-height: 44px;
+}

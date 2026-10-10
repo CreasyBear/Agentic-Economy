@@ -178,7 +178,7 @@
 
 .stack { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; gap: var(--space-3); }
 .full { width: 100%; justify-content: center; }
-.inlineLink { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+.inlineLink { display: inline-block; padding-block: var(--space-3); margin-block: calc(var(--space-3) * -1); color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
 
 /* Skeleton rows hold the real row's height: the crumb, the tabs row, the phone bar. */
 .skeletonRow { display: grid; flex: 1; min-height: var(--control-height-md); align-items: center; }

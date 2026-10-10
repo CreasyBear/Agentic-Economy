@@ -80,7 +80,7 @@ function PurchaseActivityQuery({ search, compact = false }: PurchaseActivityProp
         </p>
         <div className="flex items-center gap-intra">
           {compact ? (
-            <a className="inline-flex min-h-touch items-center gap-1 text-sm underline underline-offset-4" href={adminActivityHref(search)}>
+            <a className="inline-flex items-center gap-1 py-3 -my-3 text-sm underline underline-offset-4" href={adminActivityHref(search)}>
               View purchases <ArrowUpRightIcon className="size-3.5" aria-hidden="true" />
             </a>
           ) : null}
@@ -114,7 +114,7 @@ const PURCHASE_COLUMNS: AeDataColumn<PurchaseTableRow>[] = [
     key: 'purchase', label: 'Purchase',
     render: (_value, row) => (
       <div className="min-w-0">
-        <a className="font-medium underline-offset-4 hover:underline" href={`/admin/calls/${encodeURIComponent(row.callRef)}`}>
+        <a className="inline-flex items-center py-3 -my-3 font-medium underline-offset-4 hover:underline" href={`/admin/calls/${encodeURIComponent(row.callRef)}`}>
           {row.purchase}
         </a>
         <p className="mt-1 max-w-64 truncate text-xs text-muted-foreground" title={row.callRef}>{row.callRef}</p>
@@ -124,7 +124,7 @@ const PURCHASE_COLUMNS: AeDataColumn<PurchaseTableRow>[] = [
   {
     key: 'account', label: 'Account',
     render: (_value, row) => (
-      <a className="text-sm underline-offset-4 hover:underline" href={`/admin/workspaces/${encodeURIComponent(row.accountRef)}`}>
+      <a className="inline-flex items-center py-3 -my-3 text-sm underline-offset-4 hover:underline" href={`/admin/workspaces/${encodeURIComponent(row.accountRef)}`}>
         {row.account}
       </a>
     ),

@@ -495,6 +495,16 @@ describe('/tools/$toolRef', () => {
     expect(within(panel).getByRole('tree', { name: 'Output schema' }).textContent).toContain('lineItems')
   })
 
+  it('does not show a validation error on the untouched sample until the JSON is edited', () => {
+    const invalidSample = { ...callableTool, contract: { ...callableTool.contract, inputExamples: [{ label: 'Missing URL', input: { includeTax: true } }] } }
+    renderWithRouter({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool: invalidSample })
+    fireEvent.click(screen.getByRole('button', { name: 'JSON' }))
+    const editor = screen.getByRole('textbox', { name: 'Request JSON' })
+    expect(editor.getAttribute('aria-invalid')).not.toBe('true')
+    fireEvent.change(editor, { target: { value: '{"includeTax": true' } })
+    expect(screen.getByRole('textbox', { name: 'Request JSON' }).getAttribute('aria-invalid')).toBe('true')
+  })
+
   it('does not use a schema as an example when no admitted input example is published', () => {
     const noExamples = { ...callableTool, contract: { ...callableTool.contract, inputExamples: [] } }
     renderWithRouter({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool: noExamples })

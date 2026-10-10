@@ -2,7 +2,7 @@
 .arc-chat-nav-icon { flex: none; width: 44px; height: 44px; min-width: 44px; padding: 0; }
 .arc-chat-header-sharing { display: flex; flex: none; align-items: center; gap: var(--space-1); }
 .arc-chat-header-balance { display: inline-flex; min-width: 0; max-width: 100%; flex: 0 1 auto; align-items: center; min-height: 44px; padding: 6px var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-pill); color: var(--text-secondary); font-size: var(--text-sm); font-variant-numeric: tabular-nums; text-decoration: none; white-space: normal; overflow-wrap: anywhere; }
-.arc-chat-header-balance:hover { color: var(--foreground); background: var(--surface-muted); }
+@media (hover: hover) and (pointer: fine) { .arc-chat-header-balance:hover { color: var(--foreground); background: var(--surface-muted); } }
 .arc-chat-header-problem { margin: 0; padding: var(--space-3) var(--space-6); color: var(--danger); font-size: var(--text-sm); line-height: 1.5; }
 .arc-chat-share-field { padding: var(--space-3) var(--space-6); border-bottom: 1px solid var(--border-subtle); background: var(--surface); color: var(--foreground); }
 .arc-chat-history-drawer { width: min(90vw, 26rem); }

@@ -50,7 +50,6 @@ export function AeAppShell({ children }: { children: ReactNode }) {
       minimal={shell.isMinimalShell}
       mobileNavOpen={shell.mobileNavOpen}
       setMobileNavOpen={shell.setMobileNavOpen}
-      elevated={shell.elevated}
       hydrated={shell.hydrated}
       chatFrame={chatFrame}
     />
@@ -69,7 +68,6 @@ export function AeAppShell({ children }: { children: ReactNode }) {
       >
         Skip to content
       </a>
-      <div id="ae-app-shell-sentinel" aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 h-2" />
       <CommandPanelProvider open={shell.commandOpen} onOpenChange={shell.handleCommandOpenChange}>
         {/* Keep the identity boundary mounted through auth routes and Clerk hydration. */}
         <OperatorChromeProvider>
