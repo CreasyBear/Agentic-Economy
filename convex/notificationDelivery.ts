@@ -4,6 +4,7 @@ import { createClerkClient } from '@clerk/backend'
 import { v, type Infer } from 'convex/values'
 
 import { degradeBackend } from '../src/lib/observability/degrade-backend'
+import { subject as operatorDigestSubject } from '../src/emails/templates/operator-digest'
 import { renderEmail, type EmailInput } from '../src/emails/render'
 import { internal } from './_generated/api'
 import { internalAction } from './_generated/server'
@@ -98,7 +99,7 @@ export const sendOperatorDigest = internalAction({
       apiKey: resendApiKey,
       from: fromEmail,
       to: operatorEmail,
-      subject: `AE stalled accounts, ${date}`,
+      subject: operatorDigestSubject({ date, siteUrl: '', lines: [] }),
       text: digest.text,
       idempotencyKey: `operator-digest:${date}`,
     })
