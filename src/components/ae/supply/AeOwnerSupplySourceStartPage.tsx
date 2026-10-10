@@ -1,4 +1,3 @@
-import { ownerInventoryHref } from '@/lib/operator/owner-inventory-search'
 import { inventoryQueryFromReturnSearch, ownerInventoryReturnSearch, ownerToolSetupHref, type OwnerInventoryReturnSearch } from '@/lib/operator/owner-inventory-return'
 import { Link } from '@tanstack/react-router'
 import { useRef, useState } from 'react'
@@ -49,7 +48,6 @@ export type AeOwnerSupplySourceStartPageProps = Readonly<{
 export function AeOwnerSupplySourceStartPage({ data, search, navigate }: AeOwnerSupplySourceStartPageProps) {
   const { identity, connections, resume, resumeRequested, sourceUnavailable } = data
   const inventoryQuery = inventoryQueryFromReturnSearch(search)
-  const returnHref = ownerInventoryHref(inventoryQuery ?? {})
   const formRef = useRef<HTMLDivElement>(null)
   const [navigationSafety, setNavigationSafety] = useState<{
     dirty: boolean
@@ -64,7 +62,7 @@ export function AeOwnerSupplySourceStartPage({ data, search, navigate }: AeOwner
   const publish = useReverification(publishRequest)
 
   return (
-    <AeOperatorPage operatorRole="owner" title="Add Tool" description="Connect a Tool you already run. Agentic Economy checks what agents can buy." currentPath="/owner/operations/new" breadcrumbs={[{ label: 'Tools', href: returnHref }, { label: 'Add Tool' }]}>
+    <AeOperatorPage operatorRole="owner" title="Add Tool" description="Connect a Tool you already run. Agentic Economy checks what agents can buy." currentPath="/owner/operations/new">
       {identity.kind !== 'available' ? (
         <AeAlert tone="danger" title="Provider Workspace unavailable" className="arc-market arc-supply-owner-feedback"><div className="arc-supply-owner-feedback-description">
             <p>Agentic Economy could not confirm the current Business. Return to Tools and try again.</p>

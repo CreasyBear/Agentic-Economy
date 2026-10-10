@@ -37,7 +37,7 @@ export function QuoteConfirmation({ view, onApprove, onDeny, onFreshQuote }: Quo
         <AeFactList className="arc-decision-facts" facts={[
           { label: 'Tool', value: accepted?.tool.name ?? view.toolName },
           ...(context === undefined ? [] : [{ label: 'Agent', value: context.agent.currentDisplayName === null ? `${context.agent.principalRef} (current name unavailable)` : `${context.agent.currentDisplayName} (current Account label)` }]),
-          { label: view.provider.kind === 'verified' ? 'Verified Provider' : 'Directory Host', value: view.provider.href
+          { label: view.provider.kind === 'verified' ? 'Verified Provider' : 'Listed provider (not verified)', value: view.provider.href
             ? <a className="underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2" href={view.provider.href}>{view.provider.name}</a>
             : view.provider.name },
           { label: 'Quote', value: <span className="font-mono tabular-nums">{view.quoteAmount.units === '0' ? 'Free · ' : ''}{formatDisplayAmount(view.quoteAmount)} per Call</span> },

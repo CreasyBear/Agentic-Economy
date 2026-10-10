@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
-import { Badge } from '@/components/arc/badge/badge'
+import { AeStatusBadge } from '@/components/ae/status/AeStatusBadge'
 import { Button } from '@/components/arc/button/button'
 import './ReceiptComposition.css'
 
@@ -43,7 +43,7 @@ export function CallReceiptIssue({ issue }: Readonly<{ issue: CallIssueView }>) 
       className="arc-market arc-call-issue"
       aria-labelledby="call-receipt-issue-title"
     >
-      <Badge tone="warning" className="w-fit">Needs attention</Badge>
+      <AeStatusBadge status="needs_attention" density="cell" />
       <h2 id="call-receipt-issue-title" className="arc-call-heading">
         {issue.title}
       </h2>

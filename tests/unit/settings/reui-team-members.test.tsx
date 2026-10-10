@@ -56,7 +56,7 @@ describe('REUI Team composition', () => {
     render(<TeamRolesPage accountRef="account:1" members={members} inviteAvailability="available" />)
     const dialog = await openInvite()
     fireEvent.change(within(dialog).getByLabelText('Email address'), { target: { value: 'new@example.test' } })
-    fireEvent.change(within(dialog).getByLabelText('Workspace role'), { target: { value: 'admin' } })
+    fireEvent.change(within(dialog).getByLabelText('Account role'), { target: { value: 'admin' } })
     const form = within(dialog).getByRole('button', { name: 'Send invitation' }).closest('form')!
     fireEvent.submit(form); fireEvent.submit(form)
     expect(boundary.invite).toHaveBeenCalledExactlyOnceWith({ data: { expectedAccountRef: 'account:1', email: 'new@example.test', role: 'admin' } })

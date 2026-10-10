@@ -23,11 +23,11 @@ export type AeOperatorPageProps = OperatorPageChrome & {
 }
 
 type OperatorPageChromeInput = Pick<AeOperatorPageProps, 'operatorRole' | 'title' | 'description' | 'currentPath'> & {
-  [K in 'actions' | 'secondaryBar' | 'stickyHeader' | 'mainContentId' | 'breadcrumbs' | 'suppressSurfaceNavigation' | 'pending' | 'contentOwnsHeading']?: AeOperatorPageProps[K] | undefined
+  [K in 'actions' | 'secondaryBar' | 'mainContentId' | 'suppressSurfaceNavigation' | 'pending' | 'contentOwnsHeading']?: AeOperatorPageProps[K] | undefined
 }
 
 function chromeFromProps(props: OperatorPageChromeInput): OperatorPageChrome {
-  const { operatorRole, title, description, actions, secondaryBar, stickyHeader, currentPath, mainContentId, breadcrumbs, suppressSurfaceNavigation, pending, contentOwnsHeading } = props
+  const { operatorRole, title, description, actions, secondaryBar, currentPath, mainContentId, suppressSurfaceNavigation, pending, contentOwnsHeading } = props
   return {
     operatorRole,
     title,
@@ -36,19 +36,17 @@ function chromeFromProps(props: OperatorPageChromeInput): OperatorPageChrome {
     ...(contentOwnsHeading === undefined ? {} : { contentOwnsHeading }),
     ...(actions === undefined ? {} : { actions }),
     ...(secondaryBar === undefined ? {} : { secondaryBar }),
-    ...(stickyHeader === undefined ? {} : { stickyHeader }),
     ...(mainContentId === undefined ? {} : { mainContentId }),
-    ...(breadcrumbs === undefined ? {} : { breadcrumbs }),
     ...(suppressSurfaceNavigation === undefined ? {} : { suppressSurfaceNavigation }),
     ...(pending === undefined ? {} : { pending }),
   }
 }
 
 function useChromeFromProps(props: Omit<AeOperatorPageProps, 'children'>): OperatorPageChrome {
-  const { operatorRole, title, description, actions, secondaryBar, stickyHeader, currentPath, mainContentId, breadcrumbs, suppressSurfaceNavigation, pending, contentOwnsHeading } = props
+  const { operatorRole, title, description, actions, secondaryBar, currentPath, mainContentId, suppressSurfaceNavigation, pending, contentOwnsHeading } = props
   return useMemo<OperatorPageChrome>(
-    () => chromeFromProps({ operatorRole, title, description, actions, secondaryBar, stickyHeader, currentPath, mainContentId, breadcrumbs, suppressSurfaceNavigation, pending, contentOwnsHeading }),
-    [operatorRole, title, description, actions, secondaryBar, stickyHeader, currentPath, mainContentId, breadcrumbs, suppressSurfaceNavigation, pending, contentOwnsHeading],
+    () => chromeFromProps({ operatorRole, title, description, actions, secondaryBar, currentPath, mainContentId, suppressSurfaceNavigation, pending, contentOwnsHeading }),
+    [operatorRole, title, description, actions, secondaryBar, currentPath, mainContentId, suppressSurfaceNavigation, pending, contentOwnsHeading],
   )
 }
 

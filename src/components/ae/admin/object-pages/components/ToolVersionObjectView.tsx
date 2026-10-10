@@ -29,12 +29,6 @@ export function ToolVersionObjectView({ view }: ToolVersionObjectViewProps) {
       title={copy.title}
       description=""
       contentOwnsHeading
-      breadcrumbs={[
-        { label: ADMIN_OBJECT_PAGE_COPY.adminBreadcrumb, href: '/admin' },
-        { label: copy.section, href: '/admin/search?kind=tool_version' },
-        { label: view.ref },
-      ]}
-      stickyHeader
     >
       <PageHeader
         title={copy.title}

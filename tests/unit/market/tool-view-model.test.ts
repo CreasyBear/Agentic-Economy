@@ -15,7 +15,7 @@ describe("Tool buyer price", () => {
   it("uses AUD when available and otherwise shows the source USD amount", () => {
     expect(formatToolPrice({ kind: "fixed", amount: { currency: "AUD", exponent: 6, units: "1" } })).toBe("A$0.01");
     expect(formatToolPrice({ kind: "fixed", amount: { currency: "USDC", exponent: 6, units: "1" } }))
-      .toBe("US$0.000001");
+      .toBe("0.000001 USDC");
     expect(formatToolPrice({ kind: "on_request" })).toBe("");
   });
 });
@@ -143,7 +143,7 @@ function card(
     category,
     price: "USD 0.01",
     authentication: "x402 payment",
-    callLabel: "Use capability",
+    callLabel: "Use tool",
     readiness: "Routeable",
     readinessLabel: "Ready now",
     trustFact: "Ready to run through Agentic Economy",

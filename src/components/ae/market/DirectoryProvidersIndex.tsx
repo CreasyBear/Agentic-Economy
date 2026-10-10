@@ -1,6 +1,6 @@
 import { formatCount } from '@/lib/ui/format-time'
 import { Link } from '@tanstack/react-router'
-import { ArrowRightIcon, StoreIcon } from 'lucide-react'
+import { ArrowRightIcon } from 'lucide-react'
 import { Avatar } from '@/components/arc/avatar/avatar'
 import { Card } from '@/components/arc/card/card'
 import { EmptyState } from '@/components/arc/empty-state/empty-state'
@@ -32,7 +32,7 @@ export function DirectoryProvidersIndex({ result, search = {} }: DirectoryProvid
   }
   const firstPage = { ...presentation, view: 'providers' as const, ...(search.query === undefined ? {} : { query: search.query }) }
   const toolsFrom = (host: string) => ({ ...presentation, view: 'tools' as const, provider: host })
-  if (result.kind === 'unavailable') return <EmptyState role="alert" titleAs="h2" icon={<StoreIcon />}
+  if (result.kind === 'unavailable') return <EmptyState role="alert" titleAs="h2"
     title={result.reason === 'query_invalid' ? 'Check this provider search' : 'Providers didn’t load'}
     description={result.reason === 'query_invalid' ? 'Type the start of a provider’s web address, without https or a path.' : 'We couldn’t reach the provider list. Try again.'}
     action={result.reason === 'query_invalid'
@@ -55,7 +55,7 @@ export function DirectoryProvidersIndex({ result, search = {} }: DirectoryProvid
   ]
   return <section aria-label="Providers" className="ae-providers">
     {rows.length === 0
-      ? <EmptyState icon={<StoreIcon />} titleAs="h2"
+      ? <EmptyState titleAs="h2"
           title={!result.isDone ? 'Nothing on this page' : search.query === undefined ? 'No providers yet' : `No providers start with “${search.query}”`}
           description={!result.isDone ? 'More providers are on the next page.' : 'Try fewer letters, or clear the search to see every provider.'}
           {...(search.query === undefined ? {} : { action: <Link to={marketPath} search={{ ...presentation, view: 'providers' }} className={actionLinkClassName('secondary', 'md')}>See all providers</Link> })} />

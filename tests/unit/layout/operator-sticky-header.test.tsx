@@ -33,41 +33,7 @@ function renderAt(ui: ReactElement, pathname = '/owner/operations') {
   return render(<RouterContextProvider router={router}>{ui}</RouterContextProvider>)
 }
 
-describe('AeOperatorPage stickyHeader', () => {
-  it('defaults stickyHeader to false with no sticky shelf', () => {
-    renderAt(
-      <AeOperatorPage
-        operatorRole="owner"
-        title="Tools"
-        description="Manage tools."
-        currentPath="/owner/operations"
-      >
-        <p>Page body</p>
-      </AeOperatorPage>,
-    )
-
-    expect(document.querySelector('[data-sticky-shelf="true"]')).toBeNull()
-    expect(screen.queryByTestId('operator-sticky-shelf')).toBeNull()
-  })
-
-  it('does not render a sticky shelf when stickyHeader is true', () => {
-    renderAt(
-      <AeOperatorPage
-        operatorRole="owner"
-        title="Tools"
-        description="Manage tools."
-        currentPath="/owner/operations"
-        stickyHeader
-        secondaryBar={<div data-testid="secondary-filter-bar">Filters</div>}
-      >
-        <p>Page body</p>
-      </AeOperatorPage>,
-    )
-
-    expect(document.querySelector('[data-sticky-shelf="true"]')).toBeNull()
-    expect(screen.queryByTestId('operator-sticky-shelf')).toBeNull()
-  })
-
+describe('AeOperatorPage', () => {
   it('places description and secondary bar inside the page stack without an h1', () => {
     renderAt(
       <AeOperatorPage
@@ -75,7 +41,6 @@ describe('AeOperatorPage stickyHeader', () => {
         title="Tools"
         description="Manage tools."
         currentPath="/owner/operations"
-        stickyHeader
         secondaryBar={<div data-testid="secondary-filter-bar">Filters</div>}
       >
         <p>Page body</p>

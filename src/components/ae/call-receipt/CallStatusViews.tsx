@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeSection } from '@/components/ae/layout/AeSection'
+import { AeStatusBadge } from '@/components/ae/status/AeStatusBadge'
 import { Badge } from '@/components/arc/badge/badge'
 import { Button } from '@/components/arc/button/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ae/shared/base-ui/tabs/tabs'
@@ -157,7 +158,7 @@ export function CallStatusRefusedView({
   return (
     <CallReceiptWorkspace {...(returnScope === undefined ? {} : { returnScope })} callRef={result.callRef} description={receiptView.statusDetail}>
       <CallReceiptBarrierHeader
-        badgeLabel={receiptView.statusLabel}
+        badge={<AeStatusBadge status="refused" density="cell" />}
         callRef={result.callRef}
         {...(actions !== undefined ? { actions } : {})}
         showRefresh={canRetry}
@@ -190,7 +191,7 @@ export function CallStatusUnavailableView({
   return (
     <CallReceiptWorkspace {...(returnScope === undefined ? {} : { returnScope })} callRef={result.callRef} description={receiptView.statusDetail}>
       <CallReceiptBarrierHeader
-        badgeLabel="Receipt unavailable"
+        badge={<AeStatusBadge status="unavailable" density="cell" />}
         callRef={result.callRef}
         {...(actions !== undefined ? { actions } : {})}
         showRefresh={actions?.onRefresh !== undefined}
@@ -202,13 +203,13 @@ export function CallStatusUnavailableView({
 }
 
 function CallReceiptBarrierHeader({
-  badgeLabel,
+  badge,
   callRef,
   actions,
   showRefresh,
   receiptView,
 }: Readonly<{
-  badgeLabel: string
+  badge: ReactNode
   callRef: string
   actions?: CallStatusPageActions
   returnScope?: ActivityReturnScope
@@ -218,7 +219,7 @@ function CallReceiptBarrierHeader({
   return (
     <>
       <div className="arc-market arc-call-barrier">
-        <Badge tone="warning" className="w-fit">{badgeLabel}</Badge>
+        {badge}
         <CallReceiptRef value={callRef} />
         {showRefresh && actions !== undefined ? (
           <CallReceiptRefreshButton actions={actions} labelMode="refresh_status" />

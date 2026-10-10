@@ -15,8 +15,18 @@ import {
   type AuditEventsTableProps,
 } from '../audit.contracts'
 import { auditEventLabel, auditOutcomeLabel } from './audit-labels'
-import { statusToneOf } from '@/lib/ui/status-presentation'
+import { aeStatusValues, statusToneOf, type AeStatus } from '@/lib/ui/status-presentation'
+import { AeStatusBadge } from '@/components/ae/status/AeStatusBadge'
 import { RecordTime } from '@/components/ae/operator/RecordTime'
+
+// Canonical outcomes render as the shared status badge; stored values outside the status set stay a neutral badge.
+function OutcomeStatus({ outcome }: { outcome: string | null }) {
+  const status = outcome ?? 'unavailable'
+  if (!(aeStatusValues as readonly string[]).includes(status)) {
+    return <Badge tone={statusToneOf(outcome)} size="sm">{auditOutcomeLabel(outcome)}</Badge>
+  }
+  return <AeStatusBadge status={status as AeStatus} audience="operator" density="cell" />
+}
 
 const columns: ColumnDef<AeRecordTableFeatures, AdminAuditRowModel, unknown>[] = [
   {
@@ -36,7 +46,7 @@ const columns: ColumnDef<AeRecordTableFeatures, AdminAuditRowModel, unknown>[] =
   {
     accessorKey: 'outcomeRaw',
     header: AUDIT_COPY.columnLabels.outcome,
-    cell: ({ row }) => <Badge tone={statusToneOf(row.original.outcomeRaw)} size="sm">{auditOutcomeLabel(row.original.outcomeRaw)}</Badge>,
+    cell: ({ row }) => <OutcomeStatus outcome={row.original.outcomeRaw} />,
   },
   {
     accessorKey: 'actorRef',
@@ -112,7 +122,7 @@ function AuditEventDetails({ row }: { row: AdminAuditRowModel }) {
                   {row.targetRef === null ? null : <AeCopyReference label={AUDIT_COPY.columnLabels.target} value={row.targetRef} />}
                 </dd>
               </div>
-              <div className="arc-admin-source-fact"><dt>{AUDIT_COPY.columnLabels.outcome}</dt><dd><Badge tone={statusToneOf(row.outcomeRaw)} size="sm">{auditOutcomeLabel(row.outcomeRaw)}</Badge>{row.outcomeRaw === null ? null : <p><code>{row.outcomeRaw}</code></p>}</dd></div>
+              <div className="arc-admin-source-fact"><dt>{AUDIT_COPY.columnLabels.outcome}</dt><dd><OutcomeStatus outcome={row.outcomeRaw} />{row.outcomeRaw === null ? null : <p><code>{row.outcomeRaw}</code></p>}</dd></div>
               <div className="arc-admin-source-fact"><dt>{AUDIT_COPY.columnLabels.correlation}</dt><dd><AeCopyReference label={AUDIT_COPY.columnLabels.correlation} value={row.correlationId} /></dd></div>
               <AdminAuditDetails admin={row.admin} />
             </dl>

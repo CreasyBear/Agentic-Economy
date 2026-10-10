@@ -9,11 +9,6 @@ export function AdminExceptionsPageSkeleton() {
       title={ADMIN_EXCEPTIONS_COPY.title}
       description={ADMIN_EXCEPTIONS_COPY.description}
       currentPath="/admin/exceptions"
-      breadcrumbs={[
-        { label: ADMIN_EXCEPTIONS_COPY.breadcrumbs.admin, href: '/admin' },
-        { label: ADMIN_EXCEPTIONS_COPY.breadcrumbs.exceptions },
-      ]}
-      stickyHeader
       pending
     >
       <div className="arc-market arc-admin-loading" aria-busy="true" aria-label={ADMIN_EXCEPTIONS_COPY.title}>

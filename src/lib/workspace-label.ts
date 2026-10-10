@@ -1,4 +1,4 @@
-const WORKSPACE_SUFFIX = /['’]s workspace$/u
+const WORKSPACE_SUFFIX = /['’]s (workspace|account)$/u
 
 /** A stored workspace label is already the name. Do not treat it as a person. */
 export function isWorkspaceName(value: string): boolean {
@@ -9,7 +9,7 @@ export function isWorkspaceName(value: string): boolean {
 export function appendWorkspaceSuffix(name: string, apostrophe: "'" | '’' = '’'): string {
   const trimmed = name.trim()
   if (isWorkspaceName(trimmed)) return trimmed
-  return `${trimmed}${apostrophe}s workspace`
+  return `${trimmed}${apostrophe}s account`
 }
 
 export function unboundWorkspaceDefaultName(input: Readonly<{
@@ -22,8 +22,8 @@ export function unboundWorkspaceDefaultName(input: Readonly<{
   if (isWorkspaceName(input.ownerDisplayName)) return input.ownerDisplayName.trim()
   const ownerName = input.ownerDisplayName.trim()
   if (ownerName.length > 0 && !ownerName.startsWith('user_')) return appendWorkspaceSuffix(ownerName, "'")
-  if (input.clerkPersonName === null) return 'Your workspace'
+  if (input.clerkPersonName === null) return 'Your account'
   if (isWorkspaceName(input.clerkPersonName)) return input.clerkPersonName.trim()
   const person = input.clerkPersonName.trim()
-  return person.length > 0 ? appendWorkspaceSuffix(person, "'") : 'Your workspace'
+  return person.length > 0 ? appendWorkspaceSuffix(person, "'") : 'Your account'
 }

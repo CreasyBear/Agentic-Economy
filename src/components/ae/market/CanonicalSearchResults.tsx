@@ -2,10 +2,11 @@
 
 import type { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
-import { Badge } from "@/components/arc/badge/badge";
+import { AeStatusBadge } from "@/components/ae/status/AeStatusBadge";
 import { SortableDataTable, type DataColumn } from "@/components/arc/sortable-data-table/sortable-data-table";
 import { PUBLIC_SURFACE } from "@/content/brand-copy";
-import { DIRECTORY_READINESS, PRICE_UNAVAILABLE } from '@/modules/market/directory-card.view-model'
+import { PRICE_UNAVAILABLE } from '@/modules/market/directory-card.view-model'
+import { type AeStatus } from '@/lib/ui/status-presentation'
 import { directoryProviderKey } from '@/modules/market/x402-directory-index'
 import type { SearchResult } from "@/modules/registry/tool-choice-contracts";
 import { MARKET_LINK_STATE } from './market-return-context'
@@ -22,11 +23,13 @@ function identity(item: SearchResult): string {
   return JSON.stringify([item.source, item.id]);
 }
 
+/** Same status map as DirectoryToolList, so a search row and a tool row say the same thing. */
+const ACCESS_STATUS: Record<SearchResult['access'], AeStatus> = { ae_callable: 'ready_now', setup_required: 'setup_required', unavailable: 'unavailable' };
+
 /** The directory's one readiness vocabulary, so a search row and a tool row say the same thing. */
 function Readiness({ item }: { item: SearchResult }) {
-  const { label, tone } = DIRECTORY_READINESS[item.access];
   const reason = item.access === 'unavailable' && item.reason !== undefined ? REASON_COPY[item.reason] ?? REASON_COPY_FALLBACK : undefined;
-  return <Badge tone={tone} size="sm" {...(reason === undefined ? {} : { title: reason })}>{label}</Badge>;
+  return <span {...(reason === undefined ? {} : { title: reason })}><AeStatusBadge status={ACCESS_STATUS[item.access]} density="cell" /></span>;
 }
 
 const priceTitle = (item: SearchResult) => item.sourcePrice === undefined ? {} : { title: `Provider lists ${item.sourcePrice}` };

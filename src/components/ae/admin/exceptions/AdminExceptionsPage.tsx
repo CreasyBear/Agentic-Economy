@@ -29,11 +29,6 @@ export function AdminExceptionsPage(props: AdminExceptionsPageProps) {
       title={ADMIN_EXCEPTIONS_COPY.title}
       description={ADMIN_EXCEPTIONS_COPY.description}
       currentPath="/admin/exceptions"
-      breadcrumbs={[
-        { label: ADMIN_EXCEPTIONS_COPY.breadcrumbs.admin, href: '/admin' },
-        { label: ADMIN_EXCEPTIONS_COPY.breadcrumbs.exceptions },
-      ]}
-      stickyHeader
     >
       {children}
     </AeOperatorPage>

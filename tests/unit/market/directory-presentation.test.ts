@@ -36,7 +36,7 @@ it('shows recognised prices in USD without a fresh AUD estimate and omits unknow
   expect(directoryNetworkLabel(unknown)).toBe('Solana')
   expect(unknown.prices[0]?.amount).toBe('20000 atomic units (unknown-mint)')
   const priced = { ...entry, prices: [{ network: 'eip155:8453', scheme: 'exact', amount: '0.02 USDC', decimalAmount: '0.020000', symbol: 'USDC' }] }
-  expect(directoryPrice(priced)).toBe('US$0.02')
+  expect(directoryPrice(priced)).toBe('0.02 USDC')
   expect(directoryPriceContext(priced)).toMatch(/Provider.*0\.02 USDC/)
   expect(directoryPrice(entry)).toBe('')
 })
@@ -108,8 +108,8 @@ it('shares one persisted Coinbase observation across priced rows, including upto
   expect(query.mock.calls.map(([reference]) => getFunctionName(reference as never))).toContain('referenceRateRefresh:current')
   const [tiny, larger, zero, options, capped] = result.page.items.map(toDirectoryToolCardModel)
   expect(tiny).toMatchObject({ priceLabel: 'A$0.0013', priceContext: 'Indicative before Quote · Provider lists 0.001 USDC per Call', access: 'ae_callable', toolRef: ref, sourceRouteRef: 'coinbase:tiny' })
-  expect(larger).toMatchObject({ priceLabel: 'A$1.24', priceContext: 'Provider-listed estimate · Provider lists 1 USDC per Call', access: 'unavailable' })
-  expect(zero).toMatchObject({ priceLabel: 'A$0.00', priceContext: 'Provider-listed estimate · Provider lists 0 USDC per Call' })
+  expect(larger).toMatchObject({ priceLabel: 'A$1.24', priceContext: 'Provider-listed estimate · Provider lists 1.00 USDC per Call', access: 'unavailable' })
+  expect(zero).toMatchObject({ priceLabel: 'A$0.00', priceContext: 'Provider-listed estimate · Provider lists 0.00 USDC per Call' })
   expect(options).toMatchObject({ priceLabel: 'A$0.0013', priceContext: 'Provider-listed estimate · Provider lists 0.001 USDC per Call' })
   expect(capped).toMatchObject({ priceLabel: 'up to A$0.038', priceContext: 'Provider-listed estimate · Provider lists up to 0.03 USDC per Call' })
   expect(larger?.toolRef).toBeUndefined()
@@ -126,7 +126,7 @@ it('shows a concrete USD price when no persisted AUD rate is available', async (
   if (result.kind !== 'ok' || result.page.kind !== 'ok') return
   const [model] = result.page.items.map(toDirectoryToolCardModel)
   expect(query).toHaveBeenCalledTimes(2)
-  expect(model).toMatchObject({ priceLabel: 'US$0.02', priceContext: 'Provider lists 0.02 USDC per Call', access: 'unavailable' })
+  expect(model).toMatchObject({ priceLabel: '0.02 USDC', priceContext: 'Provider lists 0.02 USDC per Call', access: 'unavailable' })
 })
 
 it('does not turn publication identity into callability after readiness expires or the publication withdraws', async () => {

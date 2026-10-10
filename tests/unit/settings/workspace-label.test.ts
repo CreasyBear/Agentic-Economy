@@ -9,13 +9,13 @@ describe('workspace label', () => {
   })
 
   it('suffixes a person name once', () => {
-    expect(appendWorkspaceSuffix('Ada Lovelace')).toBe('Ada Lovelace’s workspace')
+    expect(appendWorkspaceSuffix('Ada Lovelace')).toBe('Ada Lovelace’s account')
     expect(unboundWorkspaceDefaultName({
       clerkOrgId: null,
       displayName: 'user_r10',
       ownerDisplayName: 'Ada Lovelace',
       clerkPersonName: null,
-    })).toBe("Ada Lovelace's workspace")
+    })).toBe("Ada Lovelace's account")
   })
 
   it('keeps an already suffixed owner label when the stored account name is still a user id', () => {

@@ -9,7 +9,8 @@ import { AeRecordTable } from '@/components/ae/operator/AeOperatorDataTable'
 import { Button } from '@/components/arc/button/button'
 import { Drawer, DrawerContent } from '@/components/ae/shared/base-ui/drawer/drawer'
 import { formatTimestamp } from '@/lib/ui/format-time'
-import { statusToneOf } from '@/lib/ui/status-presentation'
+import { aeStatusPresentation, statusToneOf, type AeStatus } from '@/lib/ui/status-presentation'
+import { AeStatusBadge } from '@/components/ae/status/AeStatusBadge'
 import { RecordTime } from '@/components/ae/operator/RecordTime'
 import { Badge } from '@/components/arc/badge/badge'
 import type { AccountSecurityHistoryItem } from '@/modules/security/account-security'
@@ -162,7 +163,10 @@ function historyColumns(
       id: 'outcome',
       header: 'Outcome',
       accessorKey: 'outcome',
-      cell: ({ row }) => <Badge tone={statusToneOf(row.original.outcome)} size="sm">{enumLabel(row.original.outcome)}</Badge>,
+      // outcome is a free string; only canonical statuses can use AeStatusBadge (it throws on unknown values)
+      cell: ({ row }) => Object.hasOwn(aeStatusPresentation, row.original.outcome)
+        ? <AeStatusBadge status={row.original.outcome as AeStatus} density="cell" />
+        : <Badge tone={statusToneOf(row.original.outcome)} size="sm">{enumLabel(row.original.outcome)}</Badge>,
     },
     {
       accessorKey: 'sourceSystem',

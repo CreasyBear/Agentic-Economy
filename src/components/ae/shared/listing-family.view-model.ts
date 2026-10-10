@@ -2,16 +2,8 @@ import { formatTimestamp } from '@/lib/ui/format-time'
 import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import type { PublicToolDescriptor } from '@/modules/capability-supply/public'
 import type { ListingProjection, ListingPrice } from '@/modules/registry/public'
-import { REFERENCE_RATE_MAX_AGE_MS, formatDisplayAmount, formatDisplayPrice, formatExactAmount, parseDecimalExactAmount, type ExactAmount, type ReferenceRate } from '@/modules/money/public'
+import { REFERENCE_RATE_MAX_AGE_MS, formatCurrencyAmount, formatDisplayAmount, formatDisplayPrice, parseDecimalExactAmount, type ExactAmount, type ReferenceRate } from '@/modules/money/public'
 import type { ToolObjectView } from './object-family.contracts'
-
-function buyerUsdAmount(amount: ExactAmount): string | undefined {
-  if (amount.currency !== 'USD' && amount.currency !== 'USDC') return undefined
-  const formatted = formatExactAmount(amount)
-  if (formatted === undefined) return undefined
-  const normalized = formatted.includes('.') ? formatted.replace(/0+$/u, '').replace(/\.$/u, '') : formatted
-  return `US$${normalized}`
-}
 
 function buyerSourceAmount(amount: ExactAmount, referenceRate: ReferenceRate | undefined, nowMs: number): string | undefined {
   if (amount.currency === 'AUD') return formatDisplayAmount(amount)
@@ -20,7 +12,7 @@ function buyerSourceAmount(amount: ExactAmount, referenceRate: ReferenceRate | u
       : formatDisplayPrice({ kind: 'indicative', amount, validUntil: referenceRate.fetchedAt + REFERENCE_RATE_MAX_AGE_MS, referenceRate }, nowMs)
     if (estimate?.startsWith('A$') === true) return estimate
   }
-  return buyerUsdAmount(amount)
+  return formatCurrencyAmount(amount)
 }
 
 function priceLabel(price: ListingPrice, referenceRate: ReferenceRate | undefined, nowMs: number, admittedDisplayPrice?: PublicToolDescriptor['commercial']['displayPrice']): string {

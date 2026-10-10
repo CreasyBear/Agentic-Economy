@@ -9,8 +9,6 @@ export function AdminObjectPageSkeleton() {
       currentPath="/admin/search"
       title={ADMIN_OBJECT_PAGE_COPY.loadingTitle}
       description={ADMIN_OBJECT_PAGE_COPY.loadingDescription}
-      breadcrumbs={[{ label: ADMIN_OBJECT_PAGE_COPY.adminBreadcrumb, href: '/admin' }]}
-      stickyHeader
       pending
     >
       <div className="arc-market arc-admin-loading" aria-busy="true" aria-label={ADMIN_OBJECT_PAGE_COPY.loadingTitle}>

@@ -12,12 +12,6 @@ export function AdminProviderObjectSkeleton({ slug }: AdminProviderObjectSkeleto
       title={`${PROVIDER_OBJECT_COPY.title} ${slug}`}
       description={PROVIDER_OBJECT_COPY.description}
       currentPath={`/admin/providers/${slug}`}
-      breadcrumbs={[
-        { label: PROVIDER_OBJECT_COPY.breadcrumbs.admin, href: '/admin' },
-        { label: PROVIDER_OBJECT_COPY.breadcrumbs.providers, href: '/admin/providers' },
-        { label: slug },
-      ]}
-      stickyHeader
       pending
     >
       <div className="arc-market arc-admin-loading" aria-busy="true" aria-label={PROVIDER_OBJECT_COPY.title}>

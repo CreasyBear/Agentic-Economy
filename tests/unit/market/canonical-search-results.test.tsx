@@ -107,7 +107,7 @@ describe('canonical search results', () => {
       'Weather Forecast', 'External Forecast', 'Unpriced Forecast',
     ])
 
-    expect(within(rows[0]!).getByText('Ready to call')).toBeTruthy()
+    expect(within(rows[0]!).getByText('Ready now')).toBeTruthy()
     expect(within(rows[0]!).getByText('Weather Co')).toBeTruthy()
     expect(within(rows[0]!).getByText('A$900719925474099.01')).toBeTruthy()
     expect(within(rows[1]!).getByText('Unavailable').closest('[title]')?.getAttribute('title')).toBe(REASON_COPY.chain_unsupported)

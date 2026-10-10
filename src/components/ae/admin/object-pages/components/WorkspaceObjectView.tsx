@@ -39,12 +39,6 @@ export function WorkspaceObjectView({ view, grant = null }: WorkspaceObjectViewP
       title={view.displayName ?? copy.title}
       description=""
       contentOwnsHeading
-      breadcrumbs={[
-        { label: ADMIN_OBJECT_PAGE_COPY.adminBreadcrumb, href: '/admin' },
-        { label: copy.section, href: '/admin/accounts' },
-        { label: view.ref },
-      ]}
-      stickyHeader
     >
       <PageHeader
         title={view.displayName ?? copy.title}

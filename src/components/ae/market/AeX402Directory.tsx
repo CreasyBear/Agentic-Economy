@@ -1,7 +1,7 @@
 import { formatCount } from '@/lib/ui/format-time'
 import { useAuth } from '@clerk/tanstack-react-start'
 import { Await, Link, useNavigate, useRouter, useRouterState } from '@tanstack/react-router'
-import { ArrowLeftIcon, ArrowRightIcon, HeartIcon, Loader2Icon, SearchIcon, XIcon } from 'lucide-react'
+import { ArrowLeftIcon, ArrowRightIcon, HeartIcon, Loader2Icon, XIcon } from 'lucide-react'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 import { Alert } from '@/components/arc/alert/alert'
@@ -275,7 +275,7 @@ function DirectoryMarketplace({ canonicalSearch: rankedSource, landingRows, load
   const subtitle = displayView === 'saved' ? 'Tools you saved, with their current prices.'
     : providerSearch ? search.query === undefined ? 'The services behind each tool. Open one to see everything it lists.' : `Providers whose address starts with “${search.query}”.`
     : browse && coverage !== undefined ? `${formatCount(coverage.indexedTotal)} paid APIs, data feeds and services, each priced per call.`
-    : 'Each tool is priced per call. Tools marked Ready to call run through aecon once you sign in.'
+    : 'Each tool is priced per call. Tools marked Ready now run through aecon once you sign in.'
 
   const viewLinks: readonly { value: BrowseView; label: string }[] = [
     { value: 'tools', label: 'Tools' },
@@ -385,7 +385,7 @@ function DirectoryMarketplace({ canonicalSearch: rankedSource, landingRows, load
   }
 
   function toolResults() {
-    if (page.kind === 'unavailable') return <EmptyState role="alert" titleAs="h2" icon={<SearchIcon />} title={page.reason === 'query_invalid' ? 'Check your search' : 'Tools didn’t load'}
+    if (page.kind === 'unavailable') return <EmptyState role="alert" titleAs="h2" title={page.reason === 'query_invalid' ? 'Check your search' : 'Tools didn’t load'}
       description={page.reason === 'query_invalid' ? 'Describe the job without personal details, such as names or account numbers.' : 'We couldn’t reach the tool index. Try again.'}
       action={<Link to={marketPath} reloadDocument search={carryMarketCompare(search, indexedSearch())} className={actionLinkClassName('secondary', 'md')}>Try again</Link>} />
     const items = shownItems
@@ -404,7 +404,7 @@ function DirectoryMarketplace({ canonicalSearch: rankedSource, landingRows, load
         {page.partialResults === true ? <p role="status" className="ae-browse-ranking">Showing the provider’s top matches. Add a word or two to narrow them.</p> : null}
         {empty ? (!pageDone
           ? <EmptyState title="Nothing on this page" description="More of the index is still to check." action={<Link to={marketPath} search={carryMarketCompare(search, { ...indexedSearch(), indexCursor: nextCursor, page: pageNumber + 1 })} className={actionLinkClassName('secondary', 'md')}>Next page</Link>} />
-          : revealed ? null : <EmptyState icon={<SearchIcon />}
+          : revealed ? null : <EmptyState
             title={search.query === undefined ? 'No tools match these filters' : search.alternativeTo !== undefined ? `No other tool ready to call for “${search.query}”` : `No tools match “${search.query}”`}
             description={search.query === undefined ? 'Remove a filter to see more tools.' : 'Try fewer or different words, or ask us to find a tool for this job.'}
             action={<div className="ae-browse-empty-actions">
@@ -431,10 +431,10 @@ function DirectoryMarketplace({ canonicalSearch: rankedSource, landingRows, load
     return <>
       <DirectorySavedNeeds />
       {saved.status === 'signed_out'
-        ? <EmptyState icon={<HeartIcon />} title="Save tools to come back to" description="Sign in to keep a shortlist across devices and agents." action={<Link to="/sign-in/$" params={{ _splat: '' }} search={signInSearch} className={actionLinkClassName('primary', 'md')}>Sign in</Link>} />
+        ? <EmptyState title="Save tools to come back to" description="Sign in to keep a shortlist across devices and agents." action={<Link to="/sign-in/$" params={{ _splat: '' }} search={signInSearch} className={actionLinkClassName('primary', 'md')}>Sign in</Link>} />
         : saved.status === 'loading' ? <div role="status" aria-label="Loading saved tools"><ResultsSkeleton /></div>
-          : saved.status === 'failed' ? <EmptyState role="alert" icon={<HeartIcon />} title="Saved tools didn’t load" description="Your saved tools are unchanged." action={<Button type="button" variant="secondary" onClick={saved.refresh}>Try again</Button>} />
-            : saved.savedTools.length === 0 ? <EmptyState icon={<HeartIcon />} title="Nothing saved yet" description="Tap the heart on any tool to keep it here." action={<Link to={marketPath} search={carryMarketCompare(search, {})} className={actionLinkClassName('secondary', 'md')}>Browse tools</Link>} /> : toolGrid(saved.savedTools)}
+          : saved.status === 'failed' ? <EmptyState role="alert" title="Saved tools didn’t load" description="Your saved tools are unchanged." action={<Button type="button" variant="secondary" onClick={saved.refresh}>Try again</Button>} />
+            : saved.savedTools.length === 0 ? <EmptyState title="Nothing saved yet" description="Tap the heart on any tool to keep it here." action={<Link to={marketPath} search={carryMarketCompare(search, {})} className={actionLinkClassName('secondary', 'md')}>Browse tools</Link>} /> : toolGrid(saved.savedTools)}
     </>
   }
 

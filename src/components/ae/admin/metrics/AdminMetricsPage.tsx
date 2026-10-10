@@ -16,11 +16,6 @@ export function AdminMetricsPage({ range, rejected, onRangeChange }: AdminMetric
       title={ADMIN_METRICS_COPY.title}
       description={ADMIN_METRICS_COPY.description}
       currentPath="/admin/metrics"
-      breadcrumbs={[
-        { label: ADMIN_METRICS_COPY.adminBreadcrumb, href: '/admin' },
-        { label: ADMIN_METRICS_COPY.title },
-      ]}
-      stickyHeader
     >
       <AdminSearchNotice rejected={rejected} />
       {data.kind === 'refused' ? (

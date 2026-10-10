@@ -121,5 +121,6 @@ describe('ProviderListingError copy', () => {
     expect(screen.getByRole('link', { name: 'Try again' }).classList.contains('min-h-touch')).toBe(true)
     const browseTools = screen.getAllByRole('link', { name: 'Browse Tools' }).find((link) => link.classList.contains('min-h-touch'))
     expect(browseTools?.getAttribute('href')).toBe('/market')
+    expect(screen.getByText('This provider’s listings could not be read.')).toBeTruthy()
   })
 })

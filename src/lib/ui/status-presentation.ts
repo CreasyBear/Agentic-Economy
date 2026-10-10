@@ -78,6 +78,10 @@ export const aeStatusValues = [
   'billing_provider_event_held',
   'billing_reconciliation_mismatch',
   'billing_no_repair',
+  'call_working',
+  'call_done',
+  'call_needs_you',
+  'call_failed',
 ] as const
 
 export type AeStatus = (typeof aeStatusValues)[number]
@@ -710,6 +714,42 @@ export const aeStatusPresentation = {
     audience: 'operator',
     publicness: 'private',
     disabledReason: 'Terminal no-repair state blocks paid-activation claims.',
+  },
+  call_working: {
+    label: 'Working',
+    compactLabel: 'Working',
+    tone: 'neutral',
+    description: 'The call is still running.',
+    priority: 'medium',
+    audience: 'public',
+    publicness: 'public',
+  },
+  call_done: {
+    label: 'Done',
+    compactLabel: 'Done',
+    tone: 'success',
+    description: 'The call finished.',
+    priority: 'medium',
+    audience: 'public',
+    publicness: 'public',
+  },
+  call_needs_you: {
+    label: 'Needs you',
+    compactLabel: 'Needs you',
+    tone: 'warning',
+    description: 'The call needs your input.',
+    priority: 'medium',
+    audience: 'public',
+    publicness: 'public',
+  },
+  call_failed: {
+    label: 'Failed',
+    compactLabel: 'Failed',
+    tone: 'danger',
+    description: 'The call did not finish.',
+    priority: 'medium',
+    audience: 'public',
+    publicness: 'public',
   },
 } satisfies Record<AeStatus, AeStatusPresentation>
 

@@ -48,7 +48,7 @@ afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers() })
 describe('Workspace settings composed read', () => {
   it('materializes once and preserves all existing authenticated backend reads and public detail visibility', async () => {
     const result = await readWorkspaceSettingsServer()
-    expect(result).toMatchObject({ identity, status: { kind: 'available', value: { catalog } }, defaultName: "Fixture Owner's workspace" })
+    expect(result).toMatchObject({ identity, status: { kind: 'available', value: { catalog } }, defaultName: "Fixture Owner's account" })
     expect(mocks.createTransport).toHaveBeenCalledExactlyOnceWith({ signal: expect.any(AbortSignal) })
     expect(mocks.query.mock.calls.map(([ref]) => getFunctionName(ref)).sort()).toEqual([
       'catalog:getCurrentOwnerProviderIdentity', 'catalog:getCurrentOwnerProviderIdentity',
@@ -77,7 +77,7 @@ describe('Workspace settings composed read', () => {
       if (getFunctionName(reference) === 'catalog:getCurrentOwnerPublicCatalog') throw new Error('public_status_unavailable')
       return queryResult(reference)
     })
-    expect(await readWorkspaceSettingsServer()).toMatchObject({ identity, status: { kind: 'unavailable' }, defaultName: "Fixture Owner's workspace" })
+    expect(await readWorkspaceSettingsServer()).toMatchObject({ identity, status: { kind: 'unavailable' }, defaultName: "Fixture Owner's account" })
     expect(mocks.createTransport).toHaveBeenCalledOnce()
   })
 
@@ -129,7 +129,7 @@ describe('Workspace settings composed read', () => {
       ? new Promise(resolve => { finish = resolve }) : Promise.resolve(queryResult(reference)))
     const pending = readWorkspaceSettingsServer()
     await vi.advanceTimersByTimeAsync(SOURCE_READ_TIMEOUT_MS)
-    expect(await pending).toMatchObject({ identity, status: { kind: 'unavailable' }, defaultName: "Fixture Owner's workspace" })
+    expect(await pending).toMatchObject({ identity, status: { kind: 'unavailable' }, defaultName: "Fixture Owner's account" })
     finish({ kind: 'available', catalog }); await Promise.resolve(); await Promise.resolve()
     expect(mocks.publicDetail).not.toHaveBeenCalled()
   })
