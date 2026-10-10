@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { internal } from '../../../convex/_generated/api'
 import { emitJourneyEvent } from '../../../convex/lib/journey/events'
 import { postResendEmail } from '../../../convex/lib/principalAccount/notifications/resend'
+import { emailAddressHash } from '../../../convex/lib/principalAccount/notifications/suppression'
 import { createInteractiveAuthorityBackend } from '../../helpers/interactive-authority-runtime'
 import {
   INTERACTIVE_ACCOUNT_REF,
@@ -78,7 +79,7 @@ async function pendingApprovalDelivery() {
   return { backend, deliveryId, deliveryRef }
 }
 
-describe('sendApprovalEmail', () => {
+describe('sendDeliveryEmail', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-09-30T12:00:00.000Z'))
@@ -112,7 +113,7 @@ describe('sendApprovalEmail', () => {
       new Response(JSON.stringify({ id: 'resend-message-123' }), { status: 200 }))
     vi.stubGlobal('fetch', sendEmail)
 
-    await expect(backend.action(internal.notificationDelivery.sendApprovalEmail, { deliveryId }))
+    await expect(backend.action(internal.notificationDelivery.sendDeliveryEmail, { deliveryId }))
       .resolves.toEqual({ outcome: 'sent', vendorMessageId: 'resend-message-123' })
     expect(clerkMocks.getUser).toHaveBeenCalledWith('user_sam')
     expect(sendEmail).toHaveBeenCalledOnce()
@@ -130,15 +131,57 @@ describe('sendApprovalEmail', () => {
     expect(JSON.parse(request.body)).toMatchObject({
       from: 'no-reply@example.test',
       to: ['owner@example.test'],
+      subject: 'Sam canonical principal needs your approval',
+      html: expect.stringContaining('Review request'),
       text: expect.stringContaining('/agent-access'),
+      tags: expect.arrayContaining([
+        { name: 'stream', value: 'transactional' },
+        { name: 'event_kind', value: 'agent_approval_requested' },
+      ]),
     })
+    // Required mail carries no unsubscribe target.
+    expect(JSON.parse(request.body)).not.toHaveProperty('headers')
+  })
+
+  it('suppresses a send to an address that hard-bounced before contacting Resend', async () => {
+    const { backend, deliveryId } = await pendingApprovalDelivery()
+    const addressHash = await emailAddressHash('owner@example.test')
+    await backend.run((ctx) => ctx.db.insert('emailSuppressions', {
+      addressHash,
+      domain: 'example.test',
+      reason: 'hard_bounce',
+      sourceDeliveryRef: 'notification:earlier-bounce',
+      createdAt: Date.now(),
+    }))
+    const sendEmail = vi.fn(async () => new Response(JSON.stringify({ id: 'never' }), { status: 200 }))
+    vi.stubGlobal('fetch', sendEmail)
+
+    await expect(backend.action(internal.notificationDelivery.sendDeliveryEmail, { deliveryId }))
+      .resolves.toEqual({ outcome: 'suppressed', code: 'hard_bounce_suppressed' })
+    expect(sendEmail).not.toHaveBeenCalled()
+  })
+
+  it('still sends required approval mail to an address with a complaint on file', async () => {
+    const { backend, deliveryId } = await pendingApprovalDelivery()
+    const addressHash = await emailAddressHash('owner@example.test')
+    await backend.run((ctx) => ctx.db.insert('emailSuppressions', {
+      addressHash,
+      domain: 'example.test',
+      reason: 'complaint',
+      sourceDeliveryRef: 'notification:earlier-complaint',
+      createdAt: Date.now(),
+    }))
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ id: 'resend-required-1' }), { status: 200 })))
+
+    await expect(backend.action(internal.notificationDelivery.sendDeliveryEmail, { deliveryId }))
+      .resolves.toEqual({ outcome: 'sent', vendorMessageId: 'resend-required-1' })
   })
 
   it('treats an accepted response without parseable JSON as sent', async () => {
     const { backend, deliveryId } = await pendingApprovalDelivery()
     vi.stubGlobal('fetch', vi.fn(async () => new Response('not json', { status: 202 })))
 
-    await expect(backend.action(internal.notificationDelivery.sendApprovalEmail, { deliveryId }))
+    await expect(backend.action(internal.notificationDelivery.sendDeliveryEmail, { deliveryId }))
       .resolves.toEqual({ outcome: 'sent' })
   })
 
@@ -146,7 +189,7 @@ describe('sendApprovalEmail', () => {
     const { backend, deliveryId } = await pendingApprovalDelivery()
     vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 429 })))
 
-    await expect(backend.action(internal.notificationDelivery.sendApprovalEmail, { deliveryId }))
+    await expect(backend.action(internal.notificationDelivery.sendDeliveryEmail, { deliveryId }))
       .rejects.toThrow()
   })
 
@@ -154,7 +197,7 @@ describe('sendApprovalEmail', () => {
     const { backend, deliveryId } = await pendingApprovalDelivery()
     vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 503 })))
 
-    await expect(backend.action(internal.notificationDelivery.sendApprovalEmail, { deliveryId }))
+    await expect(backend.action(internal.notificationDelivery.sendDeliveryEmail, { deliveryId }))
       .rejects.toThrow()
   })
 
@@ -162,7 +205,7 @@ describe('sendApprovalEmail', () => {
     const { backend, deliveryId } = await pendingApprovalDelivery()
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('network unavailable') }))
 
-    await expect(backend.action(internal.notificationDelivery.sendApprovalEmail, { deliveryId }))
+    await expect(backend.action(internal.notificationDelivery.sendDeliveryEmail, { deliveryId }))
       .rejects.toThrow()
   })
 
@@ -170,7 +213,7 @@ describe('sendApprovalEmail', () => {
     const { backend, deliveryId } = await pendingApprovalDelivery()
     vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 400 })))
 
-    await expect(backend.action(internal.notificationDelivery.sendApprovalEmail, { deliveryId }))
+    await expect(backend.action(internal.notificationDelivery.sendDeliveryEmail, { deliveryId }))
       .resolves.toEqual({ outcome: 'failed', code: 'provider_rejected_400' })
   })
 
@@ -185,7 +228,7 @@ describe('sendApprovalEmail', () => {
     const sendEmail = vi.fn()
     vi.stubGlobal('fetch', sendEmail)
 
-    await expect(backend.action(internal.notificationDelivery.sendApprovalEmail, { deliveryId }))
+    await expect(backend.action(internal.notificationDelivery.sendDeliveryEmail, { deliveryId }))
       .resolves.toEqual({ outcome: 'failed', code: 'no_verified_email' })
     expect(sendEmail).not.toHaveBeenCalled()
   })
@@ -197,7 +240,7 @@ describe('sendApprovalEmail', () => {
     vi.stubGlobal('fetch', sendEmail)
     vi.spyOn(console, 'error').mockImplementation(() => {})
 
-    await expect(backend.action(internal.notificationDelivery.sendApprovalEmail, { deliveryId }))
+    await expect(backend.action(internal.notificationDelivery.sendDeliveryEmail, { deliveryId }))
       .resolves.toEqual({ outcome: 'suppressed', code: 'sender_not_configured' })
     expect(clerkMocks.getUser).not.toHaveBeenCalled()
     expect(sendEmail).not.toHaveBeenCalled()
@@ -224,7 +267,7 @@ describe('sendApprovalEmail', () => {
     const sendEmail = vi.fn()
     vi.stubGlobal('fetch', sendEmail)
 
-    await expect(backend.action(internal.notificationDelivery.sendApprovalEmail, { deliveryId }))
+    await expect(backend.action(internal.notificationDelivery.sendDeliveryEmail, { deliveryId }))
       .resolves.toEqual({ outcome: 'suppressed', code: 'opted_out' })
     expect(clerkMocks.getUser).not.toHaveBeenCalled()
     expect(sendEmail).not.toHaveBeenCalled()
@@ -283,7 +326,7 @@ describe('sendOperatorDigest', () => {
     expect(sendEmail).toHaveBeenCalledTimes(1)
     const [, request] = sendEmail.mock.calls[0] ?? []
     expect(JSON.parse(String(request?.body))).toMatchObject({
-      subject: 'AE stalled accounts, 2026-10-10',
+      subject: 'aecon stalled accounts, 2026-10-10',
       text: expect.stringContaining('Signed up, not funded: 0 total'),
     })
   })
@@ -307,6 +350,17 @@ describe('sendOperatorDigest', () => {
 
 describe('postResendEmail', () => {
   afterEach(() => vi.unstubAllGlobals())
+
+  it('passes the HTML body and tags through to Resend', async () => {
+    const sendEmail = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response('{}', { status: 200 }))
+    vi.stubGlobal('fetch', sendEmail)
+    await postResendEmail({
+      apiKey: 'k', from: 'a@example.test', to: 'b@example.test', subject: 's', text: 't', html: '<p>h</p>', idempotencyKey: 'i',
+      tags: [{ name: 'stream', value: 'alert' }],
+    })
+    const [, request] = sendEmail.mock.calls[0] ?? []
+    expect(JSON.parse(String(request?.body))).toMatchObject({ html: '<p>h</p>', tags: [{ name: 'stream', value: 'alert' }] })
+  })
 
   it('passes List-Unsubscribe headers through to Resend', async () => {
     const sendEmail = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response('{}', { status: 200 }))

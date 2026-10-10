@@ -7,6 +7,7 @@ import { internalMutation } from './usageTrackedMutation'
 import { materializePurchaseResolutionRecord } from './lib/capabilityExecution/callLifecycle/purchaseResolutionMaterialize'
 import { upsertCallProjection } from './lib/capabilityExecution/callLifecycle/dispatchProjection'
 import { resolveX402SpendReservation } from './lib/money/x402PaymentAttempt/spendResolution'
+import { activeOwnerPrincipalRef, enqueueEmail } from './lib/principalAccount/notifications/enqueue'
 
 const owner = (nonce: string) => `expired-unused:${nonce}`
 const proof = {
@@ -116,6 +117,13 @@ export const finish = internalMutation({
     const projection = { state: 'refused' as const, dispatchState: 'failed' as const, result }
     await materializePurchaseResolutionRecord(ctx, call, projection, now)
     await upsertCallProjection(ctx, call, projection, now)
+    const recipient = await activeOwnerPrincipalRef(ctx.db, call.ownerId)
+    if (recipient !== null) {
+      await enqueueEmail(ctx, {
+        eventKind: 'task_refunded', stream: 'transactional', recipientPrincipalRef: recipient,
+        accountRef: call.ownerId, sourceEventRef: call.callRef,
+      })
+    }
     return { kind: 'completed' as const }
   },
 })

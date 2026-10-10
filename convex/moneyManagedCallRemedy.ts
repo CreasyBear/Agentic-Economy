@@ -4,6 +4,7 @@ import { v } from 'convex/values'
 import { internalMutation } from './usageTrackedMutation'
 import { materializePurchaseResolutionRecord } from './lib/capabilityExecution/callLifecycle/purchaseResolutionMaterialize'
 import { upsertCallProjection } from './lib/capabilityExecution/callLifecycle/dispatchProjection'
+import { activeOwnerPrincipalRef, enqueueEmail } from './lib/principalAccount/notifications/enqueue'
 import { createPublicToolRef, parsePublishedToolSnapshot } from '@/modules/capability-supply/public'
 import type { Doc } from './_generated/dataModel'
 import { capabilityCallTables } from '@/modules/capability-execution/schema'
@@ -173,6 +174,13 @@ export const finish = internalMutation({
     await upsertCallProjection(ctx, call, {
       state: 'refused', dispatchState: 'failed', result,
     }, now)
+    const owner = await activeOwnerPrincipalRef(ctx.db, call.ownerId)
+    if (owner !== null) {
+      await enqueueEmail(ctx, {
+        eventKind: 'task_refunded', stream: 'transactional', recipientPrincipalRef: owner,
+        accountRef: call.ownerId, sourceEventRef: call.callRef,
+      })
+    }
     return { kind: 'completed' as const }
   },
 })

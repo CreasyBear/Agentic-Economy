@@ -128,20 +128,65 @@ export const notificationEventKindValue = v.union(
   v.literal('stalled_not_funded'),
   v.literal('stalled_no_agent'),
   v.literal('stalled_never_called'),
+  v.literal('funding_receipt'),
+  v.literal('funding_failed'),
+  v.literal('task_refunded'),
+  v.literal('task_stuck'),
+  v.literal('credit_exhausted'),
+  v.literal('welcome'),
+  v.literal('key_issued'),
+  v.literal('key_revoked'),
+  v.literal('account_paused'),
+  v.literal('account_restored'),
+  v.literal('role_changed'),
+  v.literal('email_changed'),
+  v.literal('data_request_received'),
+  v.literal('provider_submitted'),
+  v.literal('provider_decision'),
+  v.literal('provider_live'),
+  v.literal('provider_first_paid'),
+  v.literal('provider_payout'),
+  v.literal('provider_payout_failed'),
+  v.literal('provider_weekly'),
+  v.literal('provider_offboarded'),
+  v.literal('operator_exception'),
 )
 
+export const notificationStreamValue = v.union(
+  v.literal('transactional'),
+  v.literal('alert'),
+  v.literal('lifecycle'),
+  v.literal('operator'),
+)
+
+// Ranked: a webhook may only move a delivery to a strictly higher rank. Equal rank never overwrites.
 export const notificationDeliveryStateValue = v.union(
   v.literal('pending'),
   v.literal('sent'),
+  v.literal('delivered'),
+  v.literal('bounced'),
+  v.literal('complained'),
   v.literal('failed'),
   v.literal('suppressed'),
 )
+
+export const notificationDeliveryStateRank = {
+  pending: 0,
+  failed: 0,
+  suppressed: 0,
+  sent: 1,
+  delivered: 2,
+  bounced: 3,
+  complained: 3,
+} as const
 
 export const notificationDeliveryValue = v.object({
   deliveryRef: v.string(),
   recipientPrincipalRef: v.string(),
   accountRef: v.string(),
   eventKind: notificationEventKindValue,
+  stream: v.optional(notificationStreamValue),
+  required: v.optional(v.boolean()),
   sourceEventRef: v.string(),
   usageEvidenceJson:v.optional(v.string()),
   preferenceRevision:v.optional(v.number()),
@@ -151,9 +196,23 @@ export const notificationDeliveryValue = v.object({
   vendorMessageId: v.optional(v.string()),
   vendorCode: v.optional(v.string()),
   lastFailureCode: v.optional(v.string()),
+  lastEventAt: v.optional(v.number()),
   workId: v.optional(v.string()),
   createdAt: v.number(),
   updatedAt: v.number(),
+})
+
+export const emailSuppressionValue = v.object({
+  addressHash: v.string(),
+  domain: v.string(),
+  reason: v.union(v.literal('hard_bounce'), v.literal('complaint')),
+  sourceDeliveryRef: v.string(),
+  createdAt: v.number(),
+})
+
+export const emailWebhookEventValue = v.object({
+  svixId: v.string(),
+  receivedAt: v.number(),
 })
 
 export const principalNotificationEmailValue = v.object({
@@ -266,7 +325,14 @@ export const accountTables = {
       'eventKind',
       'sourceEventRef',
     ])
-    .index('by_accountRef_and_createdAt', ['accountRef', 'createdAt']),
+    .index('by_accountRef_and_createdAt', ['accountRef', 'createdAt'])
+    .index('by_vendorMessageId', ['vendorMessageId'])
+    .index('by_state_and_updatedAt', ['state', 'updatedAt']),
   principalNotificationEmails: defineTable(principalNotificationEmailValue)
     .index('by_principalRef', ['principalRef']),
+  emailSuppressions: defineTable(emailSuppressionValue)
+    .index('by_addressHash', ['addressHash'])
+    .index('by_createdAt', ['createdAt']),
+  emailWebhookEvents: defineTable(emailWebhookEventValue)
+    .index('by_svixId', ['svixId']),
 } as const

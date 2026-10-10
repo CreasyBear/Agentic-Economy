@@ -99,6 +99,7 @@ import type * as crons from "../crons.js";
 import type * as devSeed from "../devSeed.js";
 import type * as devSeedStore from "../devSeedStore.js";
 import type * as discovery from "../discovery.js";
+import type * as emailWebhook from "../emailWebhook.js";
 import type * as facilitatorDiscovery from "../facilitatorDiscovery.js";
 import type * as http from "../http.js";
 import type * as interactiveAuthority from "../interactiveAuthority.js";
@@ -686,6 +687,8 @@ import type * as lib_principalAccount_notifications_enqueue from "../lib/princip
 import type * as lib_principalAccount_notifications_preferences from "../lib/principalAccount/notifications/preferences.js";
 import type * as lib_principalAccount_notifications_resend from "../lib/principalAccount/notifications/resend.js";
 import type * as lib_principalAccount_notifications_stalled from "../lib/principalAccount/notifications/stalled.js";
+import type * as lib_principalAccount_notifications_suppression from "../lib/principalAccount/notifications/suppression.js";
+import type * as lib_principalAccount_notifications_unsubscribe from "../lib/principalAccount/notifications/unsubscribe.js";
 import type * as lib_principalAccount_notifications_usageAlerts from "../lib/principalAccount/notifications/usageAlerts.js";
 import type * as lib_principalAccount_notifications_usageHistory from "../lib/principalAccount/notifications/usageHistory.js";
 import type * as lib_principalAccount_notifications_usagePolicyAudit from "../lib/principalAccount/notifications/usagePolicyAudit.js";
@@ -921,6 +924,7 @@ declare const fullApi: ApiFromModules<{
   devSeed: typeof devSeed;
   devSeedStore: typeof devSeedStore;
   discovery: typeof discovery;
+  emailWebhook: typeof emailWebhook;
   facilitatorDiscovery: typeof facilitatorDiscovery;
   http: typeof http;
   interactiveAuthority: typeof interactiveAuthority;
@@ -1508,6 +1512,8 @@ declare const fullApi: ApiFromModules<{
   "lib/principalAccount/notifications/preferences": typeof lib_principalAccount_notifications_preferences;
   "lib/principalAccount/notifications/resend": typeof lib_principalAccount_notifications_resend;
   "lib/principalAccount/notifications/stalled": typeof lib_principalAccount_notifications_stalled;
+  "lib/principalAccount/notifications/suppression": typeof lib_principalAccount_notifications_suppression;
+  "lib/principalAccount/notifications/unsubscribe": typeof lib_principalAccount_notifications_unsubscribe;
   "lib/principalAccount/notifications/usageAlerts": typeof lib_principalAccount_notifications_usageAlerts;
   "lib/principalAccount/notifications/usageHistory": typeof lib_principalAccount_notifications_usageHistory;
   "lib/principalAccount/notifications/usagePolicyAudit": typeof lib_principalAccount_notifications_usagePolicyAudit;

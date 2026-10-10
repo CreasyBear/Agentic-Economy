@@ -2,6 +2,7 @@ import { usageAlertPolicyInputValue,usageAlertPolicyValue } from '@/modules/prin
 import type { UsageAlertPolicy } from '@/modules/principal-account/notification-preferences.view-model'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { readUsagePolicyReplay,recordUsagePolicyAudit } from './usagePolicyAudit'
+import type { UnsubscribePayload, UnsubscribeStream } from './unsubscribe'
 import type { GenericDatabaseReader, UserIdentity } from 'convex/server'
 import { v } from 'convex/values'
 
@@ -239,6 +240,59 @@ function mergePreferencePatch(
     agentApprovalRequested: args.agentApprovalRequested ?? base.agentApprovalRequested,
     stalledStepEmails: args.stalledStepEmails ?? base.stalledStepEmails,
   }
+}
+
+export const unsubscribeEmailStreamArgs = {
+  principalRef: v.string(),
+  accountRef: v.string(),
+  stream: v.union(v.literal('alert'), v.literal('lifecycle')),
+}
+
+const STREAM_OFF_FIELDS: Record<UnsubscribeStream, Partial<PreferenceFields>> = {
+  alert: { lowCreditBalance: false, spendCapWarning: false, callFailureSpike: false },
+  lifecycle: { stalledStepEmails: false },
+}
+
+/** Called only after the HMAC token is verified. Flips the stream's toggles and nothing else. */
+export async function unsubscribeEmailStreamHandler(
+  ctx: MutationCtx,
+  args: UnsubscribePayload,
+): Promise<boolean> {
+  const existing = await ctx.db
+    .query('userNotificationPreferences')
+    .withIndex('by_principalRef_and_accountRef', (query) => query
+      .eq('principalRef', args.principalRef)
+      .eq('accountRef', args.accountRef))
+    .unique()
+  const base = existing === null ? VIRTUAL_DEFAULT_PREFERENCE_FIELDS : preferenceFieldsFromRow(existing)
+  const off = STREAM_OFF_FIELDS[args.stream]
+  if (existing !== null && Object.entries(off).every(([key, value]) => base[key as keyof PreferenceFields] === value)) {
+    return true
+  }
+
+  const merged = { ...base, ...off }
+  const now = Date.now()
+  const lastCorrelationRef = `unsubscribe:${args.stream}`
+  if (existing === null) {
+    await ctx.db.insert('userNotificationPreferences', {
+      principalRef: args.principalRef,
+      accountRef: args.accountRef,
+      ...merged,
+      lowCreditThresholdCents: merged.lowCreditThresholdCents as 1000 | 2500 | 5000,
+      revision: 1,
+      updatedAt: now,
+      lastCorrelationRef,
+    })
+  } else {
+    await ctx.db.patch(existing._id, {
+      ...merged,
+      lowCreditThresholdCents: merged.lowCreditThresholdCents as 1000 | 2500 | 5000,
+      revision: existing.revision + 1,
+      updatedAt: now,
+      lastCorrelationRef,
+    })
+  }
+  return true
 }
 
 export async function readPreferencesHandler(ctx: QueryCtx) {

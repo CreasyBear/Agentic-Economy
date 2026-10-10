@@ -144,6 +144,8 @@ const durableTables = [
   'actionExecutionHistory',
   'notificationDeliveries',
   'principalNotificationEmails',
+  'emailSuppressions',
+  'emailWebhookEvents',
   'userNotificationPreferences',
   'marketActiveTools',
   'marketActiveProviders',
@@ -199,7 +201,11 @@ const requiredIndexes = {
   ],
   notificationDeliveries: [
     'by_recipient_account_event_source',
+    'by_vendorMessageId',
+    'by_state_and_updatedAt',
   ],
+  emailSuppressions: ['by_addressHash', 'by_createdAt'],
+  emailWebhookEvents: ['by_svixId'],
   consequenceProofUses: ['by_reverificationId'],
   authorityDelegationGrants: [
     'by_grantRef',
@@ -475,6 +481,53 @@ const requiredIndexes = {
 } satisfies Record<string, readonly string[]>
 
 describe('Convex schema', () => {
+  it('keeps existing delivery rows valid and accepts the email system fields', async () => {
+    const backend = convexTest(schema, convexModules)
+    const base = {
+      deliveryRef: 'del:legacy',
+      recipientPrincipalRef: 'prn_owner',
+      accountRef: 'acc_owner',
+      eventKind: 'agent_approval_requested' as const,
+      sourceEventRef: 'approval:1',
+      state: 'sent' as const,
+      createdAt: 1,
+      updatedAt: 1,
+    }
+    const result = await backend.run(async (ctx) => {
+      await ctx.db.insert('notificationDeliveries', base)
+      await ctx.db.insert('notificationDeliveries', {
+        ...base,
+        deliveryRef: 'del:new',
+        eventKind: 'credit_exhausted',
+        sourceEventRef: 'crossing:1',
+        stream: 'transactional',
+        required: true,
+        state: 'delivered',
+        vendorMessageId: 'resend_msg_1',
+        lastEventAt: 5,
+      })
+      await ctx.db.insert('emailSuppressions', {
+        addressHash: 'sha256:addr',
+        domain: 'example.com',
+        reason: 'hard_bounce',
+        sourceDeliveryRef: 'del:new',
+        createdAt: 6,
+      })
+      await ctx.db.insert('emailWebhookEvents', { svixId: 'msg_1', receivedAt: 7 })
+      return {
+        byVendor: await ctx.db.query('notificationDeliveries')
+          .withIndex('by_vendorMessageId', (query) => query.eq('vendorMessageId', 'resend_msg_1'))
+          .unique(),
+        suppression: await ctx.db.query('emailSuppressions')
+          .withIndex('by_addressHash', (query) => query.eq('addressHash', 'sha256:addr'))
+          .unique(),
+      }
+    })
+
+    expect(result.byVendor).toMatchObject({ stream: 'transactional', required: true, state: 'delivered' })
+    expect(result.suppression).toMatchObject({ reason: 'hard_bounce', domain: 'example.com' })
+  })
+
   const exportSchema = Reflect.get(schema, 'export')
   if (typeof exportSchema !== 'function') {
     throw new Error('Convex schema export function is unavailable')

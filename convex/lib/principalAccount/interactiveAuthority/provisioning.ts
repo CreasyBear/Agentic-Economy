@@ -25,6 +25,7 @@ import {
   requireCurrentInteractiveSession,
 } from './sessionProof'
 import { emitJourneyEvent } from '../../journey/events'
+import { enqueueEmail } from '../notifications/enqueue'
 
 function interactiveOwnerDigest(kind: string, tokenIdentifier: string): string {
   return canonicalDigest({ kind, tokenIdentifier }).slice('sha256:'.length, 'sha256:'.length + 32)
@@ -65,7 +66,7 @@ export type OwnerIdentityProvisioningRefs = Readonly<{
  * drifted or ambiguous credentials fail closed.
  */
 export async function ensureOwnerIdentityForAuthenticatedIdentity(
-  ctx: Pick<MutationCtx, 'db' | 'scheduler'>,
+  ctx: MutationCtx,
   identity: UserIdentity,
 ): Promise<OwnerIdentityProvisioningRefs | null> {
   const tokenIdentifier = identity.tokenIdentifier
@@ -280,7 +281,7 @@ async function issueOwnerCredentialGeneration(
 }
 
 async function provisionOwnerIdentity(
-  ctx: Pick<MutationCtx, 'db' | 'scheduler'>,
+  ctx: MutationCtx,
   tokenIdentifier: string,
   expiresAt: number,
   displayName: string,
@@ -335,6 +336,10 @@ async function provisionOwnerIdentity(
     },
   })
   await emitJourneyEvent(ctx, accountRef, 'signed_up')
+  await enqueueEmail(ctx, {
+    eventKind: 'welcome', stream: 'transactional', recipientPrincipalRef: principalRef,
+    accountRef, sourceEventRef: accountRef,
+  })
   await ctx.db.insert('externalIdentityBindings', {
     bindingRef,
     principalRef,

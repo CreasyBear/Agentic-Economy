@@ -4,24 +4,28 @@ import { createClerkClient } from '@clerk/backend'
 import { v, type Infer } from 'convex/values'
 
 import { degradeBackend } from '../src/lib/observability/degrade-backend'
+import { subject as operatorDigestSubject } from '../src/emails/templates/operator-digest'
+import { renderEmail, type EmailInput } from '../src/emails/render'
 import { internal } from './_generated/api'
 import { internalAction } from './_generated/server'
-import { sendApprovalEmailResult } from './lib/principalAccount/notifications/delivery'
+import { sendDeliveryEmailResult } from './lib/principalAccount/notifications/delivery'
+import { emailAddressHash } from './lib/principalAccount/notifications/suppression'
 import { postResendEmail } from './lib/principalAccount/notifications/resend'
 import { buildDigest, operatorDate } from './operatorDigest'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 /** The operator reads the digest in Sydney, so the subject and idempotency key use that calendar day. */
 
-export const sendApprovalEmail = internalAction({
+export const sendDeliveryEmail = internalAction({
   args: { deliveryId: v.id('notificationDeliveries') },
-  returns: sendApprovalEmailResult,
-  handler: async (ctx, { deliveryId }): Promise<Infer<typeof sendApprovalEmailResult>> => {
+  returns: sendDeliveryEmailResult,
+  handler: async (ctx, { deliveryId }): Promise<Infer<typeof sendDeliveryEmailResult>> => {
     const resendApiKey = process.env.RESEND_API_KEY?.trim()
     const fromEmail = process.env.NOTIFICATION_FROM_EMAIL?.trim()
     const clerkSecretKey = process.env.CLERK_SECRET_KEY?.trim()
     if (!resendApiKey || !fromEmail || !clerkSecretKey) {
       degradeBackend(new Error('notification_sender_credentials_missing'), undefined, {
-        site: 'sendApprovalEmail',
+        site: 'sendDeliveryEmail',
         reason: 'source_unavailable',
       })
       return { outcome: 'suppressed', code: 'sender_not_configured' }
@@ -37,19 +41,36 @@ export const sendApprovalEmail = internalAction({
       return { outcome: 'failed', code: 'no_verified_email' }
     }
 
-    const fresh=await ctx.runQuery(internal.notifications.readNotificationContext,{deliveryId})
-    if(fresh.kind==='skip')return {outcome:'suppressed',code:fresh.code}
-    if(fresh.deliveryRef!==context.deliveryRef||fresh.clerkUserId!==context.clerkUserId||fresh.subject!==context.subject||fresh.text!==context.text||fresh.unsubscribeUrl!==context.unsubscribeUrl)return {outcome:'suppressed',code:'notification_context_changed'}
+    const fresh = await ctx.runQuery(internal.notifications.readNotificationContext, { deliveryId })
+    if (fresh.kind === 'skip') return { outcome: 'suppressed', code: fresh.code }
+    // Props digest: a change in what the email is built from between the two reads stops the send.
+    if (canonicalDigest(fresh.email) !== canonicalDigest(context.email)) return { outcome: 'suppressed', code: 'notification_context_changed' }
 
+    // The Clerk address is the one Resend will receive, so bounce and complaint records are matched here.
+    const suppressed = await ctx.runQuery(internal.notifications.readSendSuppression, {
+      deliveryId,
+      addressHash: await emailAddressHash(primaryEmail.emailAddress),
+    })
+    if (suppressed !== null) return { outcome: 'suppressed', code: suppressed }
+
+    const rendered = await renderEmail(context.email as EmailInput)
+    // Only alert and lifecycle props carry an unsubscribe target; required mail has none.
+    const unsubscribeUrl = (context.email.props as { unsubscribeUrl?: string }).unsubscribeUrl
     return await postResendEmail({
       apiKey: resendApiKey,
       from: fromEmail,
       to: primaryEmail.emailAddress,
-      subject: context.subject,
-      text: context.text,
+      subject: rendered.subject,
+      text: rendered.text,
+      html: rendered.html,
       idempotencyKey: context.deliveryRef,
-      ...(context.unsubscribeUrl === undefined ? {} : {
-        headers: { 'List-Unsubscribe': `<${context.unsubscribeUrl}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' },
+      tags: [
+        { name: 'stream', value: context.stream },
+        { name: 'event_kind', value: context.email.eventKind },
+        { name: 'env', value: process.env.AE_DEPLOYMENT_ENVIRONMENT?.trim() || 'unknown' },
+      ],
+      ...(unsubscribeUrl === undefined ? {} : {
+        headers: { 'List-Unsubscribe': `<${unsubscribeUrl}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' },
       }),
     })
   },
@@ -78,7 +99,7 @@ export const sendOperatorDigest = internalAction({
       apiKey: resendApiKey,
       from: fromEmail,
       to: operatorEmail,
-      subject: `AE stalled accounts, ${date}`,
+      subject: operatorDigestSubject({ date, siteUrl: '', lines: [] }),
       text: digest.text,
       idempotencyKey: `operator-digest:${date}`,
     })

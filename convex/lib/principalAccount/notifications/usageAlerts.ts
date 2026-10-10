@@ -5,10 +5,14 @@ import { internal } from '../../../_generated/api'
 import { notificationWorkpool } from '../../../notificationWorkpool'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { usageReportSummarySchema } from '@/lib/export/usage-report-summary'
+import { formatCurrencyAmount } from '@/modules/money/public'
 import { usageAlertEvidenceSchema } from '@/modules/principal-account/public'
 import { assertAdmission } from '../../platform/rateLimit'
 import { resolveClerkUserIdForPrincipal } from '../workspace/directory'
+import { enqueueEmail } from './enqueue'
+import { unsubscribeUrlFor } from './unsubscribe'
 const exact=/^(?:0|[1-9]\d*)$/u
+const MONTH_NAMES=['January','February','March','April','May','June','July','August','September','October','November','December']
 const monthAt=(at:number)=>new Date(at).toISOString().slice(0,7)
 
 export async function activeUsagePolicy(ctx:Pick<QueryCtx,'db'>,accountRef:string){
@@ -27,13 +31,7 @@ async function enqueue(ctx:MutationCtx,accountRef:string,evidence:unknown,source
   const allowed=data.kind==='low_credit_balance'?prefs.lowCreditBalance:data.kind==='call_failure_spike'?prefs.callFailureSpike:data.kind==='invoice_ready'?prefs.invoiceReady:prefs.spendCapWarning
   if(!allowed)return
   const sourceEventRef=canonicalDigest({format:'ae.usage-alert-episode:v1',sourceKey,preferenceRevision:prefs.revision,authorityRevisionAccount:account.revision})
-  const existing=await ctx.db.query('notificationDeliveries').withIndex('by_recipient_account_event_source',q=>q.eq('recipientPrincipalRef',prefs.principalRef).eq('accountRef',accountRef).eq('eventKind',data.kind).eq('sourceEventRef',sourceEventRef)).unique()
-  if(existing!==null)return
-  const rate=await assertAdmission(ctx,{name:'agent-approval-email',key:`usage:${accountRef}`}),now=Date.now()
-  const deliveryId=await ctx.db.insert('notificationDeliveries',{deliveryRef:`notification:${crypto.randomUUID()}`,recipientPrincipalRef:prefs.principalRef,accountRef,eventKind:data.kind,sourceEventRef,usageEvidenceJson:JSON.stringify(data),preferenceRevision:prefs.revision,authorityRevisionAccount:account.revision,state:rate.ok?'pending':'suppressed',...(rate.ok?{}:{suppressCode:'notification_rate_limited'}),createdAt:now,updatedAt:now})
-  if(!rate.ok)return
-  const workId=await notificationWorkpool.enqueueAction(ctx,internal.notificationDelivery.sendApprovalEmail,{deliveryId},{retry:true,onComplete:internal.notifications.completeDelivery,context:{deliveryId}})
-  await ctx.db.patch(deliveryId,{workId})
+  await enqueueEmail(ctx,{eventKind:data.kind,stream:data.kind==='invoice_ready'?'transactional':'alert',recipientPrincipalRef:prefs.principalRef,accountRef,sourceEventRef,evidence:{usageEvidenceJson:JSON.stringify(data),preferenceRevision:prefs.revision,authorityRevisionAccount:account.revision}})
 }
 export async function enqueueReportUsageAlerts(ctx:MutationCtx,reportRef:string){
   const row=await ctx.db.query('capabilityUsageReports').withIndex('by_reportRef',q=>q.eq('reportRef',reportRef)).unique()
@@ -53,7 +51,7 @@ export async function enqueueDocumentUsageAlert(ctx:MutationCtx,documentRef:stri
 }
 export async function enqueueMoneyAlertEvaluation(ctx:MutationCtx,accountRef:string,captureOperational=false){
   if(await activeUsagePolicy(ctx,accountRef)===null)return
-  const rate=await assertAdmission(ctx,{name:'agent-approval-email',key:`usage-evaluation:${accountRef}`})
+  const rate=await assertAdmission(ctx,{name:'email-alert',key:`usage-evaluation:${accountRef}`})
   if(!rate.ok)return
   await notificationWorkpool.enqueueAction(ctx,internal.notifications.evaluateUsageMoneyAlerts,{accountRef,captureOperational},{retry:true})
 }
@@ -61,8 +59,8 @@ export const usageMoneyEvidenceArgs={accountRef:v.string(),observedAt:v.number()
 export async function enqueueMoneyUsageAlertsHandler(ctx:MutationCtx,args:{accountRef:string;observedAt:number;availableCreditUnits?:string;grossSpendUnits?:string;month:string}):Promise<null>{
   const context=await activeUsagePolicy(ctx,args.accountRef);if(context===null)return null
   const now=Date.now();if(args.month!==monthAt(now)||args.observedAt>now||now-args.observedAt>60000)return null
-  const {prefs,policy}=context
-  if(args.availableCreditUnits!==undefined&&exact.test(args.availableCreditUnits)&&BigInt(args.availableCreditUnits)<=BigInt(prefs.lowCreditThresholdCents)*10000n)await enqueue(ctx,args.accountRef,{format:'ae.usage-alert:v1',kind:'low_credit_balance',month:args.month,sourceDigest:canonicalDigest({format:'ae.native-available-credit:v1',...args}),observedAt:args.observedAt,text:`Available credit is at or below your saved A$${prefs.lowCreditThresholdCents/100} threshold. Purchased and eligible promotional credit are included; the native balance may change after this observation.`},`${args.month}:low-credit`)
+  const {prefs,policy}=context,thresholdCents=prefs.lowCreditThresholdCents
+  if(Number.isSafeInteger(thresholdCents)&&thresholdCents>=0&&args.availableCreditUnits!==undefined&&exact.test(args.availableCreditUnits)&&BigInt(args.availableCreditUnits)<=BigInt(thresholdCents)*10000n)await enqueue(ctx,args.accountRef,{format:'ae.usage-alert:v1',kind:'low_credit_balance',month:args.month,sourceDigest:canonicalDigest({format:'ae.native-available-credit:v1',...args}),observedAt:args.observedAt,text:`Available credit is at or below your saved ${formatCurrencyAmount({currency:'AUD',units:String(thresholdCents*10000),exponent:6})} threshold. Purchased and eligible promotional credit are included; the native balance may change after this observation.`},`${args.month}:low-credit`)
   const budget=await ctx.db.query('moneyMonthlySpendBudgets').withIndex('by_accountRef',q=>q.eq('accountRef',args.accountRef)).unique()
   if(budget?.enabled===true&&exact.test(budget.ceilingUnits)&&BigInt(budget.ceilingUnits)>0n&&args.grossSpendUnits!==undefined&&exact.test(args.grossSpendUnits)){
     const gross=BigInt(args.grossSpendUnits),ceiling=BigInt(budget.ceilingUnits),exceeded=gross>=ceiling
@@ -89,10 +87,22 @@ export async function readUsageDeliveryContext(ctx:QueryCtx,delivery:Doc<'notifi
   const parsed=usageAlertEvidenceSchema.safeParse(evidence)
   if(!parsed.success||parsed.data.kind!==delivery.eventKind)return {kind:'skip' as const,code:'usage_alert_evidence_invalid'}
   const site=process.env.AE_SITE_URL?.trim();if(!site)return {kind:'skip' as const,code:'site_url_missing'}
-  let url:URL
-  try{url=new URL('/owner/credit',site)}catch{return {kind:'skip' as const,code:'site_url_invalid'}}
-  if(!['https:','http:'].includes(url.protocol))return {kind:'skip' as const,code:'site_url_invalid'}
+  let siteUrl:string
+  try{
+    const url=new URL(site)
+    if(!['https:','http:'].includes(url.protocol))return {kind:'skip' as const,code:'site_url_invalid'}
+    siteUrl=url.origin
+  }catch{return {kind:'skip' as const,code:'site_url_invalid'}}
   const clerkUserId=await resolveClerkUserIdForPrincipal(ctx.db,delivery.recipientPrincipalRef)
   if(clerkUserId===null)return {kind:'skip' as const,code:'no_clerk_identity'}
-  return {kind:'ready' as const,deliveryRef:delivery.deliveryRef,clerkUserId,subject:parsed.data.kind==='invoice_ready'?'Monthly usage statement ready':'Account usage alert',text:`${parsed.data.text}\n\nObserved: ${new Date(parsed.data.observedAt).toISOString()}\nReview your Account: ${url.toString()}\n\nAn alert does not create charges or change authority. Delivery is limited to one alert of each kind per UTC month and policy revision; issued statements have their own notice.\n`}
+  const stream=delivery.stream??'transactional'
+  const data=parsed.data
+  if(data.kind==='invoice_ready'){
+    // Statements are required mail: no unsubscribe target.
+    const periodLabel=MONTH_NAMES[Number(data.month.slice(5,7))-1]??data.month
+    return {kind:'ready' as const,deliveryRef:delivery.deliveryRef,clerkUserId,stream,email:{eventKind:data.kind,props:{siteUrl,periodLabel}}}
+  }
+  const unsubscribeUrl=await unsubscribeUrlFor({principalRef:delivery.recipientPrincipalRef,accountRef:delivery.accountRef,stream:'alert'})
+  if(unsubscribeUrl===null)return {kind:'skip' as const,code:'unsubscribe_url_missing'}
+  return {kind:'ready' as const,deliveryRef:delivery.deliveryRef,clerkUserId,stream,email:{eventKind:data.kind,props:{siteUrl,body:data.text,observedAt:new Date(data.observedAt).toISOString(),unsubscribeUrl}}}
 }
