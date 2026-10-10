@@ -4,11 +4,40 @@ import { Webhook } from 'svix'
 import { v } from 'convex/values'
 
 import { degradeBackend } from '../src/lib/observability/degrade-backend'
+import { isProductAnalyticsDisabled, readObservabilityServerConfig } from '../src/lib/observability/config'
 import { internal } from './_generated/api'
 import { internalAction } from './_generated/server'
 import { emailAddressHash, emailDomain } from './lib/principalAccount/notifications/suppression'
 
 type ResendEvent = { type: string; emailId: string; address: string; permanentBounce: boolean }
+
+/** Best-effort PostHog batch post to the same host journeyEvents forwards to. Failures stay silent, since a network error can carry request data. */
+async function captureEmailEvent(event: string, properties: Record<string, string | number | boolean>): Promise<void> {
+  const env = process.env as Record<string, string | undefined>
+  if (isProductAnalyticsDisabled(env)) return
+  const config = readObservabilityServerConfig(env)
+  if (config.posthogKey === undefined) return
+  try {
+    const response = await fetch(`${config.posthogHost.replace(/\/+$/u, '')}/batch/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        api_key: config.posthogKey,
+        batch: [{
+          event,
+          distinct_id: 'ae.email',
+          timestamp: new Date().toISOString(),
+          properties: { ...properties, $process_person_profile: false, $geoip_disable: true },
+        }],
+      }),
+      redirect: 'error',
+      signal: AbortSignal.timeout(5_000),
+    })
+    void response.body?.cancel().catch(() => {})
+  } catch {
+    // Diagnostics never change the webhook answer.
+  }
+}
 
 /** Pulls the fields the state machine needs from a signature-verified Resend payload. Null means the payload has no usable address. */
 function parseResendEvent(event: unknown): ResendEvent | null {
@@ -56,7 +85,7 @@ export const receiveResendWebhook = internalAction({
 
     const event = parseResendEvent(payload)
     if (event === null) return 'ignored'
-    return await ctx.runMutation(internal.notifications.applyResendEvent, {
+    const result = await ctx.runMutation(internal.notifications.applyResendEvent, {
       svixId: args.svixId,
       type: event.type,
       emailId: event.emailId,
@@ -64,5 +93,15 @@ export const receiveResendWebhook = internalAction({
       domain: emailDomain(event.address),
       permanentBounce: event.permanentBounce,
     })
+    if (result.outcome === 'duplicate') return 'duplicate'
+    if (event.type === 'email.bounced' || event.type === 'email.complained') {
+      await captureEmailEvent(event.type === 'email.bounced' ? 'ae.email.bounced' : 'ae.email.complained', {
+        stream: result.stream,
+        event_kind: result.eventKind,
+        env: process.env.AE_DEPLOYMENT_ENVIRONMENT?.trim() || 'unknown',
+        ...(event.type === 'email.bounced' ? { permanent: event.permanentBounce } : {}),
+      })
+    }
+    return 'applied'
   },
 })

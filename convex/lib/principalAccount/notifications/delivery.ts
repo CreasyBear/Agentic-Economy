@@ -31,15 +31,21 @@ export const resendEventArgs = {
   permanentBounce: v.boolean(),
 }
 
+/** Stream and kind come back so the webhook action can label its PostHog event; they are 'unknown' when no delivery row matches. */
+export const resendEventResult = v.union(
+  v.object({ outcome: v.literal('duplicate') }),
+  v.object({ outcome: v.literal('applied'), stream: v.string(), eventKind: v.string() }),
+)
+
 /** A replayed svix-id is a duplicate and changes nothing. Delivery states move only up the rank order, so a late
  * "delivered" never overwrites a bounce. Suppressions do not depend on the delivery row, which can lag the send. */
 export async function applyResendEventHandler(
   ctx: MutationCtx,
   args: { svixId: string; type: string; emailId: string; addressHash: string; domain: string; permanentBounce: boolean },
-): Promise<'applied' | 'duplicate'> {
+): Promise<Infer<typeof resendEventResult>> {
   const seen = await ctx.db.query('emailWebhookEvents')
     .withIndex('by_svixId', (query) => query.eq('svixId', args.svixId)).unique()
-  if (seen !== null) return 'duplicate'
+  if (seen !== null) return { outcome: 'duplicate' }
   const now = Date.now()
   await ctx.db.insert('emailWebhookEvents', { svixId: args.svixId, receivedAt: now })
 
@@ -61,7 +67,7 @@ export async function applyResendEventHandler(
   if (delivery !== null && target !== null && notificationDeliveryStateRank[delivery.state] < notificationDeliveryStateRank[target]) {
     await ctx.db.patch(delivery._id, { state: target, lastEventAt: now, updatedAt: now })
   }
-  return 'applied'
+  return { outcome: 'applied', stream: delivery?.stream ?? 'unknown', eventKind: delivery?.eventKind ?? 'unknown' }
 }
 
 export const readNotificationContextArgs = { deliveryId: v.id('notificationDeliveries') }

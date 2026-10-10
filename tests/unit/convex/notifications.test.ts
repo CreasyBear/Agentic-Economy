@@ -8,6 +8,7 @@ import { enqueueEmail } from '../../../convex/lib/principalAccount/notifications
 import type { Id } from '../../../convex/_generated/dataModel'
 import { emailAddressHash } from '../../../convex/lib/principalAccount/notifications/suppression'
 import { signUnsubscribeToken } from '../../../convex/lib/principalAccount/notifications/unsubscribe'
+import { buildDigest } from '../../../convex/operatorDigest'
 import { convexTestWithWorkers } from '../../helpers/convex-fixtures'
 import { samIdentity } from '../../helpers/interactive-authority-provisioning'
 import {
@@ -1139,5 +1140,105 @@ describe('resend delivery webhook', () => {
     await expect(backend.query(internal.notifications.readSendSuppression, { deliveryId: lifecycleId, addressHash })).resolves.toBe('complaint_suppressed')
     await expect(backend.query(internal.notifications.readSendSuppression, { deliveryId: requiredId, addressHash })).resolves.toBeNull()
     await expect(backend.query(internal.notifications.readSendSuppression, { deliveryId: operatorId, addressHash })).resolves.toBeNull()
+  })
+})
+
+describe('email deliverability observability', () => {
+  const DAY_MS = 24 * 3_600_000
+
+  async function seedDeliverabilityRows(backend: InteractiveAuthorityBackend, now: number) {
+    await backend.run(async (ctx) => {
+      const delivery = (state: 'bounced' | 'complained' | 'failed' | 'delivered', updatedAt: number, index: number) =>
+        ctx.db.insert('notificationDeliveries', {
+          deliveryRef: `notification:deliverability-${index}`,
+          recipientPrincipalRef: PRINCIPAL_REF,
+          accountRef: ACCOUNT_REF,
+          eventKind: 'agent_approval_requested',
+          stream: 'transactional',
+          sourceEventRef: `source:deliverability-${index}`,
+          state,
+          createdAt: updatedAt,
+          updatedAt,
+        })
+      await delivery('bounced', now - 1_000, 1)
+      await delivery('bounced', now - 2 * DAY_MS, 2)
+      await delivery('complained', now - 1_000, 3)
+      await delivery('failed', now - 1_000, 4)
+      await delivery('delivered', now - 1_000, 5)
+      await ctx.db.insert('emailSuppressions', { addressHash: 'hash_recent', domain: 'example.test', reason: 'hard_bounce', sourceDeliveryRef: 'del:recent', createdAt: now - 1_000 })
+      await ctx.db.insert('emailSuppressions', { addressHash: 'hash_old', domain: 'example.test', reason: 'complaint', sourceDeliveryRef: 'del:old', createdAt: now - 2 * DAY_MS })
+    })
+  }
+
+  it('counts bounces, complaints and failures from the last 24 hours, and suppressions added in that window', async () => {
+    const backend = await createNotificationBackend()
+    const now = Date.now()
+    await seedDeliverabilityRows(backend, now)
+
+    await expect(backend.query(internal.operatorDigest.deliverability, { since: now - DAY_MS }))
+      .resolves.toEqual({ bounced: 1, complained: 1, failed: 1, suppressed: 1 })
+  })
+
+  it('leads the operator digest with the deliverability line', async () => {
+    const backend = await createNotificationBackend()
+    const now = Date.now()
+    await seedDeliverabilityRows(backend, now)
+    const runQuery = ((reference: Parameters<typeof backend.query>[0], args: Record<string, unknown>) =>
+      backend.query(reference, args as never)) as never
+
+    const digest = await buildDigest({ runQuery }, now)
+
+    expect(digest.text.split('\n')[0]).toBe('Deliverability, last 24h: 1 bounced, 1 complained, 1 failed, 1 suppressed.')
+  })
+
+  it('forwards a bounce or complaint to PostHog once per svix id, with stream and kind but no address', async () => {
+    vi.stubEnv('RESEND_WEBHOOK_SECRET', WEBHOOK_SECRET)
+    vi.stubEnv('POSTHOG_KEY', 'phc_test_key')
+    const realFetch = globalThis.fetch
+    const posthog = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) =>
+      String(input).includes('/batch/') ? new Response(null, { status: 200 }) : await realFetch(input, init))
+    const backend = await createNotificationBackend()
+    const now = Date.now()
+    await backend.run((ctx) => ctx.db.insert('notificationDeliveries', {
+      deliveryRef: 'notification:webhook-em_ph_1',
+      recipientPrincipalRef: PRINCIPAL_REF,
+      accountRef: ACCOUNT_REF,
+      eventKind: 'agent_approval_requested',
+      stream: 'transactional',
+      sourceEventRef: 'source:em_ph_1',
+      vendorMessageId: 'em_ph_1',
+      state: 'sent',
+      createdAt: now,
+      updatedAt: now,
+    }))
+
+    const body = JSON.stringify({
+      type: 'email.bounced',
+      data: { email_id: 'em_ph_1', to: ['owner@example.test'], bounce: { type: 'Permanent', message: 'test bounce' } },
+    })
+    const timestamp = new Date()
+    const post = () => backend.fetch('/resend/webhook', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'svix-id': 'msg_ph_1',
+        'svix-timestamp': String(Math.floor(timestamp.getTime() / 1000)),
+        'svix-signature': new Webhook(WEBHOOK_SECRET).sign('msg_ph_1', timestamp, body),
+      },
+      body,
+    })
+    await post()
+    await post()
+
+    const batches = posthog.mock.calls
+      .filter(([input]) => String(input).includes('/batch/'))
+      .map(([, init]) => String(init?.body))
+    posthog.mockRestore()
+    expect(batches).toHaveLength(1)
+    expect(JSON.parse(batches[0]!)).toMatchObject({
+      api_key: 'phc_test_key',
+      batch: [{ event: 'ae.email.bounced', properties: { stream: 'transactional', event_kind: 'agent_approval_requested', permanent: true } }],
+    })
+    expect(batches[0]).not.toContain('owner@example.test')
   })
 })

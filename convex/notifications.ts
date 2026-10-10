@@ -15,6 +15,7 @@ import {
   readSendSuppressionArgs,
   readSendSuppressionHandler,
   resendEventArgs,
+  resendEventResult,
 } from './lib/principalAccount/notifications/delivery'
 import { enqueueAgentApprovalRequestedHandler } from './lib/principalAccount/notifications/enqueue'
 import { paginationOptsValidator } from 'convex/server'
@@ -109,7 +110,7 @@ export const readSendSuppression = internalQuery({
 
 export const applyResendEvent = internalMutation({
   args: resendEventArgs,
-  returns: v.union(v.literal('applied'), v.literal('duplicate')),
+  returns: resendEventResult,
   handler: applyResendEventHandler,
 })
 

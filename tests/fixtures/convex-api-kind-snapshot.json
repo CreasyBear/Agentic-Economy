@@ -4022,6 +4022,12 @@
   {
     "visibility": "internal",
     "module": "operatorDigest",
+    "method": "deliverability",
+    "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "operatorDigest",
     "method": "enqueue",
     "kind": "mutation"
   },

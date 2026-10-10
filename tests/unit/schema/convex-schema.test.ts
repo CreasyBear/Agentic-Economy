@@ -202,8 +202,9 @@ const requiredIndexes = {
   notificationDeliveries: [
     'by_recipient_account_event_source',
     'by_vendorMessageId',
+    'by_state_and_updatedAt',
   ],
-  emailSuppressions: ['by_addressHash'],
+  emailSuppressions: ['by_addressHash', 'by_createdAt'],
   emailWebhookEvents: ['by_svixId'],
   consequenceProofUses: ['by_reverificationId'],
   authorityDelegationGrants: [

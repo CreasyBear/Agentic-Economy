@@ -326,11 +326,13 @@ export const accountTables = {
       'sourceEventRef',
     ])
     .index('by_accountRef_and_createdAt', ['accountRef', 'createdAt'])
-    .index('by_vendorMessageId', ['vendorMessageId']),
+    .index('by_vendorMessageId', ['vendorMessageId'])
+    .index('by_state_and_updatedAt', ['state', 'updatedAt']),
   principalNotificationEmails: defineTable(principalNotificationEmailValue)
     .index('by_principalRef', ['principalRef']),
   emailSuppressions: defineTable(emailSuppressionValue)
-    .index('by_addressHash', ['addressHash']),
+    .index('by_addressHash', ['addressHash'])
+    .index('by_createdAt', ['createdAt']),
   emailWebhookEvents: defineTable(emailWebhookEventValue)
     .index('by_svixId', ['svixId']),
 } as const

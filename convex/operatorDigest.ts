@@ -21,6 +21,8 @@ const LIST_CAP = 25
 const INTENT_CHARS = 140
 const HOUR_MS = 3_600_000
 const PAGE_SIZE = 200
+const DELIVERABILITY_WINDOW_MS = 24 * HOUR_MS
+const DELIVERABILITY_CAP = 1000
 
 const SECTIONS: ReadonlyArray<readonly [StalledStep, string]> = [
   ['notFunded', 'Signed up, not funded'],
@@ -50,6 +52,34 @@ export const intents = internalQuery({
     return rows.flatMap(row => row === null ? [] : [{ accountRef: row.accountRef, text: row.text }])
   },
 })
+
+type Deliverability = { bounced: number; complained: number; failed: number; suppressed: number }
+
+/** Each count stops at DELIVERABILITY_CAP rows, so the digest query stays bounded. */
+export const deliverability = internalQuery({
+  args: { since: v.number() },
+  returns: v.object({ bounced: v.number(), complained: v.number(), failed: v.number(), suppressed: v.number() }),
+  handler: async (ctx, { since }): Promise<Deliverability> => {
+    const countState = async (state: 'bounced' | 'complained' | 'failed') => (await ctx.db.query('notificationDeliveries')
+      .withIndex('by_state_and_updatedAt', q => q.eq('state', state).gte('updatedAt', since))
+      .take(DELIVERABILITY_CAP)).length
+    return {
+      bounced: await countState('bounced'),
+      complained: await countState('complained'),
+      failed: await countState('failed'),
+      suppressed: (await ctx.db.query('emailSuppressions')
+        .withIndex('by_createdAt', q => q.gte('createdAt', since))
+        .take(DELIVERABILITY_CAP)).length,
+    }
+  },
+})
+
+/** One line above the stalled sections, so a bounce or complaint spike reads before the stalled counts. */
+export function formatDeliverability(counts: Deliverability): string {
+  const shown = (count: number) => count >= DELIVERABILITY_CAP ? `${DELIVERABILITY_CAP}+` : String(count)
+  return `Deliverability, last 24h: ${shown(counts.bounced)} bounced, ${shown(counts.complained)} complained, `
+    + `${shown(counts.failed)} failed, ${shown(counts.suppressed)} suppressed.`
+}
 
 type Stalled = Record<StalledStep, StalledAccount[]>
 
@@ -107,8 +137,9 @@ export async function buildDigest(ctx: Pick<ActionCtx, 'runQuery'>, now: number)
   const rows: Array<{ accountRef: string; text: string }> = listed.length === 0
     ? []
     : await ctx.runQuery(internal.operatorDigest.intents, { accountRefs: listed })
+  const counts: Deliverability = await ctx.runQuery(internal.operatorDigest.deliverability, { since: now - DELIVERABILITY_WINDOW_MS })
   return {
-    text: formatDigest(stalled, new Map(rows.map(row => [row.accountRef, row.text])), now),
+    text: [formatDeliverability(counts), '', formatDigest(stalled, new Map(rows.map(row => [row.accountRef, row.text])), now)].join('\n'),
     counts: { notFunded: stalled.notFunded.length, noAgent: stalled.noAgent.length, neverCalled: stalled.neverCalled.length },
   }
 }
