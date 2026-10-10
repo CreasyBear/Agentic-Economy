@@ -15,7 +15,7 @@ const answerModelRequestColumns: DataColumn<AnswerModelRequest>[] = [
   {
     key: 'requestRef',
     label: 'Request',
-    sortable: true,
+    truncate: true,
     sortValue: (request) => request.providerGenerationId ?? request.requestRef,
     render: (_value, request) => {
       const identity = request.providerGenerationId ?? request.requestRef
@@ -29,7 +29,6 @@ const answerModelRequestColumns: DataColumn<AnswerModelRequest>[] = [
   {
     key: 'model',
     label: 'Model',
-    sortable: true,
     sortValue: (request) => request.model ?? request.requestedModel,
     render: (_value, request) => {
       const model = request.model ?? request.requestedModel
@@ -40,17 +39,22 @@ const answerModelRequestColumns: DataColumn<AnswerModelRequest>[] = [
     },
   },
   {
-    key: 'tokens',
-    label: 'Tokens in / out',
-    sortable: false,
+    key: 'inputTokens',
+    label: 'Input tokens',
     numeric: true,
-    render: (_value, request) => `${request.inputTokens ?? 'Unknown'} / ${request.outputTokens ?? 'Unknown'}`,
+    render: (_value, request) => request.inputTokens ?? 'Unknown',
+  },
+  {
+    key: 'outputTokens',
+    label: 'Output tokens',
+    numeric: true,
+    render: (_value, request) => request.outputTokens ?? 'Unknown',
   },
   {
     key: 'accounting',
-    label: 'USD cost',
-    sortable: false,
+    label: 'Cost (US$)',
     numeric: true,
+    sortValue: (request) => request.accounting.status === 'priced' ? Number(request.accounting.amountUsd) : undefined,
     render: (_value, request) => {
       const accounting = request.accounting
       if (accounting.status === 'priced') {
@@ -59,9 +63,9 @@ const answerModelRequestColumns: DataColumn<AnswerModelRequest>[] = [
           <span className="arc-admin-model-request-secondary" title={accounting.source === 'inline' ? 'Response usage' : 'Generation metadata'}>{accounting.source === 'inline' ? 'Response usage' : 'Generation metadata'}</span>
         </>
       }
-      if (accounting.status === 'pending') return 'Pending'
+      if (accounting.status === 'pending') return <span className="text-muted-foreground">Pending</span>
       return <>
-        <span>Unknown</span>
+        <span className="text-muted-foreground">Unknown</span>
         <span className="arc-admin-model-request-secondary" title={accounting.reason.replaceAll('_', ' ')}>{accounting.reason.replaceAll('_', ' ')}</span>
       </>
     },

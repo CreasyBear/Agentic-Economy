@@ -20,7 +20,6 @@
 .arc-market .arc-agent-directory-money { display: block; min-width: 0; color: var(--foreground); font-family: var(--font-mono, ui-monospace, monospace); font-size: 14px; font-variant-numeric: tabular-nums; line-height: 18px; white-space: normal; overflow-wrap: anywhere; }
 .arc-market .arc-agent-directory-utilization { display: grid; min-width: 140px; gap: 2px; }
 .arc-market .arc-agent-directory-connection { display: block; min-width: 0; max-width: 20rem; max-width: min(20rem, 100%); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.arc-market .arc-agent-directory-date { font-family: var(--font-mono, ui-monospace, monospace); font-size: 14px; font-variant-numeric: tabular-nums; line-height: 18px; white-space: normal; }
 .arc-market .arc-agent-console-recovery p { margin: 0; }
 .arc-market .arc-agent-console-recovery button { justify-self: start; }
 @media (max-width: 559px) { .arc-market .arc-agent-directory-actions { justify-content: flex-start; } }

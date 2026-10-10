@@ -9,7 +9,7 @@ import { operatorRouteOptions } from '@/lib/operator/route-options'
 import { captureRouteException } from '@/lib/observability/capture-route-exception'
 import { formatUtcTimestamp } from '@/lib/ui/format-time'
 import { BROWSER_READ_TIMEOUT_MS, awaitBoundedRead } from '@/lib/bounded-read'
-import { readOwnerActivityPrimaryServer } from '@/lib/server/activity.functions'
+import { readOwnerActivityPrimaryServer, readOwnerActivityReportsServer } from '@/lib/server/activity.functions'
 
 export const Route = createFileRoute('/_operator/activity')({
   staticData: {
@@ -52,23 +52,31 @@ export const Route = createFileRoute('/_operator/activity')({
       const range = { periodStartAt, periodEndAt }
       const periodStart = dateRangeFilter === 'all' ? `All recorded history through ${formatUtcTimestamp(periodEndAt)} UTC`
         : `${formatUtcTimestamp(periodStartAt)} to ${formatUtcTimestamp(periodEndAt)} UTC`
+      // The router aborts the loader signal when it discards this match; this
+      // controller also lets a failed primary read cancel its sibling.
+      const reportsController = new AbortController()
       try {
         const signal = AbortSignal.any([AbortSignal.timeout(BROWSER_READ_TIMEOUT_MS),
           ...(ctx?.abortController?.signal === undefined ? [] : [ctx.abortController.signal])])
-        const primary = await awaitBoundedRead(signal => readOwnerActivityPrimaryServer({
-          data: { ...range, ...(agent === undefined ? {} : { principalRef: agent }) }, signal,
-        }), signal)
-        if (primary.kind === 'unavailable') return primary
+        const data = { ...range, ...(agent === undefined ? {} : { principalRef: agent }) }
+        // Deferred data: started now, never awaited here, so totals cannot hold the rows.
+        const reportsSignal = AbortSignal.any([signal, reportsController.signal])
+        const reports = awaitBoundedRead(signal => readOwnerActivityReportsServer({ data, signal }), reportsSignal)
+        reports.catch(() => {}) // The hook re-awaits and captures; this only prevents an unhandled rejection.
+        const primary = await awaitBoundedRead(signal => readOwnerActivityPrimaryServer({ data, signal }), signal)
+        if (primary.kind === 'unavailable') { reportsController.abort(); return primary }
         return {
           ...primary,
           usage: { kind: 'pending' },
           spend: { kind: 'pending' },
           periodStart,
           ...range,
+          reports,
           dateRangeFilter,
           ...(agent === undefined ? {} : { filteredAgent: agent }),
         }
       } catch (cause) {
+        reportsController.abort()
         if (ctx?.abortController?.signal.aborted) throw cause
         captureRouteException(cause, { 'ae.surface': 'operator_activity_loader' })
         return { kind: 'unavailable' }

@@ -84,15 +84,15 @@ function countColumn<Key extends CountMetricKey>(key: Key, label: string): DataC
 
 const columns: Record<keyof AdminMetricDayRow, DataColumn<AdminMetricDayRow>> = {
   day: {
-    key: 'day', label: ADMIN_METRICS_COPY.columns.day, sortable: true, width: 144,
+    key: 'day', label: ADMIN_METRICS_COPY.columns.day, sortable: true,
     render: (_value, row) => <time className={styles.day} dateTime={row.day}>{row.day}</time>,
   },
   settledCallValue: {
-    key: 'settledCallValue', label: ADMIN_METRICS_COPY.columns.settledValue, sortable: false, width: 184,
+    key: 'settledCallValue', label: ADMIN_METRICS_COPY.columns.settledValue, sortable: false, numeric: true,
     render: (_value, row) => <span className={styles.cellText} title={row.settledCallValue}>{row.settledCallValue}</span>,
   },
   money: {
-    key: 'money', label: ADMIN_METRICS_COPY.columns.money, sortable: false, width: 144,
+    key: 'money', label: ADMIN_METRICS_COPY.columns.money, sortable: false,
     render: (_value, row) => <span className={styles.cellText} title={row.money}>{row.money}</span>,
   },
   settledCalls: countColumn('settledCalls', ADMIN_METRICS_COPY.columns.settledCalls),
@@ -119,7 +119,7 @@ export function MetricsDayTable({ rows }: MetricsDayTableProps) {
   const current = views.find((item) => item.value === view) ?? views[0]
   const selectedRow = selectedDayId === null ? undefined : rows.find((row) => row.day === selectedDayId)
   const detailsColumn: DataColumn<AdminMetricDayRow> = {
-    key: 'details', label: 'Details', sortable: false, width: 104,
+    key: 'details', label: 'Details', sortable: false,
     render: (_value, row) => (
       <Button
         className={styles.detailsButton}

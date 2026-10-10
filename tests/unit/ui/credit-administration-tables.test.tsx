@@ -41,7 +41,7 @@ describe('compact reconciliation records', () => {
     const table = screen.getByRole('table', { name: 'Reconciliation cases' })
     expect(within(table).getAllByRole('columnheader')).toHaveLength(5)
     expect(within(within(table).getAllByRole('row')[1]!).getAllByRole('cell').map(cell => cell.getAttribute('data-label')))
-      .toEqual(['Difference', 'Affected scope', 'Status', 'Updated', 'Inspect'])
+      .toEqual(['Case', 'Status', 'Affected scope', 'Updated', 'Inspect'])
     expect(within(table).getAllByRole('row')).toHaveLength(2)
     expect(within(table).queryByText(reconciliation.caseRef)).toBeNull()
     expect(within(table).queryByText(reconciliation.ownerPrincipalRef!)).toBeNull()
@@ -52,7 +52,7 @@ describe('compact reconciliation records', () => {
       ...reconciliation.resolutionEvidenceRefs!]) {
       expect(within(details).getByText(value)).toBeTruthy()
     }
-    expect(within(details).getByText('render digest difference')).toBeTruthy()
+    expect(within(details).getByText('Render digest difference')).toBeTruthy()
     expect(within(details).queryByRole('button', { name: /resolve|pay|retry/iu })).toBeNull()
   })
 
@@ -133,7 +133,7 @@ describe('compact Provider obligations', () => {
     const table = screen.getByRole('table', { name: 'Provider obligations' })
     expect(within(table).getAllByRole('columnheader')).toHaveLength(5)
     expect(within(within(table).getAllByRole('row')[1]!).getAllByRole('cell').map(cell => cell.getAttribute('data-label')))
-      .toEqual(['Provider', 'Buyer amount', 'Provider amount', 'State', 'Inspect'])
+      .toEqual(['Provider', 'State', 'Buyer amount', 'Provider amount', 'Inspect'])
     expect(within(table).getByText('USDC 7.654321')).toBeTruthy()
     expect(within(table).queryByText('Amount unknown')).toBeNull()
     expect(within(table).queryByText(obligation.callRef)).toBeNull()

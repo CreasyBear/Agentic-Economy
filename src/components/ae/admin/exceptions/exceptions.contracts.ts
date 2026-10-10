@@ -53,7 +53,7 @@ export type AdminResolutionRowModel = Readonly<{
   callRef: string
   href: string
   terminalStateLabel: string
-  resolvedAtLabel: string
+  terminalStateTone: 'success' | 'warning' | 'neutral'
   resolvedAtIso: string
 }>
 
@@ -186,8 +186,8 @@ export const ADMIN_EXCEPTIONS_COPY = {
     business: 'Business',
     since: 'Since',
     call: 'Call',
-    terminalState: 'Terminal state',
-    resolvedAt: 'Resolved at',
+    terminalState: 'Outcome',
+    resolvedAt: 'Resolved',
   },
   factLabels: {
     kind: 'Kind',

@@ -8,25 +8,6 @@
 .table tbody tr[data-state="selected"] td { background: color-mix(in oklch, var(--accent) 8%, var(--surface)); }
 .table tbody tr:has(:focus-visible) td { background: var(--surface-muted); }
 .table caption { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-@media (max-width: 620px) {
-  /* The resizable desktop grid declares inline pixel tracks. Card presentation
-     keeps its stored sizes but fits the local viewport instead of that track. */
-  .wrapper[data-mobile-layout="cards"] [data-slot="scroll-area-content"] { width: 100%; min-width: 0 !important; max-width: 100%; }
-  .wrapper[data-mobile-layout="cards"] [data-slot="data-grid-table-viewport"] { width: 100% !important; max-width: 100%; }
-  .wrapper[data-mobile-layout="cards"] .table { display: block; width: 100% !important; min-width: 0; max-width: 100%; }
-  .wrapper[data-mobile-layout="cards"] .table thead { display: block; }
-  .wrapper[data-mobile-layout="cards"] .table thead tr { display: flex; align-items: center; gap: var(--space-1); padding: var(--space-1) var(--space-2); overflow-x: auto; }
-  .wrapper[data-mobile-layout="cards"] .table th { display: block; width: auto !important; flex: none; position: static; border: 0; padding: 0; background: transparent; }
-  .wrapper[data-mobile-layout="cards"] .table th button { min-height: 44px; }
-  .wrapper[data-mobile-layout="cards"] .table tbody { display: block; width: 100%; }
-  .wrapper[data-mobile-layout="cards"] .table tbody tr { display: flex; width: 100%; min-height: 44px; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 6px 12px; border-bottom: 1px solid var(--border-subtle); }
-  .wrapper[data-mobile-layout="cards"] .table td { display: block; width: auto !important; min-width: 0; max-width: 100%; height: auto; border: 0; padding: 0; white-space: normal; }
-  .wrapper[data-mobile-layout="cards"] .table td:first-child,
-  .wrapper[data-mobile-layout="cards"] .table td[data-column="__ae_selection"] + td { flex: 1 1 0; font-weight: 500; }
-  .wrapper[data-mobile-layout="cards"] .table td[data-column="__ae_selection"] { flex: 0 0 44px; }
-  .wrapper[data-mobile-layout="cards"] .table td[data-numeric] { margin-left: auto; }
-  .wrapper[data-mobile-layout="cards"] .table :is(th, td)[data-slot*="fill-"] { display: none; }
-}
 @media (prefers-reduced-motion: reduce) {
   .wrapper :is(th, td, button) { transition: none; }
 }

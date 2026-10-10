@@ -5,6 +5,7 @@ import { Button } from '@/components/arc/button/button'
 import '../../RecordWorkspaceComposition.css'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeRecordTable } from '@/components/ae/operator/AeOperatorDataTable'
+import { RecordTime } from '@/components/ae/operator/RecordTime'
 import {
   ADMIN_EXCEPTIONS_COPY,
   type AdminExceptionRowModel,
@@ -13,21 +14,23 @@ import {
 
 const columns: ColumnDef<AeRecordTableFeatures, AdminExceptionRowModel, unknown>[] = [
   {
-    accessorKey: 'kindLabel',
-    header: ADMIN_EXCEPTIONS_COPY.columnLabels.kind,
-  },
-  {
     accessorKey: 'ref',
     header: ADMIN_EXCEPTIONS_COPY.columnLabels.reference,
+    meta: { truncate: true },
     cell: ({ row }) => (
-      <a className="arc-admin-record-link" href={row.original.href}>
+      <a className="arc-admin-record-link font-mono" href={row.original.href}>
         {row.original.ref}
       </a>
     ),
   },
   {
+    accessorKey: 'kindLabel',
+    header: ADMIN_EXCEPTIONS_COPY.columnLabels.kind,
+  },
+  {
     accessorKey: 'businessSlug',
     header: ADMIN_EXCEPTIONS_COPY.columnLabels.business,
+    meta: { truncate: true },
     cell: ({ row }) => row.original.businessHref === null || row.original.businessSlug === null
       ? ADMIN_EXCEPTIONS_COPY.unavailable
       : (
@@ -37,14 +40,9 @@ const columns: ColumnDef<AeRecordTableFeatures, AdminExceptionRowModel, unknown>
         ),
   },
   {
-    accessorKey: 'sinceLabel',
+    accessorKey: 'sinceIso',
     header: ADMIN_EXCEPTIONS_COPY.columnLabels.since,
-    cell: ({ row }) => (
-      <div className="grid gap-1">
-        <time dateTime={row.original.sinceIso}>{row.original.sinceLabel}</time>
-        <span className="arc-admin-record-context">{row.original.sinceRelativeLabel}</span>
-      </div>
-    ),
+    cell: ({ row }) => <RecordTime at={row.original.sinceIso} />,
   },
 ]
 

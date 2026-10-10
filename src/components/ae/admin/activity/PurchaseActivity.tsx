@@ -13,7 +13,7 @@ import type { AeDataColumn } from '@/components/ae/shared/sortable-data-table/so
 import { Button } from '@/components/arc/button/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { adminActivityHref, adminActivityWindow, type AdminActivitySearch, type AdminPurchaseRow } from '@/lib/operator/admin-console/activity'
-import { formatPerthTimestamp } from '@/lib/ui/format-time'
+import { RecordTime } from '@/components/ae/operator/RecordTime'
 import { formatCurrencyAmount } from '@/modules/money/public'
 
 const STATUS_LABELS: Record<AdminPurchaseRow['state'], string> = {
@@ -131,7 +131,7 @@ const PURCHASE_COLUMNS: AeDataColumn<PurchaseTableRow>[] = [
     ),
   },
   {
-    key: 'state', label: 'Delivery',
+    key: 'state', label: 'Status',
     render: (_value, row) => (
       <div>
         <Badge tone={row.state === 'reconciliation_required' ? 'warning' : row.state === 'completed' ? 'success' : 'neutral'}>
@@ -148,10 +148,10 @@ const PURCHASE_COLUMNS: AeDataColumn<PurchaseTableRow>[] = [
     ),
   },
   {
-    key: 'amount', label: 'Payment', sortable: false,
+    key: 'amount', label: 'Amount', sortable: false, numeric: true,
     render: (_value, row) => (
       <div>
-        <span className="whitespace-nowrap text-sm tabular-nums">
+        <span className="whitespace-nowrap text-sm">
           {row.amount === null ? 'Not confirmed' : formatCurrencyAmount(row.amount)}
         </span>
         <p className="mt-1 text-xs text-muted-foreground">{fundingLabel(row)}</p>
@@ -161,9 +161,7 @@ const PURCHASE_COLUMNS: AeDataColumn<PurchaseTableRow>[] = [
   {
     key: 'createdAt', label: 'Started', numeric: false,
     render: (_value, row) => (
-      <time className="text-xs text-muted-foreground" dateTime={new Date(row.createdAt).toISOString()}>
-        {formatPerthTimestamp(row.createdAt)}
-      </time>
+      <RecordTime at={row.createdAt} />
     ),
   },
 ]

@@ -57,8 +57,8 @@ export function AeSortableDataTable<T extends Record<string, unknown>>({
     return column.render === undefined ? String(row[column.key] ?? '–') : column.render(row[column.key], row)
   }, [columns, rows])
 
-  return <ColumnContent.Provider value={renderCell}><div className={styles.wrapper} data-mobile-layout={mobileLayout}>
-    <AeRecordTable columns={definitions} data={rows} hideFilter announceChanges keyboardNavigation
+  return <ColumnContent.Provider value={renderCell}><div className={styles.wrapper}>
+    <AeRecordTable columns={definitions} data={rows} hideFilter announceChanges keyboardNavigation mobileLayout={mobileLayout}
       caption={caption} countLabel={itemName.other} loading={loading} serverControlled={manualSorting}
       sorting={currentSorting}
       onSortingChange={updater => {

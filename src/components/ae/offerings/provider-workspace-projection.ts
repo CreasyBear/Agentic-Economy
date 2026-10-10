@@ -42,30 +42,6 @@ export type OwnerToolAvailability = 'available' | 'unavailable' | 'unknown'
 
 export type OwnerToolBadgeVariant = 'neutral' | 'info' | 'success' | 'warning' | 'danger'
 
-export function ownerToolProtocolBadgeVariant(protocolLabel: string | undefined): 'neutral' | 'info' {
-  return protocolLabel === 'MCP' ? 'info' : 'neutral'
-}
-
-export function ownerToolAvailabilityPresentation(availability: OwnerToolAvailability | undefined): Readonly<{
-  label: string
-  variant: OwnerToolBadgeVariant
-  hasDot: boolean
-}> | undefined {
-  if (availability === undefined) return undefined
-  switch (availability) {
-    case 'available':
-      return { label: getStatusPresentation('operational').label, variant: 'success', hasDot: true }
-    case 'unavailable':
-      return { label: getStatusPresentation('degraded').label, variant: 'danger', hasDot: true }
-    case 'unknown':
-      return { label: 'Checking', variant: 'warning', hasDot: false }
-    default: {
-      const _exhaustive: never = availability
-      return _exhaustive
-    }
-  }
-}
-
 export function ownerToolLifecycleVariant(
   lifecycle: string,
   pending?: boolean,

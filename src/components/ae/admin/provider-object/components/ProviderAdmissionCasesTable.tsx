@@ -1,4 +1,5 @@
-import { SortableDataTable, type DataColumn } from '@/components/arc/sortable-data-table/sortable-data-table'
+import { AeSortableDataTable as SortableDataTable } from '@/components/ae/shared/sortable-data-table/AeSortableDataTable'
+import type { AeDataColumn as DataColumn } from '@/components/ae/shared/sortable-data-table/sortable-data-table.contracts'
 
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import '../../RecordWorkspaceComposition.css'
@@ -7,34 +8,29 @@ import {
   type ProviderAdmissionCaseRow,
   type ProviderAdmissionCasesTableProps,
 } from '../provider-object.contracts'
-import { providerStatusLabel } from '@/lib/operator/admin-console/status-adapter'
-import { providerTimestamp } from '../provider-object.view-model'
+import { RecordTime } from '@/components/ae/operator/RecordTime'
+import { ProviderStatusBadge } from './ProviderStatusBadge'
 
 const columns: DataColumn<ProviderAdmissionCaseRow>[] = [
   {
     key: 'caseRef',
-    width: 240,
     sortable: false,
     label: PROVIDER_OBJECT_COPY.columns.admissionCase,
     render: (_value, row) => (
-      <AeCopyReference label={PROVIDER_OBJECT_COPY.columns.admissionCase} value={row.caseRef} />
+      <AeCopyReference compact label={PROVIDER_OBJECT_COPY.columns.admissionCase} value={row.caseRef} />
     ),
   },
   {
     key: 'state',
     sortable: false,
     label: PROVIDER_OBJECT_COPY.columns.state,
-    render: (_value, row) => providerStatusLabel(row.state),
+    render: (_value, row) => <ProviderStatusBadge value={row.state} />,
   },
   {
     key: 'updatedAt',
-    width: 180,
     sortable: false,
     label: PROVIDER_OBJECT_COPY.columns.updated,
-    render: (_value, row) => {
-      const updatedAt = providerTimestamp(row.updatedAt)
-      return <time dateTime={updatedAt.iso} style={{ whiteSpace: 'nowrap' }}>{updatedAt.label}</time>
-    },
+    render: (_value, row) => <RecordTime at={row.updatedAt} />,
   },
 ]
 
