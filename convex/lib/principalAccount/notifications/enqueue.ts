@@ -22,6 +22,10 @@ const PHASE2_KINDS = new Set<Doc<'notificationDeliveries'>['eventKind']>([
 ])
 const phase2Enabled = () => process.env.AE_EMAIL_PHASE2_ENABLED?.trim() === 'true'
 
+/** Phase 3 lifecycle and provider notices stay dark until AE_EMAIL_PHASE3_ENABLED=true. Payouts, the weekly summary and exception alerts are not wired yet. */
+export const PHASE3_KINDS = new Set<Doc<'notificationDeliveries'>['eventKind']>(['welcome', 'provider_live', 'provider_offboarded'])
+const phase3Enabled = () => process.env.AE_EMAIL_PHASE3_ENABLED?.trim() === 'true'
+
 /** The owner of an active account, or null. Account and money mail go to the owner. */
 export async function activeOwnerPrincipalRef(db: DatabaseReader, accountRef: string): Promise<string | null> {
   const account = await db.query('accounts').withIndex('by_accountRef', (query) => query.eq('accountRef', accountRef)).unique()
@@ -72,7 +76,9 @@ export async function enqueueEmail(ctx: MutationCtx, input: {
       .eq('sourceEventRef', input.sourceEventRef)).unique()
   if (existing !== null) return 'exists'
 
-  const enabled = streamEnabled(input.stream) && (!PHASE2_KINDS.has(input.eventKind) || phase2Enabled())
+  const enabled = streamEnabled(input.stream)
+    && (!PHASE2_KINDS.has(input.eventKind) || phase2Enabled())
+    && (!PHASE3_KINDS.has(input.eventKind) || phase3Enabled())
   const now = Date.now()
   const capCode = enabled ? await alertCapCode(ctx, input, now) : null
   const admitted = enabled && capCode === null

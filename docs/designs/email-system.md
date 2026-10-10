@@ -193,7 +193,7 @@ Packages, pinned to releases at least two weeks old (installed exact in `package
 **Contract:** Needs: Task 8 | Offers: welcome, provider lifecycle, first paid Task, payout, failed payout, weekly summary, offboarding, exception alert
 **Touches:** provider modules, `scheduled.ts`, templates
 **Review:** one reviewer
-- [ ] Wire as in Task 8 -> same dark-launch proof
+- [ ] Wire as in Task 8 -> same dark-launch proof. Partial: welcome (`interactiveAuthority/provisioning.ts` owner signup), provider live (`capabilitySupply/publish/prepared.ts`, fires on publish, not on admission; confirm before Task 10) and provider offboarded (`providerOffboarding/verifyPages.ts`) wired behind `AE_EMAIL_PHASE3_ENABLED`, dark by default (suppressed `stream_disabled`). Deferred, with no trigger or decision yet: provider submitted and decision (admission-case states not mapped), first paid Task (obligation has `providerRef` only, no owner account lookup), payout and payout failed (no payout pipeline in code), weekly summary (needs recorded consent capture and earnings aggregation; lifecycle sends require `consentAt`, none is recorded yet), operator exception (operator recipient sits outside `notificationDeliveries`, same call as the digest).
 
 ### Task 10: Turn sending on
 **Contract:** Needs: Tasks 1 to 9, DNS verified, legal entity, ABN and address confirmed, Stripe receipts setting settled | Offers: live new mail

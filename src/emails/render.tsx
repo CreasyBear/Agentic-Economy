@@ -57,6 +57,9 @@ function build(input: EmailInput): { element: ReactElement; subject: string } {
     case 'team_membership_changed':
     case 'email_changed':
     case 'data_request_received':
+    case 'welcome':
+    case 'provider_live':
+    case 'provider_offboarded':
       return { element: <AccountNotice kind={input.eventKind} {...input.props} />, subject: noticeSubject(input.eventKind, input.props) }
   }
 }

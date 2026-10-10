@@ -1,5 +1,6 @@
 import { type Infer } from 'convex/values'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { activeOwnerPrincipalRef, enqueueEmail } from '../../principalAccount/notifications/enqueue'
 import {
   connectionAuthoritySnapshotsEqual,
   publishPreparedCapabilityCommand,
@@ -380,6 +381,14 @@ export async function publishPreparedCapabilityHandler(
   if (result.kind === 'refused')
     return convexPreparedPublicationResult(result)
   await recordSupplyAdmissionCase(ctx, args, result, Date.now())
+  const business = await ctx.db.get(args.businessId)
+  const liveOwner = business === null ? null : await activeOwnerPrincipalRef(ctx.db, business.owningAccountRef)
+  if (business !== null && liveOwner !== null) {
+    await enqueueEmail(ctx, {
+      eventKind: 'provider_live', stream: 'transactional', recipientPrincipalRef: liveOwner,
+      accountRef: business.owningAccountRef, sourceEventRef: result.toolRef,
+    })
+  }
   await rebuildCapabilityOriginSupplyProjection(
     ctx,
     args.businessId,

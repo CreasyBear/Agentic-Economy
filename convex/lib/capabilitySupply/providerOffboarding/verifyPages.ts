@@ -1,4 +1,5 @@
 import type { MutationCtx } from '../../../_generated/server'
+import { activeOwnerPrincipalRef, enqueueEmail } from '../../principalAccount/notifications/enqueue'
 import {
   loadExactOfferingSourceState,
   persistOfferingSourceState,
@@ -119,5 +120,13 @@ export async function verifyCompletionHandler(ctx: MutationCtx, args: { caseRef:
     completedAt: now,
     updatedAt: now,
   })
+  const business = await ctx.db.get(row.businessId)
+  const closedOwner = business === null ? null : await activeOwnerPrincipalRef(ctx.db, business.owningAccountRef)
+  if (business !== null && closedOwner !== null) {
+    await enqueueEmail(ctx, {
+      eventKind: 'provider_offboarded', stream: 'transactional', recipientPrincipalRef: closedOwner,
+      accountRef: business.owningAccountRef, sourceEventRef: row.caseRef,
+    })
+  }
   return { ready: true }
 }

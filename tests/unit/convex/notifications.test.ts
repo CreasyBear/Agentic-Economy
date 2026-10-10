@@ -1244,6 +1244,65 @@ describe('email deliverability observability', () => {
   })
 })
 
+describe('phase 3 email gate', () => {
+  const enqueuePhase3 = (backend: InteractiveAuthorityBackend, eventKind: 'welcome' | 'provider_live') =>
+    backend.run((ctx) => enqueueEmail(ctx, {
+      eventKind,
+      stream: 'transactional',
+      recipientPrincipalRef: PRINCIPAL_REF,
+      accountRef: ACCOUNT_REF,
+      sourceEventRef: `phase3:${eventKind}`,
+    }))
+
+  it('suppresses a phase 3 email while AE_EMAIL_PHASE3_ENABLED is unset, and leaves no workpool work', async () => {
+    const backend = await createNotificationBackend()
+    await seedAuthority(backend)
+
+    await expect(enqueuePhase3(backend, 'welcome')).resolves.toBe('suppressed')
+    const rows = await listDeliveryRows(backend)
+    expect(rows).toEqual([expect.objectContaining({ state: 'suppressed', suppressCode: 'stream_disabled', eventKind: 'welcome' })])
+    expect(rows[0]?.workId).toBeUndefined()
+  })
+
+  it('enqueues a phase 3 email once the gate is on, and dedupes the same source', async () => {
+    vi.stubEnv('AE_EMAIL_PHASE3_ENABLED', 'true')
+    const backend = await createNotificationBackend()
+    await seedAuthority(backend)
+
+    await expect(enqueuePhase3(backend, 'provider_live')).resolves.toBe('enqueued')
+    await expect(enqueuePhase3(backend, 'provider_live')).resolves.toBe('exists')
+    const rows = await listDeliveryRows(backend)
+    expect(rows).toEqual([expect.objectContaining({ state: 'pending', eventKind: 'provider_live', required: true })])
+  })
+
+  it('reads a phase 3 welcome back as a ready required notice for the active owner at send time', async () => {
+    vi.stubEnv('AE_EMAIL_PHASE3_ENABLED', 'true')
+    vi.stubEnv('AE_SITE_URL', 'https://app.aecon.test')
+    const backend = await createNotificationBackend()
+    await seedAuthority(backend)
+    await enqueuePhase3(backend, 'welcome')
+    const [row] = await listDeliveryRows(backend)
+
+    await expect(backend.run((ctx) => ctx.runQuery(internal.notifications.readNotificationContext, {
+      deliveryId: row!._id,
+    }))).resolves.toMatchObject({
+      kind: 'ready',
+      email: { eventKind: 'welcome', props: { siteUrl: 'https://app.aecon.test' } },
+    })
+  })
+
+  it('keeps phase 2 mail gated by its own switch, not the phase 3 one', async () => {
+    vi.stubEnv('AE_EMAIL_PHASE3_ENABLED', 'true')
+    const backend = await createNotificationBackend()
+    await seedAuthority(backend)
+
+    await expect(backend.run((ctx) => enqueueEmail(ctx, {
+      eventKind: 'key_issued', stream: 'transactional', recipientPrincipalRef: PRINCIPAL_REF,
+      accountRef: ACCOUNT_REF, sourceEventRef: 'phase3:key_issued',
+    }))).resolves.toBe('suppressed')
+  })
+})
+
 describe('phase 2 email gate and money amounts', () => {
   const enqueuePhase2 = (backend: InteractiveAuthorityBackend, eventKind: 'key_issued' | 'task_refunded') =>
     backend.run((ctx) => enqueueEmail(ctx, {

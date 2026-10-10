@@ -3,20 +3,21 @@ import { Text } from '@react-email/components'
 import { bodyText, CtaButton, Layout } from '../layout'
 import { emailUrl } from '../links'
 
-/** Phase 2 notices. All are required transactional mail: no unsubscribe, the footer links to settings. */
+/** Phase 2 and 3 notices. All are required transactional mail: no unsubscribe, the footer links to settings. */
 export type NoticeKind =
   | 'funding_receipt' | 'funding_failed' | 'task_refunded' | 'task_stuck' | 'credit_exhausted'
   | 'key_issued' | 'key_revoked' | 'account_paused' | 'account_restored'
   | 'role_changed' | 'team_membership_changed' | 'email_changed' | 'data_request_received'
+  | 'welcome' | 'provider_live' | 'provider_offboarded'
 
 /** Money arrives already formatted by the loader (moneyNoticeAmount), so no amount is retyped here. */
-export type NoticeProps = { siteUrl: string; amount?: string; taskRef?: string; role?: string }
+export type NoticeProps = { siteUrl: string; amount?: string; taskRef?: string; role?: string; toolRef?: string }
 
 type Notice = {
   subject: (props: NoticeProps) => string
   body: (props: NoticeProps) => string
   label: string
-  path: string
+  path: string | ((props: NoticeProps) => string)
   campaign: string
 }
 
@@ -81,6 +82,21 @@ const NOTICES: Record<NoticeKind, Notice> = {
     body: () => 'The primary email address on your aecon account was changed. If this was not you, secure your account now.',
     label: 'Secure your account', path: '/owner/settings/account/security', campaign: 'email_changed',
   },
+  welcome: {
+    subject: () => 'Welcome to aecon',
+    body: () => 'Your account is ready. Finish setting it up to make your first Tool call.',
+    label: 'Set up your account', path: '/owner', campaign: 'welcome',
+  },
+  provider_live: {
+    subject: () => 'Your Tool is live',
+    body: () => 'Your Tool is listed and open to buyers.',
+    label: 'View listing', path: ({ toolRef }) => `/owner/operations/${encodeURIComponent(toolRef ?? '')}`, campaign: 'provider_live',
+  },
+  provider_offboarded: {
+    subject: () => 'Your Provider account is closed',
+    body: () => 'Your Provider account is closed and your Tools are no longer listed. Your final statement is available in Receipts.',
+    label: 'View final statement', path: '/owner/settings/receipts', campaign: 'provider_offboarded',
+  },
   data_request_received: {
     subject: () => 'We received your data request',
     body: () => 'We have your data request and will email you when it moves forward.',
@@ -100,7 +116,7 @@ export default function AccountNoticeEmail({ kind, ...props }: NoticeProps & { k
       reason="You get this because of activity on your account. Required account mail cannot be turned off."
     >
       <Text className="ae-text" style={bodyText}>{notice.body(props)}</Text>
-      <CtaButton href={emailUrl(props.siteUrl, notice.path, { campaign: notice.campaign, content: 'cta' })}>{notice.label}</CtaButton>
+      <CtaButton href={emailUrl(props.siteUrl, typeof notice.path === 'string' ? notice.path : notice.path(props), { campaign: notice.campaign, content: 'cta' })}>{notice.label}</CtaButton>
     </Layout>
   )
 }

@@ -9,7 +9,7 @@ import { readExactAmount } from '@/modules/money/public'
 import type { Doc, Id } from '../../../_generated/dataModel'
 import type { MutationCtx, QueryCtx } from '../../../_generated/server'
 import { resolveClerkUserIdForPrincipal } from '../workspace/directory'
-import { activeOwnerPrincipalRef } from './enqueue'
+import { activeOwnerPrincipalRef, PHASE3_KINDS } from './enqueue'
 import { isStalledKind, readStalledDeliveryContext } from './stalled'
 import { recordSuppression, suppressionCode } from './suppression'
 
@@ -150,6 +150,24 @@ async function readMoneyNoticeContext(ctx: QueryCtx, delivery: Doc<'notification
   }
 }
 
+/** Phase 3 account notices. Recipient is re-checked as the active owner at send time; the link target comes from sourceEventRef. Required mail, so no unsubscribe target. */
+async function readAccountNoticeContext(ctx: QueryCtx, delivery: Doc<'notificationDeliveries'>): Promise<NotificationContext> {
+  const skip = (code: string): NotificationContext => ({ kind: 'skip', code })
+  if (await activeOwnerPrincipalRef(ctx.db, delivery.accountRef) !== delivery.recipientPrincipalRef) return skip('recipient_changed')
+  const clerkUserId = await resolveClerkUserIdForPrincipal(ctx.db, delivery.recipientPrincipalRef)
+  if (clerkUserId === null) return skip('no_clerk_identity')
+  const siteUrl = process.env.AE_SITE_URL?.trim().replace(/\/+$/u, '')
+  if (siteUrl === undefined || siteUrl.length === 0) return skip('site_url_missing')
+  const props: Record<string, string> = delivery.eventKind === 'provider_live' ? { toolRef: delivery.sourceEventRef } : {}
+  return {
+    kind: 'ready',
+    deliveryRef: delivery.deliveryRef,
+    clerkUserId,
+    stream: delivery.stream ?? 'transactional',
+    email: { eventKind: delivery.eventKind, props: { siteUrl, ...props } },
+  }
+}
+
 export async function readNotificationContextHandler(
   ctx: QueryCtx,
   args: { deliveryId: Id<'notificationDeliveries'> },
@@ -161,6 +179,9 @@ export async function readNotificationContextHandler(
   }
   if (delivery !== null && delivery.state === 'pending' && MONEY_NOTICE_KINDS.has(delivery.eventKind)) {
     return await readMoneyNoticeContext(ctx, delivery)
+  }
+  if (delivery !== null && delivery.state === 'pending' && PHASE3_KINDS.has(delivery.eventKind)) {
+    return await readAccountNoticeContext(ctx, delivery)
   }
   if (delivery === null || delivery.state !== 'pending' || delivery.eventKind !== 'agent_approval_requested') {
     return { kind: 'skip', code: 'approval_no_longer_pending' }

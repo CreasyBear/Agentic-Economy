@@ -34,6 +34,9 @@ const INPUTS: Array<[string, EmailInput]> = [
   ['team membership', { eventKind: 'team_membership_changed', props: { siteUrl: SITE } }],
   ['email changed', { eventKind: 'email_changed', props: { siteUrl: SITE } }],
   ['data request', { eventKind: 'data_request_received', props: { siteUrl: SITE } }],
+  ['welcome', { eventKind: 'welcome', props: { siteUrl: SITE } }],
+  ['provider live', { eventKind: 'provider_live', props: { siteUrl: SITE, toolRef: 'tool:abc123' } }],
+  ['provider offboarded', { eventKind: 'provider_offboarded', props: { siteUrl: SITE } }],
 ]
 
 const byName = (name: string): EmailInput => {
@@ -134,6 +137,28 @@ describe('phase 2 notices', () => {
       const email = await renderEmail(input)
       expect(email.text).not.toMatch(/unsubscribe/iu)
     }
+  })
+})
+
+describe('phase 3 notices', () => {
+  it('welcomes a new owner to set up the account, with no feature pitch and no unsubscribe', async () => {
+    const email = await renderEmail(byName('welcome'))
+    expect(email.subject).toBe('Welcome to aecon')
+    expect(email.text).toContain('Set up your account')
+    expect(email.text).not.toMatch(/unsubscribe/iu)
+  })
+
+  it('tells a Provider the Tool is live with a link to its operations page', async () => {
+    const email = await renderEmail(byName('provider live'))
+    expect(email.subject).toBe('Your Tool is live')
+    expect(hrefsOf(email.html).some((href) => href.includes('/owner/operations/tool%3Aabc123'))).toBe(true)
+    expect(email.text).not.toMatch(/unsubscribe/iu)
+  })
+
+  it('confirms a Provider account is closed as required mail', async () => {
+    const email = await renderEmail(byName('provider offboarded'))
+    expect(email.subject).toBe('Your Provider account is closed')
+    expect(email.text).not.toMatch(/unsubscribe/iu)
   })
 })
 
