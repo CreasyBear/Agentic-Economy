@@ -1,39 +1,34 @@
 /**
- * Single shared timestamp formatter. Used on operator surfaces (owner/admin
- * routes) and public surfaces alike (e.g. AeThreadSidebar's recent-thread
- * list), replacing ad-hoc `new Date(x).toISOString()` renders and hand-
- * rolled relative-time math.
+ * The one time formatter (spec: Language, Time). Every date or time label
+ * takes the IANA time zone it renders in, so server and client markup match.
+ * Locales are pinned: en-GB dates ("2 Jul 2026"; en-AU prints "July") and
+ * en-AU times ("1:14 pm").
  *
- * Locale is pinned to en-AU (not the runtime default) so server-rendered
- * and hydrated client markup always match, and dates render day-before-
- * month with a lowercase am/pm marker.
+ * - Records: formatTimestamp, "2 Jul 2026, 1:14 pm", inside <time dateTime={timestampIso(v)}>.
+ * - Lists: formatListTime, relative under 7 days, then "2 Jul 2026".
+ * - Durations: formatDuration, "1.2s".
  */
 
-const TIMESTAMP_LOCALE = 'en-AU'
-const dateFormatter = new Intl.DateTimeFormat(TIMESTAMP_LOCALE, { day: 'numeric', month: 'short', year: 'numeric' })
-const timeFormatter = new Intl.DateTimeFormat(TIMESTAMP_LOCALE, { hour: 'numeric', minute: '2-digit' })
-const dateOnlyFormatter = new Intl.DateTimeFormat(TIMESTAMP_LOCALE, { dateStyle: 'medium' })
-const utcTimestampFormatter = new Intl.DateTimeFormat('en-US', {
-  dateStyle: 'medium',
-  timeStyle: 'short',
-  timeZone: 'UTC',
-})
-const perthTimestampFormatter = new Intl.DateTimeFormat(TIMESTAMP_LOCALE, {
-  dateStyle: 'medium',
-  timeStyle: 'short',
-  timeZone: 'Australia/Perth',
-})
-const perthDateFormatter = new Intl.DateTimeFormat(TIMESTAMP_LOCALE, {
-  dateStyle: 'medium',
-  timeZone: 'Australia/Perth',
-})
-const countFormatter = new Intl.NumberFormat(TIMESTAMP_LOCALE)
-const percentFormatter = new Intl.NumberFormat(TIMESTAMP_LOCALE, {
-  style: 'percent',
-  maximumFractionDigits: 1,
-})
+const LOCALE = 'en-AU'
+const LIST_RELATIVE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
 
-const relativeFormatter = new Intl.RelativeTimeFormat(TIMESTAMP_LOCALE, { numeric: 'auto' })
+const formatters = new Map<string, Intl.DateTimeFormat>()
+function zoned(kind: 'date' | 'time', timeZone: string | undefined): Intl.DateTimeFormat {
+  const key = `${kind}:${timeZone ?? ''}`
+  let formatter = formatters.get(key)
+  if (formatter === undefined) {
+    formatter = kind === 'date'
+      ? new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone })
+      : new Intl.DateTimeFormat(LOCALE, { hour: 'numeric', minute: '2-digit', timeZone })
+    formatters.set(key, formatter)
+  }
+  return formatter
+}
+
+const countFormatter = new Intl.NumberFormat(LOCALE)
+const compactCountFormatter = new Intl.NumberFormat(LOCALE, { notation: 'compact', maximumFractionDigits: 1 })
+const percentFormatter = new Intl.NumberFormat(LOCALE, { style: 'percent', maximumFractionDigits: 1 })
+const relativeFormatter = new Intl.RelativeTimeFormat(LOCALE, { numeric: 'auto' })
 
 const RELATIVE_UNITS: readonly { unit: Intl.RelativeTimeFormatUnit; ms: number }[] = [
   { unit: 'year', ms: 365 * 24 * 60 * 60 * 1000 },
@@ -44,61 +39,74 @@ const RELATIVE_UNITS: readonly { unit: Intl.RelativeTimeFormatUnit; ms: number }
   { unit: 'minute', ms: 60 * 1000 },
 ]
 
-function toDate(value: number | string | Date): Date {
+type TimeValue = number | string | Date
+
+function toDate(value: TimeValue): Date {
   return value instanceof Date ? value : new Date(value)
 }
 
-/** e.g. "2 Jul 2026, 1:14 pm" */
-export function formatTimestamp(value: number | string | Date): string {
+/**
+ * Record timestamp, e.g. "2 Jul 2026, 1:14 pm". `timeZone` is the account's
+ * IANA zone; until accounts store one, omitting it uses the runtime zone.
+ */
+export function formatTimestamp(value: TimeValue, timeZone?: string): string {
   const date = toDate(value)
-  return `${dateFormatter.format(date)}, ${timeFormatter.format(date)}`
-}
-/** Date-only public label, e.g. "2 July 2026". */
-export function formatDate(value: number | string | Date): string {
-  return dateOnlyFormatter.format(toDate(value))
+  return `${zoned('date', timeZone).format(date)}, ${zoned('time', timeZone).format(date)}`
 }
 
-/** UTC timestamp for surfaces whose product contract explicitly uses UTC. */
-export function formatUtcTimestamp(value: number | string | Date): string {
-  return utcTimestampFormatter.format(toDate(value))
+/** Date label, e.g. "2 Jul 2026". */
+export function formatDate(value: TimeValue, timeZone?: string): string {
+  return zoned('date', timeZone).format(toDate(value))
 }
 
-export function formatPerthTimestamp(ms: number): string {
-  return perthTimestampFormatter.format(ms)
+/** List label: relative under 7 days ("3 hours ago"), then the date. Render after hydration. */
+export function formatListTime(value: TimeValue, timeZone?: string, now: number = Date.now()): string {
+  return Math.abs(now - toDate(value).getTime()) < LIST_RELATIVE_WINDOW_MS
+    ? formatRelativeTime(value, now)
+    : formatDate(value, timeZone)
 }
 
-export function formatPerthDate(value: number): string {
-  return perthDateFormatter.format(value)
+/** e.g. "850ms", "1.2s", "12s", "1.4min". */
+export function formatDuration(milliseconds: number): string {
+  if (milliseconds < 1_000) return `${Math.round(milliseconds)}ms`
+  const seconds = milliseconds / 1_000
+  if (seconds < 60) return `${seconds < 10 ? seconds.toFixed(1) : Math.round(seconds)}s`
+  const minutes = seconds / 60
+  return `${minutes < 10 ? minutes.toFixed(1) : Math.round(minutes)}min`
 }
 
-export function formatCount(value: number): string {
+export function formatCount(value: number | bigint): string {
   return countFormatter.format(value)
+}
+
+/** e.g. "950", "12.3K". */
+export function formatCompactCount(value: number): string {
+  return compactCountFormatter.format(value)
 }
 
 export function formatPercent(value: number): string {
   return percentFormatter.format(value)
 }
 
+/** `<input type="date">` value in the given zone, e.g. "2026-07-02". */
+export function formatDateInputValue(value: TimeValue, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit', timeZone }).formatToParts(toDate(value))
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find(entry => entry.type === type)?.value ?? ''
+  return `${part('year')}-${part('month')}-${part('day')}`
+}
+
 /** ISO-8601 for the `dateTime` attribute of a `<time>` element. */
-export function timestampIso(value: number | string | Date): string {
+export function timestampIso(value: TimeValue): string {
   return toDate(value).toISOString()
 }
 
-/** e.g. "3 hours ago", "just now" (Intl.RelativeTimeFormat-backed). */
-export function formatRelativeTime(value: number | string | Date, now: number = Date.now()): string {
+/** e.g. "3 hours ago", "just now". Zone-independent. */
+export function formatRelativeTime(value: TimeValue, now: number = Date.now()): string {
   const diffMs = toDate(value).getTime() - now
-  const diffSeconds = Math.round(diffMs / 1000)
-
-  if (Math.abs(diffSeconds) < 45) {
-    return 'just now'
-  }
-
+  if (Math.abs(diffMs) < 45_000) return 'just now'
   for (const { unit, ms } of RELATIVE_UNITS) {
     const diffInUnit = diffMs / ms
-    if (Math.abs(diffInUnit) >= 1) {
-      return relativeFormatter.format(Math.round(diffInUnit), unit)
-    }
+    if (Math.abs(diffInUnit) >= 1) return relativeFormatter.format(Math.round(diffInUnit), unit)
   }
-
-  return relativeFormatter.format(Math.round(diffSeconds / 60), 'minute')
+  return relativeFormatter.format(Math.round(diffMs / 60_000), 'minute')
 }

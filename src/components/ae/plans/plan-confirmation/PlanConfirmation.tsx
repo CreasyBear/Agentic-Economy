@@ -1,7 +1,7 @@
 import { useId } from 'react'
 import { AeActionLink } from '@/components/ae/shared/action-link/AeActionLink'
 import { DecisionPanel } from '@/components/ae/shared/arc-pro/chat/DecisionPanel'
-import { formatUtcTimestamp } from '@/lib/ui/format-time'
+import { formatTimestamp } from '@/lib/ui/format-time'
 import type { PlanConfirmationView } from '@/modules/capability-execution/plan.view-model'
 import { PlanDataFlowDisclosures } from './components/PlanDataFlowDisclosures'
 import { PlanNodeLineItems } from './components/PlanNodeLineItems'
@@ -42,7 +42,7 @@ export function PlanConfirmation({ view, pending = false, onApprove, onDeny }: P
           </div>
           <div>
             <dt>Quote expires</dt>
-            <dd><time>{formatUtcTimestamp(view.expiresAt)} UTC</time></dd>
+            <dd><time>{formatTimestamp(view.expiresAt, 'UTC')} UTC</time></dd>
           </div>
         </dl>
         <details className="text-xs text-muted-foreground"><summary className="cursor-pointer">Plan reference and digest</summary>

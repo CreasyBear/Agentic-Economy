@@ -425,7 +425,7 @@ describe('inspect Quote tool cards', () => {
     if (result.kind !== 'inspect') return
     expect(result.facts).toEqual(expect.arrayContaining([
       { label: 'Decision price', value: 'A$0.01' },
-      { label: 'Provider requirement', value: 'USDC 0.000001' },
+      { label: 'Provider requirement', value: '0.000001 USDC' },
     ]))
   })
 

@@ -8,7 +8,7 @@ import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { Button } from '@/components/arc/button/button'
 import { trialClaimResultValue } from '@/modules/money/public'
-import { formatPerthTimestamp } from '@/lib/ui/format-time'
+import { formatTimestamp } from '@/lib/ui/format-time'
 import { trialNextAction } from './trial-next-action'
 import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import { claimTrialServer } from './claimTrial.functions'
@@ -30,7 +30,7 @@ export function AeTrialPage() {
   return (
     <AePublicPage>
       <div className="mx-auto grid w-full max-w-2xl gap-related px-page py-page">
-        <h1 className="text-2xl font-semibold">Your Agentic Economy trial</h1>
+        <h1 className="text-2xl font-medium">Your Agentic Economy trial</h1>
         <AeSection title="A$10 to try Tools" description="Approved trials include A$10 promotional credit and 30 days of purchase access. No payment is required to activate.">
           {auth.isSignedIn !== true ? (
             <div className="grid gap-related">
@@ -74,7 +74,7 @@ function TrialActivation() {
   return (
     <div className="grid gap-related">
       {outcome?.kind === 'granted' ? <AeAlert title={outcome.booking === 'booked' ? 'Trial credit granted' : 'Confirming your trial credit'} tone={outcome.booking === 'booked' ? 'success' : 'info'}>
-        <p>{outcome.booking === 'booked' ? 'Your approved A$10 grant has been recorded. Your credit page shows the amount remaining.' : 'Activation is recorded. Credit will appear after confirmation.'} Trial credit and purchase access expire {formatPerthTimestamp(outcome.expiresAt)}.</p>
+        <p>{outcome.booking === 'booked' ? 'Your approved A$10 grant has been recorded. Your credit page shows the amount remaining.' : 'Activation is recorded. Credit will appear after confirmation.'} Trial credit and purchase access expire {formatTimestamp(outcome.expiresAt, 'Australia/Perth')}.</p>
       </AeAlert> : outcome?.kind === 'refused' ? <AeAlert title="Trial status" tone="warning">{REFUSAL_COPY[outcome.code]}</AeAlert>
         : <p>Activate an invitation approved for your primary email. The 30-day period starts when activation is recorded.</p>}
       {error ? <AeAlert title="Activation could not be confirmed" tone="warning">Check again to recover the same trial. A retry does not create another grant.</AeAlert> : null}

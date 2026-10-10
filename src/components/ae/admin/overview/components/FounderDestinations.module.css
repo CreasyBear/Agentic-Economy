@@ -5,7 +5,7 @@
   --orbit-peach: oklch(.58 .16 50);
   --orbit-violet: oklch(.55 .2 305);
   --accent: var(--orbit-violet);
-  --shadow-raised: var(--shadow-soft);
+  --shadow-raised: none;
   position: relative;
   min-width: 0;
   overflow: hidden;

@@ -14,7 +14,7 @@ it('scopes provider identity, counts, payment networks and activity to exact-hos
   expect(screen.getByText('Base')).toBeTruthy()
   const updated = screen.getByText('Last updated').nextElementSibling?.querySelector('time')
   expect(updated?.getAttribute('datetime')).toBe('2026-09-08T08:00:00.000Z')
-  expect(updated?.getAttribute('title')).toBe('Sep 8, 2026, 8:00 AM UTC')
+  expect(updated?.getAttribute('title')).toBe('8 Sept 2026, 8:00 am UTC')
   expect(updated?.textContent).toBe(formatRelativeTime('2026-09-08T08:00:00Z'))
   expect(screen.getByText('science')).toBeTruthy()
   expect(screen.getByText('Research papers')).toBeTruthy()

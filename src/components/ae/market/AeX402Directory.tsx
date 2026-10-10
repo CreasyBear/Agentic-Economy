@@ -1,3 +1,4 @@
+import { formatCount } from '@/lib/ui/format-time'
 import { useAuth } from '@clerk/tanstack-react-start'
 import { Await, Link, useNavigate, useRouter, useRouterState } from '@tanstack/react-router'
 import { ArrowLeftIcon, ArrowRightIcon, HeartIcon, Loader2Icon, SearchIcon, XIcon } from 'lucide-react'
@@ -272,7 +273,7 @@ function DirectoryMarketplace({ canonicalSearch: rankedSource, landingRows, load
     : 'All tools'
   const subtitle = displayView === 'saved' ? 'Tools you saved, with their current prices.'
     : providerSearch ? search.query === undefined ? 'The services behind each tool. Open one to see everything it lists.' : `Providers whose address starts with “${search.query}”.`
-    : browse && coverage !== undefined ? `${coverage.indexedTotal.toLocaleString('en-AU')} paid APIs, data feeds and services, each priced per call.`
+    : browse && coverage !== undefined ? `${formatCount(coverage.indexedTotal)} paid APIs, data feeds and services, each priced per call.`
     : 'Each tool is priced per call. Tools marked Ready to call run through aecon once you sign in.'
 
   const viewLinks: readonly { value: BrowseView; label: string }[] = [
@@ -331,7 +332,7 @@ function DirectoryMarketplace({ canonicalSearch: rankedSource, landingRows, load
     return <section className="ae-browse-section" aria-labelledby="market-best-matches">
       <header className="ae-browse-section-head">
         <h2 id="market-best-matches" tabIndex={-1}>Best matches</h2>
-        <p>{result.kind === 'scoped' ? result.reason : `Ranked for “${result.query}” across ${result.assessed.examined.toLocaleString('en-AU')} tools.`}</p>
+        <p>{result.kind === 'scoped' ? result.reason : `Ranked for “${result.query}” across ${formatCount(result.assessed.examined)} tools.`}</p>
         {refreshFailed ? <p role="status" className="ae-browse-status">
           Best matches couldn’t refresh, so these are the last ones that loaded.
           <Button type="button" variant="secondary" size="sm" onClick={() => void router.invalidate()}>Try again</Button>
@@ -457,7 +458,7 @@ function DirectoryMarketplace({ canonicalSearch: rankedSource, landingRows, load
       <div className="ae-browse-bar" inert={pendingView !== undefined}>
         <MarketSearchPill ref={queryRef} label={providerSearch ? 'Search providers' : PUBLIC_SURFACE.searchLabel} value={draftQuery} onValueChange={value => { setDraftQuery(value); setQueryError(undefined) }}
           field={{
-            placeholder: providerSearch ? 'Search providers' : PUBLIC_SURFACE.searchPlaceholder(coverage?.indexedTotal.toLocaleString('en-AU')),
+            placeholder: providerSearch ? 'Search providers' : PUBLIC_SURFACE.searchPlaceholder(coverage === undefined ? undefined : formatCount(coverage.indexedTotal)),
             'aria-invalid': queryError !== undefined,
             ...(providerSearch ? { autoCapitalize: 'none', autoCorrect: 'off', spellCheck: false } : {}),
             ...(queryError === undefined ? {} : { 'aria-describedby': 'market-search-error' }),

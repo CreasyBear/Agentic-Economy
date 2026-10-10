@@ -71,9 +71,8 @@ describe('AeSite type and rhythm primitives', () => {
     expect(sectionHeading.className).not.toContain('lg:text-5xl')
 
     const eyebrow = screen.getByText('Section label')
-    expect(eyebrow.className).toContain('text-eyebrow')
-    expect(eyebrow.className).toContain('font-eyebrow')
-    expect(eyebrow.className).toContain('tracking-eyebrow')
+    expect(eyebrow.className).toContain('text-body')
+    expect(eyebrow.className).toContain('font-medium')
     expect(eyebrow.className).toContain('uppercase')
     expect(eyebrow.className).toContain('mb-3')
     expect(eyebrow.className).toContain('block')

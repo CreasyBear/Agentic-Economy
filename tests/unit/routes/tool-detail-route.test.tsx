@@ -271,7 +271,7 @@ describe('/tools/$toolRef', () => {
     expect(within(trackRecord).getByText('8')).toBeTruthy()
     expect(within(trackRecord).getByText('4.5')).toBeTruthy()
     expect(within(trackRecord).getByText('120 ms')).toBeTruthy()
-    expect(within(trackRecord).getByText('140 ms')).toBeTruthy()
+    expect(within(trackRecord).getByText('140ms')).toBeTruthy()
     const latencyChart = within(trackRecord).getByRole('region', { name: 'Time to result' })
     expect(latencyChart).toBeTruthy()
     expect(within(latencyChart).getByText('5 timed calls')).toBeTruthy()
@@ -674,7 +674,7 @@ describe('/tools/$toolRef', () => {
     expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Browse tools' }).getAttribute('href')).toBe('/market')
     expect(screen.queryByRole('link', { name: 'Check status' })).toBeNull()
-    expect(screen.queryByText(/US\$1.25|USD 1.25/)).toBeNull()
+    expect(screen.queryByText(/1\.25 USD|US\$1\.25|USD 1\.25/)).toBeNull()
   })
 
 })

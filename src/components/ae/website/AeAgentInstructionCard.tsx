@@ -22,13 +22,13 @@ export function AeAgentInstructionCard({
   const card = (
     <aside
       aria-labelledby={headingId}
-      className={framed ? 'min-w-0 bg-container' : 'min-w-0 border border-border bg-container'}
+      className={framed ? 'min-w-0 bg-card' : 'min-w-0 border border-border bg-card'}
     >
       <Card className="gap-section rounded-none border-0 py-page shadow-none">
         <CardHeader className="gap-related">
           <h2
             id={headingId}
-            className="font-display text-2xl font-medium tracking-tight sm:text-3xl"
+            className="text-2xl font-medium tracking-tight sm:text-3xl"
           >
             {instruction.heading}
           </h2>

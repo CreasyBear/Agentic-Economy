@@ -1,3 +1,4 @@
+import { formatCount } from '@/lib/ui/format-time'
 import { DonutChart } from '@/components/arc/donut-chart/donut-chart'
 import { FunnelChart } from '@/components/ae/shared/arc-pro/funnel-chart/funnel-chart'
 import type { MarketplaceMetricsReport } from '@/lib/operator/admin-console/metrics.contracts'
@@ -5,8 +6,6 @@ import { marketplaceFundingChartViewModel } from '../marketplace-signal.view-mod
 import styles from './MarketplaceSignalCharts.module.css'
 
 type MarketplaceSignalChartsProps = Readonly<{ report: MarketplaceMetricsReport | undefined }>
-
-const count = new Intl.NumberFormat('en-AU', { maximumFractionDigits: 0 })
 
 /** Range comparisons require complete snapshots. Funding parts are disjoint settled Call counts. */
 export function MarketplaceSignalCharts({ report }: MarketplaceSignalChartsProps) {
@@ -29,7 +28,7 @@ export function MarketplaceSignalCharts({ report }: MarketplaceSignalChartsProps
       {fundingChart == null ? <p role="status" className={styles.unavailable}>{unavailable}</p> : <DonutChart
         className={styles.chart ?? ''}
         label="Settled Call funding" unit="Calls" totalLabel="Paid Calls" size={fundingChart.size} thickness={28}
-        legendAction="select" groupBelow={0} formatValue={value => count.format(value)} emptyLabel="No paid Calls"
+        legendAction="select" groupBelow={0} formatValue={value => formatCount(Math.round(value))} emptyLabel="No paid Calls"
         data={fundingChart.data} />}
       <p className={styles.note}>Mixed funding belongs to purchased credit. Free, unsettled, refunded and unclassified Calls are excluded.</p>
     </section>
@@ -37,7 +36,7 @@ export function MarketplaceSignalCharts({ report }: MarketplaceSignalChartsProps
       <h3 id={conversionTitle}>Quotes that became Calls</h3>
       <p className={styles.description}>Quotes created in this period · conversion at snapshot close</p>
       {!conversionAvailable ? <p role="status" className={styles.unavailable}>{conversionUnavailable}</p> : <FunnelChart
-        label="Quote conversion" unit="Quotes" height={168} flow={false} formatValue={value => count.format(value)}
+        label="Quote conversion" unit="Quotes" height={168} flow={false} formatValue={value => formatCount(Math.round(value))}
         emptyLabel="No Quotes yet" stages={[
           { key: 'created', label: 'Quotes created', value: quotes },
           { key: 'converted', label: 'Converted to Calls', value: converted },

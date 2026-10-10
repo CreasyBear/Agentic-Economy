@@ -19,7 +19,7 @@ function CollapsibleTrigger({
     <CollapsiblePrimitive.Trigger
       data-slot="collapsible-trigger"
       className={cn(
-        "[&[data-panel-open]>svg]:rotate-180 [&_svg]:transition-transform [&_svg]:duration-fast [&_svg]:ease-emphasized motion-reduce:[&_svg]:transition-none",
+        "[&[data-panel-open]>svg]:rotate-180 [&_svg]:transition-transform [&_svg]:duration-fast [&_svg]:ease-standard motion-reduce:[&_svg]:transition-none",
         className,
       )}
       {...props}
@@ -35,7 +35,7 @@ function CollapsibleContent({
     <CollapsiblePrimitive.Panel
       data-slot="collapsible-content"
       className={cn(
-        "h-(--collapsible-panel-height) overflow-hidden transition-[height] duration-base ease-emphasized data-ending-style:h-0 data-starting-style:h-0 motion-reduce:transition-none [&[hidden]:not([hidden='until-found'])]:hidden",
+        "h-(--collapsible-panel-height) overflow-hidden transition-[height] duration-base ease-standard data-ending-style:h-0 data-starting-style:h-0 motion-reduce:transition-none [&[hidden]:not([hidden='until-found'])]:hidden",
         className
       )}
       {...props}

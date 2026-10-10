@@ -20,8 +20,8 @@ describe('reviewing changed treasury controls', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Review current settings' })).toBeTruthy())
     rerender(<TreasuryActions view={{ ...view, controls: { ...view.controls,
       settingsStateDigest: 'settings:2', thresholds: { kind: 'fixed', lowWaterUnits: '20000000', targetFloatUnits: '30000000' } } }} />)
-    expect(screen.getByText('USDC 20.000000')).toBeTruthy()
-    expect(screen.getByText('USDC 30.000000')).toBeTruthy()
+    expect(screen.getByText('20.00 USDC')).toBeTruthy()
+    expect(screen.getByText('30.00 USDC')).toBeTruthy()
     expect((screen.getByLabelText('Low-water mark (USDC)') as HTMLInputElement).value).toBe('1')
     expect((screen.getByLabelText('Target float (USDC)') as HTMLInputElement).value).toBe('2')
     fireEvent.click(screen.getByRole('button', { name: 'Review current settings' }))

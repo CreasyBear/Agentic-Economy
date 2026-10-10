@@ -5,7 +5,7 @@
   min-width: 0;
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: var(--radius-card);
+  border-radius: var(--radius-lg);
   background: var(--surface);
   color: var(--foreground);
   font-family: var(--font-body);
@@ -298,7 +298,7 @@
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--surface-raised);
-  box-shadow: var(--shadow-float);
+  box-shadow: var(--shadow-overlay);
   pointer-events: none;
   transform: translateX(-50%);
   white-space: normal;

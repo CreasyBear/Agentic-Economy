@@ -375,7 +375,7 @@ export function ChatTranscript({
                                 fallback={
                                   <section id={panelId} data-open={panelOpen} aria-hidden={!panelOpen}
                                     aria-label="Tool input" inert={!panelOpen}
-                                    className="grid gap-3 rounded-card border border-border bg-card p-4">
+                                    className="grid gap-3 rounded-lg border border-border bg-card p-4">
                                     <p role="status" className="text-sm text-muted-foreground">{chatToolPanel.unavailable}</p>
                                     <Button type="button" variant="secondary" className="min-h-touch"
                                       onClick={() => closePanel(turn.id, panelOption.id, panelId)}>{chatToolPanel.cancel}</Button>

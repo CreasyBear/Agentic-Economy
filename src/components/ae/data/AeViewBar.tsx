@@ -1,3 +1,4 @@
+import { formatCount } from '@/lib/ui/format-time'
 import type { ReactNode } from 'react'
 
 import { SearchField } from '@/components/arc/search-field/search-field'
@@ -46,7 +47,7 @@ export function AeViewBar({
       )}
       {count === undefined ? null : (
         <p className="arc-record-count">
-          {count.toLocaleString()} {countLabel}
+          {formatCount(count)} {countLabel}
         </p>
       )}
       {action === undefined ? null : action}

@@ -1,3 +1,4 @@
+import { formatCount } from '@/lib/ui/format-time'
 import { SlidersHorizontalIcon } from 'lucide-react'
 import { useState, useSyncExternalStore, type ReactNode } from 'react'
 import styles from './DirectoryExplorerFilters.module.css'
@@ -107,8 +108,8 @@ function appliedFilters(search: DirectoryExplorerFilterValues, overview: X402Dir
   if (search.minUsdPrice !== undefined) filters.push({ id: 'minUsdPrice', label: 'Price from', value: usd(search.minUsdPrice) })
   if (search.maxUsdPrice !== undefined) filters.push({ id: 'maxUsdPrice', label: 'Price up to', value: usd(search.maxUsdPrice) })
   if (search.priceBand !== undefined) filters.push({ id: 'priceBand', label: 'Price per call', value: priceBandLabels[search.priceBand] })
-  if (search.minPayers30d !== undefined) filters.push({ id: 'minPayers30d', label: 'Paying wallets', value: `${search.minPayers30d.toLocaleString('en-AU')} or more` })
-  if (search.maxPayers30d !== undefined) filters.push({ id: 'maxPayers30d', label: 'Paying wallets', value: `Up to ${search.maxPayers30d.toLocaleString('en-AU')}` })
+  if (search.minPayers30d !== undefined) filters.push({ id: 'minPayers30d', label: 'Paying wallets', value: `${formatCount(search.minPayers30d)} or more` })
+  if (search.maxPayers30d !== undefined) filters.push({ id: 'maxPayers30d', label: 'Paying wallets', value: `Up to ${formatCount(search.maxPayers30d)}` })
   if (search.adoptionBand !== undefined) filters.push({ id: 'adoptionBand', label: 'Paying wallets', value: adoptionBandLabels[search.adoptionBand] })
   if (search.curatedOnly === true) filters.push({ id: 'curatedOnly', label: 'Curated' })
   if (search.reviewedProvidersOnly === true) filters.push({ id: 'reviewedProvidersOnly', label: 'Reviewed providers' })

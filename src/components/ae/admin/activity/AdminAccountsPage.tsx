@@ -74,7 +74,7 @@ function AccountsList({ search, onSearchChange }: AccountSearchProps) {
       {loading ? (
         <Skeleton className="h-44 w-full" role="status" aria-label="Loading Accounts" />
       ) : result.results.length === 0 ? (
-        <div className="ae-arc rounded-card border border-border bg-card">
+        <div className="ae-arc rounded-lg border border-border bg-card">
           <AeEmptyState
             icon={<SearchIcon size={24} />}
             title="No Accounts found"

@@ -8,7 +8,7 @@ import { AeAlert as Alert } from '@/components/ae/shared/alert/AeAlert'
 import { AePageState } from '@/components/ae/layout/AePageState'
 import type { MarketplaceMetricsRange, MarketplaceMetricsReport } from '@/lib/operator/admin-console/metrics.contracts'
 import { formatCurrencyAmount } from '@/modules/money/public'
-import { formatPerthTimestamp } from '@/lib/ui/format-time'
+import { formatTimestamp } from '@/lib/ui/format-time'
 import { adminActivityHref } from '@/lib/operator/admin-console/activity'
 import { ADMIN_METRICS_COPY } from './metrics.contracts'
 import { MarketplaceSignalCharts } from './components/MarketplaceSignalCharts'
@@ -46,7 +46,7 @@ export function MarketplaceActivityView({ report, range, onRangeChange }: Market
       />
       {report !== undefined ? <p className="text-xs text-muted-foreground">
         Purchased-credit activity can include internal use. It is not verified external Customer traction or revenue.
-        {latestComputedAt === null ? '' : ` Updated ${formatPerthTimestamp(latestComputedAt)}.`}
+        {latestComputedAt === null ? '' : ` Updated ${formatTimestamp(latestComputedAt, 'Australia/Perth')}.`}
       </p> : null}
       {report?.coverageComplete && report.funding != null ? <FundingSummary funding={report.funding} range={range} /> : null}
       <MarketplaceSignalCharts report={report} />
@@ -71,7 +71,7 @@ function FundingSummary({ funding, range }: Readonly<{
   ]
   return (
     <div className="grid gap-related">
-      <dl className="grid divide-y divide-border rounded-card border border-border bg-card text-sm sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+      <dl className="grid divide-y divide-border rounded-lg border border-border bg-card text-sm sm:grid-cols-3 sm:divide-x sm:divide-y-0">
         {measures.map(measure => (
           <div className="min-w-0 p-related" key={measure.label}>
             <dt className="text-muted-foreground">{measure.label}</dt>

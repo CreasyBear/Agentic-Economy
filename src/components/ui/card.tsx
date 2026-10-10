@@ -13,9 +13,9 @@ function Card({ className, discoverLift = false, ...props }: CardProps) {
       data-slot="card"
       {...(discoverLift ? { "data-ae-discover-lift": "" } : {})}
       className={cn(
-        "flex flex-col gap-4 rounded-card border border-border/70 bg-card py-4 text-card-foreground shadow-none",
+        "flex flex-col gap-4 rounded-lg border border-border/70 bg-card py-4 text-card-foreground shadow-none",
         discoverLift &&
-          "transition-[box-shadow,border-color] duration-fast ease-standard hover:border-foreground/20 hover:shadow-float motion-reduce:transition-none",
+          "transition-[box-shadow,border-color] duration-fast ease-standard hover:border-foreground/20 motion-reduce:transition-none",
         className
       )}
       {...props}
@@ -41,7 +41,7 @@ function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card-title"
       className={cn(
-        "text-lg font-semibold leading-snug tracking-tight",
+        "text-lg font-medium leading-snug tracking-tight",
         className
       )}
       {...props}

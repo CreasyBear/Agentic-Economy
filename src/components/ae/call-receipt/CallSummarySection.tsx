@@ -1,7 +1,7 @@
 import { CallObjectLinks } from '@/components/ae/shared/CallObjectLinks'
 import { CallOutcome } from '@/components/ae/shared/CallOutcome'
 import { AeFactList } from '@/components/ae/data/AeFactList'
-import { formatUtcTimestamp, timestampIso } from '@/lib/ui/format-time'
+import { formatTimestamp, timestampIso } from '@/lib/ui/format-time'
 import { projectFoundCallPurchaseStatus, type CallReceiptView } from '@/modules/capability-execution/call-receipt-view'
 import type { FoundCallStatus } from '@/lib/call-recovery/call-status-page-types'
 import { settledPaidBuyerCharge } from './call-receipt-format'
@@ -36,7 +36,7 @@ export function CallSummarySection({ result, receiptView: view }: Readonly<{
         ...(agent == null ? [] : [{ label: 'Agent', value: agent }]),
         ...(timestamp === undefined || !Number.isFinite(timestamp) ? [] : [{
           label: 'Date',
-          value: <time dateTime={timestampIso(timestamp)}>{formatUtcTimestamp(timestamp)} UTC</time>,
+          value: <time dateTime={timestampIso(timestamp)}>{formatTimestamp(timestamp, 'UTC')} UTC</time>,
         }]),
       ]} />
       {amount === undefined && purchase.kind !== 'pending'

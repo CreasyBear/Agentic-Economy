@@ -1,7 +1,7 @@
 import { BillingHistory } from '@/components/ae/shared/arc-pro/billing-overview/billing-overview'
 import { MetricsSummary } from '@/components/ae/shared/arc-pro/metrics-dashboard/metrics-dashboard'
 import { AeFactList } from '@/components/ae/data/AeFactList'
-import { formatUtcTimestamp } from '@/lib/ui/format-time'
+import { formatTimestamp } from '@/lib/ui/format-time'
 import { providerUnitLabel, providerUnitQuantity, type ProviderUnitEvidence } from '@/modules/capability-execution/provider-service-units'
 import '../activity/components/ActivitySummaryComposition.css'
 export function CallProviderUnits({evidence}: {evidence: ProviderUnitEvidence}) {
@@ -12,12 +12,12 @@ export function CallProviderUnits({evidence}: {evidence: ProviderUnitEvidence}) 
       <AeFactList facts={[{label: 'Requested model', value: current.requestedModel ?? 'Unknown'}, {label: 'Response model field', value: current.responseModel ?? 'Unknown'},
         {label: 'Source coverage', value: `${current.units.filter(unit => unit.state === 'observed').length} of ${current.units.length} quantities reported`},
         {label: 'Attempt / effect generation', value: `${current.attemptNumber} / ${current.effectGeneration}`},
-        {label: 'First captured Call update basis (UTC)', value: formatUtcTimestamp(current.occurredAt)}, {label: 'Evidence observed (UTC)', value: formatUtcTimestamp(current.observedAt)},
+        {label: 'First captured Call update basis (UTC)', value: formatTimestamp(current.occurredAt, 'UTC')}, {label: 'Evidence observed (UTC)', value: formatTimestamp(current.observedAt, 'UTC')},
         {label: 'Decoder / transport', value: `${current.profile} / ${current.adapterId}`}, {label: 'Source digest', value: current.sourceDigest, mono: true}]} />
     </>}
     <p className="text-xs text-muted-foreground">Input tokens include cache reads; output tokens include reasoning. ElevenLabs character credits are an upstream unit. Response model fields may describe a gateway substitution incompletely. Quantities do not establish the provider cost, Aecon Credit balance or settled payment.</p>
     <details><summary>Inspect {evidence.observations.length} immutable provider observations</summary><ol className="grid gap-intra text-sm">
-      {evidence.observations.map(row => <li key={row.observationRef}>Attempt {row.attemptNumber}, effect {row.effectGeneration}: {row.change === 'initial_attempt' ? 'Initial attempt observation' : 'Support correction'}. {row.units.map(unit => `${providerUnitLabel(unit)}: ${unit.state === 'observed' ? providerUnitQuantity(unit.quantityUnits, unit.quantityExponent) : 'Unknown'}`).join('; ')}. Observed {formatUtcTimestamp(row.observedAt)} UTC. <span className="break-all">{row.observationRef}</span></li>)}
+      {evidence.observations.map(row => <li key={row.observationRef}>Attempt {row.attemptNumber}, effect {row.effectGeneration}: {row.change === 'initial_attempt' ? 'Initial attempt observation' : 'Support correction'}. {row.units.map(unit => `${providerUnitLabel(unit)}: ${unit.state === 'observed' ? providerUnitQuantity(unit.quantityUnits, unit.quantityExponent) : 'Unknown'}`).join('; ')}. Observed {formatTimestamp(row.observedAt, 'UTC')} UTC. <span className="break-all">{row.observationRef}</span></li>)}
     </ol></details>
   </BillingHistory>
 }

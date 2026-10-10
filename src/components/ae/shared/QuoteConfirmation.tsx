@@ -2,7 +2,7 @@ import { useId } from 'react'
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeActionLink } from '@/components/ae/shared/action-link/AeActionLink'
 import { DecisionPanel } from '@/components/ae/shared/arc-pro/chat/DecisionPanel'
-import { formatUtcTimestamp } from '@/lib/ui/format-time'
+import { formatTimestamp } from '@/lib/ui/format-time'
 import { formatCurrencyAmount, formatDisplayAmount } from '@/modules/money/public'
 import type { QuoteConfirmationView } from './object-family.contracts'
 import { AlphaLearningNotice } from './AlphaLearningNotice'
@@ -41,7 +41,7 @@ export function QuoteConfirmation({ view, onApprove, onDeny, onFreshQuote }: Quo
             ? <a className="underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2" href={view.provider.href}>{view.provider.name}</a>
             : view.provider.name },
           { label: 'Quote', value: <span className="font-mono tabular-nums">{view.quoteAmount.units === '0' ? 'Free · ' : ''}{formatDisplayAmount(view.quoteAmount)} per Call</span> },
-          { label: 'Expires', value: <time dateTime={new Date(view.expiresAt).toISOString()}>{formatUtcTimestamp(view.expiresAt)} UTC</time> },
+          { label: 'Expires', value: <time dateTime={new Date(view.expiresAt).toISOString()}>{formatTimestamp(view.expiresAt, 'UTC')} UTC</time> },
           { label: 'Remaining cap after Call', value: <span className="font-mono tabular-nums">{formatDisplayAmount(view.remainingCap.amount)} · {view.remainingCap.window}</span> },
           { label: 'Input', value: view.inputSummary },
           ...(accepted === undefined ? [] : [

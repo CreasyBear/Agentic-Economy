@@ -58,13 +58,14 @@ export function AeAppShell({ children }: { children: ReactNode }) {
 
   return (
     <AeNavigationSafetyProvider><ChatHeaderSlotProvider><div
+      data-density={shell.hidePublicFooter ? 'workspace' : undefined}
       className={cn('arc-market arc-app-frame', chatFrame ? 'h-dvh overflow-hidden' : null)}
       style={{ '--header-height': '4rem' } as CSSProperties}
     >
       <a
         data-testid="skip-to-content"
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:start-gutter focus:top-gutter focus:z-30 focus:rounded-md focus:bg-container focus:px-gutter focus:py-intra focus:text-sm focus:font-medium focus:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        className="sr-only focus:not-sr-only focus:absolute focus:start-gutter focus:top-gutter focus:z-30 focus:rounded-sm focus:bg-card focus:px-gutter focus:py-intra focus:text-sm focus:font-medium focus:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
       >
         Skip to content
       </a>

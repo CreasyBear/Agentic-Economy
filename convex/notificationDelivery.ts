@@ -8,7 +8,7 @@ import { internal } from './_generated/api'
 import { internalAction } from './_generated/server'
 import { sendApprovalEmailResult } from './lib/principalAccount/notifications/delivery'
 import { postResendEmail } from './lib/principalAccount/notifications/resend'
-import { OPERATOR_DATE, buildDigest } from './operatorDigest'
+import { buildDigest, operatorDate } from './operatorDigest'
 
 /** The operator reads the digest in Sydney, so the subject and idempotency key use that calendar day. */
 
@@ -73,7 +73,7 @@ export const sendOperatorDigest = internalAction({
     // A zero digest is still sent, so a missing email means the job is broken, not that nobody stalled.
     const now = Date.now()
     const digest = await buildDigest(ctx, now)
-    const date = OPERATOR_DATE.format(now)
+    const date = operatorDate(now)
     const result = await postResendEmail({
       apiKey: resendApiKey,
       from: fromEmail,

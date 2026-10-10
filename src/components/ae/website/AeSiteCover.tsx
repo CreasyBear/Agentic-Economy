@@ -34,10 +34,10 @@ export function AeSiteCover({
         className,
       )}
     >
-      <p className="font-sans text-eyebrow font-medium tracking-eyebrow text-background uppercase">
+      <p className="font-sans text-body font-medium text-background uppercase">
         {eyebrow}
       </p>
-      <span className={cn(siteEnterRiseClass, 'font-display text-3xl font-medium tracking-tight sm:text-4xl')}>
+      <span className={cn(siteEnterRiseClass, 'text-3xl font-medium tracking-tight sm:text-4xl')}>
         {title}
       </span>
       <span className="font-mono text-xs">{meta}</span>

@@ -1,5 +1,5 @@
 import { Button } from '@/components/arc/button/button'
-import { formatUtcTimestamp } from '@/lib/ui/format-time'
+import { formatTimestamp } from '@/lib/ui/format-time'
 import { formatDisplayAmount } from '@/modules/money/public'
 import type { AddCreditPanelProps } from '../add-credit.contracts'
 import '@/components/ae/console/FundingComposition.css'
@@ -53,7 +53,7 @@ export function AddCreditPanel({
               <p>Purchased credit: {formatDisplayAmount(balance.balance)}</p>
               <p>Promotional credit: {formatDisplayAmount(balance.promotionalBalance)}</p>
               {balance.nextPromotionalExpiryAt == null ? null : (
-                <p>Next promotional expiry: {formatUtcTimestamp(balance.nextPromotionalExpiryAt)} UTC</p>
+                <p>Next promotional expiry: {formatTimestamp(balance.nextPromotionalExpiryAt, 'UTC')} UTC</p>
               )}
             </>
           )}

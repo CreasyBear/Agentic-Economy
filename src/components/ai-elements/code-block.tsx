@@ -302,7 +302,7 @@ const CodeBlockContainer = ({
 }: HTMLAttributes<HTMLDivElement> & { language: string }) => (
   <div
     className={cn(
-      "group relative w-full overflow-hidden rounded-md border bg-background text-foreground",
+      "group relative w-full overflow-hidden rounded-sm border bg-background text-foreground",
       className
     )}
     data-language={language}

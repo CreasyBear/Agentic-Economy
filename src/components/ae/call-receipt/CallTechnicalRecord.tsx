@@ -5,7 +5,7 @@ import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Button } from '@/components/arc/button/button'
 import { useClipboardCopy } from '@/hooks/use-clipboard-copy'
-import { formatUtcTimestamp, timestampIso } from '@/lib/ui/format-time'
+import { formatTimestamp, timestampIso } from '@/lib/ui/format-time'
 import type { CallResult } from '@/modules/capability-execution/call-contracts'
 import type { JsonValue } from '@/modules/capability-contract/public'
 import type { CallReceiptView } from '@/modules/capability-execution/call-receipt-view'
@@ -101,7 +101,7 @@ function ResultDetails({ result }: Readonly<{ result: CallResult }>) {
             <CallReceiptFact label="Result charge state" value={machineLabel(result.usage.chargeState)} />
             <CallReceiptFact label="Result exact amount" value={formatCurrencyAmount(result.usage.amount)} />
             <CallReceiptFact label="Result usage reference"><CallReceiptRef label="usage reference" value={result.usage.usageRef} /></CallReceiptFact>
-            <CallReceiptFact label="Result usage observed"><time dateTime={timestampIso(result.usage.observedAt)}>{formatUtcTimestamp(result.usage.observedAt)} UTC</time></CallReceiptFact>
+            <CallReceiptFact label="Result usage observed"><time dateTime={timestampIso(result.usage.observedAt)}>{formatTimestamp(result.usage.observedAt, 'UTC')} UTC</time></CallReceiptFact>
             <CallReceiptFact label="Result price digest"><CallReceiptRef label="price digest" value={result.usage.priceDigest} /></CallReceiptFact>
             {result.usage.transactionRef === undefined ? null : <CallReceiptFact label="Result transaction reference"><CallReceiptRef label="transaction reference" value={result.usage.transactionRef} /></CallReceiptFact>}
             {result.usage.durationMs === undefined ? null : <CallReceiptFact label="Result duration" value={`${result.usage.durationMs} ms`} />}
@@ -151,7 +151,7 @@ export function CallOutputSection({ result }: Readonly<{ result: CallResult }>) 
   if (result.kind !== 'completed') return null
   if (result.contentExpiredAt !== undefined) return (
     <AeSection title="Output">
-      <p>Call content expired on {formatUtcTimestamp(result.contentExpiredAt)}. The purchase record remains available.</p>
+      <p>Call content expired on {formatTimestamp(result.contentExpiredAt, 'UTC')}. The purchase record remains available.</p>
     </AeSection>
   )
   return <RecordedCallOutput key={result.evidenceHash} output={result.output} />

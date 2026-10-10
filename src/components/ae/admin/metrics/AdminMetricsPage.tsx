@@ -32,12 +32,12 @@ export function AdminMetricsPage({ range, rejected, onRangeChange }: AdminMetric
       ) : (
         <div className="grid gap-section">
           <MarketplaceActivityView report={data.kind === 'ready' ? data.report : undefined} range={range} onRangeChange={onRangeChange} />
-          {data.kind === 'loading' ? <Skeleton className="h-80 rounded-card" /> : (
+          {data.kind === 'loading' ? <Skeleton className="h-80 rounded-lg" /> : (
             <>
               {data.partialDays.map((day) => (
                 <p key={day} role="status" className="text-sm text-muted-foreground">{ADMIN_METRICS_COPY.snapshotIncomplete(day)}</p>
               ))}
-              <details className="rounded-card border border-border p-related">
+              <details className="rounded-lg border border-border p-related">
                 <summary className="min-h-touch cursor-pointer text-sm font-medium">Operational Call metrics</summary>
                 <MetricsDashboard cards={data.cards} ratios={data.ratios} dailyCalls={data.dailyCalls}
                   controls={null}

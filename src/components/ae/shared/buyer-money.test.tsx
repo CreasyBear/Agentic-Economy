@@ -22,7 +22,7 @@ describe('buyer money cards', () => {
     </>)
     expect(screen.getByText('A$0.01 per Call')).toBeInTheDocument()
     expect(screen.getByText('A$0.01')).toBeInTheDocument()
-    expect(screen.getByText('AUD 0.000001')).toBeInTheDocument()
+    expect(screen.getByText('A$0.000001')).toBeInTheDocument()
     const trust = screen.getByRole('link', { name: 'Trust centre (opens in a new tab)' })
     expect(trust).toHaveAttribute('href', '/trust')
     expect(trust).toHaveAttribute('target', '_blank')
@@ -40,8 +40,8 @@ describe('buyer money cards', () => {
       remainingCap: { amount: { currency: 'AUD', exponent: 6, units: '0' }, window: 'month' },
       expired: false, pending: false,
     }} onApprove={onApprove} onDeny={() => undefined} onFreshQuote={onFreshQuote} />)
-    expect(screen.queryByText('USDC 0.000001 per Call')).toBeNull()
-    expect(screen.getByText('USDC 0.000001')).toBeInTheDocument()
+    expect(screen.queryByText('0.000001 USDC per Call')).toBeNull()
+    expect(screen.getByText('0.000001 USDC')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Approve this Call' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Get a fresh Quote' }))
     expect(onFreshQuote).toHaveBeenCalledOnce()

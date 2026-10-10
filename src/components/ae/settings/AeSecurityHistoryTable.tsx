@@ -8,7 +8,7 @@ import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeRecordTable } from '@/components/ae/operator/AeOperatorDataTable'
 import { Button } from '@/components/arc/button/button'
 import { Drawer, DrawerContent } from '@/components/ae/shared/base-ui/drawer/drawer'
-import { formatUtcTimestamp } from '@/lib/ui/format-time'
+import { formatTimestamp } from '@/lib/ui/format-time'
 import { statusToneOf } from '@/lib/ui/status-presentation'
 import { RecordTime } from '@/components/ae/operator/RecordTime'
 import { Badge } from '@/components/arc/badge/badge'
@@ -86,11 +86,11 @@ export function AeSecurityHistoryTable({
                   label: 'Observed time',
                   value: selectedEvent.observedAt === undefined
                     ? 'Observed time unavailable'
-                    : `${formatUtcTimestamp(selectedEvent.observedAt)} UTC`,
+                    : `${formatTimestamp(selectedEvent.observedAt, 'UTC')} UTC`,
                 },
                 {
                   label: 'Recorded time',
-                  value: `${formatUtcTimestamp(selectedEvent.recordedAt)} UTC`,
+                  value: `${formatTimestamp(selectedEvent.recordedAt, 'UTC')} UTC`,
                 },
                 ...(showActorAndTarget
                   ? [

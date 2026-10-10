@@ -8,9 +8,9 @@
 
 const clerkSemanticVariables = {
   colorPrimary: 'var(--foreground)',
-  colorBackground: 'var(--container)',
+  colorBackground: 'var(--card)',
   colorText: 'var(--foreground)',
-  colorInputBackground: 'var(--container)',
+  colorInputBackground: 'var(--card)',
   colorInputText: 'var(--foreground)',
   colorNeutral: 'var(--muted-foreground)',
   colorDanger: 'var(--destructive)',
@@ -20,10 +20,10 @@ const clerkPrimaryButtonClasses =
   'min-h-touch rounded-none bg-foreground text-background shadow-none hover:bg-foreground/90 enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
 
 const clerkSocialButtonClasses =
-  'min-h-touch rounded-none border-border bg-container hover:bg-muted enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
+  'min-h-touch rounded-none border-border bg-card hover:bg-muted enabled:active:scale-[0.98] transition-transform duration-100 ease-out motion-reduce:transition-none motion-reduce:active:scale-100'
 
 const clerkFormFieldInputClasses =
-  'min-h-touch rounded-none border-border bg-container text-base md:text-sm outline-none transition-[border-color,box-shadow] duration-fast ease-standard focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring aria-invalid:border-destructive aria-invalid:ring-2 aria-invalid:ring-inset aria-invalid:ring-destructive'
+  'min-h-touch rounded-none border-border bg-card text-base md:text-sm outline-none transition-[border-color,box-shadow] duration-fast ease-standard focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring aria-invalid:border-destructive aria-invalid:ring-2 aria-invalid:ring-inset aria-invalid:ring-destructive'
 
 const clerkCardBoxClasses =
   'min-h-96 w-full shadow-none transition-[min-height,opacity] duration-base ease-standard motion-reduce:transition-none'
@@ -41,7 +41,7 @@ const clerkAuthInteractiveElements = {
   formFieldErrorText: 'text-sm text-destructive',
   alertText: 'text-sm text-destructive',
   alert: 'border border-destructive bg-destructive/10 text-destructive',
-  badge: 'bg-brand-muted text-info-foreground text-xs font-medium',
+  badge: 'bg-brand-muted text-brand text-xs font-medium',
   headerTitle: 'font-sans text-xl font-medium tracking-tight',
   headerSubtitle: 'text-muted-foreground',
   footerActionLink: clerkFooterLinkClasses,

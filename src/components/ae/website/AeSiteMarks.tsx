@@ -41,7 +41,7 @@ export function AeCornerMarks() {
         <span
           key={corner}
           aria-hidden="true"
-          className={`pointer-events-none absolute text-info ${cornerClass[corner]}`}
+          className={`pointer-events-none absolute text-brand ${cornerClass[corner]}`}
         >
           <AePlusMark sizePx={14} />
         </span>
@@ -59,10 +59,10 @@ export function AeMarkedDivider({ orientation = 'auto' }: { orientation?: 'auto'
       role="separator"
       className={
         vertical
-          ? 'flex h-full w-auto flex-col items-center gap-1.5 text-info'
+          ? 'flex h-full w-auto flex-col items-center gap-1.5 text-brand'
           : auto
-            ? 'flex w-full items-center gap-1.5 text-info md:h-full md:w-auto md:flex-col'
-            : 'flex w-full items-center gap-1.5 text-info'
+            ? 'flex w-full items-center gap-1.5 text-brand md:h-full md:w-auto md:flex-col'
+            : 'flex w-full items-center gap-1.5 text-brand'
       }
     >
       <AePlusMark sizePx={12} />
@@ -104,10 +104,10 @@ export function AeConnectingFrame() {
         <span className="absolute inset-x-5 bottom-0 h-px bg-border" />
         <span className="absolute bottom-5 left-0 top-0 w-px bg-border" />
         <span className="absolute bottom-5 right-0 top-0 w-px bg-border" />
-        <span className="absolute bottom-[-6.5px] left-[-6.5px] text-info">
+        <span className="absolute bottom-[-6.5px] left-[-6.5px] text-brand">
           <AePlusMark sizePx={14} />
         </span>
-        <span className="absolute bottom-[-6.5px] right-[-6.5px] text-info">
+        <span className="absolute bottom-[-6.5px] right-[-6.5px] text-brand">
           <AePlusMark sizePx={14} />
         </span>
       </div>
@@ -137,8 +137,8 @@ export function AeGuideCrosshair({ crossX, crossY }: AeGuideCrosshairProps) {
       <span className="absolute top-0 left-[var(--cross-x)] h-[calc(var(--cross-y)-var(--cross-gap))] w-px bg-border" />
       <span className="absolute top-[calc(var(--cross-y)+var(--cross-gap))] left-[var(--cross-x)] h-[calc(100%-var(--cross-y)-var(--cross-gap))] w-px bg-border" />
       <span className="absolute top-[var(--cross-y)] left-[var(--cross-x)] size-3 -translate-x-1/2 -translate-y-1/2">
-        <span className="absolute top-0 left-1/2 h-full w-px -translate-x-1/2 bg-info" />
-        <span className="absolute top-1/2 left-0 h-px w-full -translate-y-1/2 bg-info" />
+        <span className="absolute top-0 left-1/2 h-full w-px -translate-x-1/2 bg-brand" />
+        <span className="absolute top-1/2 left-0 h-px w-full -translate-y-1/2 bg-brand" />
       </span>
     </div>
   )

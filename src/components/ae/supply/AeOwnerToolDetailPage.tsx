@@ -17,7 +17,7 @@ import { AeProviderToolDetail } from '@/components/ae/supply/AeProviderToolDetai
 import { OWNER_TOOL_DETAIL_COPY } from '@/components/ae/supply/owner-tool-detail.contracts'
 import type { ProviderToolActionOutcome } from '@/modules/capability-supply/provider-tool-actions.contracts'
 import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
-import { formatTimestamp } from '@/lib/ui/format-time'
+import { formatCount, formatTimestamp } from '@/lib/ui/format-time'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import {
@@ -127,7 +127,7 @@ export function AeOwnerToolDetailPage({ toolRef, identity, status, inventoryQuer
               label: OWNER_TOOL_DETAIL_COPY.callsLabel,
               value: status.tool.callsCount === undefined
                 ? OWNER_TOOL_DETAIL_COPY.missingValue
-                : `${status.tool.callsCount.toLocaleString('en-AU')} Calls`,
+                : `${formatCount(status.tool.callsCount)} Calls`,
             },
             {
               label: OWNER_TOOL_DETAIL_COPY.updatedLabel,

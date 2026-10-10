@@ -1,5 +1,5 @@
 import { adminObjectHref } from '@/lib/operator/admin-console/contracts'
-import { formatPerthTimestamp } from '@/lib/ui/format-time'
+import { formatTimestamp } from '@/lib/ui/format-time'
 import { parseCallRef, parseQuoteRef } from '@/modules/capability-execution/call-contracts'
 import { isPublicToolRef } from '@/modules/capability-supply/public'
 import { isAccountRef } from '@/modules/principal-account/account/public'
@@ -55,7 +55,7 @@ export function buildAdminCallObjectViewModel(view: AdminCallObjectView): AdminC
     })
     facts.push({
       label: ADMIN_CALL_OBJECT_COPY.resolvedAtLabel,
-      value: formatPerthTimestamp(view.resolution.resolvedAt),
+      value: formatTimestamp(view.resolution.resolvedAt, 'Australia/Perth'),
     })
   }
 

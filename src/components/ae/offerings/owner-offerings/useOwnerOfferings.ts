@@ -1,3 +1,4 @@
+import { formatCount } from '@/lib/ui/format-time'
 import type {
   OwnerOfferingSummary,
 } from '@/components/ae/offerings/provider-workspace-projection'
@@ -28,7 +29,7 @@ export function matchesOwnerOfferingInventory(item: OwnerOfferingSummary, query:
     item.availability,
     item.blocker,
     item.pricingLabel,
-    item.callsCount?.toLocaleString('en-AU'),
+    item.callsCount === undefined ? undefined : formatCount(item.callsCount),
   ]
   return candidates.some((value) => value?.toLocaleLowerCase().includes(normalized) === true)
 }

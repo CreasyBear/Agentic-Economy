@@ -13,8 +13,8 @@ export function CreditBalanceCard({ label, value, busy, status, children, onRefr
     <CardHeader className="gap-6 px-5 py-5 sm:px-6">
       <div className="grid items-start gap-5 sm:grid-cols-[minmax(0,1fr)_auto]">
         <div className="flex min-w-0 gap-4"><span className="flex size-11 shrink-0 items-center justify-center rounded-lg border border-border bg-muted/60"><Wallet className="size-5" aria-hidden="true" /></span>
-          <div className="grid min-w-0 gap-2"><h3 className="text-base font-semibold">{label}</h3>
-            {value === undefined ? null : <p className="break-words font-mono text-3xl font-semibold tabular-nums">{value}</p>}
+          <div className="grid min-w-0 gap-2"><h3 className="text-base font-medium">{label}</h3>
+            {value === undefined ? null : <p className="break-words font-mono text-3xl font-medium tabular-nums">{value}</p>}
             <p className="text-sm text-muted-foreground">AUD Account credit for admitted paid Calls.</p>
           </div></div>
         {status === undefined ? null : <span className="rounded-full border border-border px-3 py-1 text-xs font-medium">{status}</span>}

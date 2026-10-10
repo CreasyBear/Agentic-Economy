@@ -482,7 +482,7 @@ describe('transcript projector', () => {
     expect(execute?.kind === 'execute' ? execute.outputPreview : undefined).toContain(executeSecret)
     expect(execute?.kind === 'execute' ? execute.facts : undefined).toEqual([
       { label: 'Charge', value: 'A$0.25 · Paid' },
-      { label: 'Exact charge', value: 'AUD 0.25' },
+      { label: 'Exact charge', value: 'A$0.25' },
       { label: 'Duration', value: '850 ms' },
     ])
     expect(execute?.kind === 'execute' ? execute.suggestedNextAction : undefined).toMatchObject({

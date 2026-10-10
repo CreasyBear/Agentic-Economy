@@ -22,7 +22,7 @@ export function PlanConfirmationSkeleton() {
             <Skeleton lines={1} className="w-32" label="Loading Plan stages" />
             <div className="grid min-w-0 grid-cols-2 gap-3">
               {['first-stage', 'next-stage'].map((stage) => (
-                <div key={stage} className="grid min-w-0 gap-2 rounded-card border border-border p-3">
+                <div key={stage} className="grid min-w-0 gap-2 rounded-lg border border-border p-3">
                   <Skeleton lines={1} className="w-24" label="Loading Plan stages" />
                   <Skeleton lines={2} label="Loading Plan stages" />
                 </div>
@@ -33,7 +33,7 @@ export function PlanConfirmationSkeleton() {
             <Skeleton lines={1} className="w-36" label="Loading Node ceilings" />
             <div className="grid min-w-0 gap-3">
               {['first-node', 'second-node', 'third-node'].map((node) => (
-                <div key={node} className="grid min-w-0 gap-3 rounded-card border border-border bg-muted/30 p-4">
+                <div key={node} className="grid min-w-0 gap-3 rounded-lg border border-border bg-muted/30 p-4">
                   <div className="flex min-w-0 justify-between gap-2">
                     <Skeleton lines={2} className="w-40" label="Loading Node ceiling" />
                     <Skeleton lines={1} className="w-24" label="Loading Node ceiling" />
