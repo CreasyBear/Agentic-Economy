@@ -5,7 +5,7 @@ import { AdminActionSheet } from './AdminActionSheet'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Button } from '@/components/arc/button/button'
 import { Input } from '@/components/arc/input/input'
-import { formatPerthTimestamp } from '@/lib/ui/format-time'
+import { formatTimestamp } from '@/lib/ui/format-time'
 import type { AdminActionInput } from '@/lib/operator/admin-console/contracts'
 
 export function AdminTrialAccess({ accountRef }: { accountRef?: string }) {
@@ -38,15 +38,15 @@ export function AdminTrialAccess({ accountRef }: { accountRef?: string }) {
           {accountRef === undefined ? <p className="text-sm font-medium">Latest 25 approved trials</p> : null}
           <ul className="grid gap-related">
             {view.offers.map(offer => (
-              <li key={offer.offerRef} className="rounded-card border border-border p-related text-sm">
+              <li key={offer.offerRef} className="rounded-lg border border-border p-related text-sm">
                 <p className="break-words font-medium">{offer.recipient.kind === 'email' ? offer.recipient.email : offer.recipient.accountRef}</p>
                 {offer.delivery.kind === 'queued' || offer.delivery.kind === 'sending' ? <p>Invitation delivery pending.</p>
                   : offer.delivery.kind === 'sent' ? <p>Invitation sent.</p>
                     : offer.delivery.kind === 'failed' ? <p>Email could not be sent. The approved recipient can sign in at /trial to activate.</p>
                       : offer.delivery.kind === 'unknown' ? <p>Email delivery is unconfirmed. A duplicate email will not be sent. The recipient can sign in at /trial.</p> : null}
-                {offer.activation.kind === 'unclaimed' ? <p>Awaiting activation · claim by {formatPerthTimestamp(offer.activation.claimBy)}</p> : (
+                {offer.activation.kind === 'unclaimed' ? <p>Awaiting activation · claim by {formatTimestamp(offer.activation.claimBy, 'Australia/Perth')}</p> : (
                   <>
-                    <p>{offer.booking === 'booked' ? 'A$10 credit granted.' : offer.booking === 'pending' ? 'Credit confirmation pending.' : 'Credit status unavailable.'} Expires {formatPerthTimestamp(offer.activation.expiresAt)}.</p>
+                    <p>{offer.booking === 'booked' ? 'A$10 credit granted.' : offer.booking === 'pending' ? 'Credit confirmation pending.' : 'Credit status unavailable.'} Expires {formatTimestamp(offer.activation.expiresAt, 'Australia/Perth')}.</p>
                     <a className="underline underline-offset-4" href={`/admin/workspaces/${encodeURIComponent(offer.activation.accountRef)}`}>Open Account</a>
                   </>
                 )}

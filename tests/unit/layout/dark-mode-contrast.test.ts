@@ -89,6 +89,7 @@ describe('dark mode contrast (S-17)', () => {
   it('declares calibrated dark surface and border tokens', () => {
     expect(parseDeclValue(darkBlock, '--ae-surface-raised')).toBe('#242424')
     expect(parseDeclValue(darkBlock, '--ae-surface-sunken')).toBe('#0f0f0f')
-    expect(parseDeclValue(darkBlock, '--ae-border')).toBe('#383838')
+    expect(parseDeclValue(darkBlock, '--ae-hairline')).toBe('color-mix(in srgb, var(--ae-fg) 8%, transparent)')
+    expect(parseDeclValue(darkBlock, '--border')).toBe('var(--ae-hairline)')
   })
 })

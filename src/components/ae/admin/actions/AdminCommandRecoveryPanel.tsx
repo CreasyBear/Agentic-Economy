@@ -6,7 +6,7 @@ import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { Badge } from '@/components/arc/badge/badge'
 import { Button } from '@/components/arc/button/button'
 import { ADMIN_REFUSAL_PRESENTATION } from '@/lib/operator/admin-console/refusal-presentation'
-import { formatPerthTimestamp } from '@/lib/ui/format-time'
+import { formatTimestamp } from '@/lib/ui/format-time'
 import { ADMIN_ACTION_COPY, ADMIN_SUCCESS_COPY } from './actions.contracts'
 import type { AdminCommandRecoveryIdentity } from './admin-command-recovery'
 import { useAdminCommandObservation, useAdminCommandRecovery } from './useAdminCommandRecovery'
@@ -31,7 +31,7 @@ function AdminCommandRecoveryContent() {
     <div className="flex w-full flex-wrap items-center justify-between gap-3">
       <div className="min-w-0">
         <div className="flex min-w-0 flex-wrap items-center gap-2.5">
-          <h2 className="text-foreground text-lg leading-tight font-semibold tracking-tight">Command recovery</h2>
+          <h2 className="text-foreground text-lg leading-tight font-medium tracking-tight">Command recovery</h2>
           <Badge tone="neutral">{recovery.entries.length} tracked</Badge>
         </div>
         <p className="mt-0.5 text-sm text-muted-foreground">Check commands whose outcomes need confirmation.</p>
@@ -66,7 +66,7 @@ function RecoveryRecord({ scope, identity }: Readonly<{ scope: string; identity:
       : observation.kind !== 'recorded' ? 'No outcome has been confirmed. Keep this command identity and inspect Audit before starting another command of this type.'
         : receipt?.kind === 'pending' ? 'The command is recorded and still pending. Its receipt updates when the source confirms completion.'
           : receipt?.kind === 'completed' ? Object.entries(ADMIN_SUCCESS_COPY).find(([code]) => code === receipt.code)?.[1] ?? 'The command is completed.'
-            : receipt?.kind === 'proposed' ? `A second approval is required before ${formatPerthTimestamp(receipt.expiresAt)}.`
+            : receipt?.kind === 'proposed' ? `A second approval is required before ${formatTimestamp(receipt.expiresAt, 'Australia/Perth')}.`
               : Object.entries(ADMIN_REFUSAL_PRESENTATION).find(([code]) => receipt?.kind === 'refused' && code === receipt.code)?.[1].copy ?? 'The command was refused.'
   const refs = receipt?.kind === 'completed' || receipt?.kind === 'pending' ? receipt.effectRefs : []
   return <>

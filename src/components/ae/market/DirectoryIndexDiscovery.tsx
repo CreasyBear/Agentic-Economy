@@ -1,3 +1,4 @@
+import { formatCount } from '@/lib/ui/format-time'
 import { Link } from '@tanstack/react-router'
 import { ArrowUpRight } from 'lucide-react'
 
@@ -41,7 +42,7 @@ export function DirectoryIndexDiscovery({ overview, onSave, isSaved, onCompare, 
       action={<Link to={marketPath} search={{ view: 'providers' }} className="arc-listing-all">All Providers<ArrowUpRight size={16} aria-hidden="true" /></Link>}
       {...(overview.providers.length === 0 ? { empty: <p className="arc-listing-empty">No Provider hostnames are available for this selection.</p> } : {})}
     >
-      {overview.providers.map(provider => <li key={provider.key}><ProviderListingCard provider={provider.label} {...(provider.iconUrl === undefined ? {} : { iconUrl: provider.iconUrl })} countLabel={`${provider.count.toLocaleString('en-AU')} ${provider.count === 1 ? 'Tool' : 'Tools'}`} countScope="In the indexed catalogue" action={<Link to={marketPath} search={{ view: 'tools', provider: provider.key }} aria-label={`View Tools from ${provider.label}`} className="arc-provider-action">Explore Tools<ArrowUpRight size={16} aria-hidden="true" /></Link>} /></li>)}
+      {overview.providers.map(provider => <li key={provider.key}><ProviderListingCard provider={provider.label} {...(provider.iconUrl === undefined ? {} : { iconUrl: provider.iconUrl })} countLabel={`${formatCount(provider.count)} ${provider.count === 1 ? 'Tool' : 'Tools'}`} countScope="In the indexed catalogue" action={<Link to={marketPath} search={{ view: 'tools', provider: provider.key }} aria-label={`View Tools from ${provider.label}`} className="arc-provider-action">Explore Tools<ArrowUpRight size={16} aria-hidden="true" /></Link>} /></li>)}
     </ProductListingShelf>
   </div>
 }

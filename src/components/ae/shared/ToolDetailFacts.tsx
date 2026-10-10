@@ -16,8 +16,8 @@ export function ToolDetailFacts({ view, primary, chatHref, cliCommand, onCopyCli
   return (
     <section aria-label="Tool decision facts" className="grid min-w-0 gap-section">
       <div className="grid min-w-0 gap-related">
-        <h1 className="min-w-0 wrap-anywhere text-title-lg font-medium tracking-tight">{view.title}</h1>
-        {view.outcome === undefined ? null : <p className="min-w-0 wrap-anywhere text-deck text-muted-foreground">{view.outcome}</p>}
+        <h1 className="min-w-0 wrap-anywhere text-title font-medium tracking-tight">{view.title}</h1>
+        {view.outcome === undefined ? null : <p className="min-w-0 wrap-anywhere text-body text-muted-foreground">{view.outcome}</p>}
         <ToolFacts view={view} />
         <p className="text-xs text-muted-foreground">Title source: {view.listing.identity.title.provenance.replaceAll('_', ' ')}</p>
         {view.price === undefined ? null : <p className="text-xs text-muted-foreground">Price source: {view.listing.facts.price.provenance.replaceAll('_', ' ')}</p>}

@@ -1,3 +1,4 @@
+import { formatDate } from '@/lib/ui/format-time'
 import { useAuth } from '@clerk/tanstack-react-start'
 import { Link } from '@tanstack/react-router'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
@@ -69,7 +70,7 @@ export function DirectorySavedNeeds() {
       const row = shownRows[item.requestRef]
       return <li key={item.requestRef} className="flex flex-col gap-3 py-4">
         <p className="font-medium">{item.query}</p>
-        <p className="text-xs text-muted-foreground">Saved {new Date(item.createdAt).toLocaleDateString('en-AU')} · Request reference: <code className="break-all">{item.requestRef}</code></p>
+        <p className="text-xs text-muted-foreground">Saved {formatDate(item.createdAt)} · Request reference: <code className="break-all">{item.requestRef}</code></p>
         {item.filters === undefined ? null : <details><summary className="text-sm">Saved search filters</summary><pre className="overflow-auto text-xs">{JSON.stringify(item.filters, null, 2)}</pre></details>}
         <p role="status" className="text-sm">{row?.result?.kind === 'matched' ? `${row.result.matchedCount} matching Tools` : row?.result?.kind === 'open' ? 'Waiting for matching supply' : row?.result?.kind === 'not_found' ? 'This need has expired or was withdrawn.' : 'Check status to assess current supply.'}</p>
         {row?.result?.kind === 'matched' ? <ul>{row.result.tools.map(tool => <li key={tool.toolRef}><Link to="/tools/$toolRef" params={{ toolRef: tool.toolRef }} state={MARKET_LINK_STATE}>{tool.title}</Link></li>)}</ul> : null}

@@ -1,3 +1,4 @@
+import { formatCount } from '@/lib/ui/format-time'
 import { Link } from "@tanstack/react-router";
 import { SearchIcon } from "lucide-react";
 import { useMemo } from "react";
@@ -34,10 +35,10 @@ export function AeHomeLanding({ read }: AeHomeLandingProps) {
     read.kind === "unavailable"
       ? "Catalogue unavailable"
       : read.kind === 'directory'
-        ? `${toolCount.toLocaleString()} Tools paid per Call in AUD`
+        ? `${formatCount(toolCount)} Tools paid per Call in AUD`
       : read.matchedCount === undefined
-        ? `${toolCount.toLocaleString()} shown`
-        : `${toolCount.toLocaleString()} current ${toolLabel}`;
+        ? `${formatCount(toolCount)} shown`
+        : `${formatCount(toolCount)} current ${toolLabel}`;
 
   return (
     <div className="flex flex-col">
@@ -73,7 +74,7 @@ function HomeHero({
           </AeSiteButton>
         </div>
       </AeSiteHeroIntro>
-      <div className="mx-auto mt-hero w-full max-w-3xl">
+      <div className="mx-auto mt-section w-full max-w-3xl">
         <AeSiteBrowser url="/llms.txt">
           <AeAgentInstructionCard framed />
         </AeSiteBrowser>
@@ -100,7 +101,7 @@ export function HomeCapabilityResults({
       background={<AeConnectingFrame />}
       className="scroll-mt-anchor"
     >
-      <div className="py-page md:pb-hero">
+      <div className="py-page md:pb-section">
         <AeCollectionRail title={HOME.catalogHeading} titleId="home-catalog-heading">
           {read.kind === "unavailable" ? (
             <AeEmptyState

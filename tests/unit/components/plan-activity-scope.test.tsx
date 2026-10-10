@@ -10,7 +10,7 @@ describe('Account Plan history in Call activity', () => {
     render(<PlanActivity plans={[{ planRef: 'plan:review', state: 'awaiting_approval', nodeCount: 2, approvedTotalAudUnits: '12000000', createdAt: 1 }]}
       returnScope={{ returnRange: '7d', returnStatus: 'refused' }} />)
     expect(screen.getByText('Call date and status filters do not filter this Account Plan history.')).toBeInTheDocument()
-    expect(screen.getByText('Maximum AUD 12.000000')).toBeInTheDocument()
+    expect(screen.getByText('Maximum A$12.00')).toBeInTheDocument()
     const link = new URL(screen.getByRole('link', { name: '2 Tool nodes · awaiting approval' }).getAttribute('href')!, 'https://aecon.test')
     expect(link.pathname).toBe('/plans/plan%3Areview')
     expect(link.searchParams.get('returnRange')).toBe('7d')

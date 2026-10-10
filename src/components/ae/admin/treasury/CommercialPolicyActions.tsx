@@ -7,7 +7,7 @@ import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { Button } from '@/components/arc/button/button'
 import { Input } from '@/components/arc/input/input'
 import { Label } from '@/components/ui/label'
-import { formatPerthTimestamp } from '@/lib/ui/format-time'
+import { formatTimestamp } from '@/lib/ui/format-time'
 import { COMMERCIAL_POLICY_FAMILIES, type CommercialPolicyEnvironment, type CommercialPolicyFamily } from '@/modules/money/public'
 import { createPrefixedRandomId } from '@/modules/common/random-id'
 import { buildPolicyInput, fieldsFromCurrent, POLICY_LABELS, proposedProductionPolicyFields, type PolicyFields, type PolicyInput, type PolicyPreparation } from './commercial-policy-form'
@@ -16,7 +16,7 @@ import { CommercialPolicyTable } from './CommercialPolicyTable'
 
 type Draft = { preparation: PolicyPreparation; fields: PolicyFields }
 type Review = { input: PolicyInput; stateDigest?: string; requiresSecondApproval: boolean }
-const selectClass = 'h-11 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+const selectClass = 'h-11 w-full rounded-sm border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
 
 /** Query state never writes draft state. Edit and review events capture the exact preparation and terms. */
 export function CommercialPolicyActions({ environment }: { environment: CommercialPolicyEnvironment }) {
@@ -80,7 +80,7 @@ export function CommercialPolicyActions({ environment }: { environment: Commerci
         <p className="text-sm">Environment: {ready.environment}. {ready.requiresSecondApproval ? 'A different Admin owner must approve this change.' : 'An Admin owner can approve this change.'}</p>
         {ready.conflict ? <AeAlert tone="danger" title="Multiple active policies conflict. Changes are unavailable until the conflict is resolved." role="alert" /> : null}
         {current === null ? <p>No approved policy is recorded for this family.</p> : <details><summary className="cursor-pointer">Recorded policy: {current.lifecycle}, revision {current.revision}</summary>
-          <div className="mt-3 grid gap-related"><p className="break-all text-sm">{current.policyRef}</p><p className="text-sm">Effective {formatPerthTimestamp(current.effectiveAt)} · expires {formatPerthTimestamp(current.expiresAt)} Perth time</p><CommercialPolicyControlReview control={current.control} /><p className="break-all text-sm">Evidence: {current.evidenceRef}</p><p className="break-all text-sm">Approved by: {current.approvedByPrincipalRef}</p></div>
+          <div className="mt-3 grid gap-related"><p className="break-all text-sm">{current.policyRef}</p><p className="text-sm">Effective {formatTimestamp(current.effectiveAt, 'Australia/Perth')} · expires {formatTimestamp(current.expiresAt, 'Australia/Perth')} Perth time</p><CommercialPolicyControlReview control={current.control} /><p className="break-all text-sm">Evidence: {current.evidenceRef}</p><p className="break-all text-sm">Approved by: {current.approvedByPrincipalRef}</p></div>
         </details>}
         {draft === null ? <div className="flex flex-wrap gap-intra"><Button type="button" disabled={ready.conflict || review !== null} onClick={() => beginEdit(current?.lifecycle === 'active')}>{current?.lifecycle === 'active' ? 'Replace active policy' : 'Prepare new policy'}</Button>{current?.lifecycle === 'active' ? <Button type="button" variant="secondary" disabled={ready.conflict || review !== null} onClick={suspend}>Suspend active policy</Button> : null}</div> : null}
       </>}

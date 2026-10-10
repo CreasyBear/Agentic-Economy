@@ -1,7 +1,7 @@
 import type { AdminCommandRequest } from '../actions/actions.contracts'
 import { SettingsPageGroup } from '@/components/ae/shared/arc-pro/settings-page/settings-page'
 import { SortableDataTable } from '@/components/arc/sortable-data-table/sortable-data-table'
-import { formatPerthTimestamp } from '@/lib/ui/format-time'
+import { formatTimestamp } from '@/lib/ui/format-time'
 import { POLICY_LABELS, policyDecimal } from './commercial-policy-form'
 
 type Term = readonly [label: string, value: string]
@@ -45,7 +45,7 @@ export function CommercialPolicyReview({ input }: { input: ReviewInput }) {
           ['Change', input.changeKind === 'activate' ? 'Activate a new policy' : input.changeKind === 'replace' ? 'Replace active policy' : 'Suspend active policy'],
           ['Environment', input.environment], ['Revision', String(input.revision)], ['Policy reference', input.policyRef],
           ...(input.expectedCurrentPolicyRef === undefined ? [] : [['Current policy reference', input.expectedCurrentPolicyRef] as const]),
-          ['Effective', `${formatPerthTimestamp(input.effectiveAt)} Perth time`], ['Expires', `${formatPerthTimestamp(input.expiresAt)} Perth time`],
+          ['Effective', `${formatTimestamp(input.effectiveAt, 'Australia/Perth')} Perth time`], ['Expires', `${formatTimestamp(input.expiresAt, 'Australia/Perth')} Perth time`],
         ]} caption="Policy change details" />
         <CommercialPolicyControlReview control={input.control} />
         {input.control.family === 'treasury_custody' ? <p className="text-sm text-muted-foreground">The recorded minimum must not exceed the current custody maximum. A higher floor requires changing custody configuration before approval; later cap drift blocks production admission.</p> : null}

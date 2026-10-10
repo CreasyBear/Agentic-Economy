@@ -1,3 +1,4 @@
+import { formatCount } from '@/lib/ui/format-time'
 import { ChevronDownIcon, SlidersHorizontalIcon } from 'lucide-react'
 import { useEffect, useId, useRef, useState } from 'react'
 import styles from './DirectoryExplorerFilters.module.css'
@@ -179,8 +180,8 @@ function PayerBreadthFilter({ search, onChange }: Pick<DirectoryExplorerFiltersP
   const selectedMax = search.maxPayers30d
   const removalFilters: FilterChip[] = [
     ...(selectedBand === undefined ? [] : [{ id: 'adoptionBand', label: 'payer band', value: adoptionBandLabels[selectedBand] }]),
-    ...(selectedMax === undefined ? [] : [{ id: 'maxPayers30d', label: 'maximum payer count', value: `At most ${selectedMax.toLocaleString('en-AU')} paying addresses` }]),
-    ...(search.minPayers30d === undefined ? [] : [{ id: 'minPayers30d', label: 'minimum payer count', value: `At least ${search.minPayers30d.toLocaleString('en-AU')} paying addresses` }]),
+    ...(selectedMax === undefined ? [] : [{ id: 'maxPayers30d', label: 'maximum payer count', value: `At most ${formatCount(selectedMax)} paying addresses` }]),
+    ...(search.minPayers30d === undefined ? [] : [{ id: 'minPayers30d', label: 'minimum payer count', value: `At least ${formatCount(search.minPayers30d)} paying addresses` }]),
   ]
   const payerOptions = [
     { value: 'any', label: 'Any payer count' },
@@ -189,7 +190,7 @@ function PayerBreadthFilter({ search, onChange }: Pick<DirectoryExplorerFiltersP
     { value: '1000', label: '1,000+ paying addresses' },
   ]
   if (search.minPayers30d !== undefined && ![10, 100, 1000].includes(search.minPayers30d)) {
-    payerOptions.push({ value: String(search.minPayers30d), label: `${search.minPayers30d.toLocaleString('en-AU')}+ paying addresses` })
+    payerOptions.push({ value: String(search.minPayers30d), label: `${formatCount(search.minPayers30d)}+ paying addresses` })
   }
   const selectedPayerValue = selectedBand === undefined && selectedMax === undefined
     ? [search.minPayers30d === undefined ? 'any' : String(search.minPayers30d)]
@@ -377,8 +378,8 @@ function appliedFilters(search: DirectoryExplorerFilterValues, overview: X402Dir
   if (search.provider !== undefined) filters.push({ id: 'provider', label: 'Directory Hosts', value: facetLabel(overview, 'providers', search.provider) })
   if (search.minUsdPrice !== undefined) filters.push({ id: 'minUsdPrice', label: 'Minimum Provider-listed price', value: `${String(search.minUsdPrice)} USDC` })
   if (search.maxUsdPrice !== undefined) filters.push({ id: 'maxUsdPrice', label: 'Maximum Provider-listed price', value: `${String(search.maxUsdPrice)} USDC` })
-  if (search.minPayers30d !== undefined) filters.push({ id: 'minPayers30d', label: 'Minimum paying addresses', value: `${search.minPayers30d.toLocaleString('en-AU')} or more` })
-  if (search.maxPayers30d !== undefined) filters.push({ id: 'maxPayers30d', label: 'Maximum paying addresses', value: `At most ${search.maxPayers30d.toLocaleString('en-AU')}` })
+  if (search.minPayers30d !== undefined) filters.push({ id: 'minPayers30d', label: 'Minimum paying addresses', value: `${formatCount(search.minPayers30d)} or more` })
+  if (search.maxPayers30d !== undefined) filters.push({ id: 'maxPayers30d', label: 'Maximum paying addresses', value: `At most ${formatCount(search.maxPayers30d)}` })
   if (search.priceBand !== undefined) filters.push({ id: 'priceBand', label: 'Provider-listed price', value: priceBandLabels[search.priceBand] })
   if (search.adoptionBand !== undefined) filters.push({ id: 'adoptionBand', label: 'Payer band', value: adoptionBandLabels[search.adoptionBand] })
   if (search.curatedOnly === true) filters.push({ id: 'curatedOnly', label: 'Bazaar curated' })

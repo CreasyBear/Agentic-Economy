@@ -7,7 +7,7 @@ import type { api } from '../../../../../convex/_generated/api'
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { AeRecordTable } from '@/components/ae/operator/AeOperatorDataTable'
 import { Button } from '@/components/arc/button/button'
-import { formatPerthTimestamp } from '@/lib/ui/format-time'
+import { formatTimestamp } from '@/lib/ui/format-time'
 import { validCommercialPolicyControl, validProductionCommercialPolicyControl, type CommercialPolicyFamily } from '@/modules/money/public'
 import { POLICY_LABELS } from './commercial-policy-form'
 
@@ -41,7 +41,7 @@ export function CommercialPolicyTable({ summary, selectedFamily, locked, onSelec
       return <div className="grid gap-1">
         <span>{commercialPolicyStatus(policy, summary.observedAt)}{policy.current === null ? '' : ` · revision ${policy.current.revision}`}</span>
         {firstPending === undefined ? <span>No pending decision</span> : <>
-          <span>{policy.pending.length} awaiting second owner · next expires {formatPerthTimestamp(firstPending.expiresAt)}</span>
+          <span>{policy.pending.length} awaiting second owner · next expires {formatTimestamp(firstPending.expiresAt, 'Australia/Perth')}</span>
           <details><summary className="cursor-pointer">Proposal reference</summary><AeCopyReference label="Proposal" value={firstPending.proposalRef} /></details>
           <Link to="/admin/audit-events" className="underline underline-offset-4">Review in Audit</Link>
         </>}
@@ -49,7 +49,7 @@ export function CommercialPolicyTable({ summary, selectedFamily, locked, onSelec
     } },
     { id: 'validity', header: 'Validity (Perth)', enableSorting: false, cell: ({ row }) => {
       const current = row.original.current
-      return current === null ? '—' : <div className="grid gap-1"><span>From {formatPerthTimestamp(current.effectiveAt)}</span><span>Until {formatPerthTimestamp(current.expiresAt)}</span></div>
+      return current === null ? '—' : <div className="grid gap-1"><span>From {formatTimestamp(current.effectiveAt, 'Australia/Perth')}</span><span>Until {formatTimestamp(current.expiresAt, 'Australia/Perth')}</span></div>
     } },
     { id: 'decision', header: 'Recorded decision', enableSorting: false, cell: ({ row }) => {
       const current = row.original.current

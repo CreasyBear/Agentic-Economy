@@ -1,3 +1,4 @@
+import { formatCount } from '@/lib/ui/format-time'
 import { useMemo } from 'react'
 import { useTable, type ColumnDef } from '@tanstack/react-table'
 import { groupDirectoryProviders, toDirectoryToolCardModel } from '@/modules/market/directory-card.view-model'
@@ -28,7 +29,7 @@ export function DirectoryProviderList({ entries, layout = 'table', onSelect }: D
     const lead = group.tools[0]
     return lead === undefined ? [] : [{ provider: group.provider, count: group.tools.length, model: toDirectoryToolCardModel(lead) }]
   }), [entries])
-  const countLabel = (row: ProviderRow) => `${row.count.toLocaleString('en-AU')} ${row.count === 1 ? 'Tool' : 'Tools'} in these results`
+  const countLabel = (row: ProviderRow) => `${formatCount(row.count)} ${row.count === 1 ? 'Tool' : 'Tools'} in these results`
   const action = (provider: string) => <button type="button" className="arc-provider-table-action" onClick={() => onSelect(provider)} aria-label={`View Tools from ${provider}`}>{provider}</button>
   if (layout === 'grid') return <ProductListing>{rows.map(row => <li key={row.provider} className="h-full min-w-0"><ProviderListingCard provider={row.provider} {...(row.model.iconUrl === undefined ? {} : { iconUrl: row.model.iconUrl })} countLabel={countLabel(row)} countScope="Price and activity below belong to the shown Tool." action={action(row.provider)} facts={<div className="arc-provider-source-facts"><p>Shown Tool: {row.model.title}</p><p>{row.model.accessLabel}</p><p>{row.model.priceLabel || 'Price unavailable'}</p>{row.model.priceContext === '' ? null : <p>{row.model.priceContext}</p>}<p>Coinbase Bazaar calls · 30 days: {row.model.callsLabel ?? 'Not reported'}</p><p>Coinbase Bazaar payers · 30 days: {row.model.payersLabel ?? 'Not reported'}</p></div>} /></li>)}</ProductListing>
   return <DirectoryProviderTable rows={rows} onSelect={onSelect} />
@@ -77,7 +78,7 @@ function DirectoryProviderTable({ rows, onSelect }: Pick<DirectoryProviderListPr
     {
       id: 'count', header: 'Tools', enableSorting: false,
       meta: { numeric: true, headerClassName: 'text-end', cellClassName: 'text-end tabular-nums' },
-      cell: ({ row }) => <span title={`${row.original.count.toLocaleString('en-AU')} ${row.original.count === 1 ? 'Tool' : 'Tools'} in these results`}>{row.original.count.toLocaleString('en-AU')}</span>,
+      cell: ({ row }) => <span title={`${formatCount(row.original.count)} ${row.original.count === 1 ? 'Tool' : 'Tools'} in these results`}>{formatCount(row.original.count)}</span>,
     },
   ], [onSelect])
   const table = useTable({

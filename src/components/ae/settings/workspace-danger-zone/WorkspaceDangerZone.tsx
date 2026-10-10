@@ -23,7 +23,7 @@ function WorkspaceDangerZoneContent(props: WorkspaceDangerZoneProps) {
   const headingRef = useRef<HTMLDivElement | null>(null)
   const { loading, closePanel, transferPanel, completion, readUnavailable, onRetryRead } = useWorkspaceDangerZone(props)
   if (completion !== undefined) return <section className="grid gap-4" aria-label="Workspace change complete">
-    <h2 className="text-lg font-semibold">{completion.kind === 'closed' ? 'Workspace closed' : 'Ownership transferred'}</h2>
+    <h2 className="text-lg font-medium">{completion.kind === 'closed' ? 'Workspace closed' : 'Ownership transferred'}</h2>
     <p role="status">{completion.kind === 'closed' ? `${completion.displayName} is closed. Its Tools, access keys and delegations stop. Retained records remain subject to their retention rules.`
       : `${completion.successorName ?? 'The selected member'} now owns ${completion.displayName}. You remain a member; balances and Calls stay with the workspace.`}</p>
     <p className="break-all text-sm">Workspace reference: {completion.accountRef}</p>

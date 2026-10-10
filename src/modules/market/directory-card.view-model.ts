@@ -1,5 +1,5 @@
 import Decimal from 'decimal.js'
-import { formatRelativeTime } from '@/lib/ui/format-time'
+import { formatCount, formatDate, formatRelativeTime } from '@/lib/ui/format-time'
 import { captureRouteException } from '@/lib/observability/capture-route-exception'
 import type { X402DirectoryFacet } from '@/modules/market/x402-directory-catalogue'
 import { directoryProviderKey, directorySlugBase, minimumDirectoryUsdPrice } from '@/modules/market/x402-directory-index'
@@ -79,7 +79,7 @@ export function directoryPriceContext(entry: X402DirectoryEntry): string {
 
 export function directoryDate(value: string): string {
   const date = new Date(value)
-  return Number.isFinite(date.getTime()) ? new Intl.DateTimeFormat('en-AU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(date) : value
+  return Number.isFinite(date.getTime()) ? formatDate(date, 'UTC') : value
 }
 
 const GLANCE_NOISE = new Set([
@@ -147,7 +147,7 @@ export function directoryInitials(providerLine: string): string {
 
 function countLabel(value: number | undefined): string | undefined {
   if (value === undefined || !Number.isSafeInteger(value) || value < 0) return undefined
-  return value.toLocaleString('en-AU')
+  return formatCount(value)
 }
 
 /** Buyer-facing USD from a published source USDC amount. */
@@ -182,7 +182,7 @@ export function toDirectoryProviderRow(provider: X402DirectoryFacet): DirectoryP
     key: provider.key,
     initials: directoryInitials(provider.key),
     ...(provider.iconUrl === undefined ? {} : { iconUrl: provider.iconUrl }),
-    toolLabel: provider.count.toLocaleString('en-AU'),
+    toolLabel: formatCount(provider.count),
     callsLabel: calls ?? '—',
     payersLabel: payers ?? '—',
     priceLabel: sourcePrice === '—' ? '' : sourcePrice,

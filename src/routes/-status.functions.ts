@@ -6,7 +6,7 @@ import { readReleaseSourceRevision } from '@/lib/deployment/environment'
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { readServerReadiness } from '@/lib/server/readiness'
 import { readRequestCorrelationId } from '@/lib/server/request-correlation'
-import { formatUtcTimestamp } from '@/lib/ui/format-time'
+import { formatTimestamp } from '@/lib/ui/format-time'
 import { buildSiteDiscoveryManifest, SiteDiscoveryManifestSchemaVersion } from '@/modules/discovery/public'
 import { readCatalogueFreshness } from '@/modules/market/x402-directory-index.server'
 
@@ -35,7 +35,7 @@ export const readStatusProbesServer = createServerFn().handler(async (): Promise
     runProbe('release', requestRef, probeRelease),
     runProbe('catalogue', requestRef, () => probeCatalogue(now)),
   ])
-  return { checks, checkedAt: `${formatUtcTimestamp(now)} UTC` }
+  return { checks, checkedAt: `${formatTimestamp(now, 'UTC')} UTC` }
 })
 
 type ProbeAssessment = Readonly<{ state: ProbeState; detail: string }>

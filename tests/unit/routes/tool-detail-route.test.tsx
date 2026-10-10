@@ -260,7 +260,7 @@ describe('/tools/$toolRef', () => {
     expect(within(trackRecord).getByText('8')).toBeTruthy()
     expect(within(trackRecord).getByText('4.5')).toBeTruthy()
     expect(within(trackRecord).getByText('120 ms')).toBeTruthy()
-    expect(within(trackRecord).getByText('140 ms')).toBeTruthy()
+    expect(within(trackRecord).getByText('140ms')).toBeTruthy()
     const latencyChart = within(trackRecord).getByRole('region', { name: 'Time to result' })
     expect(latencyChart).toBeTruthy()
     expect(within(latencyChart).getByText('5 timed calls')).toBeTruthy()
@@ -614,7 +614,7 @@ describe('/tools/$toolRef', () => {
     expect(screen.getByRole('link', { name: 'Try again' }).getAttribute('href')).toContain(encodeURIComponent(tool.toolRef))
     expect(screen.getByRole('link', { name: 'Browse Market' }).getAttribute('href')).toBe('/market')
     expect(screen.queryByRole('link', { name: 'Check status' })).toBeNull()
-    expect(screen.queryByText(/USD 1.25/)).toBeNull()
+    expect(screen.queryByText(/1.25 USD/)).toBeNull()
   })
 
 })

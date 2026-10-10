@@ -1,3 +1,4 @@
+import { formatCompactCount } from "@/lib/ui/format-time";
 import { captureRouteException } from "@/lib/observability/capture-route-exception";
 import { degrade } from "@/lib/observability/degrade";
 import { callPublicSourceQuery, sourceQuery, type CreatePublicConvexClientOptions } from "@/lib/server/convex-source";
@@ -26,10 +27,6 @@ import {
   type ToolCardViewModel,
 } from "./tool-view-model";
 
-const compactNumberFormatter = new Intl.NumberFormat("en", {
-  notation: "compact",
-  maximumFractionDigits: 1,
-});
 
 type MarketSourceRead = Readonly<{
   generatedAt: number;
@@ -358,7 +355,7 @@ function firstPartyMetric(
     key,
     label,
     value: Number.isInteger(value) ? value.toFixed(0) : value.toString(),
-    displayValue: compactNumberFormatter.format(value),
+    displayValue: formatCompactCount(value),
     unit: "count",
     sourceTimestamp: timestamp,
     evidenceClass,

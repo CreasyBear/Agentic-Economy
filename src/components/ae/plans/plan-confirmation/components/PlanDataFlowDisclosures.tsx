@@ -13,7 +13,7 @@ export function PlanDataFlowDisclosures({ flows }: PlanDataFlowDisclosuresProps)
       ) : (
         <ul className="grid min-w-0 gap-2 p-0">
           {flows.map((flow, index) => (
-            <li key={`${flow.from}:${flow.to}:${index}`} className="grid min-w-0 gap-2 rounded-card border border-border p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+            <li key={`${flow.from}:${flow.to}:${index}`} className="grid min-w-0 gap-2 rounded-lg border border-border p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
               <p className="m-0 min-w-0 break-words text-sm">
                 <span className="font-mono">{flow.from}</span>
                 <span aria-hidden="true" className="px-2 text-muted-foreground">→</span>

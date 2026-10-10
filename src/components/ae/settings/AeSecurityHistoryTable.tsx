@@ -7,7 +7,7 @@ import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeRecordTable } from '@/components/ae/operator/AeOperatorDataTable'
 import { Button } from '@/components/arc/button/button'
 import { Drawer, DrawerContent } from '@/components/ae/shared/base-ui/drawer/drawer'
-import { formatUtcTimestamp } from '@/lib/ui/format-time'
+import { formatTimestamp } from '@/lib/ui/format-time'
 import type { AccountSecurityHistoryItem } from '@/modules/security/account-security'
 import './SecurityHistoryComposition.css'
 
@@ -82,11 +82,11 @@ export function AeSecurityHistoryTable({
                   label: 'Observed time',
                   value: selectedEvent.observedAt === undefined
                     ? 'Observed time unavailable'
-                    : `${formatUtcTimestamp(selectedEvent.observedAt)} UTC`,
+                    : `${formatTimestamp(selectedEvent.observedAt, 'UTC')} UTC`,
                 },
                 {
                   label: 'Recorded time',
-                  value: `${formatUtcTimestamp(selectedEvent.recordedAt)} UTC`,
+                  value: `${formatTimestamp(selectedEvent.recordedAt, 'UTC')} UTC`,
                 },
                 ...(showActorAndTarget
                   ? [
@@ -164,8 +164,8 @@ function historyColumns(
       accessorFn: (row) => row.observedAt ?? row.recordedAt,
       cell: ({ row }) => (
         <span className="arc-security-time">
-          <span>{row.original.observedAt === undefined ? 'Observed time unavailable' : `${formatUtcTimestamp(row.original.observedAt)} UTC`}</span>
-          <span className="arc-security-recorded">Recorded {formatUtcTimestamp(row.original.recordedAt)} UTC</span>
+          <span>{row.original.observedAt === undefined ? 'Observed time unavailable' : `${formatTimestamp(row.original.observedAt, 'UTC')} UTC`}</span>
+          <span className="arc-security-recorded">Recorded {formatTimestamp(row.original.recordedAt, 'UTC')} UTC</span>
         </span>
       ),
     },

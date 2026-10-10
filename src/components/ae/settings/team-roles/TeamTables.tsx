@@ -1,3 +1,4 @@
+import { formatDate } from '@/lib/ui/format-time'
 import { useMemo, useState, type ReactNode } from 'react'
 import { useTable, type ColumnDef, type SortingState } from '@tanstack/react-table'
 import { Search, X } from 'lucide-react'
@@ -70,7 +71,7 @@ export function TeamInvitationsTable({ invitations, complete, renderActions, act
     { id: 'role', accessorKey: 'role', header: ({ column }) => <DataGridColumnHeader column={column} title="Role" />, size: 120,
       cell: ({ row }) => row.original.role === 'org:admin' ? 'Admin' : 'Member' },
     { id: 'expires', accessorKey: 'expiresAt', header: ({ column }) => <DataGridColumnHeader column={column} title="Expires" />, size: 140,
-      cell: ({ row }) => <time dateTime={new Date(row.original.expiresAt).toISOString()}>{new Date(row.original.expiresAt).toLocaleDateString('en-AU')}</time> },
+      cell: ({ row }) => <time dateTime={new Date(row.original.expiresAt).toISOString()}>{formatDate(row.original.expiresAt)}</time> },
     { id: 'actions', header: 'Actions', enableSorting: false, size: 230, cell: ({ row }) => renderActions(row.original) },
   ], [renderActions])
   const table = useTable({ features: dataGridFeatures, columns, data: rows, getRowId: row => row.invitationId,

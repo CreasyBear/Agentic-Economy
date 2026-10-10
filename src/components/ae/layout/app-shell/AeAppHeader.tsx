@@ -88,7 +88,7 @@ export function AeAppHeader({
       ) : signedIn ? (
         <div
           data-elevated={elevated ? '' : undefined}
-          className={cn('ae-nav arc-app-header__bar arc-app-header__bar--signed-in px-1 sm:px-2 shadow-none data-[elevated]:shadow-soft', chatFrame && 'max-sm:!h-11 max-sm:!min-h-11 max-sm:!px-4')}
+          className={cn('ae-nav arc-app-header__bar arc-app-header__bar--signed-in px-1 sm:px-2 shadow-none', chatFrame && 'max-sm:!h-11 max-sm:!min-h-11 max-sm:!px-4')}
         >
           <div className={chatFrame && workspaceReady ? 'hidden sm:block' : ''}><BrandLink /></div>
           {chatActionSlot(chatFrame && workspaceReady)}

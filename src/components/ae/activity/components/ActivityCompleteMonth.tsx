@@ -4,7 +4,7 @@ import { BillingHistory } from '@/components/ae/shared/arc-pro/billing-overview/
 import { Button } from '@/components/arc/button/button'
 import { Input } from '@/components/arc/input/input'
 import { AeFactList } from '@/components/ae/data/AeFactList'
-import { formatUtcTimestamp } from '@/lib/ui/format-time'
+import { formatTimestamp } from '@/lib/ui/format-time'
 import { formatExactAmount } from '@/modules/money/public'
 import { monthlyDraftIntentSchema } from '@/modules/capability-execution/monthly-usage-draft'
 import { activityReturnSearch,type ActivityReturnScope } from '@/lib/call-recovery/activity-return-scope'
@@ -61,7 +61,7 @@ export function ActivityCompleteMonth({returnScope,draftRef}:{returnScope:Activi
     finally{policyInFlight.current=false;setPolicyPending(false)}
   }
   const facts=snapshot===null?[]:[{label:'UTC month / revision',value:`${snapshot.month} / ${snapshot.revision}`},{label:'Calls created in this month',value:snapshot.usageReport.recordCountUnits},
-    {label:'Call facts captured (UTC)',value:formatUtcTimestamp(snapshot.sourcesCapturedAt)},{label:'Ledger recorded through (UTC)',value:formatUtcTimestamp(snapshot.ledgerSnapshotAt)},
+    {label:'Call facts captured (UTC)',value:formatTimestamp(snapshot.sourcesCapturedAt, 'UTC')},{label:'Ledger recorded through (UTC)',value:formatTimestamp(snapshot.ledgerSnapshotAt, 'UTC')},
     ...(['grossChargeUnits','refundUnits','netChargeUnits','promotionalUseUnits','promotionalRefundUnits'] as const).map(field=>({label:{grossChargeUnits:'Gross settled charges (AUD)',refundUnits:'Refunds (AUD)',netChargeUnits:'Net charge (AUD)',promotionalUseUnits:'Promotional credit used (AUD)',promotionalRefundUnits:'Promotional credit returned (AUD)'}[field],value:formatExactAmount({currency:'AUD',exponent:6,units:snapshot.financial.totals[field]})??'Unknown'})),
     {label:'Provider transfers (USDC)',value:formatExactAmount({currency:'USDC',exponent:6,units:snapshot.financial.totals.providerTransferUnits})??'Unknown'},{label:'Amount / attribution coverage',value:`${snapshot.financial.amountCoverage} / ${snapshot.financial.attributionCoverage}`},
     {label:'Existing financial documents',value:snapshot.relatedDocumentCountUnits},{label:'Snapshot digest',value:close?.snapshotDigest??'Unavailable',mono:true}]

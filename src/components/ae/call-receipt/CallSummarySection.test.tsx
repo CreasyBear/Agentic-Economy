@@ -78,18 +78,18 @@ describe('Posted Call money', () => {
     const view = paidView()
     render(<CallSummarySection result={foundStatus(view)} receiptView={view} />)
     expect(screen.getByText('Charged')).toBeInTheDocument()
-    expect(screen.getByText('A$0.01')).toBeInTheDocument()
-    expect(screen.getByText('AUD 0.001444')).toBeInTheDocument()
-    expect(screen.queryByText('AUD 0.000000')).not.toBeInTheDocument()
+    expect(screen.getAllByText('A$0.01').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('A$0.001444').length).toBeGreaterThan(0)
+    expect(screen.queryByText('A$0.00')).not.toBeInTheDocument()
   })
 
   it('uses the same settled buyer receipt for the post-call charge and exact amount', () => {
     render(<CallMoneyFacts view={paidView()} />)
     const group = screen.getByRole('heading', { name: 'After' }).parentElement
     if (group === null) throw new Error('post_call_money_group_missing')
-    expect(within(group).getByText('A$0.01')).toBeInTheDocument()
-    expect(within(group).getByText('AUD 0.001444')).toBeInTheDocument()
-    expect(within(group).queryByText('AUD 0.000000')).not.toBeInTheDocument()
+    expect(within(group).getAllByText('A$0.01').length).toBeGreaterThan(0)
+    expect(within(group).getAllByText('A$0.001444').length).toBeGreaterThan(0)
+    expect(within(group).queryByText('A$0.00')).not.toBeInTheDocument()
   })
 
   it('includes the recorded service fee rather than displaying only the base buyer charge', () => {
@@ -97,11 +97,11 @@ describe('Posted Call money', () => {
     const view = paidView({ receipt })
     render(<><CallSummarySection result={foundStatus(view)} receiptView={view} /><CallMoneyFacts view={view} /></>)
     const summary = screen.getByRole('region', { name: 'Call summary' })
-    expect(within(summary).getByText('A$0.03')).toBeInTheDocument()
-    expect(within(summary).getByText('AUD 0.021444')).toBeInTheDocument()
+    expect(within(summary).getAllByText('A$0.03').length).toBeGreaterThan(0)
+    expect(within(summary).getAllByText('A$0.021444').length).toBeGreaterThan(0)
     const group = screen.getByRole('heading', { name: 'After' }).parentElement
     if (group === null) throw new Error('post_call_money_group_missing')
-    expect(within(group).getByText('AUD 0.021444')).toBeInTheDocument()
+    expect(within(group).getAllByText('A$0.021444').length).toBeGreaterThan(0)
   })
 
   it('preserves a genuine zero settled total even when legacy usage records a nonzero amount', () => {
@@ -109,37 +109,36 @@ describe('Posted Call money', () => {
     const view = paidView({ receipt, usage: { ...paidView().usage!, amount: aud('1444') } })
     render(<><CallSummarySection result={foundStatus(view)} receiptView={view} /><CallMoneyFacts view={view} /></>)
     const summary = screen.getByRole('region', { name: 'Call summary' })
-    expect(within(summary).getByText('A$0.00')).toBeInTheDocument()
-    expect(within(summary).getByText('AUD 0.000000')).toBeInTheDocument()
+    expect(within(summary).getAllByText('A$0.00').length).toBeGreaterThan(0)
     const group = screen.getByRole('heading', { name: 'After' }).parentElement
     if (group === null) throw new Error('post_call_money_group_missing')
-    expect(within(group).getByText('AUD 0.000000')).toBeInTheDocument()
+    expect(within(group).getAllByText('A$0.00').length).toBeGreaterThan(0)
   })
 
   it('retains the recorded resolution amount when paid usage is absent', () => {
     const { usage, ...view } = paidView({ purchaseResolution: purchaseResolution({ considerationAmount: aud('1403') }) })
     expect(usage).toBeDefined()
     render(<><CallSummarySection result={foundStatus(view)} receiptView={view} /><CallMoneyFacts view={view} /></>)
-    expect(within(screen.getByRole('region', { name: 'Call summary' })).getByText('AUD 0.001403')).toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Call summary' })).getAllByText('A$0.001403').length).toBeGreaterThan(0)
     const group = screen.getByRole('heading', { name: 'After' }).parentElement
     if (group === null) throw new Error('post_call_money_group_missing')
-    expect(within(group).queryByText('AUD 0.001444')).not.toBeInTheDocument()
+    expect(within(group).queryByText('A$0.001444')).not.toBeInTheDocument()
     expect(within(group).getByText('Settled')).toBeInTheDocument()
   })
 
   it('does not replace a disputed purchase resolution with a Charged total', () => {
     const view = paidView({ purchaseResolution: purchaseResolution({ terminalState: 'disputed', considerationAmount: aud('1403') }) })
     render(<CallSummarySection result={foundStatus(view)} receiptView={view} />)
-    expect(screen.getByText('AUD 0.001403')).toBeInTheDocument()
-    expect(screen.queryByText('AUD 0.001444')).not.toBeInTheDocument()
+    expect(screen.getAllByText('A$0.001403').length).toBeGreaterThan(0)
+    expect(screen.queryByText('A$0.001444')).not.toBeInTheDocument()
     expect(screen.queryByText('Charged')).not.toBeInTheDocument()
   })
 
   it.each(['refunded', 'released'] as const)('preserves the %s resolution amount instead of calling the receipt a new charge', (terminalState) => {
     const view = paidView({ purchaseResolution: purchaseResolution({ terminalState, considerationAmount: aud('1403') }) })
     render(<CallSummarySection result={foundStatus(view)} receiptView={view} />)
-    expect(screen.getByText('AUD 0.001403')).toBeInTheDocument()
-    expect(screen.queryByText('AUD 0.001444')).not.toBeInTheDocument()
+    expect(screen.getAllByText('A$0.001403').length).toBeGreaterThan(0)
+    expect(screen.queryByText('A$0.001444')).not.toBeInTheDocument()
   })
 
   it.each(['free_tier', 'outcome_unknown'] as const)('does not substitute a paid charge for %s usage', (chargeState) => {
@@ -148,8 +147,8 @@ describe('Posted Call money', () => {
     render(<CallMoneyFacts view={paidView({ usage })} />)
     const group = screen.getByRole('heading', { name: 'After' }).parentElement
     if (group === null) throw new Error('post_call_money_group_missing')
-    expect(within(group).getByText('AUD 0.000000')).toBeInTheDocument()
-    expect(within(group).queryByText('AUD 0.001444')).not.toBeInTheDocument()
+    expect(within(group).getAllByText('A$0.00').length).toBeGreaterThan(0)
+    expect(within(group).queryByText('A$0.001444')).not.toBeInTheDocument()
   })
 
   it.each(['refunded', 'reconciliation_required'] as const)('does not replace a %s receipt with a confirmed buyer charge', (state) => {
@@ -157,7 +156,7 @@ describe('Posted Call money', () => {
     render(<CallMoneyFacts view={paidView({ receipt })} />)
     const group = screen.getByRole('heading', { name: 'After' }).parentElement
     if (group === null) throw new Error('post_call_money_group_missing')
-    expect(within(group).getByText('AUD 0.000000')).toBeInTheDocument()
+    expect(within(group).getAllByText('A$0.00').length).toBeGreaterThan(0)
   })
 
   it('shows the rounded buyer charge alongside the exact recorded amount', () => {
@@ -170,7 +169,7 @@ describe('Posted Call money', () => {
       },
     }
     render(<CallMoneyFacts view={view} />)
-    expect(screen.getByText('A$0.01')).toBeInTheDocument()
-    expect(screen.getByText('AUD 0.000001')).toBeInTheDocument()
+    expect(screen.getAllByText('A$0.01').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('A$0.000001').length).toBeGreaterThan(0)
   })
 })

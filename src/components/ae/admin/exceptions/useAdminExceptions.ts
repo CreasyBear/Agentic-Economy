@@ -8,7 +8,7 @@ import { adminObjectHref, type AdminExceptionKind, type AdminExceptionPartition,
 import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import { withAdminInvestigationReturn } from './admin-investigation-return'
 import { ADMIN_LIST_WINDOW, nextAdminListWindow } from '../admin-list-window'
-import { formatPerthTimestamp, formatRelativeTime, timestampIso } from '@/lib/ui/format-time'
+import { formatRelativeTime, formatTimestamp, timestampIso } from '@/lib/ui/format-time'
 import {
   ADMIN_EXCEPTION_PARTITIONS,
   ADMIN_EXCEPTION_KIND_LABELS,
@@ -122,7 +122,7 @@ function toExceptionRowModel(exception: AdminExceptionRecord, partition: AdminEx
       : exception.kind === 'source_authority_review' ? `/admin/tools/${encodeURIComponent(ref)}`
         : `/admin/exceptions?kind=${exception.kind}&partition=${partition}&ref=${encodeURIComponent(ref)}`, businessSlug,
     businessHref: businessSlug === null ? null : `/admin/providers/${encodeURIComponent(businessSlug)}`,
-    sinceLabel: formatPerthTimestamp(exception.since),
+    sinceLabel: formatTimestamp(exception.since, 'Australia/Perth'),
     sinceRelativeLabel: formatRelativeTime(exception.since),
     sinceIso: timestampIso(exception.since),
     state: 'state' in exception ? exception.state : null,
@@ -144,7 +144,7 @@ function toResolutionRowModel(row: AdminResolutionRow): AdminResolutionRowModel 
       ? adminObjectHref({ kind: 'call', ref: parsed.ref })
       : `/admin/calls/${encodeURIComponent(row.callRef)}`,
     terminalStateLabel: purchaseTerminalLabel(row.terminalState),
-    resolvedAtLabel: formatPerthTimestamp(row.resolvedAt),
+    resolvedAtLabel: formatTimestamp(row.resolvedAt, 'Australia/Perth'),
     resolvedAtIso: timestampIso(row.resolvedAt),
   }
 }

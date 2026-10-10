@@ -13,7 +13,7 @@ export function PlanNodeLineItems({ nodes }: PlanNodeLineItemsProps) {
       ) : (
         <ul className="grid min-w-0 gap-3 p-0">
           {nodes.map((node) => (
-            <li key={node.nodeId} className="grid min-w-0 gap-3 rounded-card border border-border bg-muted/30 p-4">
+            <li key={node.nodeId} className="grid min-w-0 gap-3 rounded-lg border border-border bg-muted/30 p-4">
               <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
                 <div className="grid min-w-0 gap-1">
                   <h4 className="m-0 break-all font-mono text-sm font-medium">{node.nodeId}</h4>

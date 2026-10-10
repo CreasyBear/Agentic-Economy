@@ -3,7 +3,7 @@ import type { ActivityReturnScope } from '@/lib/call-recovery/activity-return-sc
 import { Link } from '@tanstack/react-router'
 import { Button } from '@/components/arc/button/button'
 import { BillingHistory } from '@/components/ae/shared/arc-pro/billing-overview/billing-overview'
-import { formatUtcTimestamp } from '@/lib/ui/format-time'
+import { formatTimestamp } from '@/lib/ui/format-time'
 import { useMemo } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 import { MetricsSummary } from '@/components/ae/shared/arc-pro/metrics-dashboard/metrics-dashboard'
@@ -34,14 +34,14 @@ export function ActivityReconciliation({ result, retryPending, onRetry, returnSc
     { accessorKey: 'transactionId', header: 'Ledger transaction' },
     { accessorKey: 'kind', header: 'Financial entry' },
     { id: 'amount', header: 'Amount', cell: ({row}) => row.original.units === null || row.original.currency === null ? 'Unknown' : amount(row.original.units, row.original.currency) },
-    { id: 'effective', header: 'Effective (UTC)', cell: ({row}) => formatUtcTimestamp(row.original.occurredAt) },
-    { id: 'recorded', header: 'Recorded (UTC)', cell: ({row}) => row.original.recordedAt === null ? 'Unknown' : formatUtcTimestamp(row.original.recordedAt) },
+    { id: 'effective', header: 'Effective (UTC)', cell: ({row}) => formatTimestamp(row.original.occurredAt, 'UTC') },
+    { id: 'recorded', header: 'Recorded (UTC)', cell: ({row}) => row.original.recordedAt === null ? 'Unknown' : formatTimestamp(row.original.recordedAt, 'UTC') },
     { id: 'call', header: 'Call evidence', cell: ({row}) => row.original.callRef === null ? 'Unattributed' : <Link to="/calls/$callRef" params={{callRef:row.original.callRef}} search={returnScope} aria-label={`View Call for ledger transaction ${row.original.transactionId}`}>View Call</Link> },
     { id: 'status', header: 'Included in measured amounts', cell: ({row}) => row.original.kind === 'unsupported' ? 'No — unsupported entry' : row.original.reverted ? 'No — reverted original' : 'Yes' },
   ], [returnScope])
   if (result.kind !== 'available') return <AeSection title="Financial reconciliation"><p className="text-sm text-muted-foreground">Financial reconciliation is unavailable. Choose a shorter period or retry the read.</p><Button type="button" variant="secondary" loading={retryPending} onClick={onRetry}>{retryPending ? 'Refreshing…' : 'Retry reconciliation'}</Button></AeSection>
   return <AeSection title="Financial reconciliation" description="Financial entries use ledger effective dates. Call counts and recorded obligations use Call creation dates. All amounts retain six decimal places.">
-    <p className="text-xs text-muted-foreground">Ledger snapshot: {formatUtcTimestamp(result.snapshotAt)} UTC. Selected financial period: {formatUtcTimestamp(result.periodStartAt)} to {formatUtcTimestamp(result.periodEndAt)} UTC.</p>
+    <p className="text-xs text-muted-foreground">Ledger snapshot: {formatTimestamp(result.snapshotAt, 'UTC')} UTC. Selected financial period: {formatTimestamp(result.periodStartAt, 'UTC')} to {formatTimestamp(result.periodEndAt, 'UTC')} UTC.</p>
     <div className="arc-market arc-activity-monthly-summary"><MetricsSummary cards={[
       { label: result.amountCoverage === 'complete' ? 'Gross purchased-credit charges' : 'Measured purchased-credit charges', value: amount(result.totals.grossChargeUnits) },
       { label: 'Purchased-credit refunds', value: amount(result.totals.refundUnits) },
@@ -53,7 +53,7 @@ export function ActivityReconciliation({ result, retryPending, onRetry, returnSc
     <p className="text-xs text-muted-foreground">Amount coverage: {result.amountCoverage}. {result.amountCoverage === 'partial' ? 'Every amount above is a measured subset; missing or reverted evidence prevents confirmed totals.' : 'All supported ledger entries in the financial period were read.'} Call attribution: {result.attributionCoverage}; {result.unattributedTransactionCountUnits} entries remain unattributed. Missing provider costs remain unknown.</p>
     <details><summary className="cursor-pointer text-sm">How these amounts and dates reconcile</summary>
     <p className="text-xs text-muted-foreground">Charges include the fees and tax already booked in the buyer sale. Provider transfers are shown separately in USDC; they are never subtracted again from the customer charge. A customer refund does not reverse provider payment.</p>
-    <p className="text-xs text-muted-foreground">{sourceFactsCapturedAt === undefined ? 'Canonical Call links are verified at read time; financial entries retain their ledger snapshot cutoff.' : `Canonical Call links were verified and frozen at ${formatUtcTimestamp(sourceFactsCapturedAt)} UTC. This view reproduces that draft version.`}</p>
+    <p className="text-xs text-muted-foreground">{sourceFactsCapturedAt === undefined ? 'Canonical Call links are verified at read time; financial entries retain their ledger snapshot cutoff.' : `Canonical Call links were verified and frozen at ${formatTimestamp(sourceFactsCapturedAt, 'UTC')} UTC. This view reproduces that draft version.`}</p>
     <ul className="grid gap-1 text-sm" aria-label="Call creation period bridge">
       {result.bridge.map(row => <li key={row.callCreated}>{bridgeLabels[row.callCreated]}: {amount(row.totals.netChargeUnits)} net purchased cost; {amount(row.totals.netPromotionalUseUnits)} net promotional use; {amount(row.totals.netProviderTransferUnits, 'USDC')} net provider transfer.</li>)}
     </ul>

@@ -1,3 +1,4 @@
+import { formatCount } from '@/lib/ui/format-time'
 import { projectToolLatency, type ToolLatencyProjection } from '@/modules/registry/tool-latency';
 export { TOOL_MIN_LATENCY_SAMPLE_SIZE as MARKET_MIN_LATENCY_SAMPLE_SIZE, TOOL_MAX_LATENCY_SAMPLE_SIZE as MARKET_MAX_LATENCY_SAMPLE_SIZE } from '@/modules/registry/tool-latency';
 
@@ -118,7 +119,7 @@ export function projectMarketListingEvidence(
       : {
           kind: "observed",
           completedCalls: source.completedCalls,
-          display: `${source.completedCalls.toLocaleString()} completed ${source.completedCalls === 1 ? "call" : "calls"}`,
+          display: `${formatCount(source.completedCalls)} completed ${source.completedCalls === 1 ? "call" : "calls"}`,
           definition:
             "Completed Agentic Economy calls for this published Tool during the selected period.",
         };
@@ -187,7 +188,7 @@ function projectRating(count: number, sum: number): MarketRatingProjection {
     kind: "rated",
     average,
     count,
-    display: `${average.toFixed(1)} (${count.toLocaleString()})`,
+    display: `${average.toFixed(1)} (${formatCount(count)})`,
     definition:
       "Average rating submitted by authenticated Agentic Economy principals for this published Tool.",
   };

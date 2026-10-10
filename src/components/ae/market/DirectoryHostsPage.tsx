@@ -1,3 +1,4 @@
+import { formatDate } from '@/lib/ui/format-time'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { CompassIcon, HeartIcon, ListFilterIcon, SearchIcon, StoreIcon } from 'lucide-react'
@@ -62,7 +63,7 @@ export function DirectoryHostsPage({ result, search }: DirectoryHostsPageProps) 
           </div>
         </div>
         <DirectoryProvidersIndex result={result} search={hosts} />
-        {result.kind === 'ok' ? <p className="mt-5 text-xs leading-relaxed text-muted-foreground">Coinbase Bazaar index · refreshed {new Date(result.coverage.completedAt).toLocaleDateString('en-AU', { timeZone: 'UTC' })}. Listing details may change after this scan. Browser Back returns to the prior Host page.</p> : null}
+        {result.kind === 'ok' ? <p className="mt-5 text-xs leading-relaxed text-muted-foreground">Coinbase Bazaar index · refreshed {formatDate(result.coverage.completedAt, 'UTC')}. Listing details may change after this scan. Browser Back returns to the prior Host page.</p> : null}
       </TabsContent>
     </Tabs>
   </div>

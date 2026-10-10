@@ -1,5 +1,5 @@
 /*
- * Agentic Economy product system. DESIGN.md is the visual authority.
+ * aecon product system. docs/design-system/spec.md is the authority; DESIGN.md mirrors it.
  *
  * Compact capability-market structure. This file owns the semantic bridge
  * used by shadcn and product components; surfaces do not invent
@@ -31,11 +31,14 @@
 }
 
 @theme inline {
+  /* Clear Tailwind's default scales so only the spec's radii and shadow exist. */
+  --shadow-*: initial;
+  --radius-*: initial;
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
-  --color-container: var(--container);
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
@@ -44,7 +47,6 @@
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
-  --color-foreground-subtle: var(--ae-fg-subtle);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
@@ -56,7 +58,6 @@
   --color-ring: var(--ring);
 
   --color-brand: var(--ae-brand);
-  --color-brand-strong: var(--ae-brand-strong);
   --color-brand-muted: var(--ae-brand-muted);
   --color-on-brand: var(--ae-on-brand);
 
@@ -68,143 +69,89 @@
   --color-warning-ring: var(--ae-warning-ring);
   --color-warning-subtle: var(--ae-warning-subtle);
   --color-warning-foreground: var(--ae-warning-foreground);
-  --color-info: var(--ae-info);
-  --color-info-ring: var(--ae-info-ring);
-  --color-info-subtle: var(--ae-info-subtle);
-  --color-info-foreground: var(--ae-info-foreground);
-
 
   --font-sans: var(--ae-font-sans);
-  --font-display: var(--ae-font-display);
   --font-mono: var(--ae-font-mono);
 
-  /* Discover grammar (DirectoryHero / DirectoryHomeDiscovery / DirectoryToolCard). */
-  --text-caption: var(--ae-text-caption);
-  --text-eyebrow: var(--ae-text-eyebrow);
-  --text-deck: var(--ae-text-deck);
+  /* Two type sizes per screen; values swap under [data-density="workspace"]. */
   --text-body: var(--ae-text-body);
+  --text-body--line-height: var(--ae-leading-body);
   --text-title: var(--ae-text-title);
-  --text-title-lg: var(--ae-text-title-lg);
-  --text-display: var(--ae-text-display);
-  --leading-caption: var(--ae-leading-caption);
-  --leading-eyebrow: var(--ae-leading-eyebrow);
-  --leading-deck: var(--ae-leading-deck);
+  --text-title--line-height: var(--ae-leading-title);
   --leading-body: var(--ae-leading-body);
   --leading-title: var(--ae-leading-title);
-  --leading-title-lg: var(--ae-leading-title-lg);
-  --leading-display: var(--ae-leading-display);
-  --tracking-eyebrow: var(--ae-tracking-eyebrow);
-  --tracking-caption: var(--ae-tracking-caption);
-  --tracking-display: var(--ae-tracking-display);
-  --font-weight-eyebrow: var(--ae-weight-eyebrow);
-  --font-weight-extralight: var(--ae-weight-extralight);
-  --font-weight-regular: var(--ae-weight-regular);
-  --font-weight-medium: var(--ae-weight-medium);
-  --font-weight-semibold: var(--ae-weight-semibold);
+  --tracking-body: var(--ae-tracking-body);
+  --tracking-title: var(--ae-tracking-title);
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
 
-  --radius-card: 0.875rem;
-  --radius-nav: 0.625rem;
-  --shadow-soft: var(--shadow-low);
-  --shadow-float: var(--shadow-med);
-  --shadow-float-dark: var(--shadow-high);
+  /* Concentric radii: control, card, overlay, chip. */
+  --radius-sm: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+  --radius-pill: 9999px;
+  /* The only shadow: dialogs, sheets, menus, command palette, tooltips. */
   --shadow-overlay: var(--ae-shadow-overlay);
-  --shadow-market-row-hover: var(--shadow-inset-market-row);
-  /* Use the approved website's radius scale across maintained components. */
-  --radius-sm: 0.375rem;
-  --radius-md: 0.5rem;
-  --radius-lg: 0.625rem;
-  --radius-xl: 0.875rem;
-  --radius-2xl: 1.125rem;
-  --radius-3xl: 1.375rem;
-  --shadow-xs: 0 1px 3px 0 rgba(0, 0, 0, 0.06);
-  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.06);
-  --shadow-md: 0 12px 32px rgba(0, 0, 0, 0.08);
-  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.4);
-  --shadow-xl: 0 12px 32px -16px rgba(0, 0, 0, 0.18);
-  --shadow-2xl: 0 12px 32px -16px rgba(0, 0, 0, 0.18);
+
+  --duration-hover: var(--motion-duration-hover);
   --duration-fast: var(--motion-duration-fast);
   --duration-base: var(--motion-duration-base);
-  --duration-slow: var(--motion-duration-slow);
   --ease-standard: var(--motion-ease-standard);
-  --ease-emphasized: var(--motion-ease-emphasized);
 
-  /* Layout: --container is a surface colour. These are widths and spaces. */
+  /* Layout widths and spaces on a 4px grid. */
   --max-width-nav: var(--ae-nav);
   --max-width-rail: var(--ae-rail);
   --spacing-gutter: var(--ae-gutter);
   --spacing-gutter-lg: var(--ae-gutter-lg);
   --spacing-intra: var(--ae-space-intra);
   --spacing-related: var(--ae-space-related);
+  --spacing-region: var(--ae-space-region);
   --spacing-section: var(--ae-space-section);
   --spacing-page: var(--ae-space-page);
-  --spacing-hero: var(--ae-space-hero);
   --spacing-touch: var(--ae-touch);
-  --spacing-band: var(--ae-space-band);
-  --spacing-fold-peek: var(--ae-fold-peek);
+  --spacing-row: var(--ae-row);
+  --spacing-control: var(--ae-control);
   --spacing-nav-stack: var(--ae-nav-stack);
   --spacing-anchor: var(--ae-anchor);
-  --min-height-fold: var(--ae-fold);
-  --min-height-chapter: var(--ae-chapter);
 }
 
 :root {
   color-scheme: light;
 
-  --font-weight-normal: 400;
-  --font-weight-medium: 500;
-  --font-weight-semibold: 600;
-  --font-weight-bold: 700;
-  --ae-weight-extralight: 200;
-  --ae-weight-regular: 400;
-  --ae-weight-medium: 500;
-  --ae-weight-semibold: 600;
-  --ae-weight-eyebrow: 700;
-  --ae-text-caption: 0.75rem;
-  --ae-text-eyebrow: 0.75rem;
-  --ae-text-deck: 0.875rem;
-  --ae-text-body: 1rem;
-  --ae-text-title: 1.5rem;
-  --ae-text-title-lg: 1.875rem;
-  --ae-text-display: 2.75rem;
-  --ae-leading-caption: 1.35;
-  --ae-leading-eyebrow: 1.35;
-  --ae-leading-deck: 1.625;
-  --ae-leading-body: 1.55;
+  /* Density: public is the default. */
+  --ae-text-body: 16px;
+  --ae-leading-body: 1.5;
+  --ae-text-title: 24px;
   --ae-leading-title: 1.25;
-  --ae-leading-title-lg: 1.2;
-  --ae-leading-display: 1.02;
-  --ae-tracking-eyebrow: 0.16em;
-  --ae-tracking-caption: 0.14em;
-  --ae-tracking-display: -0.055em;
+  --ae-tracking-body: -0.01em;
+  --ae-tracking-title: -0.025em;
+  --ae-row: 40px;
+  --ae-control: 44px;
+  --ae-space-page: 48px;
+
   --font-family-body:
     "Manrope Variable", ui-sans-serif, system-ui, sans-serif;
-  --font-family-display: var(--font-family-body);
   --font-family-code:
     ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
   --ae-font-sans: var(--font-family-body);
   --ae-font-mono: var(--font-family-code);
-  --ae-font-display: var(--font-family-display);
 
   /* Validated against aecon.ai and its local src/styles.css, 2026-09-08. */
   --ae-bg: #e8e4da;
   --ae-fg: #141414;
   --ae-muted-fg: #595854;
-  --ae-fg-subtle: #595854;
   --ae-surface: #f2efe7;
   --ae-surface-sunken: #dedbd4;
   --ae-surface-raised: var(--ae-surface);
-  /* Canvas vs work-well. Theme the well independently of page chrome. */
-  --ae-container: var(--ae-surface);
-  --ae-border: #c5c1b8;
+  --ae-hairline: color-mix(in srgb, var(--ae-fg) 8%, transparent);
   --ae-border-strong: #918e87;
 
-  /* Neutral controls; forest belongs to identity and focus. */
-  --ae-primary: var(--ae-fg);
-  --ae-primary-fg: #e8e4da;
+  /* Forest marks the one primary button, the selected row, keyboard focus and inline links. */
   --ae-brand: #24543d;
-  --ae-brand-strong: #24543d;
   --ae-brand-muted: rgba(36, 84, 61, 0.08);
   --ae-on-brand: #e8e4da;
+  --ae-primary: var(--ae-brand);
+  --ae-primary-fg: var(--ae-on-brand);
   --ae-ring: var(--ae-brand);
 
   --ae-success: oklch(0.5423 0.1222 157.98);
@@ -219,14 +166,9 @@
   --ae-danger-foreground: var(--ae-danger);
   --ae-danger-ring: oklch(0.53 0.18 28 / 0.32);
   --ae-danger-subtle: oklch(0.95 0.03 28);
-  --ae-info: var(--ae-brand);
-  --ae-info-foreground: #24543d;
-  --ae-info-ring: rgba(36, 84, 61, 0.32);
-  --ae-info-subtle: var(--ae-brand-muted);
 
   --background: var(--ae-bg);
   --foreground: var(--ae-fg);
-  --container: var(--ae-container);
   --card: var(--ae-surface);
   --card-foreground: var(--ae-fg);
   --popover: var(--ae-surface);
@@ -237,56 +179,39 @@
   --secondary-foreground: var(--ae-fg);
   --muted: var(--ae-surface-sunken);
   --muted-foreground: var(--ae-muted-fg);
+  /* Hover moves one surface step; nothing lifts or blurs. */
   --accent: var(--ae-surface-sunken);
   --accent-foreground: var(--ae-fg);
   --destructive: var(--ae-danger);
   --destructive-foreground: oklch(0.985 0.002 106);
-  --border: var(--ae-border);
+  --border: var(--ae-hairline);
   --input: var(--ae-border-strong);
   --ring: var(--ae-ring);
-  --radius: 0.625rem;
+  --radius: 10px;
 
   /* Public layout. Pixel values keep the rail independent of the root type size. */
   --ae-nav: 1440px;
   --ae-rail: 1408px;
   --ae-gutter: 16px;
-  --ae-gutter-lg: 26px;
+  --ae-gutter-lg: 24px;
   --ae-space-intra: 8px;
   --ae-space-related: 16px;
+  --ae-space-region: 24px;
   --ae-space-section: 32px;
-  --ae-space-page: 48px;
-  --ae-space-hero: 72px;
-  --ae-space-band: 96px;
   --ae-touch: 44px;
   /* Measured sticky public header (pt-3 + nav pill). */
   --ae-nav-stack: 56px;
   /* Measured fixed owner navigation, excluding the device safe area. */
   --ae-mobile-nav-height: 56px;
-  --ae-fold-peek: 48px;
   --ae-anchor: calc(var(--ae-nav-stack) + 16px);
-  --ae-fold: calc(100svh - var(--ae-nav-stack));
-  --ae-chapter: calc(100svh - var(--ae-nav-stack));
 
-
-  --motion-duration-fast: 150ms;
-  --motion-duration-base: 220ms;
-  --motion-duration-slow: 300ms;
+  /* Hover 80ms, colour only; exits 120ms; entrances 150ms. */
+  --motion-duration-hover: 80ms;
+  --motion-duration-fast: 120ms;
+  --motion-duration-base: 150ms;
   --motion-ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
-  --motion-ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
-  --ae-duration-fast: var(--motion-duration-fast);
-  --ae-duration-state: var(--motion-duration-base);
-  --ae-duration-route: var(--motion-duration-slow);
-  --ae-ease-out: var(--motion-ease-emphasized);
-  --ae-ease-state: var(--motion-ease-standard);
-  --ae-focus-ring: 0 0 0 2px var(--ae-brand);
   --ae-overlay-scrim: rgba(0, 0, 0, 0.3);
-  --shadow-low: 0 1px 3px 0 rgba(0, 0, 0, 0.06);
-  --shadow-med: 0 12px 32px rgba(0, 0, 0, 0.08);
-  --shadow-high: 0 12px 32px rgba(0, 0, 0, 0.4);
   --ae-shadow-overlay: 0 12px 32px -16px rgba(0, 0, 0, 0.18);
-  --shadow-inset-hover: inset 0 0 0 1px var(--ae-border-strong);
-  --shadow-inset-selected: inset 0 0 0 2px var(--ae-brand);
-  --shadow-inset-market-row: inset 0 0 0 1px var(--ae-brand);
 }
 
 .dark {
@@ -294,36 +219,50 @@
   --ae-bg: #141414;
   --ae-fg: #e8e4da;
   --ae-muted-fg: #aaa89e;
-  --ae-fg-subtle: #aaa89e;
   --ae-surface: #1c1c1c;
   --ae-surface-sunken: #0f0f0f;
   --ae-surface-raised: #242424;
-  --ae-container: #1c1c1c;
-  --ae-border: #383838;
+  --ae-hairline: color-mix(in srgb, var(--ae-fg) 8%, transparent);
   --ae-border-strong: #595854;
+  --ae-brand: #b7e7cc;
+  --ae-brand-muted: rgba(183, 231, 204, 0.12);
+  --ae-on-brand: #141414;
+  --ae-primary: var(--ae-brand);
+  --ae-primary-fg: var(--ae-on-brand);
+  --ae-ring: var(--ae-brand);
 
   --background: var(--ae-bg);
   --foreground: var(--ae-fg);
-  --container: var(--ae-container);
   --card: var(--ae-surface);
   --card-foreground: var(--ae-fg);
   --popover: var(--ae-surface);
   --popover-foreground: var(--ae-fg);
-  --primary: var(--ae-fg);
-  --primary-foreground: var(--ae-bg);
+  --primary: var(--ae-primary);
+  --primary-foreground: var(--ae-primary-fg);
   --secondary: var(--ae-surface);
   --secondary-foreground: var(--ae-fg);
   --muted: var(--ae-surface-sunken);
   --muted-foreground: var(--ae-muted-fg);
   --accent: var(--ae-surface-raised);
   --accent-foreground: var(--ae-fg);
-  --border: var(--ae-border);
-  --input: var(--ae-border);
-  --ae-ring: #b7e7cc;
+  --border: var(--ae-hairline);
+  --input: var(--ae-border-strong);
   --ring: var(--ae-ring);
-  --ae-focus-ring: 0 0 0 2px var(--ae-ring);
   --ae-danger-foreground: oklch(0.8 0.11 27.61);
+}
 
+/* Workspace density: same token names, denser values (spec: Foundations, Density). */
+[data-density="workspace"] {
+  --ae-text-body: 13px;
+  --ae-leading-body: 1.4;
+  --ae-text-title: 20px;
+  --ae-leading-title: 1.3;
+  --ae-row: 32px;
+  --ae-control: 32px;
+  --ae-space-page: 24px;
+}
+@media (pointer: coarse) {
+  [data-density="workspace"] { --ae-control: 44px; }
 }
 
 /* At browser/text zoom, keep all four destinations reachable without colliding labels. */
@@ -331,6 +270,10 @@
 @container (max-width: 12rem) {
   .ae-owner-mobile-nav-label { display: none; }
   .ae-owner-mobile-nav a { min-width: 0; }
+}
+
+@utility duration-hover {
+  transition-duration: var(--motion-duration-hover);
 }
 
 @utility duration-fast {
@@ -341,16 +284,8 @@
   transition-duration: var(--motion-duration-base);
 }
 
-@utility duration-slow {
-  transition-duration: var(--motion-duration-slow);
-}
-
 @utility ease-standard {
   transition-timing-function: var(--motion-ease-standard);
-}
-
-@utility ease-emphasized {
-  transition-timing-function: var(--motion-ease-emphasized);
 }
 
 @utility ae-nav {
@@ -367,29 +302,6 @@
 
   @variant md {
     padding-inline: var(--ae-gutter-lg);
-  }
-}
-
-/* Landing fold: remaining viewport after the sticky public nav. */
-@utility min-h-fold {
-  min-height: var(--ae-fold);
-}
-
-/* Hero fold leaves --ae-fold-peek of the next band visible (NN/G false-floor rule). */
-@utility min-h-fold-hero {
-  min-height: auto;
-
-  @variant md {
-    min-height: calc(var(--ae-fold) - var(--ae-fold-peek));
-  }
-}
-
-/* Below-the-fold chapters fill a viewport on md+, grow with content on small screens. */
-@utility min-h-chapter {
-  min-height: auto;
-
-  @variant md {
-    min-height: var(--ae-chapter);
   }
 }
 
@@ -420,13 +332,7 @@
   }
 
   :where(h3, h4) {
-    letter-spacing: -0.015em;
-  }
-
-  .font-display {
-    font-family: var(--ae-font-display);
-    font-weight: 200;
-    font-synthesis-weight: none;
+    letter-spacing: var(--ae-tracking-body);
   }
 
   ::selection {
@@ -457,7 +363,7 @@
 
 .ae-chat-approvals [data-slot="card"] {
   border: 0;
-  border-radius: var(--radius-card);
+  border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--muted) 40%, transparent);
   box-shadow: none;
 }

@@ -179,6 +179,12 @@ export function formatExactAmount(amount: unknown): string | undefined {
   return fractionalPart.length === 0 ? integerPart : `${integerPart}.${fractionalPart}`
 }
 
-export function formatCurrencyAmount(amount: ExactAmount): string {
-  return `${amount.currency} ${formatExactAmount(amount) ?? '—'}`
+/** The one display format for money: "A$0.012", "A$5.00", "0.02 USDC", or "--" when unknown. */
+export function formatCurrencyAmount(amount: ExactAmount | null | undefined): string {
+  const exact = formatExactAmount(amount)
+  if (exact === undefined || amount == null) return '--'
+  const [integerPart, fractionalPart = ''] = exact.split('.')
+  const trimmed = fractionalPart.replace(/0+$/, '').padEnd(2, '0')
+  const value = `${integerPart}.${trimmed}`
+  return amount.currency === 'AUD' ? `A$${value}` : `${value} ${amount.currency}`
 }

@@ -12,7 +12,7 @@ import { SearchField } from '@/components/arc/search-field/search-field'
 import { SortableDataTable } from '@/components/arc/sortable-data-table/sortable-data-table'
 import { Button } from '@/components/arc/button/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { formatPerthTimestamp } from '@/lib/ui/format-time'
+import { formatTimestamp } from '@/lib/ui/format-time'
 import { AdminSearchNotice } from '../AdminSearchNotice'
 import { AdminTrialAccess } from '../actions/AdminTrialAccess'
 
@@ -73,7 +73,7 @@ function AccountsList({ search, onSearchChange }: AccountSearchProps) {
       {loading ? (
         <Skeleton className="h-44 w-full" role="status" aria-label="Loading Accounts" />
       ) : result.results.length === 0 ? (
-        <div className="ae-arc rounded-card border border-border bg-card">
+        <div className="ae-arc rounded-lg border border-border bg-card">
           <AeEmptyState
             icon={<SearchIcon size={24} />}
             title="No Accounts found"
@@ -104,7 +104,7 @@ function AccountsList({ search, onSearchChange }: AccountSearchProps) {
                   <Badge tone={account.lifecycle === 'suspended' ? 'warning' : 'neutral'}>{account.lifecycle.replaceAll('_', ' ')}</Badge>
                 ) },
                 { key: 'createdAt', label: 'Created', numeric: false, render: (_value, account) => (
-                  <time className="text-xs text-muted-foreground" dateTime={new Date(account.createdAt).toISOString()}>{formatPerthTimestamp(account.createdAt)}</time>
+                  <time className="text-xs text-muted-foreground" dateTime={new Date(account.createdAt).toISOString()}>{formatTimestamp(account.createdAt, 'Australia/Perth')}</time>
                 ) },
               ]}
             />

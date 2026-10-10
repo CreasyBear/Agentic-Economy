@@ -156,7 +156,7 @@ export function TeamAccessManagement({ onRecordedRead, accountRef, members = [],
         <Button type="button" variant="ghost" size="sm" className="text-destructive" disabled={disabled} onClick={event => choose({ kind: 'invitation', invitation: item, action: 'cancel' }, event)}>Cancel invitation</Button>
       </div>}
       footer={view.nextInvitationOffset !== null ? <Button type="button" variant="outline" disabled={disabled} onClick={() => void loadMore('invitations')}>Load more invitations</Button> : undefined} />
-      : <div className="grid gap-3"><h2 className="text-lg font-semibold">Invitations unavailable</h2><p className="text-sm text-muted-foreground">{inviteReason ?? 'Pending invitations are available to workspace owners and admins after the Business identity organisation is set up.'}</p></div>}
+      : <div className="grid gap-3"><h2 className="text-lg font-medium">Invitations unavailable</h2><p className="text-sm text-muted-foreground">{inviteReason ?? 'Pending invitations are available to workspace owners and admins after the Business identity organisation is set up.'}</p></div>}
     {inviteReason && view?.canManageInvitations !== false ? <p className="text-sm text-muted-foreground">{inviteReason}</p> : null}
     <AeConfirmDialog open={decision !== undefined} onOpenChange={open => { if (!pending && !open) setDecision(undefined) }}
       returnFocusRef={decisionTriggerRef} returnFocusFallbackRefs={[refreshRef]}

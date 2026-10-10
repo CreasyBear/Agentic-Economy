@@ -39,7 +39,7 @@ export function InviteQueueCard({
     <Card className={cn("min-w-0 w-full gap-0 p-0", className)}>
       {/* Header */}
       <CardHeader className="items-center gap-1 border-b px-5 py-4 max-sm:has-data-[slot=card-action]:grid-cols-1">
-        <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
+        <h2 className="text-lg font-medium tracking-tight">{title}</h2>
         <CardDescription className="text-xs">{description}</CardDescription>
         {action ? (
           <CardAction className="self-center max-sm:col-start-1 max-sm:row-start-3 max-sm:justify-self-start max-sm:pt-3">{action}</CardAction>

@@ -1,6 +1,6 @@
 import { adminObjectHref } from '@/lib/operator/admin-console/contracts'
 import { providerStatusLabel } from '@/lib/operator/admin-console/status-adapter'
-import { formatPerthTimestamp, timestampIso } from '@/lib/ui/format-time'
+import { formatTimestamp, timestampIso } from '@/lib/ui/format-time'
 import { parseBusinessSlug } from '@/modules/business/public'
 import type { AdminProviderRow, AdminProviderRowModel } from './providers-list.contracts'
 
@@ -14,7 +14,7 @@ export function providerRowModel(row: AdminProviderRow): AdminProviderRowModel {
       : `/admin/providers/${encodeURIComponent(row.slug)}`,
     publicStatusLabel: providerStatusLabel(row.publicStatus),
     trustTierLabel: providerStatusLabel(row.trustTier),
-    updatedAtLabel: formatPerthTimestamp(row.updatedAt),
+    updatedAtLabel: formatTimestamp(row.updatedAt, 'Australia/Perth'),
     updatedAtIso: timestampIso(row.updatedAt),
   }
 }

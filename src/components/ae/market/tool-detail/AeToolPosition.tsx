@@ -33,7 +33,7 @@ export function AeToolPosition({
         <ArrowUpRightIcon aria-hidden="true" data-icon="inline-end" />
       </Link>
       <Accordion type="single" collapsible>
-        <AccordionItem value="actions" className="rounded-card border bg-card px-related">
+        <AccordionItem value="actions" className="rounded-lg border bg-card px-related">
           <AccordionTrigger className="min-h-touch py-intra hover:no-underline">
             Actions
           </AccordionTrigger>

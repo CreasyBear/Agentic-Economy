@@ -48,7 +48,7 @@ export function AeSiteSection({
         clip ? 'overflow-clip' : 'overflow-visible',
         schemeClass(scheme),
         rhythmClass(rhythm),
-        enter && 'animate-in fade-in-0 duration-base ease-emphasized motion-reduce:animate-none',
+        enter && 'animate-in fade-in-0 duration-base ease-standard motion-reduce:animate-none',
         className,
       )}
     >
@@ -70,7 +70,7 @@ function schemeClass(scheme: AeSiteScheme): string {
     case 'canvas':
       return 'bg-background text-foreground'
     case 'surface':
-      return 'bg-container text-foreground'
+      return 'bg-card text-foreground'
     case 'muted':
       return 'bg-muted text-foreground'
     case 'ink':
@@ -88,7 +88,7 @@ function rhythmClass(rhythm: AeSiteRhythm): string {
     case 'hero':
       return 'py-16 md:py-24'
     case 'spacious':
-      return 'py-band md:py-hero'
+      return 'py-section md:py-section'
     case 'flush':
       return 'overflow-visible py-0'
     default: {

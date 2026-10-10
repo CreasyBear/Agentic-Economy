@@ -1,3 +1,4 @@
+import { formatCount } from '@/lib/ui/format-time'
 import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import type { ToolObjectView } from '@/components/ae/shared/object-family.contracts'
 import { toolCardState, toolChoiceReadinessLabel, type ToolCardProjection, type ToolCardRecommendation } from '@/modules/chat/tool-card'
@@ -42,7 +43,7 @@ export function projectOptionsFromCard(
     } else if (choice.readiness !== undefined) {
       facts.Readiness = { value: toolChoiceReadinessLabel(choice.readiness), source: 'Catalogue result' }
     }
-    if (usage?.kind === 'present') facts.Usage = { value: `${usage.value.count.toLocaleString()} uses ${usage.value.window}`, source: sourceLabel(usage.provenance) }
+    if (usage?.kind === 'present') facts.Usage = { value: `${formatCount(usage.value.count)} uses ${usage.value.window}`, source: sourceLabel(usage.provenance) }
     const identity = object?.identity
     const seller = identity?.kind === 'verified_provider' ? { kind: 'provider' as const, name: identity.name }
       : identity?.kind === 'directory_host' ? { kind: 'host' as const, name: identity.name } : undefined
@@ -54,7 +55,7 @@ export function projectOptionsFromCard(
       price: displayedPrice ?? 'Price to be confirmed',
       ...(displayedPrice === undefined || (currentPrice ? price?.validUntil : choice.priceValidUntil) === undefined
         ? {} : { priceValidUntil: currentPrice ? price?.validUntil : choice.priceValidUntil }),
-      ...(usage?.kind === 'present' ? { usage: `Used ${usage.value.count.toLocaleString()}× ${usage.value.window}` } : {}),
+      ...(usage?.kind === 'present' ? { usage: `Used ${formatCount(usage.value.count)}× ${usage.value.window}` } : {}),
       ...(choice.sourcePrice === undefined ? {} : { providerListedPrice: choice.sourcePrice }),
       ...(choice.host === undefined ? {} : { host: choice.host }),
       ...(choice.resourcePath === undefined ? {} : { resourcePath: choice.resourcePath }),

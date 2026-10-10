@@ -101,7 +101,7 @@ export function AeCopyPublicUrlButton({
           readOnly
           onFocus={(event) => event.currentTarget.select()}
           onClick={(event) => event.currentTarget.select()}
-          className="h-11 basis-full min-w-0 rounded-md border border-input bg-background px-3 text-sm text-foreground"
+          className="h-11 basis-full min-w-0 rounded-sm border border-input bg-background px-3 text-sm text-foreground"
         />
       ) : null}
     </>

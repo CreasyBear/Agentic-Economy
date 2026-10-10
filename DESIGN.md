@@ -2,7 +2,11 @@
 
 **Status:** active product design contract
 
-**Revised:** 2026-10-07
+**Revised:** 2026-10-10. Foundations (type, spacing, radii, surfaces,
+shadow, colour, status, motion, focus, money and time formats) now follow
+[the design system spec](docs/design-system/spec.md), which wins where this
+file disagrees. Rule IDs (R1 to R29) refer to
+[the rulebook](docs/design-system/2026-10-10-aecon-rulebook.md).
 Aligned to aecon brand guidelines (PDF, 2026-09). The lived visual reference is
 `/market` (`MarketLanding.tsx`) for the opening, and the Arc Tool and Host
 compositions for discovery results.
@@ -21,15 +25,12 @@ success do not describe a Tool.
 The pilot uses `.arc-market` on each block and its portal roots. Arc foundation
 is scoped there; `src/styles/arc-market.css` maps the existing AE palette and
 Manrope fonts onto its tokens. The existing `.dark` appearance owner controls
-both systems. Keep Arc's concentric 18/26/34px control/panel/surface radius scale,
-44px control heights, 400/500 interface type and source motion presets within
-this scope. Forest is the light accent; mint is the dark accent. Main purchase
-and navigation actions may retain charcoal/chalk emphasis. Sentence-case labels,
-visible keyboard focus and reduced-motion behavior remain required.
-
-These block recipes supersede the ExtraLight, uppercase-eyebrow, compact-radius
-and 150/220/300ms recipes below only on migrated surfaces. Unmigrated pages keep
-their current system. Current source establishes migrated coverage.
+both systems. `arc-market.css` maps Arc's control/panel/surface radii onto the
+spec's 6/10/14px, its control heights onto the density control token, its type
+sizes onto the two type tokens, its resting and raised shadows onto none, and
+its durations and springs onto 80/120/150ms with no bounce. Forest is the light
+accent; mint is the dark accent. Sentence-case labels, visible keyboard focus
+and reduced-motion behavior remain required.
 The dated contract and coverage inventory remain in
 [the Arc refactor protocol](docs/archive/2026-10-05/designs/arc-ui-refactor/protocol.md).
 
@@ -263,11 +264,10 @@ allowed transitions. No dashboard may contain authority, recovery or money
 state that an authorised agent can discover only by screen-scraping or support
 intervention.
 
-The lived visual grammar is discover: chalk field, charcoal action, one forest
-accent, ExtraLight display, medium tracked uppercase eyebrow without a marker,
-website radius scale, hairline listing cards with hover lift, collection rails,
-aligned numeric values. Public editorial pages use that composition. Operator
-pages use the same tokens at compact density. Restraint matters because
+The visual grammar is calm by subtraction: chalk field, one Forest primary
+action per screen, grey everywhere else, two type sizes per screen, hairline
+edges, no in-page shadows, aligned numeric values. Public pages use the default
+density; the workspace uses the same token names at `[data-density="workspace"]`. Restraint matters because
 commercial state and provenance need to remain visible.
 
 ### Feel
@@ -297,54 +297,50 @@ relevant, but it must not replace the Seller or Provider.
 
 Two dialects, one system. Tokens never fork.
 
-1. **Public / editorial-discover.** Generous composition: left ExtraLight
-   display, medium tracked uppercase eyebrow without a marker, collection rails,
-   listing cards. Mono uppercase actions remain the public-action exception.
+1. **Public.** Default density (16px body, 24px title, 40px rows, 44px
+   controls, 48px page padding). Real tools first; no display type, eyebrows
+   or mono uppercase actions.
 2. **Market.** Discover is the ideal. Search, compare, providers and saved use
    the same card, pill and rail grammar. Comparison and operational records stay
    tabular. Authenticated Tool Quote remains the caller-specific decision view.
-3. **Operator / compact-discover.** Quiet work areas for Accounts, spending
-   policies, Provider publication, purchases, recovery and records. Same tokens
-   at workbench scale: medium titles, muted decks, hairlines. Display type does
-   not enter forms, tables or status views. No 7xl hero. No second weight language.
+3. **Workspace.** Quiet work areas for Accounts, spending policies, Provider
+   publication, purchases, recovery and records. Same tokens under
+   `[data-density="workspace"]`: 13px body, 20px title, 32px rows and controls
+   (44px on coarse pointers), 24px page padding.
 
 The same object retains the same name and state across all three modes. Public
 language may be shorter, but it must not invent a simpler commercial model.
 
 ## Type
 
-- `font-sans` (Manrope, `--ae-font-sans`) carries interface text, prose,
-  headings, forms and controls at Regular 400 or Medium 500. Listing card titles
-  may use `font-semibold` (discover-legal). `font-bold` page titles are defects.
-- `font-mono` (`--ae-font-mono`) carries prices, amounts, identifiers,
-  timestamps, code, keyboard hints and values whose alignment matters.
-- `font-display` (Manrope, `--ae-font-display`) carries one public display
-  statement per editorial page, set ExtraLight 200 with discover tracking
-  (`-0.055em` on the hero). Values are the tokens copied from
-  `DirectoryHero.tsx`, not an older written scale.
-
-Type is stepped. Discover names the steps (caption, eyebrow, deck, title,
-display). Headings use `text-wrap: balance`. Do not switch typefaces inside one
-heading. Interface copy is sentence case, including buttons, labels and
-headings; do not title-case.
-
-**Discover-legal eyebrow.** Medium weight, tracked uppercase, no `SiteMarker`.
-`impeccable` craft-floor bans kickers; this contract overrides that ban. Do not
-delete legal eyebrows. The remaining ban is a marker-dot product eyebrow.
+- Manrope (`--ae-font-sans`) at weights 400 and 500 only. Tracking is -0.01em
+  for body (`--ae-tracking-body`) and -0.025em for titles
+  (`--ae-tracking-title`).
+- Each screen uses two type sizes: `text-body` and `text-title`. h2 uses the
+  body size at weight 500. Secondary text is `--ae-muted-fg` at the same size.
+- Mono with `tabular-nums` is only for money, refs and code.
+- Copy is sentence case. No eyebrows, mono uppercase, Title Case or em dashes
+  (R16). The caption, eyebrow, deck, title-lg and display sizes, weights 200,
+  600 and 700, and `.font-display` are deleted.
+- Money prints only through `formatCurrencyAmount`: "A$0.003", "A$5.00",
+  "0.02 USDC", or `--` when unknown (R9). Time prints only through
+  `src/lib/ui/format-time.ts`, which takes the time zone (R11). oxlint
+  `no-restricted-properties` flags `Intl.NumberFormat`, `Intl.DateTimeFormat`
+  and `toLocale*String` anywhere else.
 
 ## Shape and structure
 
-- Use the approved website radius scale in `globals.css`. Controls use
-  `--radius-md`. Cards use `--radius-card`. Filter and collection chips use
-  `rounded-full`. Twenty 2px is leftover and must not be restored.
-- The floating public navigation is the most rounded persistent shell.
-- Market discovery may use listing cards (hairline, optional hover lift).
-  Comparison, purchase state and operator records use rows, tables and hairlines.
-- Cards are for objects that sit above the page or contain a self-contained
-  action. A Tool listing is such an object. A table row is not.
-- Whitespace establishes the first level of grouping. A border is the second.
-  Elevation is the last. Card lift uses `--shadow-float`, not generic
-  `shadow-md`.
+- Spacing is a 4px grid: 8px intra (`--ae-space-intra`), 16px related, 24px
+  region (`--ae-space-region`), 32px section. The hero, band, fold and chapter
+  spaces are deleted.
+- Radii are concentric: control 6px (`rounded-sm`), card 10px (`rounded-lg`),
+  overlay 14px (`rounded-xl`), chips pill (`rounded-pill`). Tailwind's radius
+  and shadow namespaces are cleared, so other `rounded-*` and `shadow-*` sizes
+  render nothing.
+- Cards are for objects that contain a self-contained action. A Tool listing is
+  such an object. A table row is not.
+- Whitespace establishes the first level of grouping. A hairline is the second.
+  Nothing lifts.
 
 Never place a bordered card inside another bordered card merely to show
 hierarchy. The information model should create the hierarchy.
@@ -355,35 +351,37 @@ The brand palette (Brand guidelines, p.7):
 
 | Colour   | Hex       | Role                                          | CSS token                        |
 | -------- | --------- | ---------------------------------------------- | --------------------------------- |
-| Forest   | `#24543D` | Primary, artwork and identity, links, focus    | `--ae-brand` (`--ae-brand-strong`, `--ae-ring`, `--ae-info`) |
-| Charcoal | `#141414` | Primary dark surface, action colour            | `--ae-fg`                         |
+| Forest   | `#24543D` | The one primary button, selected row, focus, inline links; dark mint `#B7E7CC` | `--ae-brand` (`--ae-primary`, `--ae-ring`) |
+| Charcoal | `#141414` | Text and dark surface                          | `--ae-fg`                         |
 | Chalk    | `#E8E4DA` | Light surface, body text on dark               | `--ae-bg` (`--ae-on-brand`, `--ae-primary-fg`) |
 | Stone    | `#AAA89E` | Supporting; dark-mode muted text               | `--ae-muted-fg` in `.dark`        |
 | Gold     | `#E5AA35` | Logo endpoint only, restricted, never a UI accent | no token                       |
 
-Use three surface levels: canvas (`--ae-bg`), sunken work area
-(`--ae-surface-sunken`) and raised surface (`--ae-surface`). Structural
-borders use `--ae-border`.
+Use three surface levels: canvas (`--ae-bg`), sunken (`--ae-surface-sunken`)
+and raised (`--ae-surface`). Edges are `--ae-hairline` (8% foreground), which
+is `--border`; `--ae-border-strong` is for inputs. Hover moves one surface step
+(to sunken in light, to `--ae-surface-raised` in dark) and changes colour only.
 
-Charcoal `#141414` (`--ae-fg`) is the action colour. Forest `#24543D`
-(`--ae-brand`) marks links, selection, focus and information. It does not fill
-buttons or broad surfaces. Green, amber and red appear only for literal state
-and always with text or an icon. Muted text uses `--ae-muted-fg`; check the AA
-contrast floor before relying on it for body copy. Gold never appears as a UI
-accent; it is reserved for the logo endpoint.
+Forest (`--ae-brand`) marks only the one primary button, the selected row,
+keyboard focus and inline links; `--ae-primary` is Forest. Everything else is
+grey. Success, warning and danger colour status icons only: each status is a
+16px lucide-react icon with a grey label, never a pill. Gold never appears as a
+UI accent; it is reserved for the logo endpoint.
 
-Use only the established shadow levels: header `0 1px 3px 0 rgba(0,0,0,.06)`,
-popup `0 12px 32px rgba(0,0,0,.08)`, dark popup
-`0 12px 32px rgba(0,0,0,.4)` and card lift
-`0 12px 32px -16px rgba(0,0,0,.18)`.
+The only shadow is `--ae-shadow-overlay`
+(`0 12px 32px -16px rgba(0,0,0,.18)`, utility `shadow-overlay`) on dialogs,
+sheets, menus, tooltips and the command palette.
+
+Focus rings show for keyboard focus only: 2px solid `--ring` with a 2px offset.
 
 ## Motion
 
-Motion acknowledges interaction or explains a state change. Use the existing
-150, 220 and 300 millisecond ladder with the standard
-`cubic-bezier(0.22,1,0.36,1)` or emphasised
-`cubic-bezier(0.16,1,0.3,1)` easing. The button hover is the existing 260
-millisecond ink wash.
+Motion explains cause and effect. Hover takes 80ms (`duration-hover`) and
+changes colour only. Exits take 120ms (`duration-fast`), entrances 150ms
+(`duration-base`), with `--motion-ease-standard`. Only transform and opacity
+animate. Arc's `motionTokens` cap at 0.15s (exits 0.12s) and every spring is
+`visualDuration: 0.15, bounce: 0`. The command palette, shortcuts and row focus
+don't animate. Spinners appear after 300ms and stay at least 500ms.
 
 Do not add decorative page-load animation, shimmer, orbit or perpetual motion.
 Respect `prefers-reduced-motion`.
@@ -510,7 +508,7 @@ selection, signing material or internal FX mechanics.
 
 ## Hard constraints
 
-- Use one accent colour. Semantic colours carry literal state only.
+- Use one accent colour. Semantic colours colour status icons only.
 - Do not use generic card grids for dense market or purchase data.
 - Do not nest boxes where spacing or one divider expresses the relationship.
 - Do not place duplicate actions with the same intent in one normal page state.

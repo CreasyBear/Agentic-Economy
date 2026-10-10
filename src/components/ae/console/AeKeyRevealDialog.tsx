@@ -404,7 +404,7 @@ export function AeKeyRevealDialog({
         <div
           className={cn(
             'arc-key-ack-row',
-            dismissBlocked && 'rounded-md ring-2 ring-warning-ring ring-offset-2 ring-offset-background',
+            dismissBlocked && 'rounded-sm ring-2 ring-warning-ring ring-offset-2 ring-offset-background',
           )}
         >
           <Checkbox

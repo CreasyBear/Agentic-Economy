@@ -1,3 +1,4 @@
+import { formatCount } from '@/lib/ui/format-time'
 import { Link } from "@tanstack/react-router";
 
 import { cn } from "@/lib/utils";
@@ -22,7 +23,7 @@ export function AeCapabilityTile({
 }) {
   const listingFact =
     group.providerCount > 1
-      ? `${group.providerCount.toLocaleString()} listed`
+      ? `${formatCount(group.providerCount)} listed`
       : group.tools[0]?.providerName ?? "1 listed";
   const price = capabilityFromPrice(group.tools);
 
@@ -35,12 +36,12 @@ export function AeCapabilityTile({
           search={{ query: group.label }}
           aria-label={`${group.label}, ${listingFact}, ${price}`}
           className={cn(
-            "block rounded-md transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+            "block rounded-sm transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
           )}
         >
           <ItemContent>
             <ItemHeader>
-              <ItemTitle className="text-base font-semibold transition-colors duration-fast ease-standard group-hover:text-brand-strong">
+              <ItemTitle className="text-base font-medium transition-colors duration-fast ease-standard group-hover:text-brand">
                 {group.label}
               </ItemTitle>
               <span className="shrink-0 text-xs text-muted-foreground">

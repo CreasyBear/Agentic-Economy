@@ -47,7 +47,7 @@ function SelectedCallFeedback({ callRef }: Readonly<{ callRef: string }>) {
     </div>
     {feedback !== null && feedback.choice !== 'useful' ? <label className="grid max-w-sm gap-intra">
       <span>Reason (optional)</span>
-      <select className="min-h-touch rounded-md border border-input bg-background px-3 text-foreground" disabled={pending}
+      <select className="min-h-touch rounded-sm border border-input bg-background px-3 text-foreground" disabled={pending}
         value={feedback.reason ?? ''} onChange={event => {
           const reason = callFeedbackReasons.find(value => value === event.target.value)
           void save(reason === undefined ? { choice: feedback.choice } : { choice: feedback.choice, reason })

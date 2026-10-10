@@ -24,7 +24,7 @@ export function TreasuryActions({ view }: { view: AdminTreasuryView }) {
   const locked = state.pending || state.unresolved
   const current = state.targetChanged || approvalRequired ? view.controls : state.review
   return <AeSection title="Actions" description="Refill the company wallet or change the controls for new purchases.">
-    <div className="grid gap-related rounded-card border border-border p-related">
+    <div className="grid gap-related rounded-lg border border-border p-related">
       <h3 className="font-medium">Refill the float</h3>
       {view.custody === null ? <AeInlineState state="unavailable" label="Deposit address unavailable" description="Custody must be configured before refill details can be shown." /> : <>
         <p className="text-sm text-muted-foreground">Send USDC on {view.environment === 'production' ? 'Base' : 'Base Sepolia (test network)'} · {view.custody.network}.</p>
@@ -54,7 +54,7 @@ export function TreasuryActions({ view }: { view: AdminTreasuryView }) {
           <DialogDescription>{thresholdAction ? 'Save fixed USDC amounts. This replaces the automatic runway-day thresholds.' : resume ? `Restore new purchases for ${audienceLabel(current.resumePaymentsOpenTo)}. ${propose || approvalRequired ? 'Another Admin owner must approve this proposal.' : 'Accepted Calls keep their existing authority.'}` : 'New purchases will pause. Accepted Calls will continue or reconcile.'}</DialogDescription>
         </DialogHeader>
         <p className="text-sm font-medium">{view.environment === 'production' ? 'Production · Base' : 'Sandbox · Base Sepolia'}</p>
-        <div className="grid gap-intra rounded-md border border-border p-related">
+        <div className="grid gap-intra rounded-sm border border-border p-related">
           <h3 className="text-sm font-medium">Current settings</h3>
           {thresholdAction ? <AeFactList density="compact" facts={current.thresholds.kind === 'fixed' ? [
             { label: 'Current low-water mark', value: treasuryMoney(current.thresholds.lowWaterUnits) },

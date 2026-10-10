@@ -1,3 +1,4 @@
+import { formatCount } from '@/lib/ui/format-time'
 import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { ArrowUpRightIcon } from 'lucide-react'
@@ -29,7 +30,7 @@ export function DirectoryComparison({ entries, tools = [], open, onOpenChange, o
         description: entry.description || 'Not published', category: entry.category ?? 'Not categorized',
         input: entry.schemaSummary ?? 'Inspect input contract', output: entry.outputSummary ?? 'Not published',
         access: model.accessLabel, price: model.priceLabel || 'Price unavailable', priceContext: model.priceContext,
-        calls: entry.activity?.calls30d === undefined ? 'Not reported' : entry.activity.calls30d.toLocaleString('en-AU'),
+        calls: entry.activity?.calls30d === undefined ? 'Not reported' : formatCount(entry.activity.calls30d),
         source: entry.provenance === undefined ? 'Metadata provenance not stated' : `${entry.provenance.directory} · Provider-published metadata`,
         action: <Link to="/tools/$providerHost/$slug" params={{ providerHost: directoryProviderKey(entry.provider), slug: entry.slug ?? directorySlugBase(entry.resource) }} state={MARKET_LINK_STATE}>Inspect Tool<ArrowUpRightIcon aria-hidden="true" size={14} /></Link> }
     }),

@@ -1,9 +1,10 @@
+import { formatCompactCount, formatCount } from '@/lib/ui/format-time'
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
 
 export { directoryDate, directoryOutputLabel, directoryPrice, directoryPriceContext, directoryTitle } from '@/modules/market/directory-card.view-model'
 
 export function directoryCount(value: number): string {
-  return new Intl.NumberFormat('en-AU', { notation: value >= 10_000 ? 'compact' : 'standard', maximumFractionDigits: 1 }).format(value)
+  return value >= 10_000 ? formatCompactCount(value) : formatCount(value)
 }
 
 export function directoryNetworkLabel(entry: X402DirectoryEntry): string | undefined {

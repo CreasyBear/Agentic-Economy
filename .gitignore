@@ -27,6 +27,9 @@ graphify-out/
 !/.agents/skills/deployment-operations/**
 /.claude/*
 !/.claude/settings.json
+!/.claude/skills/
+/.claude/skills/*
+!/.claude/skills/aecon-rulebook/
 /agent/
 /skills-lock.json
 /.agent-skills.lock

@@ -12,7 +12,7 @@ import { requestOwnerUsageReportServer } from '@/lib/server/durable-usage-report
 import { formatDisplayAmount, formatExactAmount } from '@/modules/money/public'
 import { toast } from '@/lib/ui/toast'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
-import { formatUtcTimestamp } from '@/lib/ui/format-time'
+import { formatTimestamp } from '@/lib/ui/format-time'
 import {
   downloadCsv,
   downloadJson,
@@ -216,7 +216,7 @@ function projectCallRow(item: CallRow, reviewMode: boolean): ActivityCallRowView
     purchaseBadge: purchaseStatusBadge(purchase),
     purchaseLabel: purchase.label,
     paymentStateLabel: formatPaymentStateLabel(item.paymentState),
-    whenLabel: `${formatUtcTimestamp(item.createdAt)} UTC`,
+    whenLabel: `${formatTimestamp(item.createdAt, 'UTC')} UTC`,
     createdAt: item.createdAt,
     receiptHref: `/calls/${encodeURIComponent(item.callRef)}`,
     receiptAccessibleLabel: `${reviewMode ? 'Review' : 'View receipt for'} ${item.toolLabel}`,

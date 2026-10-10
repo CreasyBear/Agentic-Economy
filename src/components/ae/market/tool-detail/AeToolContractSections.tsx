@@ -19,7 +19,7 @@ import {
   ItemTitle,
 } from '@/components/ui/item'
 import { Separator } from '@/components/ui/separator'
-import { formatUtcTimestamp, timestampIso } from '@/lib/ui/format-time'
+import { formatTimestamp, timestampIso } from '@/lib/ui/format-time'
 import type {
   PublicToolDescriptor,
   PublicToolParameter,
@@ -161,7 +161,7 @@ export function AeToolCompactContract({
 
   return (
     <Accordion type="single" collapsible>
-      <AccordionItem value="contract" className="rounded-card border bg-card px-related">
+      <AccordionItem value="contract" className="rounded-lg border bg-card px-related">
         <AccordionTrigger className="min-h-touch hover:no-underline">
           Inputs, terms, risks, and evidence
         </AccordionTrigger>
@@ -449,7 +449,7 @@ function Schema({
   return (
     <section className="grid min-w-0 gap-2">
       <h3 className="font-medium text-foreground">{title}</h3>
-      <pre className="max-h-96 overflow-auto rounded-md bg-muted p-4 text-xs text-foreground">
+      <pre className="max-h-96 overflow-auto rounded-sm bg-muted p-4 text-xs text-foreground">
         <code>{JSON.stringify(value, null, 2)}</code>
       </pre>
     </section>
@@ -477,7 +477,7 @@ function TimeFact({
     <Fact label={label} value="Not published" />
   ) : (
     <Fact label={label}>
-      <time dateTime={timestampIso(value)}>{formatUtcTimestamp(value)} UTC</time>
+      <time dateTime={timestampIso(value)}>{formatTimestamp(value, 'UTC')} UTC</time>
     </Fact>
   )
 }

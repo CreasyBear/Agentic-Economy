@@ -6,17 +6,17 @@ export function ChatSkeleton() {
     <AeChatPage
       header={
         <header className="arc-chat-skeleton-header">
-          <Skeleton className="min-h-touch min-w-touch shrink-0 rounded-md" />
+          <Skeleton className="min-h-touch min-w-touch shrink-0 rounded-sm" />
           <div className="arc-chat-skeleton-title">
             <Skeleton className="h-4 w-40" />
             <Skeleton className="h-3 w-56" />
           </div>
-          <Skeleton className="min-h-touch min-w-touch rounded-md" />
+          <Skeleton className="min-h-touch min-w-touch rounded-sm" />
         </header>
       }
       dock={
         <div className="arc-chat-skeleton-dock">
-          <Skeleton className="h-24 rounded-md" />
+          <Skeleton className="h-24 rounded-sm" />
         </div>
       }
     >

@@ -37,7 +37,7 @@ describe('owner earnings facts', () => {
         transferEvidenceDigest: 'sha256:transfer', transferObservedAt: Date.UTC(2026, 8, 27), createdAt: 1,
       }] }} />)
     expect(screen.getByText('A$2.00')).toBeTruthy()
-    expect(screen.getByText('Exact amount: AUD 2.000000')).toBeTruthy()
+    expect(screen.getByText('Exact amount: A$2.00')).toBeTruthy()
     expect(screen.getByText('Stripe transfer status: succeeded')).toBeTruthy()
     expect(screen.getByText('Payout not yet observed')).toBeTruthy()
     expect(screen.queryByRole('button', { name: /approve|start|review payout/i })).toBeNull()
@@ -49,9 +49,9 @@ describe('owner earnings facts', () => {
         { payoutRef: 'payout:usd', currency: 'USD', exponent: 6, amountUnits: '1234567', state: 'paid', createdAt: 2 },
       ] }} />)
     expect(screen.getByText('A$0.01')).toBeTruthy()
-    expect(screen.getByText('Exact amount: AUD 0.000001')).toBeTruthy()
-    expect(screen.getByText('USD 1.234567')).toBeTruthy()
-    expect(screen.getByText('USDC 1.250000')).toBeTruthy()
+    expect(screen.getByText('Exact amount: A$0.000001')).toBeTruthy()
+    expect(screen.getByText('1.234567 USD')).toBeTruthy()
+    expect(screen.getByText('1.25 USDC')).toBeTruthy()
     expect(screen.queryByText('A$1.25')).toBeNull()
   })
   it('does not represent a payout review row as an executed Stripe transfer', () => {

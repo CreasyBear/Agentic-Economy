@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/arc/button/button'
 import { BillingHistory } from '@/components/ae/shared/arc-pro/billing-overview/billing-overview'
 import { AeFactList } from '@/components/ae/data/AeFactList'
-import { formatUtcTimestamp } from '@/lib/ui/format-time'
+import { formatTimestamp } from '@/lib/ui/format-time'
 import { downloadCsv, downloadJson } from '@/lib/export/csv-export'
 import { generateCallUsageExportCsv } from '@/lib/export/call-usage-export'
 import { assembleUsageReport, type UsageReportManifest } from '@/lib/export/durable-usage-report'
@@ -84,11 +84,11 @@ export function ActivityUsageReports({request}:{request?:{reportRef:string;forma
       {selected===null&&request!==undefined?<Button type="button" variant="secondary" disabled={pending} onClick={()=>void read(request.reportRef)}>Read requested report</Button>:null}
     </div>
     <p role="status" aria-live="polite" className="text-sm text-muted-foreground">{message}</p>
-    {reports.length===0?<p className="text-sm text-muted-foreground">{failed?'Saved report history is unavailable.':historyLoaded?'No saved reports for this Account.':'Loading saved reports…'}</p>:<ul className="grid gap-2">{reports.map(report=><li key={report.reportRef}><Button type="button" variant="ghost" disabled={pending} onClick={()=>void read(report.reportRef)}>{formatUtcTimestamp(report.createdAt)} · {report.state} · {report.recordCountUnits} Calls</Button></li>)}</ul>}
+    {reports.length===0?<p className="text-sm text-muted-foreground">{failed?'Saved report history is unavailable.':historyLoaded?'No saved reports for this Account.':'Loading saved reports…'}</p>:<ul className="grid gap-2">{reports.map(report=><li key={report.reportRef}><Button type="button" variant="ghost" disabled={pending} onClick={()=>void read(report.reportRef)}>{formatTimestamp(report.createdAt, 'UTC')} · {report.state} · {report.recordCountUnits} Calls</Button></li>)}</ul>}
     {selected===null?null:<>
       <ActivityUsageForecast report={selected} />
-      <AeFactList facts={[{label:'State',value:selected.state},{label:'Period starts (UTC)',value:formatUtcTimestamp(selected.periodStartAt)},{label:'Period ends, exclusive (UTC)',value:formatUtcTimestamp(selected.periodEndAt)},
-        {label:'Scope',value:`${selected.principalRef??'All Agents'} · ${selected.status}`},{label:'Captured through (UTC)',value:formatUtcTimestamp(selected.snapshotAt)},
+      <AeFactList facts={[{label:'State',value:selected.state},{label:'Period starts (UTC)',value:formatTimestamp(selected.periodStartAt, 'UTC')},{label:'Period ends, exclusive (UTC)',value:formatTimestamp(selected.periodEndAt, 'UTC')},
+        {label:'Scope',value:`${selected.principalRef??'All Agents'} · ${selected.status}`},{label:'Captured through (UTC)',value:formatTimestamp(selected.snapshotAt, 'UTC')},
         {label:'Calls / scanned records',value:`${selected.recordCountUnits} / ${selected.scannedCountUnits}`},{label:'Failure',value:selected.failureCode??'None'},
         {label:'Immutable evidence chain',value:selected.recordsChainDigest,mono:true}]} />
       {selected.state==='failed'?<p className="text-sm text-muted-foreground">This capture could not finish. Request a new report for the same filters after current activity settles.</p>:null}

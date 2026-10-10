@@ -1,3 +1,4 @@
+import { formatCount } from '@/lib/ui/format-time'
 import { Link } from '@tanstack/react-router'
 import { useMemo, type ReactNode } from 'react'
 import { useTable, type ColumnDef } from '@tanstack/react-table'
@@ -44,13 +45,13 @@ export function DirectoryProvidersIndex({ result, search = {} }: DirectoryProvid
       ? <DirectoryHostsTable rows={rows} hostLink={hostLink} example={example} />
       : <ProductListing>{rows.map(row => <li key={row.key} className="min-w-0 h-full"><article className="flex h-full min-w-0 flex-col gap-5 rounded-xl border border-border bg-card p-5 sm:p-6">
         <div className="flex min-w-0 items-start gap-3"><span className="arc-provider-mark" aria-hidden="true">{row.model.initials}</span><div className="min-w-0 flex-1"><h3 className="text-lg leading-snug [overflow-wrap:anywhere]">{hostLink(row)}</h3><p className="mt-1 text-xs text-muted-foreground">Directory Host</p></div></div>
-        <p className="text-sm"><span className="font-medium tabular-nums">{row.provider.count.toLocaleString('en-AU')}</span> {row.provider.count === 1 ? 'listing' : 'listings'} in the indexed catalogue</p>
+        <p className="text-sm"><span className="font-medium tabular-nums">{formatCount(row.provider.count)}</span> {row.provider.count === 1 ? 'listing' : 'listings'} in the indexed catalogue</p>
         <div className="min-w-0 border-t border-border pt-4"><p className="mb-1 text-xs text-muted-foreground">Example Tool</p><p className="text-sm [overflow-wrap:anywhere]">{example(row)}</p></div>
         <Link to={marketPath} search={{ ...presentation, view: 'tools', provider: row.model.key }} className={`${actionLinkClassName('secondary', 'md')} mt-auto w-full justify-between`}>Browse this Host’s Tools<ArrowRight size={16} aria-hidden="true" /></Link>
       </article></li>)}</ProductListing>}
     <nav aria-label="Directory Host pages" className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-5">
       {search.providerCursor === undefined ? <span /> : <Link to={marketPath} search={firstPage} className={actionLinkClassName('secondary', 'md')}>First page</Link>}
-      <span className="text-sm text-muted-foreground">{rows.length.toLocaleString('en-AU')} {rows.length === 1 ? 'Host' : 'Hosts'} on this page</span>
+      <span className="text-sm text-muted-foreground">{formatCount(rows.length)} {rows.length === 1 ? 'Host' : 'Hosts'} on this page</span>
       {result.isDone || result.continueCursor === '' ? <span /> : <Link to={marketPath} search={{ ...firstPage, providerCursor: result.continueCursor }} className={actionLinkClassName('secondary', 'md')}>Next Hosts<ArrowRight size={16} aria-hidden="true" /></Link>}
     </nav>
   </section>
@@ -73,7 +74,7 @@ function DirectoryHostsTable({ rows, hostLink, example }: Readonly<{
     {
       id: 'provider', header: 'Indexed listings', enableSorting: false,
       meta: { numeric: true, headerClassName: 'text-end', cellClassName: 'text-end tabular-nums' },
-      cell: ({ row }) => row.original.provider.count.toLocaleString('en-AU'),
+      cell: ({ row }) => formatCount(row.original.provider.count),
     },
     {
       id: 'model', header: 'Example Tool', enableSorting: false,

@@ -1,3 +1,4 @@
+import { formatCount } from '@/lib/ui/format-time'
 import { useAuth } from '@clerk/tanstack-react-start'
 import { Link, useNavigate, useRouter, useRouterState } from '@tanstack/react-router'
 import { ArrowLeftIcon, ArrowRightIcon, CompassIcon, HeartIcon, ListFilterIcon, Loader2Icon, SearchIcon, StoreIcon, XIcon } from 'lucide-react'
@@ -308,10 +309,10 @@ function DirectoryMarketplace({ canonicalSearch: routeSearch, page, compareEntri
     : !indexed && !browse
       ? page.kind === 'ok'
         ? page.total !== undefined
-          ? `Showing ${page.total.toLocaleString()} matching Tools`
-          : `${page.items.length.toLocaleString()} matching Tools on this page`
+          ? `Showing ${formatCount(page.total)} matching Tools`
+          : `${formatCount(page.items.length)} matching Tools on this page`
         : undefined
-      : coverage !== undefined ? `${coverage.indexedTotal.toLocaleString()} Tools in the catalogue` : page.kind === 'ok' && page.total !== undefined ? `${page.total.toLocaleString()} Tools` : undefined
+      : coverage !== undefined ? `${formatCount(coverage.indexedTotal)} Tools in the catalogue` : page.kind === 'ok' && page.total !== undefined ? `${formatCount(page.total)} Tools` : undefined
 
   // Filter changes stay on the current Market route and only narrow the same list the user
   // is already looking at, so they keep the current scroll position instead
@@ -379,7 +380,7 @@ function DirectoryMarketplace({ canonicalSearch: routeSearch, page, compareEntri
       {items.map(item => {
         const model = toSavedDirectoryRowModel(item)
         const key = item.identity.kind === 'ae_callable' ? item.identity.toolRef : item.identity.resource
-        return <li key={key} className="flex min-w-0 flex-col gap-3 rounded-card border border-border bg-card p-gutter">
+        return <li key={key} className="flex min-w-0 flex-col gap-3 rounded-lg border border-border bg-card p-gutter">
           <p className="text-xs text-muted-foreground">{model.provider}</p>
           {model.toolRef !== undefined
             ? <Link to="/tools/$toolRef" params={{ toolRef: model.toolRef }} state={MARKET_LINK_STATE} className="break-words font-medium underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring">{model.title}</Link>
@@ -423,7 +424,7 @@ function DirectoryMarketplace({ canonicalSearch: routeSearch, page, compareEntri
     return <div aria-label="Search verdict" className="flex flex-col gap-5" aria-busy={canonicalSearch.loading}>
       <p role="status" className="text-sm text-muted-foreground">
         {result.kind === 'match' ? 'Matching Tools' : result.kind === 'scoped' ? 'Search assessed a limited scope' : result.kind === 'noMatch' ? 'No matching Tool in the assessed catalogue' : 'Search unavailable'}
-        {' · '}{result.assessed.examined.toLocaleString()} assessed · {result.assessed.source === 'all' ? 'AE + Coinbase Bazaar' : result.assessed.source === 'current' ? 'AE Tools' : 'Coinbase Bazaar'} · {result.assessed.coverage} coverage
+        {' · '}{formatCount(result.assessed.examined)} assessed · {result.assessed.source === 'all' ? 'AE + Coinbase Bazaar' : result.assessed.source === 'current' ? 'AE Tools' : 'Coinbase Bazaar'} · {result.assessed.coverage} coverage
       </p>
       {result.recipient === undefined ? null : <p className="text-xs text-muted-foreground">Search query and candidate Tool text went to {result.recipient.label} ({result.recipient.host}).</p>}
       {result.kind === 'scoped' || result.kind === 'noMatch' ? <p className="text-sm text-muted-foreground">{result.reason}</p> : null}
@@ -512,7 +513,7 @@ function DirectoryMarketplace({ canonicalSearch: routeSearch, page, compareEntri
           <DirectorySavedNeeds />
           {saved.status === 'signed_out'
             ? <AeEmptyState icon={<HeartIcon />} title="Save Tools and listings to your account" description="Sign in to keep possibilities across browsers and connected Agents." action={<Link to="/sign-in/$" params={{ _splat: '' }} search={signInSearch} className={cn(cn(actionLinkClassName('secondary', 'md')))}>Sign in</Link>} />
-            : saved.status === 'loading' ? <div role="status" aria-label="Loading saved Tools" className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">{[0, 1, 2].map(index => <div key={index} aria-hidden="true" className="rounded-card border border-border bg-card p-gutter"><Skeleton avatar lines={3} /></div>)}</div>
+            : saved.status === 'loading' ? <div role="status" aria-label="Loading saved Tools" className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">{[0, 1, 2].map(index => <div key={index} aria-hidden="true" className="rounded-lg border border-border bg-card p-gutter"><Skeleton avatar lines={3} /></div>)}</div>
               : saved.status === 'failed' ? <AeEmptyState icon={<HeartIcon />} title="Saved Tools could not be loaded" description="Your saved identities are unchanged." action={<Button type="button" variant="secondary" onClick={saved.refresh}>Try again</Button>} />
                 : saved.savedTools.length === 0 ? <AeEmptyState icon={<HeartIcon />} title="Keep a few possibilities close" description="Save a Tool or external listing, then come back from any connected device." action={<Link to={marketPath} search={carryMarketCompare(search, { view: 'tools' })} className={cn(cn(actionLinkClassName('secondary', 'md')))}>Browse Tools</Link>} /> : toolGrid(saved.savedTools)}
         </TabsContent>
@@ -525,12 +526,12 @@ function DirectoryMarketplace({ canonicalSearch: routeSearch, page, compareEntri
         const railDeck = search.alternativeTo !== undefined ? 'Currently callable AE Tools other than the selected Tool' : search.query !== undefined ? tab === 'providers' ? 'Matching published listings, grouped by Provider.' : search.reviewedProvidersOnly === true ? 'Published listings from reviewed providers' : 'AE-admitted Tools and Coinbase Bazaar listings' : [
           page.kind === 'ok' && tabItems.length > 0
             ? tab === 'providers'
-              ? `${new Set(tabItems.map(entry => entry.provider)).size.toLocaleString()} Providers on this page`
+              ? `${formatCount(new Set(tabItems.map(entry => entry.provider)).size)} Providers on this page`
               : indexed
-                ? `${tabItems.length.toLocaleString()} Tools on this page`
+                ? `${formatCount(tabItems.length)} Tools on this page`
                 : page.mode === 'search' || !browse
                   ? `${page.items.length} matching Tools`
-                  : `Showing ${page.offset + 1}–${page.offset + page.items.length}${page.total === undefined ? '' : ` of ${page.total.toLocaleString()}`}`
+                  : `Showing ${page.offset + 1}–${page.offset + page.items.length}${page.total === undefined ? '' : ` of ${formatCount(page.total)}`}`
             : undefined,
         ].filter((line): line is string => line !== undefined).join(' · ') || undefined
         return <TabsContent key={tab} value={tab} className="pt-5">
@@ -599,7 +600,7 @@ function DirectoryMarketplace({ canonicalSearch: routeSearch, page, compareEntri
             </>}
             </nav>
             <p className="mt-4 text-xs text-muted-foreground">Directory: Coinbase Bazaar. Descriptions and payment requirements are published by providers.</p>
-            {coverage === undefined ? null : <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{coverage.indexedTotal.toLocaleString()} Tools indexed · refreshed {directoryDate(new Date(coverage.completedAt).toISOString())}. {coverage.sourceChangedDuringScan ? 'The upstream directory changed during this refresh; counts reflect the Tools observed.' : 'Prices and service details can change after this refresh.'}</p>}
+            {coverage === undefined ? null : <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{formatCount(coverage.indexedTotal)} Tools indexed · refreshed {directoryDate(new Date(coverage.completedAt).toISOString())}. {coverage.sourceChangedDuringScan ? 'The upstream directory changed during this refresh; counts reflect the Tools observed.' : 'Prices and service details can change after this refresh.'}</p>}
           </>}
           </section>
         </div>

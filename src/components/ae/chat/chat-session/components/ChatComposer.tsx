@@ -1,5 +1,6 @@
 // The ReUI composer owns presentation; AE owns draft admission and recovery.
 
+import { formatCount } from '@/lib/ui/format-time'
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { ReuiChatComposer } from '@/components/ae/shared/reui-pro/ai-chat/composer'
 import { AlphaLearningNotice } from '@/components/ae/shared/AlphaLearningNotice'
@@ -31,7 +32,7 @@ export function ChatComposer({ prompt, busy, disabled, error, errorReference, br
         </div> : <div id="tool-chat-error" role="alert" />}
         {anonymousMessageLimitReached && !invalid ? <RecoveryNotice reason="anonymous_message_limit" {...(onNewChat === undefined ? {} : { onNewChat })} /> : anonymousMessageCount === undefined || invalid ? null : <p className="arc-chat-browser-count">{chatAnonymousCountLine(anonymousMessageCount, false)}</p>}
       </div>
-      <p id="tool-chat-limit" className="arc-chat-character-count">{promptLength >= 1_800 ? `${promptLength.toLocaleString('en-AU')} / 2,000` : ''}</p>
+      <p id="tool-chat-limit" className="arc-chat-character-count">{promptLength >= 1_800 ? `${formatCount(promptLength)} / 2,000` : ''}</p>
     </div>
     } /><AlphaLearningNotice /></>
 }

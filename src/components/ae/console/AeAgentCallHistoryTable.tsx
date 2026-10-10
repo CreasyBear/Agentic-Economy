@@ -14,7 +14,7 @@ import {
 import { AeEmptyState } from '@/components/ae/shared/empty-state/AeEmptyState'
 import { formatDisplayAmount } from '@/modules/money/public'
 import { projectCallSummaryPurchaseStatus } from '@/modules/capability-execution/call-receipt-view'
-import { formatUtcTimestamp } from '@/lib/ui/format-time'
+import { formatTimestamp } from '@/lib/ui/format-time'
 import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import type {
   AgentActivityView,
@@ -128,7 +128,7 @@ export function AeAgentCallHistoryTable({
             dateTime={new Date(row.original.createdAt).toISOString()}
             className="font-mono text-sm tabular-nums text-muted-foreground"
           >
-            {formatUtcTimestamp(row.original.createdAt)} UTC
+            {formatTimestamp(row.original.createdAt, 'UTC')} UTC
           </time>
         ),
       },

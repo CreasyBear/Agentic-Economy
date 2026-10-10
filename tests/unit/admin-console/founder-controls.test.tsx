@@ -51,7 +51,7 @@ describe('founder record controls', () => {
     const rows = [purchase('call-b', 'Beta Tool', 2), purchase('call-a', 'Alpha Tool', 1)]
     render(<PurchaseActivityTable rows={rows} />)
     const table = screen.getByRole('table', { name: 'Loaded purchases' })
-    expect(within(table).getAllByText('AUD 1.234567')).toHaveLength(2)
+    expect(within(table).getAllByText('A$1.234567')).toHaveLength(2)
     expect(within(table).getAllByText('Funding not classified')).toHaveLength(2)
     expect(screen.queryByRole('button', { name: /Sort by Payment/ })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Sort by Purchase' }))

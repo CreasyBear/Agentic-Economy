@@ -25,7 +25,7 @@ export function ToolPanelSkeleton({ recommended }: ToolPanelSkeletonProps) {
         </div>
       </div>
       <div aria-hidden="true" className="h-4 w-3/5 overflow-hidden"><Skeleton lines={1} /></div>
-      <div aria-hidden="true" className="h-11 w-full rounded-md"><Skeleton lines={2} /></div>
+      <div aria-hidden="true" className="h-11 w-full rounded-sm"><Skeleton lines={2} /></div>
       <div aria-hidden="true" className="h-4 w-5/6 overflow-hidden"><Skeleton lines={1} /></div>
       <div aria-hidden="true" className="h-4 w-2/3 overflow-hidden"><Skeleton lines={1} /></div>
       {recommended ? <div aria-hidden="true" className="h-4 w-4/5 overflow-hidden"><Skeleton lines={1} /></div> : null}

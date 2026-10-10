@@ -6,7 +6,7 @@
 import { useId, useMemo, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
 import { motion, useReducedMotion } from 'motion/react'
 
-import { motionTokens } from '@/components/arc/motion-tokens'
+import { motionTokens } from '@/components/arc/lib/motion-tokens'
 import { formatCount } from '@/lib/ui/format-time'
 import styles from './metrics-dashboard.module.css'
 

@@ -40,7 +40,7 @@
   position: relative;
   z-index: 1;
   max-width: 10ch;
-  font-family: var(--ae-font-display);
+  font-family: var(--ae-font-sans);
   font-size: clamp(64px, 8.1vw, 136px);
   line-height: .99;
   letter-spacing: -.065em;
@@ -69,13 +69,13 @@
 .ae-market-landing__signature a { display: grid; place-items: center; min-height: 44px; min-width: 44px; color: var(--market-chalk); }
 .ae-market-landing__capabilities { max-width: 1680px; margin: 0 auto; padding: 100px var(--market-gutter) 64px; scroll-margin-top: calc(var(--header-height, 72px) + 24px); }
 .ae-market-landing__section-heading { display: flex; align-items: end; justify-content: space-between; gap: 32px; margin-bottom: 64px; }
-.ae-market-landing__section-heading h2 { font-family: var(--ae-font-display); font-size: clamp(40px, 5.2vw, 76px); line-height: 1.05; letter-spacing: -.055em; font-weight: 500; }
+.ae-market-landing__section-heading h2 { font-family: var(--ae-font-sans); font-size: clamp(40px, 5.2vw, 76px); line-height: 1.05; letter-spacing: -.055em; font-weight: 500; }
 .ae-market-landing__section-heading p { max-width: 28ch; color: var(--text-secondary); font-size: 17px; line-height: 1.6; }
 .ae-market-landing__categories { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--border-strong); }
 .ae-market-landing__category { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 250px; padding: 28px 32px 32px 0; border-bottom: 1px solid var(--border); color: var(--foreground); text-decoration: none; transition: background-color 180ms ease; }
 .ae-market-landing__category:not(:nth-child(3n + 1)) { border-left: 1px solid var(--border); padding-left: 32px; }
 .ae-market-landing__category-number { color: var(--text-secondary); font-size: 12px; font-variant-numeric: tabular-nums; }
-.ae-market-landing__category h3 { max-width: 15ch; margin: 32px 24px 12px 0; font-family: var(--ae-font-display); font-size: clamp(24px, 2.4vw, 34px); line-height: 1.15; letter-spacing: -.035em; font-weight: 500; }
+.ae-market-landing__category h3 { max-width: 15ch; margin: 32px 24px 12px 0; font-family: var(--ae-font-sans); font-size: clamp(24px, 2.4vw, 34px); line-height: 1.15; letter-spacing: -.035em; font-weight: 500; }
 .ae-market-landing__category p { max-width: 30ch; margin: 0; color: var(--text-secondary); font-size: 14px; line-height: 1.6; }
 .ae-market-landing__category-arrow { position: absolute; right: 28px; top: 24px; transition: transform 180ms ease; }
 .ae-market-landing__category:focus-visible { outline: 2px solid var(--ae-brand); outline-offset: -4px; background: var(--surface-muted); }

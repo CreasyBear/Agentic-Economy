@@ -1,3 +1,4 @@
+import { formatCount } from '@/lib/ui/format-time'
 import { BASE_FACILITATOR_ADDRESSES, BASE_FACILITATOR_SET } from '@/modules/market/base-facilitator-set'
 
 export const FLOW_WINDOW_DAYS = 30
@@ -309,11 +310,11 @@ export function formatUsdcAtomic(amountAtomic: string): string | undefined {
 }
 
 export function countLabel(value: number): string {
-  return value.toLocaleString('en-AU')
+  return formatCount(value)
 }
 
 export function toolCountLabel(count: number, capped: boolean): string {
-  const shown = count.toLocaleString('en-AU')
+  const shown = formatCount(count)
   if (capped) return `${shown}+ Tools`
   return count === 1 ? '1 Tool' : `${shown} Tools`
 }

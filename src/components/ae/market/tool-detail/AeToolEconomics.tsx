@@ -1,5 +1,5 @@
 import { AeFactList, type AeFact } from '@/components/ae/data/AeFactList'
-import { formatUtcTimestamp, timestampIso } from '@/lib/ui/format-time'
+import { formatTimestamp, timestampIso } from '@/lib/ui/format-time'
 import type { PublicToolDescriptor } from '@/modules/capability-supply/public'
 import { formatPaymentNetwork } from '@/modules/market/tool-view-model'
 import { formatCurrencyAmount } from '@/modules/money/public'
@@ -41,14 +41,14 @@ export function AeToolEconomics({ tool, pricing }: AeToolEconomicsProps) {
       ? []
       : [{
           label: 'Price observed',
-          value: <time dateTime={timestampIso(priceEvidence.observedAt)}>{formatUtcTimestamp(priceEvidence.observedAt)} UTC</time>,
+          value: <time dateTime={timestampIso(priceEvidence.observedAt)}>{formatTimestamp(priceEvidence.observedAt, 'UTC')} UTC</time>,
           mono: true,
         } satisfies AeFact]),
     ...(priceEvidence?.observedAt !== undefined || priceEvidence?.validUntil === undefined
       ? []
       : [{
           label: 'Quote valid until',
-          value: <time dateTime={timestampIso(priceEvidence.validUntil)}>{formatUtcTimestamp(priceEvidence.validUntil)} UTC</time>,
+          value: <time dateTime={timestampIso(priceEvidence.validUntil)}>{formatTimestamp(priceEvidence.validUntil, 'UTC')} UTC</time>,
           mono: true,
         } satisfies AeFact]),
   ]
@@ -56,7 +56,7 @@ export function AeToolEconomics({ tool, pricing }: AeToolEconomicsProps) {
   return (
     <div role="region" aria-label="Price and market evidence" className="grid min-w-0">
       <div className="px-gutter pb-1 pt-4">
-        <h3 className="text-sm font-semibold text-foreground">
+        <h3 className="text-sm font-medium text-foreground">
           {breakdown === undefined ? 'Call economics' : 'Price breakdown'}
         </h3>
       </div>

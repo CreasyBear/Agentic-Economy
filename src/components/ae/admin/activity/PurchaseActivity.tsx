@@ -13,7 +13,7 @@ import type { AeDataColumn } from '@/components/ae/shared/sortable-data-table/so
 import { Button } from '@/components/arc/button/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { adminActivityHref, adminActivityWindow, type AdminActivitySearch, type AdminPurchaseRow } from '@/lib/operator/admin-console/activity'
-import { formatPerthTimestamp } from '@/lib/ui/format-time'
+import { formatTimestamp } from '@/lib/ui/format-time'
 import { formatCurrencyAmount } from '@/modules/money/public'
 
 const STATUS_LABELS: Record<AdminPurchaseRow['state'], string> = {
@@ -90,7 +90,7 @@ function PurchaseActivityQuery({ search, compact = false }: PurchaseActivityProp
         </div>
       </div>
       {activity.results.length === 0 ? (
-        <div className="ae-arc rounded-card border border-border bg-card">
+        <div className="ae-arc rounded-lg border border-border bg-card">
           <AeEmptyState
             icon={<ShoppingBagIcon size={24} />}
             title={exhausted ? 'No matching purchases' : 'No matches in the records scanned'}
@@ -162,7 +162,7 @@ const PURCHASE_COLUMNS: AeDataColumn<PurchaseTableRow>[] = [
     key: 'createdAt', label: 'Started', numeric: false,
     render: (_value, row) => (
       <time className="text-xs text-muted-foreground" dateTime={new Date(row.createdAt).toISOString()}>
-        {formatPerthTimestamp(row.createdAt)}
+        {formatTimestamp(row.createdAt, 'Australia/Perth')}
       </time>
     ),
   },

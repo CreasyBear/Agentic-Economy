@@ -7,7 +7,7 @@ export type AeSiteHeadingLevel = 'h1' | 'h2' | 'h3' | 'h4'
 export type AeSiteHeadingSize = 'xl' | 'lg' | 'md' | 'sm' | 'xs'
 
 export const siteEnterRiseClass =
-  'animate-in fade-in-0 slide-in-from-bottom-2 duration-base ease-emphasized motion-reduce:animate-none'
+  'animate-in fade-in-0 slide-in-from-bottom-2 duration-base ease-standard motion-reduce:animate-none'
 
 type AeSiteHeadingProps = {
   as?: AeSiteHeadingLevel
@@ -20,10 +20,10 @@ type AeSiteHeadingProps = {
 
 /** Discover display recipes. ExtraLight; no viewport-fluid weight jumps. */
 const sizeClass: Record<AeSiteHeadingSize, string> = {
-  xl: 'font-display max-w-xl text-display leading-[1.02] font-extralight tracking-display lg:text-6xl xl:text-7xl',
-  lg: 'text-4xl font-extralight tracking-[-0.035em] md:text-5xl lg:text-6xl',
-  md: 'text-4xl font-extralight tracking-[-0.035em]',
-  sm: 'font-sans text-title font-medium tracking-tight sm:text-title-lg',
+  xl: ' max-w-xl text-title leading-[1.02] font-normal tracking-title lg:text-6xl xl:text-7xl',
+  lg: 'text-4xl font-normal tracking-[-0.035em] md:text-5xl lg:text-6xl',
+  md: 'text-4xl font-normal tracking-[-0.035em]',
+  sm: 'font-sans text-title font-medium tracking-tight sm:text-title',
   xs: 'font-sans text-lg font-medium leading-snug tracking-tight sm:text-xl',
 }
 
@@ -60,7 +60,7 @@ export function AeSiteBody({ children, muted = false, size = 'md', id, className
       data-ae-muted={muted ? '' : undefined}
       className={cn(
         'ae-site-body max-w-[65ch] text-pretty',
-        size === 'md' ? 'text-deck leading-relaxed lg:text-body' : 'text-deck leading-relaxed',
+        size === 'md' ? 'text-body leading-relaxed lg:text-body' : 'text-body leading-relaxed',
         muted ? 'text-muted-foreground' : 'text-foreground',
         className,
       )}
@@ -72,7 +72,7 @@ export function AeSiteBody({ children, muted = false, size = 'md', id, className
 
 export function AeSiteEyebrow({ children }: { children: string }) {
   return (
-    <p className="ae-site-eyebrow mb-3 block font-sans text-eyebrow font-eyebrow tracking-eyebrow text-muted-foreground uppercase">
+    <p className="ae-site-eyebrow mb-3 block font-sans text-body font-medium text-muted-foreground uppercase">
       {children}
     </p>
   )

@@ -35,7 +35,7 @@ describe('treasury source and reconciliation rendering', () => {
     expect(screen.getByText('Runway unavailable')).toBeTruthy()
     expect(screen.getByText('Customer credit unavailable')).toBeTruthy()
     expect(screen.getByText('Finalized chain balance · block 123')).toBeTruthy()
-    expect(screen.getAllByText('USDC 18.000000')).toHaveLength(2)
+    expect(screen.getAllByText('18.00 USDC')).toHaveLength(2)
   })
   it('declares cash reconciled only for a matched check and exposes both credit families', () => {
     const view = treasuryTestView()
@@ -53,11 +53,11 @@ describe('treasury source and reconciliation rendering', () => {
     const view = treasuryTestView()
     view.snapshot = null
     render(<TreasuryMetrics view={view} />)
-    expect(screen.getByText('USDC 18.000000')).toBeTruthy()
+    expect(screen.getByText('18.00 USDC')).toBeTruthy()
     expect(screen.getByText('Ledger balances unavailable')).toBeTruthy()
     expect(screen.getByText('Reconciliation queue unavailable')).toBeTruthy()
     expect(screen.getByText('Rolling spend exposure unavailable')).toBeTruthy()
-    expect(screen.queryByText('USDC 0.000000')).toBeNull()
+    expect(screen.queryByText('0.00 USDC')).toBeNull()
   })
   it.each(['sandbox', 'production'] as const)('discloses exact transfer evidence and only valid %s network links', environment => {
     const view = treasuryTestView()
@@ -70,7 +70,7 @@ describe('treasury source and reconciliation rendering', () => {
     ]
     view.snapshot!.depositsComplete = false
     render(<TreasuryMetrics view={view} />)
-    expect(screen.getByText('Opening balance · USDC 2.000000')).toBeTruthy()
+    expect(screen.getByText('Opening balance · 2.00 USDC')).toBeTruthy()
     const refills = screen.getByRole('table', { name: 'Recent booked refills' })
     const disclosure = within(refills).getAllByText('Transfer details')[1]!
     expect(disclosure.closest('details')!.hasAttribute('open')).toBe(false)
@@ -97,13 +97,13 @@ describe('treasury source and reconciliation rendering', () => {
     const table = screen.getByRole('table', { name: 'Recent booked refills' })
     const amounts = () => Array.from(table.querySelectorAll('tbody tr')).map(row => within(row as HTMLElement).getAllByRole('cell')[0]!.textContent)
     fireEvent.click(within(table).getByRole('button', { name: 'Sort by Amount' }))
-    expect(amounts()).toEqual(['Opening balance · USDC 9007199254.740992', 'Opening balance · USDC 9007199254.740993'])
+    expect(amounts()).toEqual(['Opening balance · 9007199254.740992 USDC', 'Opening balance · 9007199254.740993 USDC'])
     expect(within(table).getByRole('columnheader', { name: 'Amount' }).getAttribute('aria-sort')).toBe('ascending')
     fireEvent.click(within(table).getByRole('button', { name: 'Sort by Amount' }))
     expect(within(table).getByRole('columnheader', { name: 'Amount' }).getAttribute('aria-sort')).toBe('descending')
-    expect(amounts()).toEqual(['Opening balance · USDC 9007199254.740993', 'Opening balance · USDC 9007199254.740992'])
+    expect(amounts()).toEqual(['Opening balance · 9007199254.740993 USDC', 'Opening balance · 9007199254.740992 USDC'])
     fireEvent.change(screen.getByPlaceholderText('Filter booked refills'), { target: { value: 'deposit:smaller' } })
-    expect(amounts()).toEqual(['Opening balance · USDC 9007199254.740992'])
+    expect(amounts()).toEqual(['Opening balance · 9007199254.740992 USDC'])
     expect(view.snapshot!.deposits.map(row => row.transactionRef)).toEqual(['deposit:larger', 'deposit:smaller'])
   })
   it('sorts and filters unresolved Calls while retaining the full reference, detail exit and queue continuation', () => {
@@ -147,7 +147,7 @@ describe('treasury source and reconciliation rendering', () => {
     expect(within(meter).queryByText('Over limit') !== null).toBe(limitState === 'over')
     expect(within(meter).queryByText('Limit reached') !== null).toBe(limitState === 'at')
     if (limitState === 'over') expect(within(meter).getByRole('img').getAttribute('aria-label')).toContain('Over the limit.')
-    expect(screen.getByText(`USDC ${settledUnits.slice(0, -6)}.${settledUnits.slice(-6)} / USDC 9007199254.740993`)).toBeTruthy()
+    expect(screen.getByText(`${settledUnits.slice(0, -6)}.${settledUnits.slice(-6)} USDC / 9007199254.740993 USDC`)).toBeTruthy()
     expect(screen.getByText('The percentage is approximate. Exposure and limit amounts above remain exact.')).toBeTruthy()
   })
   it.each(['0', '-1'])('makes the ratio unavailable for a nonpositive limit (%s) without losing source money facts', maximumUnits => {

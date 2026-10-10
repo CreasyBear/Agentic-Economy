@@ -13,9 +13,9 @@ const RIGHT_SLOPE_PATH =
 /** Light card with a dipped cap — Twenty NotchedCardShape, AE surface tokens. */
 export function AeNotchedCardShape() {
   return (
-    <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-0 text-container">
+    <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-0 text-card">
       <div className="absolute inset-x-0 top-0 flex h-5">
-        <div className="min-w-0 bg-container" style={{ flexGrow: LEFT_FLAT_GROW, flexBasis: 0 }} />
+        <div className="min-w-0 bg-card" style={{ flexGrow: LEFT_FLAT_GROW, flexBasis: 0 }} />
         <svg
           fill="none"
           height={CAP_HEIGHT_PX}
@@ -39,9 +39,9 @@ export function AeNotchedCardShape() {
         >
           <path d={RIGHT_SLOPE_PATH} fill="currentColor" />
         </svg>
-        <div className="min-w-0 bg-container" style={{ flexGrow: RIGHT_FLAT_GROW, flexBasis: 0 }} />
+        <div className="min-w-0 bg-card" style={{ flexGrow: RIGHT_FLAT_GROW, flexBasis: 0 }} />
       </div>
-      <div className="absolute inset-x-0 bottom-0 top-[19px] bg-container" />
+      <div className="absolute inset-x-0 bottom-0 top-[19px] bg-card" />
     </div>
   )
 }

@@ -1,9 +1,9 @@
-import { formatPerthTimestamp, timestampIso } from '@/lib/ui/format-time'
+import { formatTimestamp, timestampIso } from '@/lib/ui/format-time'
 
 
 export function providerTimestamp(value: number): Readonly<{ label: string; iso: string }> {
   return {
-    label: formatPerthTimestamp(value),
+    label: formatTimestamp(value, 'Australia/Perth'),
     iso: timestampIso(value),
   }
 }
