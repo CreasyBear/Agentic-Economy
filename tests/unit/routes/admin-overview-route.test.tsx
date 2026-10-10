@@ -147,6 +147,16 @@ describe('admin overview route', () => {
     expect(screen.getAllByText('Your account does not have the Admin role for this action.')).toHaveLength(1)
   })
 
+  it('shows a stale reference rate as ready with quotes degraded, not as a failure', () => {
+    const readiness = passingReadiness(Date.now() + 60_000)
+    readiness.checks.reference_rate = { kind: 'failed', code: 'reference_rate_stale' }
+    mocks.overview = { paymentReadiness: readiness }
+    render(<AdminOverviewPage />)
+    expect(screen.getByRole('status', { name: 'Payment readiness status' }).textContent).toBe('Ready, quotes degraded')
+    expect(screen.getByText('Quotes are refused until the USDC/AUD reference rate refreshes; payment readiness does not depend on it.')).toBeTruthy()
+    expect(screen.getByText('USDC/AUD reference rate').closest('div')?.textContent).toContain('Degraded')
+  })
+
   it('shows undeclared environment and eight failures without guessing a money world', () => {
     render(<AdminOverviewPage />)
     expect(screen.getByText('Environment: Not declared')).toBeTruthy()
