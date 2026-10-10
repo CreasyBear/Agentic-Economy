@@ -1,17 +1,22 @@
 import { Link } from '@tanstack/react-router'
 import { Check, Heart } from 'lucide-react'
-import { memo, useMemo } from 'react'
-import { useTable, type ColumnDef } from '@tanstack/react-table'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 
-import { ProductListing, ProductListingCard } from '@/components/ae/shared/arc-pro/market/ProductListing'
-import { DataGrid, DataGridContainer, dataGridFeatures, type DataGridFeatures } from '@/components/reui/data-grid/data-grid'
-import { DataGridScrollArea } from '@/components/reui/data-grid/data-grid-scroll-area'
-import { DataGridTable } from '@/components/reui/data-grid/data-grid-table'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Button } from '@/components/ui/button'
-import { toDirectoryToolCardModel } from '@/modules/market/directory-card.view-model'
+import { Avatar } from '@/components/arc/avatar/avatar'
+import { Badge } from '@/components/arc/badge/badge'
+import { Button } from '@/components/arc/button/button'
+import { Card } from '@/components/arc/card/card'
+import { SortableDataTable, type DataColumn, type SortState } from '@/components/arc/sortable-data-table/sortable-data-table'
+import { PUBLIC_SURFACE } from '@/content/brand-copy'
+import { DIRECTORY_READINESS, PRICE_UNAVAILABLE, toDirectoryToolCardModel, type DirectoryToolCardModel } from '@/modules/market/directory-card.view-model'
 import type { SavedDirectoryTool } from '@/modules/market/saved-tools.contracts'
+import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
+import { minimumDirectoryUsdPrice } from '@/modules/market/x402-directory-index'
 import { MARKET_LINK_STATE } from './market-return-context'
+import './MarketComposition.css'
+
+/** Server orders a header can ask for. Keyword search ranks by relevance only, so it passes no handler. */
+type ServerSort = 'price_asc'
 
 type DirectoryToolListProps = Readonly<{
   layout?: 'table' | 'grid'
@@ -23,88 +28,156 @@ type DirectoryToolListProps = Readonly<{
   onCompare: (item: SavedDirectoryTool) => void
   isComparing: (resource: string) => boolean
   compareDisabled: (resource: string) => boolean
+  /** The URL sort, so the table's header shows the order the page was read in. */
+  sort?: string | undefined
+  onSortChange?: (sort: ServerSort) => void
 }>
 
-type ToolRow = { resource: string; item: SavedDirectoryTool; model: ReturnType<typeof toDirectoryToolCardModel> }
+type ToolRow = {
+  key: string
+  item: SavedDirectoryTool
+  model: DirectoryToolCardModel
+  title: string
+  price: number | undefined
+  calls: number | undefined
+}
 
-/** Table composition adapted from REUI c-data-grid-6:
- * https://reui.io/r/base-nova/c-data-grid-6.json
- * The parent owns catalogue ordering and cursor pages in both presentations.
+function toRow(item: SavedDirectoryTool): ToolRow {
+  const model = toDirectoryToolCardModel(item.entry)
+  const usd = minimumDirectoryUsdPrice(item.entry)
+  return { key: item.entry.resource, item, model, title: model.title, price: usd === undefined ? undefined : Number(usd), calls: item.entry.activity?.calls30d }
+}
+
+/** An AUD estimate is marked on the face, as Google Flights marks its fares; only a Quote is exact. */
+function shownPrice(model: DirectoryToolCardModel) {
+  return model.priceEstimateSource === undefined ? model.priceLabel : `est. ${model.priceLabel}`
+}
+
+function priceLine(model: DirectoryToolCardModel) {
+  return model.priceLabel === '' ? PRICE_UNAVAILABLE : PUBLIC_SURFACE.pricePerCall(shownPrice(model))
+}
+
+/** Save controls are optional: a card on the landing has no saved list to write to. */
+export type DirectoryToolCardControls = Pick<DirectoryToolListProps, 'onSave' | 'isSaved' | 'saveDisabled' | 'saveUnknown'>
+
+function SaveButton({ row, onSave, isSaved, saveDisabled = false, saveUnknown = false, className }: DirectoryToolCardControls & { row: ToolRow; className?: string }) {
+  const saved = isSaved(row.item)
+  return <Button type="button" variant="ghost" size="sm" className={className} onClick={() => onSave(row.item)} disabled={saveDisabled}
+    aria-label={saveUnknown ? `Saved status unavailable for ${row.title}` : `${saved ? 'Unsave' : 'Save'} ${row.title}`} {...(saveUnknown ? { title: 'Saved status unavailable' } : { 'aria-pressed': saved })}>
+    <Heart size={18} strokeWidth={1.75} fill={saved && !saveUnknown ? 'currentColor' : 'none'} aria-hidden="true" />
+  </Button>
+}
+
+/**
+ * The one listing card, on the landing and in /market (Arc Card, as Airbnb and OpenRouter do it): the provider's
+ * mark, the title, what it does, one usage line and one price line. The whole card is one link; the heart sits above it.
  */
-export const DirectoryToolList = memo(function DirectoryToolList({ items, layout = 'table', onSave, isSaved, saveDisabled = false, saveUnknown = false, onCompare, isComparing, compareDisabled }: DirectoryToolListProps) {
-  const rows = useMemo(() => items.map(item => ({ resource: item.entry.resource, item, model: toDirectoryToolCardModel(item.entry) })), [items])
-  if (layout === 'grid') return <ProductListing>{rows.map(({ resource, item, model }) => <li key={resource} className="h-full min-w-0"><ProductListingCard model={model} entry={item.entry} onSave={() => onSave(item)} saved={isSaved(item)} saveDisabled={saveDisabled} saveUnknown={saveUnknown} onCompare={() => onCompare(item)} comparing={isComparing(resource)} compareDisabled={compareDisabled(resource)} /></li>)}</ProductListing>
-  return <DirectoryToolTable rows={rows} onSave={onSave} isSaved={isSaved} saveDisabled={saveDisabled} saveUnknown={saveUnknown} onCompare={onCompare} isComparing={isComparing} compareDisabled={compareDisabled} />
+function ToolCard({ row, controls }: Readonly<{ row: ToolRow; controls?: DirectoryToolCardControls | undefined }>) {
+  const { model } = row
+  return <div className="ae-tool-card">
+    <Card
+      title={row.title}
+      {...(model.glance === undefined ? {} : { description: model.glance })}
+      avatar={<Avatar name={model.providerLine} {...(model.iconUrl === undefined ? {} : { src: model.iconUrl })} size="sm" />}
+      meta={<><span className="ae-tool-card-provider">{model.providerLine}</span>{model.factsLine === undefined ? null : <span className="ae-tool-card-facts" title={model.factsLine}>{model.factsLine}</span>}</>}
+      action={<span className="ae-tool-card-price" {...(model.priceContext === '' ? {} : { title: model.priceContext })}>
+        {model.priceLabel === '' ? <span>{PRICE_UNAVAILABLE}</span> : <><span>{shownPrice(model)}</span><span>{model.priceEstimateSource === undefined ? 'per call' : `${model.priceEstimateSource} per call`}</span></>}
+      </span>}
+    >
+      {/* Every card states its readiness, as the table does: a missing badge would read as "probably fine". */}
+      <Badge className="ae-tool-card-badge" tone={DIRECTORY_READINESS[model.access].tone} size="sm">{DIRECTORY_READINESS[model.access].label}</Badge>
+    </Card>
+    <Link to="/tools/$providerHost/$slug" params={{ providerHost: model.providerHost, slug: model.slug }} state={MARKET_LINK_STATE} className="ae-tool-card-link"
+      aria-label={`${row.title}, ${model.providerLine}, ${priceLine(model)}`} />
+    {controls === undefined ? null : <SaveButton row={row} {...controls} className="ae-tool-card-save" />}
+  </div>
+}
+
+/** One listing as a card, from a directory entry. */
+export const DirectoryToolCard = memo(function DirectoryToolCard({ entry, controls }: Readonly<{ entry: X402DirectoryEntry; controls?: DirectoryToolCardControls | undefined }>) {
+  const row = useMemo(() => toRow({ entry, search: {} }), [entry])
+  return <ToolCard row={row} controls={controls} />
 })
 
-function DirectoryToolTable({ rows, onSave, isSaved, saveDisabled = false, saveUnknown = false, onCompare, isComparing, compareDisabled }: Omit<DirectoryToolListProps, 'items' | 'layout'> & { rows: ToolRow[] }) {
-  const columns = useMemo<ColumnDef<DataGridFeatures, ToolRow>[]>(() => [
+export const DirectoryToolList = memo(function DirectoryToolList({ items, layout = 'table', ...props }: DirectoryToolListProps) {
+  const rows = useMemo(() => items.map(toRow), [items])
+  if (layout === 'grid') {
+    const controls = { onSave: props.onSave, isSaved: props.isSaved, saveDisabled: props.saveDisabled ?? false, saveUnknown: props.saveUnknown ?? false }
+    return <ul className="arc-tool-grid">{rows.map(row => <li key={row.key}><ToolCard row={row} controls={controls} /></li>)}</ul>
+  }
+  return <DirectoryToolTable rows={rows} {...props} />
+})
+
+/**
+ * The header orders the index can apply, each one way only. The default order (most buyers) has no column, so no header
+ * claims it; calls are not a server order here, so that header does not sort a single page and call it the index.
+ */
+const HEADER_SORT: Readonly<Record<string, { sort: ServerSort; state: SortState }>> = { price: { sort: 'price_asc', state: { key: 'price', direction: 'asc' } } }
+
+/**
+ * Arc's sortable table, driven by the URL as Arc's notes describe for server sorting: defaultSort per read, remounted
+ * when the order changes. The pressed header gets focus back and the order is announced after the remount.
+ */
+function DirectoryToolTable({ rows, onSave, isSaved, saveDisabled = false, saveUnknown = false, onCompare, isComparing, compareDisabled, sort, onSortChange }: Omit<DirectoryToolListProps, 'items' | 'layout'> & { rows: ToolRow[] }) {
+  const wrapper = useRef<HTMLDivElement>(null)
+  const pressedKey = useRef<string | undefined>(undefined)
+  const [repress, setRepress] = useState(0)
+  const [announcement, setAnnouncement] = useState('')
+  const tableKey = `${sort ?? 'default'}:${repress}`
+  useEffect(() => {
+    const key = pressedKey.current
+    if (key === undefined) return
+    pressedKey.current = undefined
+    wrapper.current?.querySelector<HTMLElement>(`th[data-key="${CSS.escape(key)}"] button`)?.focus()
+  }, [tableKey])
+  const serverSorted = (key: string) => onSortChange !== undefined && HEADER_SORT[key] !== undefined
+  const columns: DataColumn<ToolRow>[] = [
     {
-      id: 'tool', header: 'Tool', enableSorting: false,
-      cell: ({ row }) => {
-        const { model } = row.original
-        return <div className="flex min-w-56 max-w-sm items-center gap-2">
-          <Avatar className="size-7" aria-hidden="true">
-            {model.iconUrl === undefined ? null : <AvatarImage src={model.iconUrl} alt="" loading="lazy" referrerPolicy="no-referrer" />}
-            <AvatarFallback>{model.initials}</AvatarFallback>
-          </Avatar>
-          <div className="min-w-0 whitespace-normal break-words">
-            <Link to="/tools/$providerHost/$slug" params={{ providerHost: model.providerHost, slug: model.slug }} state={MARKET_LINK_STATE} title={model.title} className="text-foreground hover:text-primary inline-flex items-center font-medium [@media(pointer:coarse)]:min-h-touch">{model.title}</Link>
-            <p className="text-muted-foreground text-xs" title={model.providerLine}>{model.providerLine}</p>
-          </div>
+      key: 'title', label: 'Tool', sortable: false,
+      render: (_value, row) => <div className="ae-tool-row">
+        <Avatar name={row.model.providerLine} {...(row.model.iconUrl === undefined ? {} : { src: row.model.iconUrl })} size="sm" />
+        <div className="ae-tool-row-text">
+          <Link to="/tools/$providerHost/$slug" params={{ providerHost: row.model.providerHost, slug: row.model.slug }} state={MARKET_LINK_STATE} title={row.title}>{row.title}</Link>
+          <span title={row.model.providerLine}>{row.model.providerLine}</span>
         </div>
-      },
+      </div>,
     },
+    { key: 'access', label: 'Access', sortable: false, render: (_value, row) => { const { label, tone } = DIRECTORY_READINESS[row.model.access]; return <Badge tone={tone} size="sm">{label}</Badge> } },
+    { key: 'price', label: 'Price per call', sortable: serverSorted('price'), numeric: true, render: (_value, row) => <span {...(row.model.priceContext === '' ? {} : { title: row.model.priceContext })}>{row.model.priceLabel === '' ? PRICE_UNAVAILABLE : shownPrice(row.model)}</span> },
+    { key: 'calls', label: 'Calls in 30 days', sortable: false, numeric: true, render: (_value, row) => <span {...(row.model.activityTitle === undefined ? {} : { title: row.model.activityTitle })}>{row.model.callsLabel ?? 'Not reported'}</span> },
     {
-      id: 'access', header: 'Access', enableSorting: false,
-      cell: ({ row }) => <span className="text-muted-foreground text-xs">{row.original.model.accessLabel}</span>,
-    },
-    {
-      id: 'price', header: 'Price', enableSorting: false,
-      meta: { numeric: true, headerClassName: 'text-end', cellClassName: 'text-end tabular-nums' },
-      cell: ({ row }) => {
-        const { model } = row.original
-        return <div className="ms-auto min-w-40 max-w-64 whitespace-normal break-words">
-          <p className="font-medium">{model.priceLabel || 'Price unavailable'}</p>
-          {model.priceContext === '' ? null : <p className="text-muted-foreground text-xs" title={model.priceContext}>{model.priceContext}</p>}
-        </div>
-      },
-    },
-    {
-      id: 'calls', header: 'Coinbase Bazaar calls · 30 days', enableSorting: false,
-      meta: { numeric: true, headerClassName: 'text-end', cellClassName: 'text-end tabular-nums' },
-      cell: ({ row }) => <span {...(row.original.model.activityTitle === undefined ? {} : { title: row.original.model.activityTitle })}>{row.original.model.callsLabel ?? 'Not reported'}</span>,
-    },
-    {
-      id: 'actions', header: 'Actions', enableSorting: false,
-      cell: ({ row }) => {
-        const { resource, item, model } = row.original
-        const comparing = isComparing(resource)
-        const saved = isSaved(item)
-        return <div className="flex items-center justify-end gap-2">
-          <Link to="/tools/$providerHost/$slug" params={{ providerHost: model.providerHost, slug: model.slug }} state={MARKET_LINK_STATE} className="text-foreground hover:text-primary inline-flex min-h-11 items-center font-medium md:hidden">Inspect Tool</Link>
-          <Button type="button" variant="ghost" size="icon-sm" onClick={() => onSave(item)} disabled={saveDisabled} aria-label={saveUnknown ? `Saved status unavailable for ${model.title}` : `${saved ? 'Unsave' : 'Save'} ${model.title}`} {...(saveUnknown ? { title: 'Saved status unavailable' } : { 'aria-pressed': saved })}>
-            <Heart size={18} strokeWidth={1.75} fill={saved && !saveUnknown ? 'currentColor' : 'none'} aria-hidden="true" />
+      key: 'actions', label: 'Save or compare', sortable: false,
+      render: (_value, row) => {
+        const comparing = isComparing(row.key)
+        return <div className="ae-tool-row-actions">
+          <SaveButton row={row} onSave={onSave} isSaved={isSaved} saveDisabled={saveDisabled} saveUnknown={saveUnknown} />
+          <Button type="button" variant="ghost" size="sm" onClick={() => onCompare(row.item)} disabled={compareDisabled(row.key)} aria-label={`${comparing ? 'Remove' : 'Add'} ${row.title} ${comparing ? 'from' : 'to'} comparison`} aria-pressed={comparing}>
+            {comparing ? <><Check size={15} aria-hidden="true" />Added</> : 'Compare'}
           </Button>
-          <Button type="button" variant="ghost" size="sm" onClick={() => onCompare(item)} disabled={compareDisabled(resource)} aria-label={`${comparing ? 'Remove' : 'Add'} ${model.title} ${comparing ? 'from' : 'to'} comparison`} aria-pressed={comparing}>
-            {comparing ? <Check size={15} aria-hidden="true" /> : null}Compare
-          </Button>
         </div>
       },
     },
-  ], [onSave, isSaved, saveDisabled, saveUnknown, onCompare, isComparing, compareDisabled])
-  const table = useTable({
-    features: dataGridFeatures, columns, data: rows,
-    getRowId: row => row.resource,
-    manualPagination: true, manualSorting: true, manualFiltering: true,
-  })
-  return <DataGrid table={table} recordCount={rows.length} tableLayout={{ width: 'auto', headerBackground: true }} tableClassNames={{ base: '[&_th]:border-border [&_td]:border-border' }} tableAriaLabel="Tools">
-    <div className="w-full space-y-2.5">
-      <DataGridContainer className="rounded-xl border border-border bg-card">
-        <DataGridScrollArea>
-          <DataGridTable caption="Tools on this catalogue page. Ordering covers the catalogue; row actions preserve each Tool identity." />
-        </DataGridScrollArea>
-      </DataGridContainer>
-    </div>
-  </DataGrid>
+  ]
+  const defaultSort = onSortChange === undefined ? undefined : Object.values(HEADER_SORT).find(header => header.sort === sort)?.state
+  return <div className="ae-tool-table" ref={wrapper}>
+    <SortableDataTable<ToolRow>
+      key={tableKey}
+      rows={rows}
+      columns={columns}
+      rowKey="key"
+      caption="Tools on this page"
+      itemName={{ one: 'tool', other: 'tools' }}
+      {...(defaultSort === undefined ? {} : { defaultSort })}
+      {...(onSortChange === undefined ? {} : { onSortChange: (next: SortState) => {
+        const header = HEADER_SORT[next.key]
+        if (header === undefined) return
+        pressedKey.current = next.key
+        setAnnouncement(`Sorted by ${columns.find(column => column.key === next.key)?.label ?? next.key}, ${header.state.direction === 'asc' ? 'ascending' : 'descending'}`)
+        // A second press would reverse only this page in Arc; reset to the index order instead.
+        if (header.sort === sort) setRepress(count => count + 1)
+        else onSortChange(header.sort)
+      } })}
+    />
+    <p role="status" className="sr-only">{announcement}</p>
+  </div>
 }

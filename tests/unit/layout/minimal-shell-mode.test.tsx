@@ -62,11 +62,11 @@ describe('minimal shell mode (S-11)', () => {
     expect(screen.getByRole('link', { name: 'Browse Tools' }).getAttribute('href')).toBe('/market')
   })
 
-  it('suppresses primary navigation and Find Tools on minimal shell routes', async () => {
+  it('suppresses primary navigation and Find tools on minimal shell routes', async () => {
     await renderAppShellAt('/sign-in/', { shellMode: 'minimal' })
 
     expect(screen.queryByRole('navigation', { name: 'Primary' })).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Find Tools' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Find tools' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Open public menu' })).toBeNull()
     expect(screen.queryByRole('link', { name: 'Sign in' })).toBeNull()
   })
@@ -108,11 +108,11 @@ describe('minimal shell mode (S-11)', () => {
     await screen.findByText('Current private record')
   })
 
-  it('renders full primary navigation and Find Tools on standard public routes', async () => {
+  it('renders full primary navigation and Find tools on standard public routes', async () => {
     await renderAppShellAt('/market')
 
     expect(screen.getByRole('navigation', { name: 'Primary' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Find Tools' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Find tools' })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Sign in' })).toBeTruthy()
   })
 })

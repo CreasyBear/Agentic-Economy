@@ -11,7 +11,7 @@ import { REFERENCE_RATE_MAX_AGE_MS, formatDisplayPrice, parseDecimalExactAmount,
 import { readPersistedReferenceRate } from '@/modules/money/reference-rate.server'
 import { readX402Directory } from './x402-directory.server'
 import type { DirectoryChoice, X402DirectoryEntry } from './x402-directory'
-import { directoryNetwork, directorySlugBase, directorySlugWithMethod, minimumDirectoryUsdPrice, type X402DirectoryIndexCoverage, type X402DirectoryIndexInput, type X402IndexedDirectoryEntry } from './x402-directory-index'
+import { directoryNetwork, directoryStorefrontEntry, directorySlugBase, directorySlugWithMethod, minimumDirectoryUsdPrice, type X402DirectoryIndexCoverage, type X402DirectoryIndexInput, type X402IndexedDirectoryEntry } from './x402-directory-index'
 import { decodeOpaqueCursor, encodeOpaqueCursor } from '@/modules/registry/opaque-cursor'
 import {
   x402DirectoryProvidersInputSchema, type X402DirectoryProvidersInput, type X402DirectoryProvidersPage,
@@ -298,7 +298,7 @@ export async function readX402DirectoryCatalogue(input: X402DirectoryCatalogueIn
       const items = await withAudEstimates(compact.page.flatMap(row => {
         if (row.network !== network) return []
         const card = cardFromCompact(row)
-        return card === undefined ? [] : [card]
+        return card === undefined || !directoryStorefrontEntry(card) ? [] : [card]
       }), options)
       return {
         kind: 'ok', source: 'index', searchMethod: 'native_full_text',
@@ -335,7 +335,9 @@ export async function readX402DirectoryCatalogue(input: X402DirectoryCatalogueIn
     if (result.kind === 'unavailable') return result
     if (offset) return { kind: 'unavailable', reason: 'index_cursor_required' }
     const { provider, maxUsdPrice } = filters
-    const items = await withAudEstimates(result.page.map(item => toDirectoryCardEntry({
+    // Test and demo hosts stay reachable by their own provider filter, never in a browse or search.
+    const shoppable = provider === undefined ? result.page.filter(item => directoryStorefrontEntry(item.entry)) : result.page
+    const items = await withAudEstimates(shoppable.map(item => toDirectoryCardEntry({
       ...item.entry,
       choice: item.choice ?? { access: 'external_listing' as const },
     })), options)

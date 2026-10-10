@@ -1,8 +1,8 @@
-import { formatDate } from '@/lib/ui/format-time'
 import { useAuth } from '@clerk/tanstack-react-start'
 import { Link } from '@tanstack/react-router'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Button } from '@/components/arc/button/button'
+import { RelativeTime } from '@/components/ae/shared/RelativeTime'
 import { listOwnerMarketDemand, getOwnerMarketDemandStatus, withdrawOwnerMarketDemand, type OwnerMarketDemandRequest, type OwnerMarketDemandStatusResult } from '@/modules/market-demand/market-demand.functions'
 import { MARKET_LINK_STATE } from './market-return-context'
 
@@ -70,9 +70,9 @@ export function DirectorySavedNeeds() {
       const row = shownRows[item.requestRef]
       return <li key={item.requestRef} className="flex flex-col gap-3 py-4">
         <p className="font-medium">{item.query}</p>
-        <p className="text-xs text-muted-foreground">Saved {formatDate(item.createdAt)} · Request reference: <code className="break-all">{item.requestRef}</code></p>
+        <p className="text-xs text-muted-foreground">Saved <RelativeTime value={item.createdAt} /> · Request reference: <code className="break-all">{item.requestRef}</code></p>
         {item.filters === undefined ? null : <details><summary className="text-sm">Saved search filters</summary><pre className="overflow-auto text-xs">{JSON.stringify(item.filters, null, 2)}</pre></details>}
-        <p role="status" className="text-sm">{row?.result?.kind === 'matched' ? `${row.result.matchedCount} matching Tools` : row?.result?.kind === 'open' ? 'Waiting for matching supply' : row?.result?.kind === 'not_found' ? 'This need has expired or was withdrawn.' : 'Check status to assess current supply.'}</p>
+        <p role="status" className="text-sm">{row?.result?.kind === 'matched' ? `${row.result.matchedCount} matching tools` : row?.result?.kind === 'open' ? 'Waiting for matching supply' : row?.result?.kind === 'not_found' ? 'This need has expired or was withdrawn.' : 'Check status to assess current supply.'}</p>
         {row?.result?.kind === 'matched' ? <ul>{row.result.tools.map(tool => <li key={tool.toolRef}><Link to="/tools/$toolRef" params={{ toolRef: tool.toolRef }} state={MARKET_LINK_STATE}>{tool.title}</Link></li>)}</ul> : null}
         <div className="flex flex-wrap gap-3"><Button type="button" variant="secondary" disabled={row?.busy} onClick={() => void action(item.requestRef, 'check')}>Check status</Button><Button type="button" variant="ghost" disabled={row?.busy} onClick={() => void action(item.requestRef, 'withdraw')}>Withdraw</Button></div>
         {row?.error === undefined ? null : <p role="alert" className="text-sm text-destructive">{row.error}</p>}

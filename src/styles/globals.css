@@ -25,7 +25,7 @@
 @font-face {
   font-family: "Manrope Variable";
   font-style: normal;
-  font-weight: 200 800;
+  font-weight: 400 500;
   font-display: swap;
   src: url("/fonts/manrope-latin.woff2") format("woff2");
 }
@@ -118,6 +118,17 @@
 :root {
   color-scheme: light;
 
+  /* Two weights only (Arc): regular 400 and medium 500. Heavier and lighter
+     utilities resolve onto them so no surface can reach 200, 600 or 700. */
+  --font-weight-thin: 400;
+  --font-weight-extralight: 400;
+  --font-weight-light: 400;
+  --font-weight-normal: 400;
+  --font-weight-semibold: 500;
+  --font-weight-bold: 500;
+  --font-weight-extrabold: 500;
+  --font-weight-black: 500;
+
   /* Density: public is the default. */
   --ae-text-body: 16px;
   --ae-leading-body: 1.5;
@@ -146,26 +157,29 @@
   --ae-hairline: color-mix(in srgb, var(--ae-fg) 8%, transparent);
   --ae-border-strong: #918e87;
 
-  /* Forest marks the one primary button, the selected row, keyboard focus and inline links. */
+  /* Brand kit: Forest marks the one primary button, the selected row, keyboard
+     focus and inline links; Chalk sits on it. Stone is the only second chart
+     colour. Gold appears only in the logo artwork. */
   --ae-brand: #24543d;
   --ae-brand-muted: rgba(36, 84, 61, 0.08);
   --ae-on-brand: #e8e4da;
+  --ae-stone: #aaa89e;
   --ae-primary: var(--ae-brand);
   --ae-primary-fg: var(--ae-on-brand);
   --ae-ring: var(--ae-brand);
 
-  --ae-success: oklch(0.5423 0.1222 157.98);
-  --ae-success-foreground: oklch(0.32 0.085 150);
-  --ae-success-ring: oklch(0.53 0.12 150 / 0.32);
-  --ae-success-subtle: oklch(0.95 0.025 150);
-  --ae-warning: oklch(0.5948 0.1401 58.96);
-  --ae-warning-foreground: oklch(0.35 0.08 70);
-  --ae-warning-ring: oklch(0.69 0.13 78 / 0.38);
-  --ae-warning-subtle: oklch(0.96 0.035 82);
-  --ae-danger: oklch(0.5408 0.176 27.61);
+  --ae-success: var(--ae-brand);
+  --ae-success-foreground: var(--ae-brand);
+  --ae-success-ring: rgba(36, 84, 61, 0.32);
+  --ae-success-subtle: var(--ae-brand-muted);
+  --ae-warning: #8a5a0b;
+  --ae-warning-foreground: #8a5a0b;
+  --ae-warning-ring: rgba(138, 90, 11, 0.32);
+  --ae-warning-subtle: #f1e4c6;
+  --ae-danger: #9b2c2c;
   --ae-danger-foreground: var(--ae-danger);
-  --ae-danger-ring: oklch(0.53 0.18 28 / 0.32);
-  --ae-danger-subtle: oklch(0.95 0.03 28);
+  --ae-danger-ring: rgba(155, 44, 44, 0.32);
+  --ae-danger-subtle: #f3deda;
 
   --background: var(--ae-bg);
   --foreground: var(--ae-fg);
@@ -219,13 +233,13 @@
   --ae-bg: #141414;
   --ae-fg: #e8e4da;
   --ae-muted-fg: #aaa89e;
-  --ae-surface: #1c1c1c;
+  --ae-surface: #1e1e1c;
   --ae-surface-sunken: #0f0f0f;
   --ae-surface-raised: #242424;
   --ae-hairline: color-mix(in srgb, var(--ae-fg) 8%, transparent);
   --ae-border-strong: #595854;
-  --ae-brand: #b7e7cc;
-  --ae-brand-muted: rgba(183, 231, 204, 0.12);
+  --ae-brand: #6fa587;
+  --ae-brand-muted: rgba(111, 165, 135, 0.14);
   --ae-on-brand: #141414;
   --ae-primary: var(--ae-brand);
   --ae-primary-fg: var(--ae-on-brand);
@@ -249,6 +263,7 @@
   --input: var(--ae-border-strong);
   --ring: var(--ae-ring);
   --ae-danger-foreground: oklch(0.8 0.11 27.61);
+  --ae-success-ring: rgba(111, 165, 135, 0.32);
 }
 
 /* Workspace density: same token names, denser values (spec: Foundations, Density). */

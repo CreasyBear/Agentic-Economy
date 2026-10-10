@@ -36,6 +36,11 @@ vi.mock('@/modules/market/tool-detail-route.functions', () => ({
   readDirectoryToolDetailRouteServer: readDirectoryDetailMock,
 }))
 
+const canonicalUrlMock = vi.hoisted(() => vi.fn(async () => 'https://aecon.test'))
+vi.mock('@/lib/server/canonical-url.functions', () => ({ readCanonicalBaseUrlServer: canonicalUrlMock }))
+const authState = vi.hoisted(() => ({ isSignedIn: false }))
+vi.mock('@clerk/tanstack-react-start', () => ({ useAuth: () => ({ isLoaded: true, isSignedIn: authState.isSignedIn }) }))
+
 import { PublicToolDetail, Route } from '@/routes/tools.$toolRef'
 import type { PublicToolDetailProps } from '@/components/ae/market/public-tool-detail/PublicToolDetail'
 import { DirectoryToolPage } from '@/components/ae/market/public-tool-detail/DirectoryToolPage'
@@ -160,10 +165,15 @@ const projectCapabilityTool = (
 )
 
 const tool = projectCapabilityTool(sourceRecord, 2_000)
+// Fresh routeable availability: the page only offers to run a Tool whose readiness is current.
+const callableTool = { ...tool, availability: { ...tool.availability, posture: 'routeable' as const, observedAt: Date.now(), validUntil: Date.now() + 60_000 } }
 
 function renderWithRouter(
   result: PublicToolDetailProps['result'],
   _hasBuyerCredential = false,
+  /** `null` renders without a canonical URL; a default parameter would swallow `undefined`. */
+  baseUrl: string | null = 'https://aecon.test',
+  search?: PublicToolDetailProps['search'],
 ) {
   const rootRoute = createRootRoute()
   const routeTree = rootRoute.addChildren([
@@ -178,7 +188,7 @@ function renderWithRouter(
   const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }) })
   return render(
     <RouterContextProvider router={router}>
-      <PublicToolDetail result={result} />
+      <PublicToolDetail result={result} baseUrl={baseUrl ?? undefined} {...(search === undefined ? {} : { search })} />
     </RouterContextProvider>,
   )
 }
@@ -215,6 +225,7 @@ function expectRenderedHrefToMatchProducer(renderedHref: string | null, producer
 
 afterEach(() => {
   cleanup()
+  authState.isSignedIn = false
   readDetailMock.mockReset()
   readDirectoryDetailMock.mockReset()
   if (originalClipboard === undefined) Reflect.deleteProperty(navigator, 'clipboard')
@@ -222,27 +233,27 @@ afterEach(() => {
 })
 
 describe('/tools/$toolRef', () => {
+
   it('shows the existing time-to-result chart on the public Tool page with its observation meaning', async () => {
     const evidence = projectMarketListingEvidence({
       toolRef: tool.toolRef, ratingCount: 0, ratingSum: 0, completedCalls: 5,
       latencySamplesMs: [38_000, 39_000, 40_000, 41_000, 42_000],
     }, tool.contract.capabilityId)
     renderWithRouter({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool, evidence })
-    fireEvent.click(screen.getByRole('button', { name: 'Time to result · last 30 days' }))
-    const performance = screen.getByRole('region', { name: 'Time to result · last 30 days' })
-    expect(within(performance).getByText('Median 40 s, p95 42 s across 5 completed Calls.')).toBeTruthy()
-    expect(within(performance).getByText(/not network time to first byte/)).toBeTruthy()
-    expect(within(performance).getByRole('region', { name: 'Time to result' })).toBeTruthy()
-    await waitFor(() => expect(performance.querySelector('[data-slot="chart"]')).not.toBeNull())
+    const record = screen.getByRole('region', { name: 'Track record' })
+    expect(within(record).getByText('Median 40 s, p95 42 s across 5 completed calls in the last 30 days.')).toBeTruthy()
+    expect(within(record).getByRole('region', { name: 'Time to result' })).toBeTruthy()
+    await waitFor(() => expect(record.querySelector('[data-slot="chart"]')).not.toBeNull(), { timeout: 5000 })
+    expect(within(record).getByText(/not network time to first byte/)).toBeTruthy()
   })
 
   it('does not label unavailable public-page performance as zero timed Calls', () => {
     renderWithRouter({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool })
-    fireEvent.click(screen.getByRole('button', { name: 'Time to result · last 30 days' }))
-    const performance = screen.getByRole('region', { name: 'Time to result · last 30 days' })
-    expect(within(performance).getByText('Performance history is unavailable right now.')).toBeTruthy()
-    expect(within(performance).queryByRole('region', { name: 'Time to result' })).toBeNull()
-    expect(within(performance).queryByText(/0 completed Calls/)).toBeNull()
+    const record = screen.getByRole('region', { name: 'Track record' })
+    expect(within(record).getByText('Timing history is unavailable')).toBeTruthy()
+    expect(within(record).getByRole('button', { name: 'Try again' })).toBeTruthy()
+    expect(within(record).queryByRole('region', { name: 'Time to result' })).toBeNull()
+    expect(within(record).queryByText(/0 completed calls/)).toBeNull()
   })
 
   it('fills the track record from observed market evidence', async () => {
@@ -455,44 +466,40 @@ describe('/tools/$toolRef', () => {
     }))
   })
 
-  it('keeps one Tool identity with price, reciprocal Provider link and a single Start action', () => {
+  it('keeps one Tool identity with price, reciprocal Provider link and one Start destination', () => {
     renderWithRouter({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool, verifiedBusinessSlug: tool.business.slug })
     expect(screen.getByRole('heading', { level: 1, name: 'Invoice line-item extraction' })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Ledger Labs' }).getAttribute('href')).toBe('/ledger-labs')
-    expect(screen.getAllByText('US$1.25 per Call').length).toBeGreaterThan(0)
-    expect(screen.getByRole('heading', { name: 'Example' })).toBeTruthy()
-    expect(screen.getByText(/No published output example/)).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Search callable alternatives' })).toBeTruthy()
+    expect(screen.getAllByText('US$1.25 per call').length).toBeGreaterThan(0)
+    expect(screen.getByText('No sample output yet')).toBeTruthy()
+    expect(screen.getByText('Readiness unknown')).toBeTruthy()
+    // The card and the phone bar share one action; a stale Tool offers alternatives, never a Quote.
+    const start = screen.getAllByRole('link', { name: 'See similar tools' })
+    expect(new Set(start.map(link => link.getAttribute('href'))).size).toBe(1)
+    expect(screen.queryByRole('link', { name: 'Sign in to run it' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Get a Quote' })).toBeNull()
-    expect(screen.getByText(/Readiness stale/)).toBeTruthy()
   })
 
-  it('keeps published inputs in the gallery and exact schemas only under Technical', () => {
-    renderWithRouter({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool })
-    const gallery = screen.getByRole('region', { name: 'Invoice line-item extraction published examples' })
-    const inputExample = JSON.stringify({ documentUrl: 'https://docs.example/invoice.pdf', includeTax: true }, null, 2)
-    expect(gallery.querySelector('code')?.textContent).toBe(inputExample)
-    for (const schema of [tool.contract.inputJsonSchema, tool.contract.outputJsonSchema]) {
-      const exact = JSON.stringify(schema, null, 2)
-      expect([...gallery.querySelectorAll('code')].some(node => node.textContent === exact)).toBe(false)
-      expect([...document.querySelectorAll('code')].filter(node => node.textContent === exact)).toHaveLength(1)
-    }
-    expect(screen.queryByRole('button', { name: 'Next example' })).toBeNull()
-    const technicalTrigger = screen.getByRole('button', { name: /Technical · operation IDs/ })
-    fireEvent.click(technicalTrigger)
-    const technical = screen.getByRole('region', { name: /Technical · operation IDs/ })
-    const technicalCodes = [...technical.querySelectorAll('code')].map(node => node.textContent)
-    expect(technicalCodes).toContain(JSON.stringify(tool.contract.outputJsonSchema, null, 2))
-    expect(technicalCodes).toContain(JSON.stringify(tool.contract.inputJsonSchema, null, 2))
+  it('keeps the published input example in Try it and the exact schemas only under Schema', () => {
+    renderWithRouter({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool: callableTool })
+    expect(screen.getByRole('textbox', { name: /Document url/ }).getAttribute('value')).toBe('https://docs.example/invoice.pdf')
+    expect(screen.getByRole('checkbox', { name: 'Include tax' }).getAttribute('aria-checked')).toBe('true')
+    const schemaTab = screen.getByRole('tab', { name: 'Schema' })
+    fireEvent.mouseDown(schemaTab, { button: 0, ctrlKey: false })
+    fireEvent.click(schemaTab)
+    const panel = screen.getByRole('tabpanel', { name: 'Schema' })
+    expect(within(panel).getByRole('heading', { name: 'Input' })).toBeTruthy()
+    expect(within(panel).getByRole('heading', { name: 'Output' })).toBeTruthy()
+    expect(within(panel).getByRole('tree', { name: 'Input schema' }).textContent).toContain('documentUrl')
+    expect(within(panel).getByRole('tree', { name: 'Output schema' }).textContent).toContain('lineItems')
   })
 
   it('does not use a schema as an example when no admitted input example is published', () => {
-    const noExamples = { ...tool, contract: { ...tool.contract, inputExamples: [] } }
+    const noExamples = { ...callableTool, contract: { ...callableTool.contract, inputExamples: [] } }
     renderWithRouter({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool: noExamples })
-    const gallery = screen.getByRole('region', { name: 'Invoice line-item extraction published examples' })
-    expect(within(gallery).getByText('No example input is published for this Tool.')).toBeTruthy()
-    expect(gallery.querySelector('code')).toBeNull()
-    expect(screen.getByText('No published output example. The output contract is under Technical.')).toBeTruthy()
+    expect(screen.getByRole('textbox', { name: /Document url/ }).getAttribute('value')).toBe('')
+    expect(document.body.textContent).not.toContain('https://docs.example/invoice.pdf')
+    expect(screen.getByText(/The provider hasn't published a sample response/)).toBeTruthy()
   })
 
   it('searches for another eligible Tool by capability and exact current identity, not its title', () => {
@@ -529,7 +536,7 @@ describe('/tools/$toolRef', () => {
       prices: [{ scheme: 'exact', decimalAmount: '0.000001', symbol: 'USDC' }],
     })
     const rate = { source: 'coinbase' as const, base: 'USDC' as const, quote: 'AUD' as const, rate: '1.5', fetchedAt: 1_000 }
-    expect(projectToolObject(listing, undefined, 2_000, rate).price?.label).toBe('A$0.01 per Call')
+    expect(projectToolObject(listing, undefined, 2_000, rate).price?.label).toBe('A$0.000002 per Call')
     expect(projectToolObject(listing, undefined, 2_000, rate).price?.source).toContain('directory reported')
     expect(projectToolObject(listing, undefined, rate.fetchedAt + REFERENCE_RATE_MAX_AGE_MS, rate).price?.label)
       .toBe('US$0.000001 per Call')
@@ -544,41 +551,35 @@ describe('/tools/$toolRef', () => {
     expect(source.facts.price.kind === 'present' && source.facts.price.value.kind === 'fixed' ? source.facts.price.value.amount : undefined).toBe('1.25')
   })
 
-  it('discloses provider and release classes before the admitted Tool chat action', () => {
-    renderWithRouter({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool, verifiedBusinessSlug: tool.business.slug })
-    const disclosure = screen.getByRole('region', { name: 'Input and recipient before Quote' })
-    expect(within(disclosure).getByText('Your input and its recipient')).toBeTruthy()
-    expect(within(disclosure).getByText('Ledger Labs')).toBeTruthy()
-    const release = within(disclosure).getByText('/documentUrl').closest('li')
-    expect(release?.textContent).toContain('public input')
-    expect(release?.textContent).toContain('invoice extraction')
-    expect(release?.textContent).toContain('execution, after Quote approval')
-    expect(release?.textContent).toContain('Ledger Labs (selected Provider)')
-    expect(disclosure.compareDocumentPosition(screen.getByRole('link', { name: /Try in chat/ })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(disclosure.compareDocumentPosition(screen.getByRole('region', { name: 'Start' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(within(disclosure).queryByText(/named recipient/i)).toBeNull()
+  it('discloses the Provider and the fields sent before the admitted Tool run action', () => {
+    authState.isSignedIn = true
+    renderWithRouter({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool: callableTool, verifiedBusinessSlug: tool.business.slug })
+    const disclosure = screen.getByText('Your input goes to Ledger Labs').closest('[role="status"], [role="alert"], div')
+    if (!(disclosure instanceof HTMLElement)) throw new Error('disclosure_missing')
+    expect(within(disclosure).getByText('/documentUrl')).toBeTruthy()
+    expect(within(disclosure).getByText('/includeTax')).toBeTruthy()
+    expect(disclosure.textContent).toContain('Nothing runs until you approve the price.')
+    const run = screen.getAllByRole('link', { name: 'Run this call' })[0]
+    if (run === undefined) throw new Error('run_missing')
+    expect(disclosure.compareDocumentPosition(run) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.queryByText(/named recipient/i)).toBeNull()
   })
 
-  it('retains explicit input guidance when no transfer classes are published', () => {
-    const noTransferClasses = { ...tool, dataUse: [] }
-    renderWithRouter({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool: noTransferClasses })
-    const disclosure = screen.getByRole('region', { name: 'Input and recipient before Quote' })
-    expect(within(disclosure).getByText('No input transfer classes are declared for this Tool. Inspect its input schema before requesting a Quote.')).toBeTruthy()
-  })
 
-  it('does not offer a Quote or chat input path when a named recipient has no published identity', () => {
+  it('does not offer a run or chat input path when a named recipient has no published identity', () => {
+    authState.isSignedIn = true
     const unnamedRecipient = {
-      ...tool,
+      ...callableTool,
       dataUse: tool.dataUse.map(effect => ({ ...effect, recipient: 'named_recipient' as const })),
-      availability: { ...tool.availability, posture: 'routeable' as const, observedAt: Date.now(), validUntil: Date.now() + 60_000 },
     }
     renderWithRouter({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool: unnamedRecipient })
-    expect(within(screen.getByRole('region', { name: 'Input and recipient before Quote' })).getByText('/documentUrl').closest('li')?.textContent).toContain('recipient identity not published; do not send this input')
-    expect(screen.queryByRole('link', { name: /Try in chat/ })).toBeNull()
-    expect(screen.getByRole('button', { name: 'Search callable alternatives' })).toBeTruthy()
-    expect(screen.getByText('Input recipient not identified')).toBeTruthy()
-    expect(screen.queryByText(/^Routeable · observed/)).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Set up to get a Quote' })).toBeNull()
+    expect(screen.getByText('Input recipient not named')).toBeTruthy()
+    expect(screen.queryByText('Ready to call')).toBeNull()
+    expect(screen.getAllByText('The provider hasn’t said who receives your input, so aecon won’t run it.').length).toBeGreaterThan(0)
+    expect(screen.queryByRole('link', { name: /Run this call/ })).toBeNull()
+    expect(screen.queryByRole('tab', { name: 'Try it' })).toBeNull()
+    expect(screen.queryByText(/Your input goes to/)).toBeNull()
+    expect(screen.getAllByRole('link', { name: 'See similar tools' }).length).toBeGreaterThan(0)
   })
 
   it('does not link an unverified publisher to an unpublished Business page', () => {
@@ -587,11 +588,25 @@ describe('/tools/$toolRef', () => {
     expect(screen.queryByRole('link', { name: 'Ledger Labs' })).toBeNull()
   })
 
-  it('makes technical operation IDs a disclosure, not the heading', () => {
-    renderWithRouter({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool })
-    expect(screen.getByText(/Technical · operation IDs/)).toBeTruthy()
+  it('keeps the Tool ref a copyable fact, not the heading, and runs through chat once signed in', () => {
+    authState.isSignedIn = true
+    renderWithRouter({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool: callableTool })
     expect(screen.getByRole('heading', { level: 1 }).textContent).not.toContain('operation:v1:')
-    expect(screen.getByRole('link', { name: /Try in chat/ }).getAttribute('href')).toContain('/t/new?q=')
+    expect(screen.getByText('Tool ref').parentElement?.querySelector('code')?.textContent).toBe(tool.toolRef)
+    expect(screen.getByRole('button', { name: 'Copy tool ref' })).toBeTruthy()
+    expect(screen.getAllByRole('link', { name: 'Run this call' })[0]?.getAttribute('href')).toContain('/t/new?q=')
+  })
+
+  it('says so when a callable Tool declares no input fields sent to its Provider', () => {
+    renderWithRouter({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool: { ...callableTool, dataUse: [] } })
+    expect(screen.getByText('Ledger Labs hasn’t declared which input fields it receives')).toBeTruthy()
+    expect(screen.queryByText(/Your input goes to/)).toBeNull()
+  })
+
+  it('asks a signed-out visitor to sign in instead of running the Tool', () => {
+    renderWithRouter({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool: callableTool })
+    expect(screen.getAllByRole('link', { name: 'Sign in to run it' }).length).toBeGreaterThan(0)
+    expect(screen.queryByRole('link', { name: 'Run this call' })).toBeNull()
   })
 
   it('keeps the ToolRef route canonical even if a directory URL exists', async () => {
@@ -604,17 +619,62 @@ describe('/tools/$toolRef', () => {
   it('rejects malformed references before reading the catalog', async () => {
     const loader = Route.options.loader as (input: { params: { toolRef: string } }) => Promise<unknown>
     await expect(loader({ params: { toolRef: 'not-an-tool' } })).resolves.toEqual({
-      result: { kind: 'invalid_ref', toolRef: 'not-an-tool' }, evidence: undefined,
+      result: { kind: 'invalid_ref', toolRef: 'not-an-tool' }, evidence: undefined, baseUrl: undefined,
     })
     expect(readDetailMock).not.toHaveBeenCalled()
   })
 
+  it('still renders the Tool when the canonical URL cannot be resolved, hiding only the connect block', async () => {
+    readDetailMock.mockResolvedValue({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool: callableTool })
+    canonicalUrlMock.mockRejectedValueOnce(new Error('canonical_base_url_configuration_required'))
+    const loader = Route.options.loader as (input: { params: { toolRef: string } }) => Promise<unknown>
+    await expect(loader({ params: { toolRef: tool.toolRef } })).resolves.toMatchObject({ result: { kind: 'found' }, baseUrl: undefined })
+    renderWithRouter({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool: callableTool }, false, null)
+    expect(screen.getByRole('heading', { level: 1 })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Connect your agent' })).toBeTruthy()
+    expect(screen.queryByText(/\/mcp$/u)).toBeNull()
+  })
+
+  it('puts Connect your agent above the track record and says where the curl key comes from', () => {
+    renderWithRouter({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool: callableTool })
+    const connect = screen.getByRole('heading', { name: 'Connect your agent' })
+    const record = screen.getByRole('heading', { name: 'Track record' })
+    expect(connect.compareDocumentPosition(record) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    const curlTab = screen.getByRole('tab', { name: 'curl' })
+    fireEvent.mouseDown(curlTab, { button: 0, ctrlKey: false })
+    fireEvent.click(curlTab)
+    expect(screen.getByRole('link', { name: 'Create an agent key' }).getAttribute('href')).toBe('/owner/settings/agent-keys')
+    expect(screen.getByText(/AE_API_KEY/u, { selector: 'p' })).toBeTruthy()
+  })
+
+  it('names the scrollable code region it makes focusable', () => {
+    renderWithRouter({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool: callableTool })
+    const code = screen.getAllByRole('region', { name: 'Selectable source code' })[0]
+    expect(code?.tagName).toBe('PRE')
+    expect(code?.getAttribute('tabindex')).toBe('0')
+  })
+
+  it('states the chat size limit and offers the agent path when the input is too long to run here', () => {
+    authState.isSignedIn = true
+    const longInput = { documentUrl: `https://docs.example/${'a'.repeat(1_900)}` }
+    renderWithRouter({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool: callableTool }, false, 'https://aecon.test', { tab: 'try', input: longInput })
+    expect(screen.queryByRole('link', { name: 'Run this call' })).toBeNull()
+    expect(screen.getAllByRole('link', { name: 'Run it from your agent' })[0]?.getAttribute('href')).toBe('#connect')
+    expect(screen.getByText(/over the 2,000 character limit/u)).toBeTruthy()
+  })
+
+  it('gives a tool that is not found a top-level heading', () => {
+    renderWithRouter({ kind: 'not_found', toolRef: tool.toolRef } as unknown as PublicToolDetailProps['result'])
+    expect(screen.getByRole('heading', { level: 1, name: 'This tool is unknown or no longer current' })).toBeTruthy()
+  })
+
   it('retries the same Tool when the read is unavailable and shows no commercial claims', () => {
     renderWithRouter({ kind: 'source_unavailable', toolRef: tool.toolRef })
-    expect(screen.getByRole('link', { name: 'Try again' }).getAttribute('href')).toContain(encodeURIComponent(tool.toolRef))
-    expect(screen.getByRole('link', { name: 'Browse Market' }).getAttribute('href')).toBe('/market')
+    expect(screen.getByRole('heading', { name: 'Tool details are unavailable' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Browse tools' }).getAttribute('href')).toBe('/market')
     expect(screen.queryByRole('link', { name: 'Check status' })).toBeNull()
-    expect(screen.queryByText(/1.25 USD/)).toBeNull()
+    expect(screen.queryByText(/1\.25 USD|US\$1\.25|USD 1\.25/)).toBeNull()
   })
 
 })
@@ -630,24 +690,26 @@ describe('/tools/$providerHost/$slug', () => {
     metadataJson: '{}',
   }
 
-  it('retains both published directory examples while exposing its input schema once in Technical', () => {
+  it('retains both published directory examples while exposing its input schema once under Schema', () => {
     const input = '{"documentUrl":"https://docs.example/invoice.pdf"}'
     const output = '{"lineItems":[{"amount":"12.34"}]}'
     const schema = '{"type":"object","required":["documentUrl"]}'
     const publishedEntry = { ...entry, input: { fields: [], exampleJson: input, schemaJson: schema }, output: { fields: [], exampleJson: output } }
     const root = createRootRoute()
     const router = createRouter({ routeTree: root.addChildren([createRoute({ getParentRoute: () => root, path: '/' }), createRoute({ getParentRoute: () => root, path: '/market' })]), history: createMemoryHistory({ initialEntries: ['/'] }) })
-    render(<RouterContextProvider router={router}><DirectoryToolPage metadata={{ kind: 'found_upstream', item: { entry: publishedEntry } }} providerHost="example.test" slug="invoices" /></RouterContextProvider>)
-    const gallery = screen.getByRole('region', { name: 'Invoice extraction published examples' })
-    expect(within(gallery).getByText(input)).toBeTruthy()
-    expect(within(gallery).queryByText(schema)).toBeNull()
-    expect([...document.querySelectorAll('code')].filter(node => node.textContent === schema)).toHaveLength(1)
-    fireEvent.click(screen.getByRole('button', { name: 'Next example' }))
-    expect(within(gallery).getByRole('group', { name: 'Output example, 2 of 2' }).textContent).toContain(output)
-    expect(screen.queryByRole('button', { name: 'Show Input contract' })).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Technical · endpoint and source' }))
-    expect(within(screen.getByRole('region', { name: 'Technical · endpoint and source' })).getByText(schema)).toBeTruthy()
-    expect(screen.queryByRole('link', { name: /Try in chat/ })).toBeNull()
+    render(<RouterContextProvider router={router}><DirectoryToolPage baseUrl="https://aecon.test" metadata={{ kind: 'found_upstream', item: { entry: publishedEntry } }} providerHost="example.test" slug="invoices" /></RouterContextProvider>)
+    expect(screen.queryByRole('tab', { name: 'Try it' })).toBeNull()
+    expect(screen.queryByRole('link', { name: /Run this call|Sign in to run it/ })).toBeNull()
+    expect(screen.getByRole('tree', { name: 'Sample response' }).textContent).toContain('lineItems')
+    const schemaTab = screen.getByRole('tab', { name: 'Schema' })
+    fireEvent.mouseDown(schemaTab, { button: 0, ctrlKey: false })
+    fireEvent.click(schemaTab)
+    const panel = screen.getByRole('tabpanel', { name: 'Schema' })
+    expect(within(panel).getByRole('tree', { name: 'Input schema' }).textContent).toContain('documentUrl')
+    expect(within(panel).getByText('Endpoint')).toBeTruthy()
+    expect(within(panel).getByText('https://example.test/x402/invoices')).toBeTruthy()
+    // The published input example is part of this listing; a preview page must still show it.
+    expect(screen.getByRole('tree', { name: 'Sample input' }).textContent).toContain('https://docs.example/invoice.pdf')
   })
 
   it('resolves an external compact identity to human detail and rejects a mismatched Host', async () => {
@@ -657,10 +719,12 @@ describe('/tools/$providerHost/$slug', () => {
     readDirectoryDetailMock.mockResolvedValue({ metadata, referenceRate })
     const loader = DirectoryRoute.options.loader
     if (typeof loader !== 'function') throw new Error('directory_loader_missing')
-    await expect(loader({ params: { providerHost: 'example.test', slug: id }, location: { state: {} } } as never)).resolves.toEqual({ metadata, referenceRate })
+    await expect(loader({ params: { providerHost: 'example.test', slug: id }, location: { state: {} } } as never)).resolves.toEqual({ metadata, referenceRate, baseUrl: 'https://aecon.test' })
     expect(readDirectoryDetailMock).toHaveBeenCalledWith({ data: { id } })
     expect(readDirectoryDetailMock).toHaveBeenCalledTimes(1)
-    await expect(loader({ params: { providerHost: 'other.test', slug: id }, location: { state: {} } } as never)).resolves.toEqual({ metadata: { kind: 'unavailable', reason: 'query_invalid' } })
+    await expect(loader({ params: { providerHost: 'other.test', slug: id }, location: { state: {} } } as never)).resolves.toEqual({ metadata: { kind: 'unavailable', reason: 'query_invalid' }, baseUrl: 'https://aecon.test' })
+    canonicalUrlMock.mockRejectedValueOnce(new Error('canonical_base_url_configuration_required'))
+    await expect(loader({ params: { providerHost: 'example.test', slug: id }, location: { state: {} } } as never)).resolves.toEqual({ metadata, referenceRate, baseUrl: undefined })
   })
 
   it('passes fresh source rate to a directory-only detail and never claims an AE input recipient', async () => {
@@ -677,15 +741,16 @@ describe('/tools/$providerHost/$slug', () => {
       createRoute({ getParentRoute: () => root, path: '/market' }),
     ])
     const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }) })
-    render(<RouterContextProvider router={router}><DirectoryToolPage metadata={metadata} providerHost="example.test" slug="invoices" referenceRate={referenceRate} /></RouterContextProvider>)
-    expect(screen.getByText('A$0.01 per Call')).toBeTruthy()
-    expect(screen.getByText(/Provider-listed source price: 0.000001 USDC/)).toBeTruthy()
-    expect(screen.getByText(/No admitted AE Tool or verified execution Provider/)).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Search for a similar Tool' })).toBeTruthy()
-    expect(screen.queryByRole('link', { name: /Try in chat/ })).toBeNull()
+    render(<RouterContextProvider router={router}><DirectoryToolPage baseUrl="https://aecon.test" metadata={metadata} providerHost="example.test" slug="invoices" referenceRate={referenceRate} /></RouterContextProvider>)
+    expect(screen.getAllByText('A$0.000002 per call').length).toBeGreaterThan(0)
+    expect(screen.getByText('Preview only')).toBeTruthy()
+    expect(screen.getAllByText('aecon can’t run this listing yet. You can still see what it takes and returns.').length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('link', { name: 'See similar tools' }).length).toBeGreaterThan(0)
+    expect(screen.queryByRole('link', { name: /Run this call|Sign in to run it/ })).toBeNull()
+    expect(screen.queryByText(/Your input goes to/)).toBeNull()
 
     cleanup()
-    render(<RouterContextProvider router={router}><DirectoryToolPage metadata={{
+    render(<RouterContextProvider router={router}><DirectoryToolPage baseUrl="https://aecon.test" metadata={{
       kind: 'found',
       coverage: {
         source: 'coinbase', generation: 'active', indexedTotal: 1, reportedTotal: 1,
@@ -698,7 +763,12 @@ describe('/tools/$providerHost/$slug', () => {
         observedAt: 2_000, sourceDigest: 'digest', sourceRouteRef: `source-route:v1:${'b'.repeat(64)}`,
       },
     }} providerHost="example.test" slug="invoices" referenceRate={referenceRate} /></RouterContextProvider>)
-    expect(screen.getByRole('button', { name: 'Search callable alternatives' })).toBeTruthy()
+    expect(screen.getAllByRole('link', { name: 'See similar tools' }).length).toBeGreaterThan(0)
+
+    cleanup()
+    render(<RouterContextProvider router={router}><DirectoryToolPage baseUrl="https://aecon.test" metadata={metadata} providerHost="example.test" slug="invoices" referenceRate={referenceRate} /></RouterContextProvider>)
+    // The source USDC price is a secondary fact beside the AUD estimate.
+    expect(screen.getByText(/0.000001 USDC/)).toBeTruthy()
   })
 })
 

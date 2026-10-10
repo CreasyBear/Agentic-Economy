@@ -1,4 +1,3 @@
-/** Motion presets are shared by the gallery and future registry consumers. */
 export const motionTokens = {
   /** aecon caps motion at 150ms and exits at 120ms (spec: Foundations, Motion). */
   duration: { instant: 0.08, fast: 0.12, exit: 0.12, standard: 0.15, considered: 0.15 },
