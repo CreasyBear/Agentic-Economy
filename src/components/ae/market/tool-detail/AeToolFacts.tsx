@@ -23,9 +23,6 @@ export function AeToolFacts({
         facts={[
           { label: 'Access', value: model.authenticationLabel },
           ...(model.paymentNetwork === undefined ? [] : [{ label: 'Payment network', value: model.paymentNetwork }]),
-          ...(model.readinessLabel === model.decisionLabel
-            ? []
-            : [{ label: 'Readiness', value: model.readinessLabel }]),
           ...tool.commercial.materialTerms.map((term) => ({
             label: term.label,
             value: term.value,
