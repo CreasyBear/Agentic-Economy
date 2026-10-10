@@ -43,7 +43,7 @@ Each benchmark gets a baseline before anything is changed. Every change is re-me
 | R10 | Font sizes visible on one page | 2 | up to 9, including fractional px values such as 116.64 and 19.44 (2026-10-10) | |
 
 ## Method
-- **References over taste.** The rulebook is `docs/specs/2026-10-10-aecon-rulebook.md`. Every page copies a named archetype (rulebook, Page archetypes). Every fix names its reference.
+- **References over taste.** The rulebook is `docs/designs/aecon-rulebook.md`. Every page copies a named archetype (rulebook, Page archetypes). Every fix names its reference.
 - **Discovery first.** The core user arrives to see what they or their agent can use. Personas, journeys and competitor patterns come from the discovery research.
 - **Skills used:**
   - Arc (composition, checklist)
@@ -67,13 +67,13 @@ Each benchmark gets a baseline before anything is changed. Every change is re-me
 ## Phases
 | Phase | Status | Output |
 |---|---|---|
-| 1. Papercut and hostility audit | done | docs/strategy/papercut-audit-2026-10-10.md |
-| 2. Rules and references research | done (draft) | docs/specs/2026-10-10-aecon-rulebook.md |
-| 3. Discovery personas and competitor study | done (first opinion; second and third pending) | docs/design-system/discovery.md |
-| 4. Design system spec (rulebook plus discovery IA, archetypes, tokens, language) | done (draft, two poteto opinions, opus reconcile) | docs/design-system/spec.md |
+| 1. Papercut and hostility audit | done | docs/strategy/papercut-audit-2026-10-10.md (local, untracked by policy) |
+| 2. Rules and references research | done (draft) | docs/designs/aecon-rulebook.md |
+| 3. Discovery personas and competitor study | done (first opinion; second and third pending) | docs/designs/design-system-discovery.md |
+| 4. Design system spec (rulebook plus discovery IA, archetypes, tokens, language) | done (draft, two poteto opinions, opus reconcile) | docs/designs/design-system-spec.md |
 | 5. Baseline measurement | done (each metric has second and third opinions) | the benchmarks table above |
 | 6. Enforcement (tokens, lint bans, aecon-rulebook skill) | done on codex/design-foundations: implement, two opinions, fix; typecheck 0 verified by me | branch codex/design-foundations |
-| 7. Full-application walkover, one persona journey per agent | done: 7 journeys, each with second and third opinions | docs/design-system/walkover-2026-10-10.md |
+| 7. Full-application walkover, one persona journey per agent | done: 7 journeys, each with second and third opinions | docs/designs/design-system-walkover.md |
 | 8. Restyle waves, route by route, measured | blocked on merges: 7 branches are uncommitted and level with main | |
 | 9. R1 baseline with /aecon-audit on main | done (first pass plus two opinions on the 3 worst) | the R1 row above |
 
@@ -86,7 +86,7 @@ Each benchmark gets a baseline before anything is changed. Every change is re-me
   - mono uppercase retired
 
 ## Skill fixes found by use
-- aecon-rulebook SKILL.md expects the rulebook at docs/design-system/2026-10-10-aecon-rulebook.md. That file exists on codex/design-foundations but not on main (main has docs/specs/). Commit it with the branch.
+- The rulebook and design-system docs live in docs/designs/, the only tracked docs path for designs; the aecon-rulebook skill points there.
 - R17 now carries a scope (visible copy only, never identifiers) in the skill on codex/design-foundations. Fixed 2026-10-10.
 
 ## What aren't we asking?

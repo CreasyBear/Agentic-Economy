@@ -4,9 +4,9 @@
 
 **Revised:** 2026-10-10. Foundations (type, spacing, radii, surfaces,
 shadow, colour, status, motion, focus, money and time formats) now follow
-[the design system spec](docs/design-system/spec.md), which wins where this
+[the design system spec](docs/designs/design-system-spec.md), which wins where this
 file disagrees. Rule IDs (R1 to R29) refer to
-[the rulebook](docs/design-system/2026-10-10-aecon-rulebook.md).
+[the rulebook](docs/designs/aecon-rulebook.md).
 Aligned to aecon brand guidelines (PDF, 2026-09). The lived visual reference is
 `/market` (`MarketLanding.tsx`) for the opening, and the Arc Tool and Host
 compositions for discovery results.

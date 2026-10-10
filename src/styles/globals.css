@@ -1,5 +1,5 @@
 /*
- * aecon product system. docs/design-system/spec.md is the authority; DESIGN.md mirrors it.
+ * aecon product system. docs/designs/design-system-spec.md is the authority; DESIGN.md mirrors it.
  *
  * Compact capability-market structure. This file owns the semantic bridge
  * used by shadcn and product components; surfaces do not invent

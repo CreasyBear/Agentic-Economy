@@ -6,9 +6,9 @@ description: Audit or restyle one aecon route against the design system rulebook
 # aecon rulebook
 
 Sources, in order of authority:
-1. `docs/design-system/spec.md`: Foundations, Components, Page archetypes, Language, Agent surfaces.
-2. `docs/specs/2026-10-10-aecon-rulebook.md`: rules R1 to R29.
-3. `docs/design-system/README.md`: benchmarks and the change log.
+1. `docs/designs/design-system-spec.md`: Foundations, Components, Page archetypes, Language, Agent surfaces.
+2. `docs/designs/aecon-rulebook.md`: rules R1 to R29.
+3. `docs/designs/design-system.md`: benchmarks and the change log.
 
 This skill applies those rules. It never adds a rule. Each finding cites an
 existing rule ID (R1 to R29), or a spec section when the spec, not the rulebook,
@@ -88,7 +88,7 @@ Fix one route per pass. Do not touch other routes.
    expectations the restyle intentionally changes.
 6. Re-run `/aecon-audit <route>`. Fix what remains or list it with its reason.
 7. Record the route, the before and after finding counts, and the benchmarks
-   it moved in the `docs/design-system/README.md` change log.
+   it moved in the `docs/designs/design-system.md` change log.
 
 Optional sub-passes, each run as its own skill when installed: better-writing
 (R16 to R19), cognitive-load-auditor (archetype, R18), number-formatting (R9 to

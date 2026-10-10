@@ -294,6 +294,10 @@ describe("facilitator discovery ingest", () => {
       platformFee: { units: "0", exponent: 6 },
       total: { units: "100", exponent: 6 },
     });
+    // Stored material terms keep the original "CODE amount" serialisation, independent of display formatting.
+    expect(result.admitted[1]?.offering.presentation.materialTerms).toContainEqual({
+      termId: "provider-amount", label: "Listed Provider amount", value: "USDC 0.000100",
+    });
   });
 
   it("admits a full page but refuses an accept list above 20", async () => {

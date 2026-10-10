@@ -1,6 +1,6 @@
 # aecon design system spec
 
-aecon helps a person or their agent see what they can use. This spec applies the rulebook (`docs/specs/2026-10-10-aecon-rulebook.md`, R1 to R29) and the reconciled position in `docs/design-system/discovery.md`. Where they conflict with DESIGN.md, this spec wins, and DESIGN.md is amended to match. "verify" marks a value not found in the repo.
+aecon helps a person or their agent see what they can use. This spec applies the rulebook (`docs/designs/aecon-rulebook.md`, R1 to R29) and the reconciled position in `docs/designs/design-system-discovery.md`. Where they conflict with DESIGN.md, this spec wins, and DESIGN.md is amended to match. "verify" marks a value not found in the repo.
 
 ## Principles
 1. **Real tools first.** Every public screen shows a named tool, its price and its output before asking for anything.
@@ -10,7 +10,7 @@ aecon helps a person or their agent see what they can use. This spec applies the
 5. **Calm by subtraction.** Grey by default, two type sizes, no in-page shadows, motion only for cause and effect.
 
 ## Foundations
-Tokens live in `src/styles/globals.css`. Arc changes are overrides in `src/styles/arc-market.css`, so `foundation.css` stays unedited. The one vendored file we edit is `src/components/arc/motion-tokens.ts`, because CSS can't override JS. Clear deleted Tailwind namespaces (`--shadow-*: initial`, `--radius-*: initial`) so Tailwind's defaults don't return.
+Tokens live in `src/styles/globals.css`. Arc changes are overrides in `src/styles/arc-market.css`, so `foundation.css` stays unedited. The one vendored file we edit is `src/components/arc/motion-tokens.ts`, because CSS can't override JS. The class edits in `src/components/ui/*` are remaps forced by deleted tokens: each swaps a removed class for its surviving token, with no behaviour change. Clear deleted Tailwind namespaces (`--shadow-*: initial`, `--radius-*: initial`) so Tailwind's defaults don't return.
 
 **Density.** Public is the default. `[data-density="workspace"]` on `AeAppShell` swaps values under the same names, which replaces R1's `--ae-text-ui`.
 
@@ -210,7 +210,7 @@ Names go in text and refs go in JSON (R25 to R29). The MCP server id becomes `ae
 - **Returning.** Open on Your tools when something changed.
 
 ## Benchmarks it must move
-Targets and baselines live in `docs/design-system/README.md`.
+Targets and baselines live in `docs/designs/design-system.md`.
 
 | IDs | Moved by |
 |---|---|
@@ -336,6 +336,6 @@ How each point was ruled where the second opinion (fidelity) or the third opinio
 
 ---
 Notes for the caller (not part of the spec):
-- **Read-only run.** Nothing was written to `docs/design-system/spec.md`.
+- **Read-only run.** Nothing was written to `docs/designs/design-system-spec.md`.
 - **Word count.** The spec is 2,315 words not counting table pipes, or 2,369 counting every token except pipes. A raw `wc -w`, which counts each pipe, gives 2,719; the same count gives 2,544 for the previous draft.
 - **Scratch copies.** `/private/tmp/claude-501/-Users-joelchan-Documents-Coding-App-Dev-live-01--Pre-Implementation-Agentic-Economy/f5f7123e-e2af-4469-8b1b-9930508c1636/scratchpad/spec-final.txt` and `decisions-log.txt` hold an earlier wording of the text above. Save the text above, not those files.
