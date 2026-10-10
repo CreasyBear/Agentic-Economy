@@ -1,7 +1,6 @@
 import { formatCount } from '@/lib/ui/format-time'
 import { Link } from '@tanstack/react-router'
 import { useEffect, useState, type ReactNode } from 'react'
-import { ActivityIcon } from 'lucide-react'
 import { recordProductJourney } from '@/lib/observability/product-journey'
 
 import { alternativeToolSearchHref, projectToolObject } from '@/components/ae/shared/listing-family.view-model'
@@ -10,7 +9,7 @@ import { RelativeTime } from '@/components/ae/shared/RelativeTime'
 import { EmptyState } from '@/components/arc/empty-state/empty-state'
 import { BRAND_NAME } from '@/content/brand-copy'
 import { REASON_COPY, REASON_COPY_FALLBACK } from '@/content/reason-copy'
-import { DIRECTORY_READINESS, directoryActivityLabel, directoryLede, toDirectoryToolCardModel } from '@/modules/market/directory-card.view-model'
+import { directoryActivityLabel, directoryLede, toDirectoryToolCardModel } from '@/modules/market/directory-card.view-model'
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
 import type { X402DirectoryCatalogueResource } from '@/modules/market/x402-directory-catalogue'
 import { projectDirectoryListing } from '@/modules/registry/public'
@@ -55,7 +54,7 @@ export function DirectoryToolPage({ metadata, providerHost, slug, baseUrl, refer
     provider: { name: providerName, ...(providerName === providerHost ? {} : { host: providerHost }), ...(providerHref === undefined ? {} : { href: providerHref }), ...(entry.iconUrl === undefined ? {} : { iconUrl: entry.iconUrl }) },
     ...(price === undefined ? {} : { price }),
     ...(priceNote === undefined ? {} : { priceNote }),
-    readiness: DIRECTORY_READINESS[callableRef === undefined ? 'unavailable' : 'ae_callable'],
+    readiness: callableRef === undefined ? 'unavailable' : 'ready_now',
     ...(activity === undefined ? {} : { activity }),
     endpoint: entry.resource,
     ...(entry.method === undefined ? {} : { method: entry.method.toUpperCase() }),
@@ -82,7 +81,7 @@ function DirectoryActivity({ activity }: Readonly<{ activity: X402DirectoryEntry
     lastCalled === undefined || Number.isNaN(lastCalled.getTime()) ? undefined : ['Last paid call', <RelativeTime key="last-called" value={lastCalled} />],
   ]
   const rows = facts.filter((row): row is [string, ReactNode] => row !== undefined)
-  if (rows.length === 0) return <EmptyState icon={<ActivityIcon aria-hidden="true" />} title="No track record yet" description="The x402 directory hasn't recorded paid calls for this listing." titleAs="p" />
+  if (rows.length === 0) return <EmptyState title="No track record yet" description="The x402 directory hasn't recorded paid calls for this listing." titleAs="p" />
   return <>
     <dl className={styles.facts}>{rows.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
     <p className={styles.muted}>Reported by the x402 directory.</p>

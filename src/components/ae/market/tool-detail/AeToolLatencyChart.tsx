@@ -1,5 +1,4 @@
 import { lazy, Suspense } from 'react'
-import { TimerIcon } from 'lucide-react'
 
 import { EmptyState } from '@/components/arc/empty-state/empty-state'
 import { BRAND_NAME } from '@/content/brand-copy'
@@ -34,7 +33,7 @@ export function AeToolLatencyChart({
       </div>
 
       {chartData.length === 0 ? (
-        <EmptyState icon={<TimerIcon aria-hidden="true" />} titleAs="p" title="Waiting for timed calls" description={`The chart appears after ${BRAND_NAME} records the first completed call.`} />
+        <EmptyState titleAs="p" title="Waiting for timed calls" description={`The chart appears after ${BRAND_NAME} records the first completed call.`} />
       ) : (
         <Suspense fallback={<AeToolLatencyChartSkeleton />}>
           <AeToolLatencyChartPlot

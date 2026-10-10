@@ -9,7 +9,7 @@ export const PROVIDER_SETUP_STEPS = [
   },
   {
     title: 'Review and publish',
-    detail: 'Review the terms and authorise the listing. The Tool becomes callable when admission and readiness checks pass. If something is missing, setup shows what needs attention.',
+    detail: 'Review the terms and authorise the Tool. The Tool becomes callable when admission and readiness checks pass. If something is missing, setup shows what needs attention.',
   },
 ] as const
 

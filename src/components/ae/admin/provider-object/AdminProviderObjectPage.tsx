@@ -67,12 +67,6 @@ export function AdminProviderObjectPage(props: AdminProviderObjectPageProps) {
       description=""
       contentOwnsHeading
       currentPath={`/admin/providers/${view.slug}`}
-      breadcrumbs={[
-        { label: PROVIDER_OBJECT_COPY.breadcrumbs.admin, href: '/admin' },
-        { label: PROVIDER_OBJECT_COPY.breadcrumbs.providers, href: '/admin/providers' },
-        { label: view.slug },
-      ]}
-      stickyHeader
     >
       <PageHeader
         title={`${PROVIDER_OBJECT_COPY.title} ${view.slug}`}

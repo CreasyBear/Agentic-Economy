@@ -161,7 +161,7 @@ const REFUSAL_SUMMARIES: Readonly<Record<string, string>> = {
   setup_required: getStatusPresentation('setup_required').label,
   temporarily_unavailable: 'Temporarily unavailable',
   readiness_expired: 'Readiness expired',
-  publisher_withdrew: 'Publisher withdrew the listing',
+  publisher_withdrew: 'Provider withdrew the Tool',
   under_review: 'Under review',
   updated_terms_require_review: 'Updated terms require review',
   not_supported_by_ae: 'Not supported',

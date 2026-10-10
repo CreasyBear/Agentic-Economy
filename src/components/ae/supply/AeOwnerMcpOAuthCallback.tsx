@@ -21,11 +21,6 @@ export function AeOwnerMcpOAuthCallback({ result }: AeOwnerMcpOAuthCallbackProps
       title={OWNER_MCP_OAUTH_CALLBACK_COPY.pageTitle}
       description={OWNER_MCP_OAUTH_CALLBACK_COPY.pageDescription}
       currentPath="/owner/operations/new"
-      breadcrumbs={[
-        { label: 'Tools', href: '/owner/operations' },
-        { label: 'Add Tool', href: '/owner/operations/new' },
-        { label: OWNER_MCP_OAUTH_CALLBACK_COPY.pageTitle },
-      ]}
     >
       <AeSettingsStack>
         {result.environment === undefined ? null : (

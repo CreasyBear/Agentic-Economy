@@ -312,7 +312,7 @@ describe('/tools/$toolRef', () => {
     const decision = screen.getByRole('region', { name: 'Operational' })
     fireEvent.click(within(decision).getByRole('button', { name: 'Copy request for Agent' }))
     await waitFor(() => expect(within(decision).getByRole('status').textContent).toBe('Copy request for Agent: Could not copy'))
-    expect(within(decision).getAllByText('US$1.25').length).toBeGreaterThan(0)
+    expect(within(decision).getAllByText('1.25 USD').length).toBeGreaterThan(0)
     expect(within(decision).getByRole('button', { name: 'Copy request for Agent' })).toBeTruthy()
     expect(screen.getByRole('link', { name: /Open full Tool details/ })).toBeTruthy()
   })
@@ -352,7 +352,7 @@ describe('/tools/$toolRef', () => {
     const compactDecision = compactView.getByRole('region', { name: 'Operational' })
     expect(within(compactDecision).getByRole('button', { name: 'Copy request for Agent' })).toBeTruthy()
     expect(compactView.queryByRole('region', { name: 'What you can do next' })).toBeNull()
-    for (const fact of ['US$1.25', 'API key connection', 'Ready now', 'Per accepted extraction']) {
+    for (const fact of ['1.25 USD', 'API key connection', 'Ready now', 'Per accepted extraction']) {
       expect(compactView.getAllByText(fact).length).toBeGreaterThan(0)
     }
 
@@ -380,7 +380,7 @@ describe('/tools/$toolRef', () => {
     expect(fullView.getByRole('region', { name: '30-day track record' })).toBeTruthy()
     expect(fullView.getByText(/Performance history is unavailable/)).toBeTruthy()
     expect(fullView.getByRole('button', { name: 'Copy Continue with your Agent' })).toBeTruthy()
-    for (const fact of ['US$1.25', 'API key connection', 'Ready now']) {
+    for (const fact of ['1.25 USD', 'API key connection', 'Ready now']) {
       expect(fullView.getAllByText(fact).length).toBeGreaterThan(0)
     }
     const contractTab = fullView.getByRole('tab', { name: 'Contract' })
@@ -471,9 +471,9 @@ describe('/tools/$toolRef', () => {
     renderWithRouter({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool, verifiedBusinessSlug: tool.business.slug })
     expect(screen.getByRole('heading', { level: 1, name: 'Invoice line-item extraction' })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Ledger Labs' }).getAttribute('href')).toBe('/ledger-labs')
-    expect(screen.getAllByText('US$1.25 per call').length).toBeGreaterThan(0)
+    expect(document.body.textContent).toContain('1.25 USD per call')
     expect(screen.getByText('No sample output yet')).toBeTruthy()
-    expect(screen.getByText('Readiness unknown')).toBeTruthy()
+    expect(screen.getByText('Unavailable')).toBeTruthy()
     // The card and the phone bar share one action; a stale Tool offers alternatives, never a Quote.
     const start = screen.getAllByRole('link', { name: 'See similar tools' })
     expect(new Set(start.map(link => link.getAttribute('href'))).size).toBe(1)
@@ -540,15 +540,15 @@ describe('/tools/$toolRef', () => {
     expect(projectToolObject(listing, undefined, 2_000, rate).price?.label).toBe('A$0.000002 per Call')
     expect(projectToolObject(listing, undefined, 2_000, rate).price?.source).toContain('directory reported')
     expect(projectToolObject(listing, undefined, rate.fetchedAt + REFERENCE_RATE_MAX_AGE_MS, rate).price?.label)
-      .toBe('US$0.000001 per Call')
-    expect(projectToolObject(listing, undefined, 2_000).price?.label).toBe('US$0.000001 per Call')
+      .toBe('0.000001 USDC per Call')
+    expect(projectToolObject(listing, undefined, 2_000).price?.label).toBe('0.000001 USDC per Call')
   })
 
   it('uses a fresh admitted AUD indication ahead of non-AUD source price without rounding the source record', () => {
     const source = projectAdmittedListing(tool)
     const displayed = { kind: 'indicative' as const, amount: { currency: 'AUD', units: '1239000', exponent: 6 }, rateObservedAt: 1_000, validUntil: 300_000 }
     expect(projectToolObject(source, undefined, 2_000, undefined, displayed).price?.label).toBe('A$1.24 per Call')
-    expect(projectToolObject(source, undefined, 300_001, undefined, displayed).price?.label).toBe('US$1.25 per Call')
+    expect(projectToolObject(source, undefined, 300_001, undefined, displayed).price?.label).toBe('1.25 USD per Call')
     expect(source.facts.price.kind === 'present' && source.facts.price.value.kind === 'fixed' ? source.facts.price.value.amount : undefined).toBe('1.25')
   })
 
@@ -574,8 +574,8 @@ describe('/tools/$toolRef', () => {
       dataUse: tool.dataUse.map(effect => ({ ...effect, recipient: 'named_recipient' as const })),
     }
     renderWithRouter({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool: unnamedRecipient })
-    expect(screen.getByText('Input recipient not named')).toBeTruthy()
-    expect(screen.queryByText('Ready to call')).toBeNull()
+    expect(screen.getByText('Needs attention')).toBeTruthy()
+    expect(screen.queryByText('Ready now')).toBeNull()
     expect(screen.getAllByText('The provider hasn’t said who receives your input, so aecon won’t run it.').length).toBeGreaterThan(0)
     expect(screen.queryByRole('link', { name: /Run this call/ })).toBeNull()
     expect(screen.queryByRole('tab', { name: 'Try it' })).toBeNull()
@@ -593,8 +593,8 @@ describe('/tools/$toolRef', () => {
     authState.isSignedIn = true
     renderWithRouter({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool: callableTool })
     expect(screen.getByRole('heading', { level: 1 }).textContent).not.toContain('operation:v1:')
-    expect(screen.getByText('Tool ref').parentElement?.querySelector('code')?.textContent).toBe(tool.toolRef)
-    expect(screen.getByRole('button', { name: 'Copy tool ref' })).toBeTruthy()
+    expect(screen.getByText('Tool ID').parentElement?.querySelector('code')?.textContent).toBe(tool.toolRef)
+    expect(screen.getByRole('button', { name: 'Copy tool id' })).toBeTruthy()
     expect(screen.getAllByRole('link', { name: 'Run this call' })[0]?.getAttribute('href')).toContain('/t/new?q=')
   })
 
@@ -707,7 +707,7 @@ describe('/tools/$providerHost/$slug', () => {
     fireEvent.click(schemaTab)
     const panel = screen.getByRole('tabpanel', { name: 'Schema' })
     expect(within(panel).getByRole('tree', { name: 'Input schema' }).textContent).toContain('documentUrl')
-    expect(within(panel).getByText('Endpoint')).toBeTruthy()
+    expect(within(panel).getByText('Request')).toBeTruthy()
     expect(within(panel).getByText('https://example.test/x402/invoices')).toBeTruthy()
     // The published input example is part of this listing; a preview page must still show it.
     expect(screen.getByRole('tree', { name: 'Sample input' }).textContent).toContain('https://docs.example/invoice.pdf')
@@ -783,7 +783,7 @@ describe('/tools/$providerHost/$slug', () => {
         choice: { access: 'ae_callable', toolRef: registryRef },
       },
     }} providerHost="example.test" slug="invoices" referenceRate={referenceRate} /></RouterContextProvider>)
-    expect(screen.getByText('Ready to call')).toBeTruthy()
+    expect(screen.getByText('Ready now')).toBeTruthy()
     expect(screen.queryByRole('link', { name: 'See similar tools' })).toBeNull()
 
     cleanup()

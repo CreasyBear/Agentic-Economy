@@ -30,7 +30,7 @@ it('carries the decision facts a listing page can show without a Call', () => {
   expect(toDirectoryToolPageModel({
     ...entry,
     prices: [{ network: 'eip155:8453', networkLabel: 'Base', scheme: 'exact', amount: '0.002000 USDC', decimalAmount: '0.002000', symbol: 'USDC' }],
-  })).toMatchObject({ priceLabel: 'US$0.002', priceContext: 'Provider lists 0.002 USDC per Call' })
+  })).toMatchObject({ priceLabel: '0.002 USDC', priceContext: 'Provider lists 0.002 USDC per Call' })
   expect(toDirectoryToolPageModel({
     ...entry,
     prices: [{ network: 'eip155:8453', networkLabel: 'Base', scheme: 'exact', amount: '5680.941049 USDC', decimalAmount: '5680.941049', symbol: 'USDC' }],
@@ -84,12 +84,12 @@ it('groups a Provider and shows buyer prices for each indexed endpoint', () => {
   const surface = toDirectoryServiceSurface(search, [search, contents], false)
   expect(surface.title).toBe('Exa')
   expect(surface.networks).toBe('Base, Solana')
-  expect(surface.priceRange).toBe('US$0.001 · US$0.007')
+  expect(surface.priceRange).toBe('0.001 USDC · 0.007 USDC')
   expect(surface.endpointCount).toBe('2 endpoints')
   expect(surface.endpoints.map(endpoint => endpoint.path)).toEqual(['/search', '/contents'])
   expect(surface.endpoints[0]?.current).toBe(true)
   expect(surface.endpoints[0]?.activity).toBe('5,900 calls · 87 buyers in 30 days')
-  expect(surface.endpoints.map(endpoint => endpoint.price)).toEqual(['US$0.001', 'US$0.007'])
+  expect(surface.endpoints.map(endpoint => endpoint.price)).toEqual(['0.001 USDC', '0.007 USDC'])
   expect(toDirectoryServiceSurface(search, [], true).endpointCount).toBe('1+ endpoints')
 })
 
@@ -104,7 +104,7 @@ it('shows the listed denomination as source detail, not the buyer price', () => 
     ...entry,
     prices: [{ network: 'eip155:8453', scheme: 'exact', amount: '0.02 USDC', decimalAmount: '0.020000', symbol: 'USDC' }],
   })
-  expect(model.priceLabel).toBe('US$0.02')
+  expect(model.priceLabel).toBe('0.02 USDC')
   expect(model.priceContext).toBe('Provider lists 0.02 USDC per Call')
 })
 
@@ -113,7 +113,7 @@ it('keeps a sub-cent published source exact while refusing to invent an AUD rate
     ...entry,
     prices: [{ network: 'eip155:8453', scheme: 'exact', amount: '0.0000001 USDC', decimalAmount: '0.0000001', symbol: 'USDC' }],
   })
-  expect(model.priceLabel).toBe('US$0.0000001')
+  expect(model.priceLabel).toBe('0.0000001 USDC')
   expect(model.priceContext).toBe('Provider lists 0.0000001 USDC per Call')
 })
 
@@ -122,7 +122,7 @@ it('labels an upto maximum as up to in USD and AUD', () => {
     ...entry,
     prices: [{ network: 'eip155:8453', scheme: 'upto', amount: '0.02 USDC', decimalAmount: '0.02', symbol: 'USDC' }],
   }
-  expect(toDirectoryToolCardModel(capped).priceLabel).toBe('up to US$0.02')
+  expect(toDirectoryToolCardModel(capped).priceLabel).toBe('up to 0.02 USDC')
   expect(toDirectoryToolCardModel({ ...capped, audEstimate: 'A$0.03' }).priceLabel).toBe('up to A$0.03')
 })
 
@@ -230,7 +230,7 @@ it('reads a Provider from its busiest Tool and leaves a quiet host blank', () =>
     key: 'blockrun.ai', label: 'blockrun.ai', count: 48,
     leadCalls: 334244, leadPayers: 183, leadPrice: '0.002', leadTitle: 'AI chat completions', leadSlug: 'api-v1-chat-completions',
   })).toMatchObject({
-    callsLabel: '334,244', payersLabel: '183', priceLabel: 'US$0.002', priceSourceLabel: 'Provider lists 0.002 USDC per Call', toolLabel: '48',
+    callsLabel: '334,244', payersLabel: '183', priceLabel: '0.002 USDC', priceSourceLabel: 'Provider lists 0.002 USDC per Call', toolLabel: '48',
     leadTitle: 'AI chat completions', leadSlug: 'api-v1-chat-completions',
   })
   const quiet = toDirectoryProviderRow({ key: 'quiet.example', label: 'quiet.example', count: 1, leadCalls: -1, leadTitle: 'Ghost' })

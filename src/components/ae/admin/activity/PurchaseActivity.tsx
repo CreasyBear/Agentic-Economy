@@ -1,12 +1,12 @@
 import { ErrorBoundary } from '@sentry/react'
 import { usePaginatedQuery, useQuery } from 'convex/react'
 import { useEffect, useState } from 'react'
-import { ArrowUpRightIcon, RefreshCwIcon, ShoppingBagIcon } from 'lucide-react'
+import { ArrowUpRightIcon, RefreshCwIcon } from 'lucide-react'
 
 import { api } from '../../../../../convex/_generated/api'
 import { AeAlert as Alert } from '@/components/ae/shared/alert/AeAlert'
 import { AeSection } from '@/components/ae/layout/AeSection'
-import { Badge } from '@/components/arc/badge/badge'
+import { Badge, type BadgeTone } from '@/components/arc/badge/badge'
 import { AeEmptyState } from '@/components/ae/shared/empty-state/AeEmptyState'
 import { AeSortableDataTable } from '@/components/ae/shared/sortable-data-table/AeSortableDataTable'
 import type { AeDataColumn } from '@/components/ae/shared/sortable-data-table/sortable-data-table.contracts'
@@ -16,12 +16,12 @@ import { adminActivityHref, adminActivityWindow, type AdminActivitySearch, type 
 import { RecordTime } from '@/components/ae/operator/RecordTime'
 import { formatCurrencyAmount } from '@/modules/money/public'
 
-const STATUS_LABELS: Record<AdminPurchaseRow['state'], string> = {
-  completed: 'Delivered',
-  pending: 'Pending',
-  refused: 'Refused',
-  reconciliation_required: 'Needs reconciliation',
-  cancelled: 'Cancelled',
+const STATUS_BADGES: Record<AdminPurchaseRow['state'], { label: string; tone: BadgeTone }> = {
+  completed: { label: 'Delivered', tone: 'success' },
+  pending: { label: 'Billing pending', tone: 'info' },
+  refused: { label: 'Refused', tone: 'neutral' },
+  reconciliation_required: { label: 'Needs reconciliation', tone: 'warning' },
+  cancelled: { label: 'Cancelled', tone: 'neutral' },
 }
 
 type PurchaseActivityProps = Readonly<{ search: AdminActivitySearch; compact?: boolean }>
@@ -92,7 +92,6 @@ function PurchaseActivityQuery({ search, compact = false }: PurchaseActivityProp
       {activity.results.length === 0 ? (
         <div className="ae-arc rounded-lg border border-border bg-card">
           <AeEmptyState
-            icon={<ShoppingBagIcon size={24} />}
             title={exhausted ? 'No matching purchases' : 'No matches in the records scanned'}
             description={exhausted
               ? 'No purchases match this period and these filters. Choose another period or clear a filter.'
@@ -134,9 +133,7 @@ const PURCHASE_COLUMNS: AeDataColumn<PurchaseTableRow>[] = [
     key: 'state', label: 'Status',
     render: (_value, row) => (
       <div>
-        <Badge tone={row.state === 'reconciliation_required' ? 'warning' : row.state === 'completed' ? 'success' : 'neutral'}>
-          {STATUS_LABELS[row.state]}
-        </Badge>
+        <Badge tone={STATUS_BADGES[row.state].tone}>{STATUS_BADGES[row.state].label}</Badge>
         {row.recovery === null ? null : (
           <p className="mt-1 max-w-56 text-xs text-muted-foreground">
             {row.recovery.disposition === 'manual_review'

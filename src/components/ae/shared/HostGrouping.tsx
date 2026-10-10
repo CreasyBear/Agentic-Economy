@@ -16,7 +16,7 @@ export function HostGrouping({ hostname, listings, verifiedProvider }: HostGroup
       <header className="arc-host-identity">
         <div className="arc-provider-title">
           <h1 id="host-grouping-heading">{hostname.value}</h1>
-          <p>Directory Host grouping, not an accountable Business identity.</p>
+          <p>Grouped by host name, not by a verified Provider.</p>
         </div>
         <div className="arc-provider-source">
           <details><summary>Technical source reference</summary><p>{hostname.sourceRef}</p></details>

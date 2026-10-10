@@ -32,12 +32,12 @@ export function TeamInviteDialog({ invitation, actionRef, onObserve, disabled = 
           {invitation.emailError ? <p id={`${id}-email-error`} className="text-sm text-destructive">{invitation.emailError}</p> : null}
         </Field>
         <Field>
-          <FieldLabel htmlFor={`${id}-role`}>Workspace role</FieldLabel>
+          <FieldLabel htmlFor={`${id}-role`}>Account role</FieldLabel>
           <select id={`${id}-role`} className="min-h-11 w-full rounded-sm border bg-background px-3 text-sm" value={invitation.role} disabled={invitation.pending || disabled}
             aria-describedby={`${id}-role-help`} onChange={event => invitation.setRole(event.target.value === 'admin' ? 'admin' : 'member')}>
             <option value="member">Member</option><option value="admin">Admin</option>
           </select>
-          <FieldDescription id={`${id}-role-help`}>Admins manage workspace settings. Members can use the workspace.</FieldDescription>
+          <FieldDescription id={`${id}-role-help`}>Admins manage account settings. Members can use the account.</FieldDescription>
         </Field>
         {invitation.message ? <p role="status" className="text-sm">{invitation.message}</p> : null}
         {invitation.error ? <p role="alert" className="text-sm text-destructive">{invitation.error}</p> : null}

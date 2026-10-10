@@ -183,15 +183,15 @@ export function AeToolTechnicalContract({
   return (
     <div className="grid gap-6">
       <dl className="grid gap-3 sm:grid-cols-2">
-        <Fact label="Tool reference">
-          <AeCopyReference label="Tool reference" value={tool.toolRef} />
+        <Fact label="Tool ID">
+          <AeCopyReference label="Tool ID" value={tool.toolRef} />
         </Fact>
-        <Fact label="Tool ID" value={tool.toolId} />
+        <Fact label="Provider tool ID" value={tool.toolId} />
         <Fact
-          label="Capability"
+          label="Tool"
           value={`${tool.contract.capabilityId} · version ${tool.contract.version}`}
         />
-        <Fact label="Publisher" value={toolLabel(tool.provenance.publisher)} />
+        <Fact label="Provider" value={toolLabel(tool.provenance.publisher)} />
         <Fact label="Source kind" value={toolLabel(tool.provenance.sourceKind)} />
         <Fact
           label="Transport"

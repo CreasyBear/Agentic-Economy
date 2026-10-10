@@ -1,4 +1,4 @@
-import { activityReturnHref, activityReturnSearch, buyerReturnDestination, type ActivityReturnScope } from '@/lib/call-recovery/activity-return-scope'
+import { activityReturnSearch, buyerReturnDestination, type ActivityReturnScope } from '@/lib/call-recovery/activity-return-scope'
 import { Link } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
 
@@ -28,7 +28,6 @@ export function CallReceiptWorkspace({
       title={title}
       description={description}
       currentPath={`/calls/${encodeURIComponent(callRef)}`}
-      breadcrumbs={[{ label: 'Calls', href: activityReturnHref(returnScope) }, { label: 'Call receipt' }]}
       actions={(
         <div className="arc-market arc-call-actions">
           {returnDestination === undefined ? null : <a href={returnDestination.href} className={actionLinkClassName('secondary', 'md')}>{returnDestination.label}</a>}

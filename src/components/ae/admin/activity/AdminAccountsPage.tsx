@@ -1,18 +1,16 @@
 import { ErrorBoundary } from '@sentry/react'
 import { usePaginatedQuery, useQuery } from 'convex/react'
 import { useEffect, useState } from 'react'
-import { SearchIcon } from 'lucide-react'
 
 import { api } from '../../../../../convex/_generated/api'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeAlert as Alert } from '@/components/ae/shared/alert/AeAlert'
-import { Badge } from '@/components/arc/badge/badge'
+import { AeStatusBadge } from '@/components/ae/status/AeStatusBadge'
 import { AeEmptyState } from '@/components/ae/shared/empty-state/AeEmptyState'
 import { SearchField } from '@/components/arc/search-field/search-field'
 import { AeSortableDataTable as SortableDataTable } from '@/components/ae/shared/sortable-data-table/AeSortableDataTable'
 import { Button } from '@/components/arc/button/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { enumLabel } from '@/lib/ui/enum-label'
 import { RecordTime } from '@/components/ae/operator/RecordTime'
 import { AdminSearchNotice } from '../AdminSearchNotice'
 import { AdminTrialAccess } from '../actions/AdminTrialAccess'
@@ -25,8 +23,6 @@ export function AdminAccountsPage({ search, rejected, onSearchChange }: AccountS
       operatorRole="admin" title="Accounts"
       description="Find an Account, follow its purchases and inspect its access and funding."
       currentPath="/admin/accounts"
-      breadcrumbs={[{ label: 'Admin', href: '/admin' }, { label: 'Accounts' }]}
-      stickyHeader
     >
       <AdminSearchNotice rejected={rejected} />
       <ErrorBoundary fallback={
@@ -76,7 +72,6 @@ function AccountsList({ search, onSearchChange }: AccountSearchProps) {
       ) : result.results.length === 0 ? (
         <div className="ae-arc rounded-lg border border-border bg-card">
           <AeEmptyState
-            icon={<SearchIcon size={24} />}
             title="No Accounts found"
             description={search.length > 0 ? 'Try another name or clear the search.' : 'Accounts will appear here when they are created.'}
             action={search.length > 0 ? <Button variant="secondary" onClick={() => onSearchChange('')}>Clear Account search</Button> : undefined}
@@ -102,7 +97,7 @@ function AccountsList({ search, onSearchChange }: AccountSearchProps) {
                   </div>
                 ) },
                 { key: 'lifecycle', label: 'Status', render: (_value, account) => (
-                  <Badge tone={account.lifecycle === 'suspended' ? 'warning' : 'neutral'}>{enumLabel(account.lifecycle)}</Badge>
+                  <AeStatusBadge status={account.lifecycle} density="cell" />
                 ) },
                 { key: 'createdAt', label: 'Created', numeric: false, render: (_value, account) => (
                   <RecordTime at={account.createdAt} />

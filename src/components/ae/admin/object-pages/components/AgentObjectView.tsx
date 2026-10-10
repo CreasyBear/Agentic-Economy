@@ -24,12 +24,6 @@ export function AgentObjectView({ view }: AgentObjectViewProps) {
       title={copy.title}
       description=""
       contentOwnsHeading
-      breadcrumbs={[
-        { label: ADMIN_OBJECT_PAGE_COPY.adminBreadcrumb, href: '/admin' },
-        { label: copy.section, href: '/admin/search?kind=agent' },
-        { label: view.ref },
-      ]}
-      stickyHeader
     >
       <PageHeader
         title={copy.title}

@@ -44,7 +44,7 @@ export function AeSupplyLanding() {
     <section className="ae-provider-market" aria-labelledby="provider-market-heading">
       <header className="ae-provider-section-heading">
         <h2 id="provider-market-heading">See what <br />buyers can inspect</h2>
-        <div><p>Browse Tool descriptions, listed prices and access requirements before creating your own listing.</p>
+        <div><p>Browse Tool descriptions, listed prices and access requirements before creating your own Tool.</p>
           <Link to="/market" search={{ view: 'tools' }} preload={false} className="ae-provider-text-link">Browse the directory<ArrowUpRight size={20} aria-hidden="true" /></Link>
         </div>
       </header>

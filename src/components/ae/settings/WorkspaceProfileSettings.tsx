@@ -63,7 +63,7 @@ export function WorkspaceProfileSettings({ identity, status, defaultName }: Work
         {workspace === undefined ? <div role="status" aria-busy="true" aria-label="Loading workspace name" className="h-10 w-64 max-w-full"><div aria-hidden="true"><ArcSkeleton lines={1} /></div></div>
           : <WorkspaceNameEditor key={workspace.accountRef} accountRef={workspace.accountRef}
               name={workspace.clerkOrgId === null && workspace.displayName.startsWith('user_')
-                ? defaultName ?? 'Your workspace' : workspace.displayName}
+                ? defaultName ?? 'Your account' : workspace.displayName}
               canonicalName={workspace.displayName} accountRevision={workspace.accountRevision}
               clerkOrgId={workspace.clerkOrgId} canEdit={workspace.callerIsOwner} />}
       </SettingsRow>

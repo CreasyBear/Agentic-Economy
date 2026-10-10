@@ -1,9 +1,9 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { FileJsonIcon } from 'lucide-react'
 
+import { AeStatusBadge } from '@/components/ae/status/AeStatusBadge'
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
 import { Avatar } from '@/components/arc/avatar/avatar'
-import { Badge, type BadgeTone } from '@/components/arc/badge/badge'
+import type { AeStatus } from '@/lib/ui/status-presentation'
 import { Card } from '@/components/arc/card/card'
 import { CopyButton } from '@/components/arc/copy-button/copy-button'
 import { EmptyState } from '@/components/arc/empty-state/empty-state'
@@ -27,7 +27,7 @@ export type ToolPageModel = Readonly<{
   price?: string
   /** The source price behind an estimated price, as a secondary line on the price card. */
   priceNote?: string
-  readiness: Readonly<{ label: string; tone: BadgeTone }>
+  readiness: AeStatus
   /** Real usage for the title meta row, Airbnb's rating slot. Omitted when there is none. */
   activity?: string
   /** Copyable tool ref, OpenRouter model-id style. Only callable tools have one. */
@@ -107,7 +107,7 @@ function ToolPageBody({ model, search, onSearchChange }: ToolPageProps) {
         <h1 className={styles.title} title={title}>{title}</h1>
         {summary === undefined || summary === '' ? null : <p className={styles.summary}>{summary}</p>}
         <div className={styles.meta}>
-          <Badge tone={readiness.tone}>{readiness.label}</Badge>
+          <AeStatusBadge status={readiness} density="cell" />
           {model.activity === undefined ? null : <span className={styles.activity}>{model.activity}</span>}
           {reference === undefined ? null : <span className={styles.ref}><span>{reference.label}</span><code title={reference.value}>{reference.value}</code><CopyButton value={reference.value} label={`Copy ${reference.label.toLowerCase()}`} iconOnly variant="plain" /></span>}
         </div>
@@ -127,7 +127,7 @@ function ToolPageBody({ model, search, onSearchChange }: ToolPageProps) {
             <TabsContent value="schema">
               <div className={styles.panel}>
                 {model.endpoint === undefined ? null : <section className={styles.stack}>
-                  <div className={styles.sectionHead}><h2>Endpoint</h2></div>
+                  <div className={styles.sectionHead}><h2>Request</h2></div>
                   <span className={styles.endpoint}><code title={model.endpoint}>{model.method === undefined ? null : <span className={styles.method}>{model.method} </span>}{model.endpoint}</code><CopyButton value={model.endpoint} label="Copy endpoint" iconOnly variant="plain" /></span>
                 </section>}
                 <SchemaSection title="Input" data={inputSchema} empty="The provider hasn't published an input schema." />
@@ -138,7 +138,7 @@ function ToolPageBody({ model, search, onSearchChange }: ToolPageProps) {
               <div className={styles.panel}>
                 {sampleInput === undefined ? null : <><div className={styles.sectionHead}><h2>Sample input</h2></div><JsonViewer data={sampleInput} rootName="input" label="Sample input" defaultExpandDepth={2} maxHeight={360} /></>}
                 {sampleOutput === undefined
-                  ? <EmptyState icon={<FileJsonIcon aria-hidden="true" />} title="No sample output yet" description="The provider hasn't published a sample response." titleAs="p" />
+                  ? <EmptyState title="No sample output yet" description="The provider hasn't published a sample response." titleAs="p" />
                   : <><div className={styles.sectionHead}><h2>Sample response</h2></div><JsonViewer data={sampleOutput} rootName="response" label="Sample response" defaultExpandDepth={2} maxHeight={560} /></>}
               </div>
             </TabsContent>

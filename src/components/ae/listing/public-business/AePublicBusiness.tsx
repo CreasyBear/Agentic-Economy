@@ -59,7 +59,7 @@ export function ProviderListingError() {
     <AePageState
       tone="danger"
       title="This provider didn’t load"
-      description="Try again, or return to the catalogue."
+      description="This provider’s listings could not be read."
       action={
         <div className="arc-provider-actions">
           <a href={pathname} className={cn(actionLinkClassName('primary', 'md'), 'min-h-touch')}>Try again</a>

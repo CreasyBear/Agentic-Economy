@@ -118,15 +118,6 @@ export function chatAnonymousCountLine(count: number, limitReached: boolean): st
   return `${count} / 12 browser messages${limitReached ? ' — limit reached; start a new chat to continue.' : ''}`
 }
 
-export const chatToolStatus = {
-  working: 'Working',
-  pending: 'Pending',
-  complete: 'Complete',
-  attention: 'Needs attention',
-  refused: 'Refused',
-  error: "Couldn't run",
-} as const
-
 export const chatBrowseMarket = 'Browse Market'
 
 export const chatBelowMatch = 'Below a match'

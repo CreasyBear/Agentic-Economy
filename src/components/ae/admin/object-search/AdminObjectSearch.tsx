@@ -20,7 +20,6 @@ export function AdminObjectSearch({ initialKind, initialRef, rejected }: AdminOb
       title={ADMIN_OBJECT_SEARCH_COPY.title}
       description={ADMIN_OBJECT_SEARCH_COPY.description}
       currentPath="/admin/search"
-      stickyHeader
       secondaryBar={(
         <AeOperatorBreadcrumbs items={[
           { label: ADMIN_OBJECT_SEARCH_COPY.adminBreadcrumb, href: '/admin' },

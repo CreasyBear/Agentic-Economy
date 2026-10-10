@@ -1,4 +1,5 @@
 import {
+  formatCurrencyAmount,
   formatExactAmount,
   formatDisplayAmount,
   formatDisplayPrice,
@@ -201,32 +202,26 @@ export function capabilityFromPrice(
 const marketFallbackCategory: MarketCategory = {
   id: "other",
   label: "Other",
-  description: "Other callable capabilities.",
+  description: "Other callable tools.",
 };
 
-function formatUsdAmount(amount: ExactAmount): string | undefined {
-  if (amount.currency !== "USD" && amount.currency !== "USDC") return undefined;
-  const formatted = formatExactAmount(amount);
-  if (formatted === undefined) return undefined;
-  const normalized = formatted.includes(".") ? formatted.replace(/0+$/u, "").replace(/\.$/u, "") : formatted;
-  return `US$${normalized}`;
-}
+const isUsdAmount = (amount: ExactAmount): boolean =>
+  amount.currency === "USD" || amount.currency === "USDC";
 
 export function formatToolPrice(price: PublicToolPrice): string {
   if (price.kind === "on_request") return "";
   if (price.kind === "fixed") {
     return price.amount.currency === "AUD"
       ? exactIsZero(price.amount) ? "Free" : formatDisplayAmount(price.amount)
-      : formatUsdAmount(price.amount) ?? "";
+      : isUsdAmount(price.amount) ? formatCurrencyAmount(price.amount) : "";
   }
   if (price.minimum.currency !== price.maximum.currency) return "";
   if (price.minimum.currency === "AUD") {
     return exactIsZero(price.minimum) && exactIsZero(price.maximum)
       ? "Free" : `${formatDisplayAmount(price.minimum)}–${formatDisplayAmount(price.maximum)}`;
   }
-  const minimum = formatUsdAmount(price.minimum);
-  const maximum = formatUsdAmount(price.maximum);
-  return minimum === undefined || maximum === undefined ? "" : `${minimum}–${maximum}`;
+  if (!isUsdAmount(price.minimum)) return "";
+  return `${formatCurrencyAmount(price.minimum)}–${formatCurrencyAmount(price.maximum)}`;
 }
 
 export function formatToolReadiness(
@@ -256,11 +251,10 @@ export function toolPrice(tool: PublicToolDescriptor, now = Date.now()): string 
     const amount = tool.commercial.priceBreakdown.totalBuyerAuthorization;
     return amount.currency === "AUD"
       ? exactIsZero(amount) ? "Free" : formatDisplayAmount(amount)
-      : formatUsdAmount(amount) ?? "";
+      : isUsdAmount(amount) ? formatCurrencyAmount(amount) : "";
   }
   if (displayPrice?.kind === "indicative") {
-    const sourcePrice = formatUsdAmount(displayPrice.amount);
-    if (sourcePrice !== undefined) return sourcePrice;
+    if (isUsdAmount(displayPrice.amount)) return formatCurrencyAmount(displayPrice.amount);
   }
   return formatToolPrice(tool.commercial.price);
 }
@@ -294,7 +288,7 @@ export function compareToolPrices(left: ToolCardViewModel, right: ToolCardViewMo
 }
 
 function toolCallLabel(readiness: ToolReadiness): string {
-  if (readiness === "Routeable") return "Use capability";
+  if (readiness === "Routeable") return "Use tool";
   if (readiness === "SetupRequired") return "Setup required";
   return "Not available";
 }

@@ -245,7 +245,7 @@ describe('operator command panel', () => {
 
     const fixture = detailFixture()
     // Exact USD source price remains visible without an AUD conversion.
-    expect(await screen.findByText('US$0.25')).toBeTruthy()
+    expect(await screen.findByText('0.25 USD')).toBeTruthy()
     expect(document.activeElement).toBe(screen.getByRole('region', { name: 'Tool details' }))
     expect(screen.getByText(formatToolAuthentication(fixture.authentication))).toBeTruthy()
     expect(screen.getByText(formatToolReadiness(fixture.availability.posture))).toBeTruthy()
