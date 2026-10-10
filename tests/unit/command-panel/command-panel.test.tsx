@@ -94,7 +94,7 @@ describe('operator command panel', () => {
   it('opens as a centered modal with cmd+k or ctrl+k and closes again with truthful aria-expanded', async () => {
     renderPanel()
 
-    const trigger = screen.getByRole('button', { name: 'Find Tools' })
+    const trigger = screen.getByRole('button', { name: 'Find tools' })
     expect(trigger.getAttribute('aria-expanded')).toBe('false')
 
     fireEvent.keyDown(window, { key: 'k', metaKey: true })
@@ -151,7 +151,7 @@ describe('operator command panel', () => {
   it('lets the dialog primitive dismiss an outside press and restore its trigger', async () => {
     renderPanel()
 
-    const trigger = screen.getByRole('button', { name: 'Find Tools' })
+    const trigger = screen.getByRole('button', { name: 'Find tools' })
     fireEvent.click(trigger)
     expect(await screen.findByRole('dialog', { name: 'Command console' })).toBeTruthy()
 
@@ -281,7 +281,7 @@ describe('operator command panel', () => {
       expect(screen.queryByRole('dialog')).toBeNull()
     })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Find Tools' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Find tools' }))
     const reopenedInput = await screen.findByRole<HTMLInputElement>('combobox', {
       name: 'Search Tools',
     })
@@ -673,7 +673,7 @@ describe('operator command panel', () => {
     })
 
     renderPanel({ readDetail })
-    const trigger = screen.getByRole('button', { name: 'Find Tools' })
+    const trigger = screen.getByRole('button', { name: 'Find tools' })
     fireEvent.keyDown(window, { key: 'k', metaKey: true })
     const input = await screen.findByRole('combobox', { name: 'Search Tools' })
     fireEvent.change(input, { target: { value: 'weather' } })

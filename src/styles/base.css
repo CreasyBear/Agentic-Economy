@@ -108,7 +108,7 @@ body {
   padding: 0 1.25rem;
   position: relative;
   text-decoration: none;
-  text-transform: uppercase;
+  text-transform: none;
   transition: scale var(--motion-duration-fast) var(--motion-ease-standard);
   white-space: nowrap;
 }

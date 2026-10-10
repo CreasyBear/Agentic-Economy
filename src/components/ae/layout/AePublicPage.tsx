@@ -1,7 +1,7 @@
 import { type ReactNode } from 'react'
 
 import { AePageHeader } from '@/components/ae/layout/AePageHeader'
-import { AeSiteFooter } from '@/components/ae/website/AeSiteFooter'
+import { AePublicSiteFooter } from '@/components/ae/site/AePublicSiteFooter'
 
 type AePublicPageHeader = {
   eyebrow?: string
@@ -14,11 +14,9 @@ type AePublicPageHeader = {
 
 type AePublicEditorialPageProps = {
   kind?: 'editorial'
-  /** Working surfaces may supply their own compact help/legal navigation. */
+  /** Sign-in and sign-up stay minimal; every other public page carries the one site footer. */
   footer?: 'site' | 'none'
   children: ReactNode
-  /** When true, omit the footer closer panel. Default off. */
-  hideFooterCloser?: boolean
 }
 
 type AePublicRecordPageProps = AePublicPageHeader & {
@@ -73,14 +71,12 @@ export function AePublicPage(
     return props.children
   })()
 
-  const hideFooterCloser = 'hideFooterCloser' in props && props.hideFooterCloser === true
-
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <main id="main-content" data-shell-mode="page" tabIndex={-1} className="flex-1">
         {composition}
       </main>
-      {'footer' in props && props.footer === 'none' ? null : <AeSiteFooter hideCloser={hideFooterCloser} />}
+      {'footer' in props && props.footer === 'none' ? null : <AePublicSiteFooter />}
     </div>
   )
 }

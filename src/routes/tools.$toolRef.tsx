@@ -1,7 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { useCallback } from 'react'
 
-import { AePageSkeleton } from '@/components/ae/layout/AePageState'
 import { PublicToolDetail } from '@/components/ae/market/public-tool-detail/PublicToolDetail'
+import { ToolPageSkeleton } from '@/components/ae/market/public-tool-detail/ToolPageSkeleton'
+import { validateToolPageSearch, type ToolPageSearch } from '@/components/ae/market/public-tool-detail/tool-page-search'
+import { BRAND_NAME } from '@/content/brand-copy'
+import { degrade } from '@/lib/observability/degrade'
+import { readCanonicalBaseUrlServer } from '@/lib/server/canonical-url.functions'
 import { isPublicToolRef } from '@/modules/capability-supply/public'
 import { toolDisplayTitle } from '@/modules/market/tool-view-model'
 import {
@@ -12,14 +17,20 @@ import {
 export { PublicToolDetail } from '@/components/ae/market/public-tool-detail/PublicToolDetail'
 
 export const Route = createFileRoute('/tools/$toolRef')({
+  validateSearch: validateToolPageSearch,
   loader: async ({ params }) => {
     if (!isPublicToolRef(params.toolRef)) {
-      return { result: { kind: 'invalid_ref' as const, toolRef: params.toolRef }, evidence: undefined }
+      return { result: { kind: 'invalid_ref' as const, toolRef: params.toolRef }, evidence: undefined, baseUrl: undefined }
     }
-    const result = await readPublicToolDetailRouteServer({ data: { toolRef: params.toolRef } })
-      .catch((): PublicToolDetailRouteResult => ({ kind: 'source_unavailable', toolRef: params.toolRef }))
+    const [result, baseUrl] = await Promise.all([
+      readPublicToolDetailRouteServer({ data: { toolRef: params.toolRef } })
+        .catch((): PublicToolDetailRouteResult => ({ kind: 'source_unavailable', toolRef: params.toolRef })),
+      // Only the connect block needs the site URL; a missing one hides that block, never the Tool.
+      readCanonicalBaseUrlServer()
+        .catch(cause => degrade(cause, undefined, { site: 'toolCanonicalUrl', reason: 'source_unavailable' })),
+    ])
     const evidence = result.kind === 'found' ? result.evidence : undefined
-    return { result, evidence }
+    return { result, evidence, baseUrl }
   },
   // Public browsing shares Market's short freshness window; Quote/Call authority is fetched separately.
   staleTime: 30_000,
@@ -27,30 +38,29 @@ export const Route = createFileRoute('/tools/$toolRef')({
   head: ({ loaderData }) => {
     if (loaderData?.result.kind !== 'found') {
       return { meta: [
-        { title: 'Tool unavailable | Agentic Economy' },
+        { title: `Tool unavailable | ${BRAND_NAME}` },
         { name: 'robots', content: 'noindex' },
       ] }
     }
     return { meta: [
-      { title: `${toolDisplayTitle(loaderData.result.tool)} | Agentic Economy` },
+      { title: `${toolDisplayTitle(loaderData.result.tool)} | ${BRAND_NAME}` },
       { name: 'description', content: loaderData.result.tool.summary },
     ] }
   },
-  pendingComponent: ToolDetailPending,
+  pendingComponent: ToolPageSkeleton,
   errorComponent: ToolDetailError,
   component: ToolDetailRoute,
 })
 
 function ToolDetailRoute() {
   const data = Route.useLoaderData()
-  return <PublicToolDetail result={data.result} />
-}
-
-function ToolDetailPending() {
-  return <AePageSkeleton title="Loading this Tool…" description="Loading this Tool…" shape="detail" />
+  const search = Route.useSearch()
+  const navigate = Route.useNavigate()
+  const onSearchChange = useCallback((next: ToolPageSearch) => { void navigate({ search: next, replace: true, resetScroll: false }) }, [navigate])
+  return <PublicToolDetail result={data.result} baseUrl={data.baseUrl} search={search} onSearchChange={onSearchChange} />
 }
 
 function ToolDetailError() {
   const { toolRef } = Route.useParams()
-  return <PublicToolDetail result={{ kind: 'source_unavailable', toolRef }} />
+  return <PublicToolDetail result={{ kind: 'source_unavailable', toolRef }} baseUrl={undefined} />
 }

@@ -107,7 +107,7 @@ describe('AeToolEconomics', () => {
       },
     })
     const view = render(<AeToolDecision tool={tool} model={toToolInspectorModel(tool)} />)
-    expect(view.getByText('A$0.02 per Call')).toBeTruthy()
+    expect(view.getByText('A$0.012 per Call')).toBeTruthy()
     expect(view.queryByText('US$0.01 per Call')).toBeNull()
   })
 
@@ -124,7 +124,7 @@ describe('AeToolEconomics', () => {
     })
     const view = render(<AeToolDecision tool={tool} model={toToolInspectorModel(tool)} />)
     expect(view.getByText('US$0.01 per Call')).toBeTruthy()
-    expect(view.queryByText('A$0.02 per Call')).toBeNull()
+    expect(view.queryByText('A$0.012 per Call')).toBeNull()
   })
 
   it('keeps AeToolDecision at 0% Call fee without a loading-fee row', () => {

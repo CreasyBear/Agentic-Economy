@@ -13,9 +13,10 @@ const subscribeNever = () => () => {}
 
 // Public doors come from PUBLIC_NAVIGATION; Market is deliberately omitted
 // because signed-in /market is an app destination. The remainder are the
-// legal, help and platform-information routes named by the shell contract.
+// audience, legal, help and platform-information routes named by the shell contract.
 const PUBLIC_MARKETING_PATHS: Record<string, true> = Object.fromEntries([
   ...PUBLIC_NAVIGATION.filter(({ id }) => id !== 'market').map(({ to }) => [to, true] as const),
+  ['/for-agents', true],
   ['/about', true],
   ['/terms', true],
   ['/privacy', true],

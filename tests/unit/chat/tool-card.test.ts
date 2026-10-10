@@ -150,7 +150,7 @@ describe('search result state', () => {
       type: toolType, state: 'output-available', output: { kind: 'match', results: [item], recommendation },
     })
     expect(matched).toMatchObject({ kind: 'choices', state: 'complete', count: 1, recommendation,
-      choices: [{ title: 'Lookup A', price: 'A$0.01', priceValidUntil: 2_000_000_000_000 }] })
+      choices: [{ title: 'Lookup A', price: 'A$0.000001', priceValidUntil: 2_000_000_000_000 }] })
     if (matched === null) throw new Error('missing_projected_card')
     const stored = serializeToolCard(matched)
     expect(projectToolCard(stored)).toEqual(matched)
@@ -243,11 +243,11 @@ describe('search result state', () => {
           rateObservedAt: 1_900_000_000_000, validUntil: 2_000_000_000_000 } } }] }
     const output = projectToolSearchChoices(result, undefined, { verdict: 'matched', nearMisses: [] })
     expect(output.results[0]?.price).toEqual({
-      kind: 'indicative', label: 'A$0.01', validUntil: 2_000_000_000_000,
+      kind: 'indicative', label: 'A$0.000001', validUntil: 2_000_000_000_000,
     })
     const card = projectToolCard({ type: `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']}`,
       state: 'output-available', output })
-    expect(card).toMatchObject({ kind: 'choices', choices: [{ price: 'A$0.01', priceValidUntil: 2_000_000_000_000 }] })
+    expect(card).toMatchObject({ kind: 'choices', choices: [{ price: 'A$0.000001', priceValidUntil: 2_000_000_000_000 }] })
   })
   it('keeps canonical readiness and maps health-status fallback to enums', () => {
     const toolType = `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.list']}`
