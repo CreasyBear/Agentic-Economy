@@ -43,7 +43,6 @@ export type AppShellState = Readonly<{
   handleCommandOpenChange: (open: boolean) => void
   shortcutsOpen: boolean
   setShortcutsOpen: (open: boolean) => void
-  elevated: boolean
   hydrated: boolean
 }>
 
@@ -56,7 +55,6 @@ export function useAppShellState(): AppShellState {
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [commandOpen, setCommandOpen] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
-  const [elevated, setElevated] = useState(false)
 
   useEffect(() => {
     emitFunnelEventOnce({ eventType: 'visitor_attributed', stage: 'visitor', correlationPrefix: 'visitor' })
@@ -81,14 +79,6 @@ export function useAppShellState(): AppShellState {
     window.addEventListener('hashchange', focusTarget)
     focusTarget()
     return () => window.removeEventListener('hashchange', focusTarget)
-  }, [])
-
-  useEffect(() => {
-    const sentinel = document.getElementById('ae-app-shell-sentinel')
-    if (typeof IntersectionObserver === 'undefined' || sentinel === null) return
-    const observer = new IntersectionObserver(([entry]) => setElevated(entry?.isIntersecting === false))
-    observer.observe(sentinel)
-    return () => observer.disconnect()
   }, [])
 
   useEffect(() => {
@@ -121,7 +111,6 @@ export function useAppShellState(): AppShellState {
     },
     shortcutsOpen,
     setShortcutsOpen,
-    elevated,
     hydrated: useSyncExternalStore(subscribeNever, () => true, () => false),
   }
 }

@@ -89,8 +89,6 @@ body {
 [data-ae-site-button] {
   --ae-button-fill: var(--foreground);
   --ae-button-stroke: transparent;
-  --ae-button-hover-fill: color-mix(in oklch, var(--foreground) 88%, var(--background));
-  --ae-button-hover-opacity: 1;
   --ae-button-label: var(--background);
   --ae-button-label-hover: var(--background);
   align-items: center;
@@ -113,6 +111,13 @@ body {
   white-space: nowrap;
 }
 
+@media (hover: hover) and (pointer: fine) {
+  [data-ae-site-button] {
+    --ae-button-hover-fill: color-mix(in oklch, var(--foreground) 88%, var(--background));
+    --ae-button-hover-opacity: 1;
+  }
+}
+
 [data-ae-site-button]:active {
   scale: 0.96;
 }
@@ -120,10 +125,15 @@ body {
 [data-ae-site-button][data-variant="outlined"] {
   --ae-button-fill: transparent;
   --ae-button-stroke: var(--foreground);
-  --ae-button-hover-fill: var(--foreground);
-  --ae-button-hover-opacity: 0.05;
   --ae-button-label: var(--foreground);
   --ae-button-label-hover: var(--foreground);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  [data-ae-site-button][data-variant="outlined"] {
+    --ae-button-hover-fill: var(--foreground);
+    --ae-button-hover-opacity: 0.05;
+  }
 }
 
 [data-ae-scheme="ink"] [data-ae-site-button][data-variant="filled"] {
@@ -141,7 +151,8 @@ body {
 }
 
 [data-ae-site-button]:focus-visible {
-  outline: none;
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
   box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
 }
 
@@ -192,8 +203,14 @@ body {
   width: 100%;
 }
 
-[data-ae-site-button]:is(:hover, :focus-visible) .ae-site-button-hover > span {
+[data-ae-site-button]:focus-visible .ae-site-button-hover > span {
   transform: translateX(0);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  [data-ae-site-button]:hover .ae-site-button-hover > span {
+    transform: translateX(0);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

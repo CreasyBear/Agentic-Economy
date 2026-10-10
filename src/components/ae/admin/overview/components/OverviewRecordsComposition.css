@@ -52,6 +52,10 @@
   .arc-market .arc-overview-record-row:hover {
     background: var(--surface-muted);
   }
+
+  .arc-market .arc-overview-record-link:hover {
+    text-decoration: underline;
+  }
 }
 
 .arc-market .arc-overview-record-copy {
@@ -71,10 +75,6 @@
   overflow-wrap: anywhere;
   text-decoration: none;
   text-underline-offset: 4px;
-}
-
-.arc-market .arc-overview-record-link:hover {
-  text-decoration: underline;
 }
 
 .arc-market .arc-overview-record-detail {

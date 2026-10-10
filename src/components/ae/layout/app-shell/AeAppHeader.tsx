@@ -25,7 +25,6 @@ export type AeAppHeaderProps = Readonly<{
   minimal: boolean
   mobileNavOpen: boolean
   setMobileNavOpen: (open: boolean) => void
-  elevated: boolean
   hydrated: boolean
   chatFrame: boolean
 }>
@@ -55,7 +54,6 @@ export function AeAppHeader({
   minimal,
   mobileNavOpen,
   setMobileNavOpen,
-  elevated,
   hydrated,
   chatFrame,
 }: AeAppHeaderProps) {
@@ -87,7 +85,6 @@ export function AeAppHeader({
         </div>
       ) : signedIn ? (
         <div
-          data-elevated={elevated ? '' : undefined}
           className={cn('ae-nav arc-app-header__bar arc-app-header__bar--signed-in px-1 sm:px-2 shadow-none', chatFrame && 'max-sm:!h-11 max-sm:!min-h-11 max-sm:!px-4')}
         >
           <div className={chatFrame && workspaceReady ? 'hidden sm:block' : ''}><BrandLink /></div>

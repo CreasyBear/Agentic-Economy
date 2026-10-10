@@ -55,7 +55,7 @@ export function AePageHeader({
         descriptionId={descriptionId}
         {...(focusTitle ? { titleTabIndex: -1 as const } : {})}
         {...(eyebrow === undefined ? {} : { context: eyebrow })}
-        {...(meta === undefined ? {} : { metadata: <p role="status" aria-live="polite">{meta}</p> })}
+        {...(meta === undefined ? {} : { metadata: <p role="status" aria-live="polite" data-numeric>{meta}</p> })}
         {...(actions === undefined ? {} : { actions })}
       />
     </section>

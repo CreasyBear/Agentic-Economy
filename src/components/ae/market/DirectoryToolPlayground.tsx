@@ -95,7 +95,7 @@ export function DirectoryToolPlayground({ run, input, sampleOutputJson, inputNot
   const callable = run.kind === 'callable'
   const showForm = mode === 'form' && formAvailable && schema !== undefined && value !== undefined
 
-  const jsonEditor = <Textarea label="Request JSON" value={text} onChange={event => setText(event.target.value)} spellCheck={false} maxLength={131_072} rows={10} className="font-mono" {...(errors.length > 0 ? { error: errors[0] } : {})} />
+  const jsonEditor = <Textarea label="Request JSON" value={text} onChange={event => setText(event.target.value)} spellCheck={false} maxLength={131_072} rows={10} className="font-mono" {...(errors.length > 0 && text !== startText ? { error: errors[0] } : {})} />
 
   return <div className={styles.panel}>
     <section className={styles.stack} aria-labelledby={`${id}-input`}>
