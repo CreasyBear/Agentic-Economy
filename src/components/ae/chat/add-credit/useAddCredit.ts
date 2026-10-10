@@ -2,6 +2,7 @@ import { saveFundingReturnScope } from '@/lib/call-recovery/funding-return-scope
 import { useChatBuyerReturnScope } from '../chat-session/buyer-return-context'
 import { useAuth } from '@clerk/tanstack-react-start'
 import { useServerFn } from '@tanstack/react-start'
+import { useQuery } from 'convex/react'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
@@ -19,12 +20,14 @@ import type {
 } from '@/modules/money/server'
 import { randomId, persistFundingAttempt, readStoredFundingAttempt, persistRecovery, readStoredRecovery, clearStoredRecovery } from '@/components/ae/console/credit-top-up-storage'
 import { topUpErrorCopy } from '@/components/ae/console/credit-top-up-format'
+import { api } from '../../../../../convex/_generated/api'
 import type { AddCreditAmount, AddCreditPaymentStatus } from './add-credit.contracts'
 
 type AvailableBalance = Extract<AccountFundingBalance, { kind: 'available' }>
 type OwnedResult<T> = Readonly<{ userId: string; value: T }>
 
-const POLL_INTERVAL_MS = 3_000
+// Fallback only: the webhook-driven command state triggers checks; this covers return-path fulfillment when no webhook arrives.
+const POLL_INTERVAL_MS = 30_000
 const POLL_LIMIT_MS = 10 * 60 * 1_000
 const AMOUNT_UNITS = 10n ** BigInt(AUD_EXPONENT)
 function fundingProblemCopy(result: MoneyRefusal | AccountFundingOutcomeUnknownResult): string {
@@ -44,7 +47,7 @@ function fundingProblemCopy(result: MoneyRefusal | AccountFundingOutcomeUnknownR
  */
 export function useAddCredit(open: boolean, onFunded: () => void) {
   const returnScope = useChatBuyerReturnScope()
-  const { userId } = useAuth()
+  const { userId, orgId } = useAuth()
   const beginAccountFunding = useServerFn(beginAccountFundingServer)
   const readAccountFundingBalance = useServerFn(readAccountFundingBalanceServer)
   const readAccountFunding = useServerFn(readAccountFundingServer)
@@ -62,6 +65,13 @@ export function useAddCredit(open: boolean, onFunded: () => void) {
   const waitingForCredit = paymentStatus !== 'idle'
   const [problem, setProblem] = useState<string | null>(null)
   const pendingAttemptRef = useRef<Readonly<{ accountRef?: string; idempotencyKey: string; commandRef?: string }> | null>(null)
+  const [watched, setWatched] = useState<Readonly<{ commandRef: string; idempotencyKey: string }> | null>(null)
+  const convexConfigured = Boolean(import.meta.env.VITE_CONVEX_URL?.trim())
+  // Constant per build, so hook order is stable; no provider exists without a Convex URL.
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const funding = convexConfigured ? useQuery(api.moneyAccountFunding.read,
+    paymentStatus === 'checking' && watched !== null ? watched : 'skip') : undefined
+  const commandState = funding?.kind === 'accepted' ? funding.command.state : undefined
   const onFundedRef = useRef(onFunded)
   const idempotencyKeyRef = useRef<string | undefined>(undefined)
   const previousUserIdRef = useRef<string | null | undefined>(undefined)
@@ -87,6 +97,8 @@ export function useAddCredit(open: boolean, onFunded: () => void) {
       ...(recovery !== undefined && 'commandRef' in recovery && recovery.idempotencyKey === savedKey
         ? { commandRef: recovery.commandRef } : {}),
     }
+    const savedCommandRef = pendingAttemptRef.current?.commandRef
+    setWatched(savedKey !== undefined && savedCommandRef !== undefined ? { commandRef: savedCommandRef, idempotencyKey: savedKey } : null)
     setConstraintsState(null)
     pollDeadlineRef.current = null
     setPaymentStatus(savedKey === undefined ? 'idle' : 'paused')
@@ -145,7 +157,7 @@ export function useAddCredit(open: boolean, onFunded: () => void) {
     return () => {
       active = false
     }
-  }, [open, readAccountFundingBalance, readAccountFundingConstraints, userId])
+  }, [open, orgId, readAccountFundingBalance, readAccountFundingConstraints, userId])
 
   useEffect(() => {
     if (!open || paymentStatus !== 'checking' || userId === null || userId === undefined) return
@@ -193,6 +205,7 @@ export function useAddCredit(open: boolean, onFunded: () => void) {
         if (attempt.accountRef === undefined || attempt.commandRef === undefined) {
           attempt = { ...attempt, accountRef: current.accountRef, commandRef }
           pendingAttemptRef.current = attempt
+          setWatched({ commandRef, idempotencyKey: attempt.idempotencyKey })
         }
         persistRecovery(userId, { commandRef, idempotencyKey: attempt.idempotencyKey })
         if (payment.evidence.status === 'failed') {
@@ -239,6 +252,7 @@ export function useAddCredit(open: boolean, onFunded: () => void) {
       }
     }
 
+    void pollBalance()
     const pollTimer = setInterval(() => { void pollBalance() }, POLL_INTERVAL_MS)
     const limitTimer = setTimeout(() => {
       if (!active) return
@@ -254,7 +268,7 @@ export function useAddCredit(open: boolean, onFunded: () => void) {
       clearInterval(pollTimer)
       clearTimeout(limitTimer)
     }
-  }, [open, paymentStatus, readAccountFunding, readAccountFundingBalance, userId])
+  }, [open, paymentStatus, commandState, readAccountFunding, readAccountFundingBalance, userId])
 
   const checkPayment = useCallback(() => {
     if (!open || paymentStatus !== 'paused' || pendingAttemptRef.current === null
@@ -267,7 +281,7 @@ export function useAddCredit(open: boolean, onFunded: () => void) {
   const begin = useCallback(async () => {
     if (!open || userId === null || userId === undefined || currentUserIdRef.current !== userId
       || readStoredFundingAttempt(userId) !== undefined || pendingAttemptRef.current !== null
-      || constraints?.kind !== 'available' || beginInFlightRef.current || busy || waitingForCredit) return
+      || balance === null || constraints?.kind !== 'available' || beginInFlightRef.current || busy || waitingForCredit) return
     setProblem(null)
     // Reserve a tab in the click handler before the asynchronous funding request.
     const checkoutWindow = window.open('about:blank', '_blank')
@@ -280,45 +294,14 @@ export function useAddCredit(open: boolean, onFunded: () => void) {
     setBusy(true)
     let fundingStartSubmitted = false
     try {
-      const [currentBalance, freshConstraints] = await Promise.all([
-        readAccountFundingBalance(),
-        readAccountFundingConstraints(),
-      ])
-      if (currentUserIdRef.current !== userId) {
-        checkoutWindow.close()
-        return
-      }
-      setConstraintsState({ userId, value: freshConstraints,
-        accountRef: currentBalance.kind === 'available' ? currentBalance.accountRef : null })
-      if (currentBalance.kind !== 'available') {
-        checkoutWindow.close()
-        setProblem(fundingProblemCopy(currentBalance))
-        setBusy(false)
-        return
-      }
-      if (balance === null || currentBalance.accountRef !== balance.accountRef) {
-        checkoutWindow.close()
-        setConstraintsState(null)
-        setProblem('Your account changed. Close and reopen Add credit before starting a payment.')
-        setBusy(false)
-        return
-      }
-      if (freshConstraints.kind !== 'available') {
-        checkoutWindow.close()
-        setProblem(fundingProblemCopy(freshConstraints))
-        setBusy(false)
-        return
-      }
-      setBalanceState({ userId, value: currentBalance })
-
       const units = BigInt(selected) * AMOUNT_UNITS
       const policy = {
-        minimumPrincipalUnits: BigInt(freshConstraints.minimumPrincipalUnits),
-        maximumPrincipalUnits: BigInt(freshConstraints.maximumPrincipalUnits),
-        incrementUnits: BigInt(freshConstraints.incrementUnits),
-        serviceFeeBps: freshConstraints.serviceFeeBps,
-        taxOnServiceFeeBps: freshConstraints.taxOnServiceFeeBps,
-        legalCustomerMaximumAccessibleUnits: BigInt(freshConstraints.legalCustomerMaximumAccessibleUnits),
+        minimumPrincipalUnits: BigInt(constraints.minimumPrincipalUnits),
+        maximumPrincipalUnits: BigInt(constraints.maximumPrincipalUnits),
+        incrementUnits: BigInt(constraints.incrementUnits),
+        serviceFeeBps: constraints.serviceFeeBps,
+        taxOnServiceFeeBps: constraints.taxOnServiceFeeBps,
+        legalCustomerMaximumAccessibleUnits: BigInt(constraints.legalCustomerMaximumAccessibleUnits),
       }
       if (quoteAudAccountFunding(units, policy) === undefined) {
         checkoutWindow.close()
@@ -330,12 +313,12 @@ export function useAddCredit(open: boolean, onFunded: () => void) {
       const idempotencyKey = idempotencyKeyRef.current ?? `account-funding:${randomId()}`
       idempotencyKeyRef.current = idempotencyKey
       if (userId !== null && userId !== undefined) persistFundingAttempt(userId, idempotencyKey)
-      pendingAttemptRef.current = { accountRef: currentBalance.accountRef, idempotencyKey }
+      pendingAttemptRef.current = { accountRef: balance.accountRef, idempotencyKey }
       fundingStartSubmitted = true
       const result = await beginAccountFunding({
         data: {
           amount: { currency: 'AUD', units: units.toString(), exponent: AUD_EXPONENT },
-          expectedPolicyDigest: freshConstraints.policyDigest,
+          expectedPolicyDigest: constraints.policyDigest,
           idempotencyKey,
         },
       })
@@ -344,7 +327,8 @@ export function useAddCredit(open: boolean, onFunded: () => void) {
         checkoutWindow.close()
         return
       }
-      if (result.kind !== 'refused') pendingAttemptRef.current = { accountRef: currentBalance.accountRef, idempotencyKey, commandRef: result.commandRef }
+      if (result.kind !== 'refused') setWatched({ commandRef: result.commandRef, idempotencyKey })
+      if (result.kind !== 'refused') pendingAttemptRef.current = { accountRef: balance.accountRef, idempotencyKey, commandRef: result.commandRef }
       if (result.kind === 'outcome_unknown') {
         checkoutWindow.close()
         setProblem(fundingProblemCopy(result))
@@ -390,13 +374,13 @@ export function useAddCredit(open: boolean, onFunded: () => void) {
       setConstraintsState(null)
       setProblem(fundingStartSubmitted
         ? 'We could not confirm whether checkout started. Keep this chat open while we check the original payment and balance.'
-        : 'We could not confirm your balance and funding limits. Try again in a moment.')
+        : 'We could not start checkout. Try again in a moment.')
       if (fundingStartSubmitted) setPaymentStatus('checking')
       setBusy(false)
     } finally {
       beginInFlightRef.current = false
     }
-  }, [returnScope, balance, beginAccountFunding, busy, constraints, open, readAccountFundingBalance, readAccountFundingConstraints, selected, userId, waitingForCredit])
+  }, [returnScope, balance, beginAccountFunding, busy, constraints, open, selected, userId, waitingForCredit])
 
   return { selected, setSelected, begin, busy, problem, balance, constraints, paymentStatus, checkPayment }
 }

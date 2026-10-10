@@ -17,7 +17,9 @@ import { Button as ArcButton } from '@/components/arc/button/button'
 import { Drawer, DrawerContent } from '@/components/ae/shared/base-ui/drawer/drawer'
 import { Skeleton } from '@/components/arc/skeleton/skeleton'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
+import { RecordTime } from '@/components/ae/operator/RecordTime'
 import { formatTimestamp } from '@/lib/ui/format-time'
+import { Badge } from '@/components/arc/badge/badge'
 import type {
   AccountHistoryEntry,
   AccountHistoryResult,
@@ -180,6 +182,13 @@ function AvailableAccountHistoryView({
       cell: ({ row }) => <span className="font-medium text-foreground" title={accountHistoryLabel(row.original.kind)}>{accountHistoryLabel(row.original.kind)}</span>,
     },
     {
+      id: 'status',
+      accessorFn: (entry) => entry.reverted ? 'Reverted' : 'Booked',
+      header: ({ column }) => <AeOperatorSortableHeader label="Status" column={column} />,
+      meta: { label: 'Status' },
+      cell: ({ row }) => <Badge tone={row.original.reverted ? 'neutral' : 'success'} size="sm">{row.original.reverted ? 'Reverted' : 'Booked'}</Badge>,
+    },
+    {
       id: 'accountEffect',
       accessorFn: (entry) => BigInt(entry.accountEffect.units),
       header: ({ column }) => <AeOperatorSortableHeader label="Balance effect" column={column} />,
@@ -201,22 +210,13 @@ function AvailableAccountHistoryView({
       id: 'recorded',
       accessorFn: (entry) => entry.recordedAt ?? entry.occurredAt,
       header: ({ column }) => <AeOperatorSortableHeader label="Recorded" column={column} />,
-      meta: { label: 'Recorded', numeric: false, truncate: true },
+      meta: { label: 'Recorded' },
       cell: ({ row }) => (
         <div className="grid gap-0.5">
-          <time className="arc-credit-history-time font-mono text-xs tabular-nums text-muted-foreground" title={formatTimestamp(row.original.recordedAt ?? row.original.occurredAt)}>
-            {formatTimestamp(row.original.recordedAt ?? row.original.occurredAt)}
-          </time>
+          <RecordTime at={row.original.recordedAt ?? row.original.occurredAt} />
           {row.original.recordedAt === null ? <span className="text-xs text-muted-foreground">Occurred time</span> : null}
         </div>
       ),
-    },
-    {
-      id: 'status',
-      accessorFn: (entry) => entry.reverted ? 'Reverted' : 'Booked',
-      header: ({ column }) => <AeOperatorSortableHeader label="Status" column={column} />,
-      meta: { label: 'Status', truncate: true },
-      cell: ({ row }) => row.original.reverted ? 'Reverted' : 'Booked',
     },
   ], [])
 

@@ -286,16 +286,10 @@ export function authorityIsHistorical(status: AuthorityPresence): boolean {
   return status === 'expired' || status === 'disconnected' || status === 'revoked'
 }
 
-export function currentAuthorityLabel(status: AuthorityPresence, mode: AgentDetail['authorityMode']): string {
+function currentAuthorityLabel(status: AuthorityPresence, mode: AgentDetail['authorityMode']): string {
   if (status === 'expired') return 'Expired'
   if (status === 'disconnected' || status === 'revoked') return 'Disconnected'
   return scopeLabel(mode)
-}
-
-export function authorityCellText(item: Readonly<{ status: AuthorityPresence; authorityMode: AgentDetail['authorityMode'] }>): string {
-  const current = currentAuthorityLabel(item.status, item.authorityMode)
-  if (!authorityIsHistorical(item.status)) return current
-  return `${current} Previous authority: ${scopeLabel(item.authorityMode)}`
 }
 
 export function authorityFacts(

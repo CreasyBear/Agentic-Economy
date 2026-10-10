@@ -620,7 +620,7 @@ describe('owner credit target', () => {
     expect(screen.getByRole('heading', { name: 'Reconciliation' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Inspect reconciliation case reconciliation:one' }))
     const reconciliationDetails = await screen.findByRole('dialog', { name: 'Reconciliation case' })
-    expect(within(reconciliationDetails).getByText('projection checksum mismatch')).toBeTruthy()
+    expect(within(reconciliationDetails).getByText('Projection checksum mismatch')).toBeTruthy()
     expect(within(reconciliationDetails).getByText('reconciliation:one')).toBeTruthy()
     fireEvent.keyDown(reconciliationDetails, { key: 'Escape' })
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())

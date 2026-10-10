@@ -53,7 +53,7 @@ describe('AeAgentDirectoryTable (W-25)', () => {
       />,
     )
 
-    expect(screen.getByRole('columnheader', { name: /Charges \/ UTC month limit/i })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: /Charges this month/i })).toBeInTheDocument()
     expect(screen.getByText('A$12.50 / A$100.00')).toBeInTheDocument()
   })
 
@@ -208,7 +208,7 @@ describe('AeAgentDirectoryTable (W-25)', () => {
     let rows = table.getAllByRole('row').slice(1)
     expect(rows[0]?.textContent).toContain('Larger')
     expect(rows[1]?.textContent).toContain('Smaller')
-    fireEvent.click(screen.getByRole('button', { name: /Charges \/ UTC month limit/u }))
+    fireEvent.click(screen.getByRole('button', { name: /Charges this month/u }))
     rows = table.getAllByRole('row').slice(1)
     expect(rows[0]?.textContent).toContain('Smaller')
     expect(rows[1]?.textContent).toContain('Larger')
@@ -260,11 +260,10 @@ describe('AeAgentDirectoryTable (W-25)', () => {
     expect(within(row).getAllByRole('cell').map((cell) => cell.getAttribute('data-label'))).toEqual([
       'Agent',
       'Connection',
-      'Authority',
-      'Calls this UTC month',
-      'Charges / UTC month limit',
-      'Last used',
       'Status',
+      'Calls this month',
+      'Charges this month',
+      'Last used',
       'View',
     ])
     expect(row.querySelector('[data-column="monthlyCalls"]')).toHaveAttribute('data-numeric')

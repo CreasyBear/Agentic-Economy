@@ -3,6 +3,7 @@
 import { useAuth } from '@clerk/tanstack-react-start'
 import { useRouter } from '@tanstack/react-router'
 import { WorkspacePresentationVisibility } from '@/lib/client/workspace-presentation'
+import { rememberOperatorContext } from '@/lib/operator/operator-context-memory'
 import { type ReactNode, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
@@ -43,6 +44,9 @@ export function WorkspaceTransitionBoundary({ children, renderHeader }: { childr
     setFailed(false)
     const settle = async () => {
       // Retire previous-scope observations and speculative reads before navigation.
+      // Forgetting the remembered admission makes the reloaded beforeLoad ask the
+      // server, which redirects an ended or replaced Clerk session to sign-in.
+      rememberOperatorContext(undefined)
       router.clearCache()
       const path = router.state.location.pathname
       // Auth pages stay available when Clerk changes identity during sign-in.

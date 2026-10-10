@@ -13,13 +13,13 @@ import {
   documentFacts,
   documentKindLabel,
   documentStatusLabel,
-  documentTimeFact,
   formatCreditAmount,
 } from '@/components/ae/console/owner-credit-format'
 import { SearchField } from '@/components/arc/search-field/search-field'
 import { Button as ArcButton } from '@/components/arc/button/button'
 import { Drawer, DrawerContent, DrawerTrigger } from '@/components/ae/shared/base-ui/drawer/drawer'
-import { timestampIso } from '@/lib/ui/format-time'
+import { RecordTime } from '@/components/ae/operator/RecordTime'
+import { Badge } from '@/components/arc/badge/badge'
 import type { MoneyDocumentView } from '@/lib/server/money-documents.functions'
 import type {
   DocumentAction,
@@ -292,6 +292,12 @@ export function CreditAccountingPanel({
       },
     },
     {
+      id: 'status',
+      accessorFn: (document) => documentStatusLabel(document.state),
+      header: ({ column }) => <AeOperatorSortableHeader label="Status" column={column} />,
+      cell: ({ row }) => <Badge tone={row.original.state === 'issued' ? 'success' : row.original.state === 'failed' ? 'danger' : row.original.state === 'awaiting_signature' ? 'warning' : 'neutral'} size="sm">{documentStatusLabel(row.original.state)}</Badge>,
+    },
+    {
       id: 'amount',
       accessorFn: (document) => BigInt(document.amountUnits),
       sortFn: (left, right, columnId) => {
@@ -311,16 +317,7 @@ export function CreditAccountingPanel({
       id: 'recorded',
       accessorFn: (document) => document.createdAt,
       header: ({ column }) => <AeOperatorSortableHeader label="Recorded" column={column} />,
-      cell: ({ row }) => {
-        const time = documentTimeFact(row.original)
-        return <time className="arc-credit-document-time" dateTime={timestampIso(row.original.createdAt)}>{time.value}</time>
-      },
-    },
-    {
-      id: 'status',
-      accessorFn: (document) => documentStatusLabel(document.state),
-      header: ({ column }) => <AeOperatorSortableHeader label="Status" column={column} />,
-      cell: ({ row }) => documentStatusLabel(row.original.state),
+      cell: ({ row }) => <RecordTime at={row.original.createdAt} />,
     },
     {
       id: 'actions',

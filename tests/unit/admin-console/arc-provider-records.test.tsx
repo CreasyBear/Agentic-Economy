@@ -7,7 +7,7 @@ import { ProviderToolVersionsTable } from '@/components/ae/admin/provider-object
 import { ProviderConnectionsTable } from '@/components/ae/admin/provider-object/components/ProviderConnectionsTable'
 import { ProviderAdmissionCasesTable } from '@/components/ae/admin/provider-object/components/ProviderAdmissionCasesTable'
 import { ProviderRemovalDisputesTable } from '@/components/ae/admin/provider-object/components/ProviderRemovalDisputesTable'
-import { providerTimestamp } from '@/components/ae/admin/provider-object/provider-object.view-model'
+import { formatTimestamp } from '@/lib/ui/format-time'
 
 afterEach(cleanup)
 
@@ -48,7 +48,7 @@ describe('Arc Provider record tables', () => {
     const admission = screen.getByRole('table', { name: 'Admission cases' })
     const time = admission.querySelector('time')
     expect(time?.getAttribute('datetime')).toBe(new Date(timestamp).toISOString())
-    expect(time?.textContent).toBe(providerTimestamp(timestamp).label)
+    expect(time?.getAttribute('title')).toBe(formatTimestamp(timestamp))
     expect(within(admission).queryByRole('button', { name: /sort/i })).toBeNull()
   })
 
@@ -78,6 +78,6 @@ describe('Arc Provider record tables', () => {
     for (const message of ['No Tool versions for this Provider.', 'No Provider connections.', 'No admission cases.', 'No removal disputes.']) {
       expect(screen.getByText(message)).toBeTruthy()
     }
-    expect(screen.queryByRole('button')).toBeNull()
+    expect(screen.queryAllByRole('button').filter(button => button.getAttribute('aria-haspopup') !== 'menu')).toEqual([])
   })
 })

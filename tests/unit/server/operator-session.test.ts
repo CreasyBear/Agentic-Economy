@@ -1,3 +1,6 @@
+/**
+ * @vitest-environment jsdom
+ */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { isRedirect } from '@tanstack/react-router'
 import { OperatorSurfaceForbiddenError, type OperatorContext } from '@/lib/operator/operator-context'
@@ -12,6 +15,7 @@ vi.mock('@/lib/server/operator-context.functions', () => ({
 }))
 
 import { requireOperatorBeforeLoad } from '@/lib/server/require-operator-session'
+import { rememberOperatorContext } from '@/lib/operator/operator-context-memory'
 
 const owner: OperatorContext = {
   kind: 'authorized', userId: 'user_owner', principalRef: 'prn_owner',
@@ -20,8 +24,14 @@ const owner: OperatorContext = {
 const destination = '/owner/settings/connections?tab=credentials#provider-x402-resource-url'
 const enter = () => requireOperatorBeforeLoad({ location: { href: destination } })
 
+const signedIn = (userId: string, sessionId = 'sess_owner') => {
+  Object.assign(window, { Clerk: { user: { id: userId }, session: { id: sessionId }, organization: null } })
+}
+
 beforeEach(() => {
   vi.resetAllMocks()
+  signedIn(owner.userId)
+  rememberOperatorContext(undefined)
   boundary.auth.mockResolvedValue({ isAuthenticated: true, userId: owner.userId })
   boundary.readContext.mockResolvedValue(owner)
 })
@@ -65,5 +75,40 @@ describe('interactive server session admission', () => {
     boundary.readContext.mockRejectedValueOnce(sourceFailure)
     await expect(enter()).rejects.toBe(sourceFailure)
     await expect(enter()).resolves.toEqual(owner)
+  })
+
+  it('admits once on workspace entry and reuses the live context while the workspace stays mounted', async () => {
+    const move = (href: string, cause: 'stay' | 'preload') => requireOperatorBeforeLoad({ location: { href }, cause })
+    await expect(requireOperatorBeforeLoad({ location: { href: destination }, cause: 'enter' })).resolves.toEqual(owner)
+    await expect(move('/owner/credit', 'stay')).resolves.toEqual(owner)
+    await expect(move('/activity', 'preload')).resolves.toEqual(owner)
+    await expect(move('/admin', 'stay')).rejects.toBeInstanceOf(OperatorSurfaceForbiddenError)
+    expect(boundary.readContext).toHaveBeenCalledTimes(1)
+
+    const admin: OperatorContext = { ...owner, allowedSurfaces: ['owner', 'admin'] }
+    rememberOperatorContext(admin)
+    await expect(move('/admin', 'stay')).resolves.toEqual(admin)
+    rememberOperatorContext({ kind: 'denied', reason: 'canonical_owner_required' })
+    await expect(move('/owner/credit', 'stay')).rejects.toBeInstanceOf(OperatorSurfaceForbiddenError)
+    expect(boundary.readContext).toHaveBeenCalledTimes(1)
+
+    rememberOperatorContext(undefined)
+    await expect(move('/owner/credit', 'stay')).resolves.toEqual(owner)
+    await expect(requireOperatorBeforeLoad({ location: { href: destination }, cause: 'enter' })).resolves.toEqual(owner)
+    expect(boundary.readContext).toHaveBeenCalledTimes(3)
+  })
+
+  it('admits through the server when the remembered context belongs to another Clerk user or session', async () => {
+    const move = () => requireOperatorBeforeLoad({ location: { href: '/owner/credit' }, cause: 'stay' })
+    rememberOperatorContext({ ...owner, allowedSurfaces: ['owner', 'admin'] })
+    signedIn('user_other')
+    await expect(move()).resolves.toEqual(owner)
+    expect(boundary.readContext).toHaveBeenCalledTimes(1)
+    signedIn('user_other', 'sess_replaced')
+    await expect(move()).resolves.toEqual(owner)
+    expect(boundary.readContext).toHaveBeenCalledTimes(2)
+    delete (window as { Clerk?: unknown }).Clerk
+    await expect(move()).resolves.toEqual(owner)
+    expect(boundary.readContext).toHaveBeenCalledTimes(3)
   })
 })

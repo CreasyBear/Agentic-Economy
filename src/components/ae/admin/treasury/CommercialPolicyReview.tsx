@@ -1,11 +1,10 @@
 import type { AdminCommandRequest } from '../actions/actions.contracts'
 import { SettingsPageGroup } from '@/components/ae/shared/arc-pro/settings-page/settings-page'
-import { SortableDataTable } from '@/components/arc/sortable-data-table/sortable-data-table'
+import { AeFactList } from '@/components/ae/data/AeFactList'
 import { formatPerthTimestamp } from '@/lib/ui/format-time'
 import { POLICY_LABELS, policyDecimal } from './commercial-policy-form'
 
 type Term = readonly [label: string, value: string]
-type TermRow = { label: string; value: string }
 type ReviewInput = Readonly<Extract<AdminCommandRequest, { action: 'change_commercial_policy' }>['input']>
 type ReviewControl = ReviewInput['control']
 function controlTerms(control: ReviewControl): { business: Term[]; technical: Term[] } {
@@ -20,17 +19,9 @@ function controlTerms(control: ReviewControl): { business: Term[]; technical: Te
     case 'operations': return { business: [['Funding service fee', percent(control.fundingServiceFeeBps)], ['Buyer pricing margin', percent(control.buyerPricingMarginBps)], ['Commitment lifetime', `${control.commitmentTtlMs / 1_000} seconds`], ['Paid Call reports per day', control.paidCallReportsPerDay === undefined ? 'Default (3)' : String(control.paidCallReportsPerDay)], ['Backup', control.backupControl === 'postgres_pitr' ? 'PostgreSQL point-in-time recovery (owner attestation)' : 'Disposable fixture'], ['Restore', control.restoreControl === 'production_rehearsed' ? 'Production restore rehearsed (owner attestation)' : 'Disposable restore rehearsed'], ['Daily close', control.dailyCloseControl === 'human_signed' ? 'Human signed (owner attestation)' : 'Not required for fixture']], technical: [['SDK version', control.formanceSdkVersion], ['SDK artifact digest', control.formanceSdkArtifactDigest]] }
   }
 }
+const referenceTerms = new Set(['Policy reference', 'Current policy reference', 'SDK artifact digest'])
 function TermsTable({ terms, caption }: { terms: readonly Term[]; caption: string }) {
-  const rows: TermRow[] = terms.map(([label, value]) => ({ label, value }))
-  return <SortableDataTable
-    rows={rows}
-    rowKey="label"
-    caption={caption}
-    columns={[
-      { key: 'label', label: 'Term', width: '45%', sortable: false },
-      { key: 'value', label: 'Recorded value', width: '55%', sortable: false, render: (_value, row) => <span className="break-all whitespace-normal">{row.value}</span> },
-    ]}
-  />
+  return <section aria-label={caption}><AeFactList facts={terms.map(([label, value]) => ({ label, value, mono: referenceTerms.has(label) }))} /></section>
 }
 export function CommercialPolicyControlReview({ control }: { control: ReviewControl }) {
   const terms = controlTerms(control)

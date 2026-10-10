@@ -48,19 +48,6 @@
   white-space: nowrap;
 }
 
-.arc-security-outcome {
-  width: fit-content;
-  max-width: 100%;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-pill);
-  padding: var(--space-1) var(--space-2);
-  background: var(--surface-muted);
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-  line-height: 18px;
-  overflow-wrap: anywhere;
-}
-
 .arc-security-time {
   display: grid;
   min-width: 0;

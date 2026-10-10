@@ -7,6 +7,8 @@
  * Source TSX SHA-256 0a21e1888b3f0421a1c031803f5578bb5e2cb6b191da970eece9cc57dafb212a. */
 import { useId, type ReactNode } from 'react'
 import { AlertTriangle } from 'lucide-react'
+import { Badge } from '@/components/arc/badge/badge'
+import { RecordTime } from '@/components/ae/operator/RecordTime'
 import styles from './usage-billing.module.css'
 
 export interface UsageBillingMeterProps {
@@ -49,7 +51,7 @@ export interface UsageBillingInvoice {
   id: string
   anchorId: string
   description: string
-  date: string
+  createdAt: number
   amount: string
   status: Readonly<{ label: string; tone: 'paid' | 'reversed' }>
   detail: ReactNode
@@ -71,12 +73,12 @@ export function UsageBillingInvoices({ title, description, invoices, state, cont
     {state}
     {invoices.length === 0 ? null : <div className={styles.tableFrame}>
       <table className={styles.table}>
-        <thead><tr><th scope="col">Top-up</th><th scope="col" className={styles.issued}>Date</th><th scope="col" className={styles.num}>Amount</th><th scope="col">Status</th><th scope="col"><span className={styles.srOnly}>Documents</span></th></tr></thead>
+        <thead><tr><th scope="col">Top-up</th><th scope="col">Status</th><th scope="col" className={styles.num}>Amount</th><th scope="col" className={styles.issued}>Date</th><th scope="col">Documents</th></tr></thead>
         <tbody>{invoices.map(invoice => <tr key={invoice.id} id={invoice.anchorId} className={styles.invoiceRow}>
           <td><span className={styles.invoiceName}>{invoice.description}</span><div className={styles.invoiceDetail}>{invoice.detail}</div></td>
-          <td className={styles.issued}>{invoice.date}</td>
+          <td><Badge tone={invoice.status.tone === 'paid' ? 'success' : 'neutral'} size="sm">{invoice.status.label}</Badge></td>
           <td className={styles.num}>{invoice.amount}</td>
-          <td><span className={styles.status} data-status={invoice.status.tone}>{invoice.status.label}</span></td>
+          <td className={styles.issued}><RecordTime at={invoice.createdAt} /></td>
           <td className={styles.action}>{invoice.actions}</td>
         </tr>)}</tbody>
       </table>
