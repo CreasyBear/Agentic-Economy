@@ -4,9 +4,12 @@ import { vOnCompleteArgs } from '@convex-dev/workpool'
 
 import { AUTHORITY_REQUEST_TTL_MS } from '../../capabilityExecution/callLifecycle/admissionApprovals'
 import { notificationDeliveryStateRank } from '@/modules/principal-account/account/convex-schema'
-import type { Id } from '../../../_generated/dataModel'
+import { formatMoney } from '@/emails/money'
+import { readExactAmount } from '@/modules/money/public'
+import type { Doc, Id } from '../../../_generated/dataModel'
 import type { MutationCtx, QueryCtx } from '../../../_generated/server'
 import { resolveClerkUserIdForPrincipal } from '../workspace/directory'
+import { activeOwnerPrincipalRef } from './enqueue'
 import { isStalledKind, readStalledDeliveryContext } from './stalled'
 import { recordSuppression, suppressionCode } from './suppression'
 
@@ -99,6 +102,54 @@ export const completeDeliveryArgs = vOnCompleteArgs(
 type NotificationContext = Infer<typeof readNotificationContextResult>
 type CompleteDeliveryArgs = Infer<typeof completeDeliveryArgs>
 
+/** Money notices print the ledger amount exactly or not at all: AUD, canonical units and a valid exponent. */
+export function moneyNoticeAmount(value: unknown): string | undefined {
+  const amount = readExactAmount(value)
+  if (amount === undefined || amount.currency !== 'AUD') return undefined
+  const text = formatMoney(amount)
+  return text === '--' ? undefined : text
+}
+
+const MONEY_NOTICE_KINDS = new Set<Doc<'notificationDeliveries'>['eventKind']>(['funding_receipt', 'task_refunded'])
+
+/** Reads the amount from the ledger row at send time. Refuses (skips) when the row is gone, the recipient changed or the amount is unsafe. */
+async function readMoneyNoticeContext(ctx: QueryCtx, delivery: Doc<'notificationDeliveries'>): Promise<NotificationContext> {
+  const skip = (code: string): NotificationContext => ({ kind: 'skip', code })
+  let amount: string | undefined
+  let props: Record<string, string> = {}
+  if (delivery.eventKind === 'funding_receipt') {
+    const command = await ctx.db.query('moneyFundingCommands')
+      .withIndex('by_commandRef', (query) => query.eq('commandRef', delivery.sourceEventRef)).unique()
+    if (command === null) return skip('funding_command_missing')
+    if (command.actorPrincipalRef !== delivery.recipientPrincipalRef || command.accountRef !== delivery.accountRef) return skip('recipient_changed')
+    // Credit added is the principal; Stripe fees and tax are charged separately.
+    amount = moneyNoticeAmount({ currency: command.currency, units: command.principalUnits, exponent: command.exponent })
+  } else {
+    const call = await ctx.db.query('capabilityCalls')
+      .withIndex('by_callRef', (query) => query.eq('callRef', delivery.sourceEventRef)).unique()
+    if (call?.result?.kind !== 'refused' || call.result.receipt?.refundState !== 'released') return skip('refund_not_released')
+    if (call.ownerId !== delivery.accountRef || await activeOwnerPrincipalRef(ctx.db, delivery.accountRef) !== delivery.recipientPrincipalRef) {
+      return skip('recipient_changed')
+    }
+    amount = moneyNoticeAmount(call.result.receipt.totalBuyerCharge)
+    props = { taskRef: call.callRef }
+  }
+  if (amount === undefined) return skip('amount_unsafe')
+
+  const clerkUserId = await resolveClerkUserIdForPrincipal(ctx.db, delivery.recipientPrincipalRef)
+  if (clerkUserId === null) return skip('no_clerk_identity')
+  const siteUrl = process.env.AE_SITE_URL?.trim().replace(/\/+$/u, '')
+  if (siteUrl === undefined || siteUrl.length === 0) return skip('site_url_missing')
+  // Required mail: no unsubscribe target.
+  return {
+    kind: 'ready',
+    deliveryRef: delivery.deliveryRef,
+    clerkUserId,
+    stream: delivery.stream ?? 'transactional',
+    email: { eventKind: delivery.eventKind, props: { siteUrl, amount, ...props } },
+  }
+}
+
 export async function readNotificationContextHandler(
   ctx: QueryCtx,
   args: { deliveryId: Id<'notificationDeliveries'> },
@@ -107,6 +158,9 @@ export async function readNotificationContextHandler(
   if(delivery!==null&&delivery.state==='pending'&&delivery.usageEvidenceJson!==undefined)return await readUsageDeliveryContext(ctx,delivery)
   if (delivery !== null && delivery.state === 'pending' && isStalledKind(delivery.eventKind)) {
     return await readStalledDeliveryContext(ctx, { ...delivery, eventKind: delivery.eventKind })
+  }
+  if (delivery !== null && delivery.state === 'pending' && MONEY_NOTICE_KINDS.has(delivery.eventKind)) {
+    return await readMoneyNoticeContext(ctx, delivery)
   }
   if (delivery === null || delivery.state !== 'pending' || delivery.eventKind !== 'agent_approval_requested') {
     return { kind: 'skip', code: 'approval_no_longer_pending' }

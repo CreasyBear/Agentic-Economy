@@ -1,19 +1,21 @@
 import { render } from '@react-email/render'
 import type { ReactElement } from 'react'
 
+import AccountNotice, { subject as noticeSubject, type NoticeKind, type NoticeProps } from './templates/account-notice'
 import AgentApproval, { subject as approvalSubject, type AgentApprovalProps } from './templates/agent-approval'
 import OperatorDigest, { subject as digestSubject, type OperatorDigestProps } from './templates/operator-digest'
 import StalledStepEmail, { subject as stalledSubject, type StalledStep, type StalledStepProps } from './templates/stalled-step'
 import StatementReady, { subject as statementSubject, type StatementReadyProps } from './templates/statement-ready'
 import UsageAlertEmail, { subject as usageSubject, type UsageAlertKind, type UsageAlertProps } from './templates/usage-alert'
 
-/** The five Phase 1 families, keyed by eventKind. A switch, not a registry: each kind names its template. */
+/** The Phase 1 families and the Phase 2 account notices, keyed by eventKind. A switch, not a registry: each kind names its template. */
 export type EmailInput =
   | { eventKind: 'agent_approval_requested'; props: AgentApprovalProps }
   | { eventKind: 'stalled_not_funded' | 'stalled_no_agent' | 'stalled_never_called'; props: StalledStepProps }
   | { eventKind: UsageAlertKind; props: UsageAlertProps }
   | { eventKind: 'invoice_ready'; props: StatementReadyProps }
   | { eventKind: 'operator_digest'; props: OperatorDigestProps }
+  | { eventKind: NoticeKind; props: NoticeProps }
 
 export type RenderedEmail = { subject: string; html: string; text: string }
 
@@ -42,6 +44,20 @@ function build(input: EmailInput): { element: ReactElement; subject: string } {
       return { element: <StatementReady {...input.props} />, subject: statementSubject(input.props) }
     case 'operator_digest':
       return { element: <OperatorDigest {...input.props} />, subject: digestSubject(input.props) }
+    case 'funding_receipt':
+    case 'funding_failed':
+    case 'task_refunded':
+    case 'task_stuck':
+    case 'credit_exhausted':
+    case 'key_issued':
+    case 'key_revoked':
+    case 'account_paused':
+    case 'account_restored':
+    case 'role_changed':
+    case 'team_membership_changed':
+    case 'email_changed':
+    case 'data_request_received':
+      return { element: <AccountNotice kind={input.eventKind} {...input.props} />, subject: noticeSubject(input.eventKind, input.props) }
   }
 }
 

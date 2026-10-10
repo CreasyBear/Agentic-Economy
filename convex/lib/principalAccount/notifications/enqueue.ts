@@ -1,5 +1,5 @@
 import type { Doc } from '../../../_generated/dataModel'
-import type { MutationCtx } from '../../../_generated/server'
+import type { DatabaseReader, MutationCtx } from '../../../_generated/server'
 import { internal } from '../../../_generated/api'
 import { notificationWorkpool } from '../../../notificationWorkpool'
 import { assertAdmission } from '../../platform/rateLimit'
@@ -13,6 +13,23 @@ const STREAM_SWITCH: Record<EmailStream, string> = {
 }
 
 const streamEnabled = (stream: EmailStream) => process.env[STREAM_SWITCH[stream]]?.trim() !== 'false'
+
+/** Phase 2 account notices stay dark until AE_EMAIL_PHASE2_ENABLED=true, whatever the stream switch says. */
+const PHASE2_KINDS = new Set<Doc<'notificationDeliveries'>['eventKind']>([
+  'funding_receipt', 'funding_failed', 'task_refunded', 'task_stuck', 'credit_exhausted',
+  'key_issued', 'key_revoked', 'account_paused', 'account_restored', 'role_changed',
+  'team_membership_changed', 'email_changed', 'data_request_received',
+])
+const phase2Enabled = () => process.env.AE_EMAIL_PHASE2_ENABLED?.trim() === 'true'
+
+/** The owner of an active account, or null. Account and money mail go to the owner. */
+export async function activeOwnerPrincipalRef(db: DatabaseReader, accountRef: string): Promise<string | null> {
+  const account = await db.query('accounts').withIndex('by_accountRef', (query) => query.eq('accountRef', accountRef)).unique()
+  if (account?.lifecycle !== 'active') return null
+  const ownership = await db.query('accountOwnerships')
+    .withIndex('by_ownershipRef', (query) => query.eq('ownershipRef', account.currentOwnershipRef)).unique()
+  return ownership?.lifecycle === 'active' && ownership.accountRef === accountRef ? ownership.ownerPrincipalRef : null
+}
 
 const ALERT_WINDOW_MS = 24 * 60 * 60 * 1000
 const ALERT_KIND_DAILY_CAP = 1
@@ -55,7 +72,7 @@ export async function enqueueEmail(ctx: MutationCtx, input: {
       .eq('sourceEventRef', input.sourceEventRef)).unique()
   if (existing !== null) return 'exists'
 
-  const enabled = streamEnabled(input.stream)
+  const enabled = streamEnabled(input.stream) && (!PHASE2_KINDS.has(input.eventKind) || phase2Enabled())
   const now = Date.now()
   const capCode = enabled ? await alertCapCode(ctx, input, now) : null
   const admitted = enabled && capCode === null
@@ -121,4 +138,19 @@ export async function enqueueAgentApprovalRequestedHandler(
     sourceEventRef: call.callRef,
   })
   return { kind }
+}
+
+/** Funding receipt is owed to the payer who funded the Credit. The amount is read from the funding command at send time. */
+export async function enqueueFundingReceiptHandler(ctx: MutationCtx, args: { commandRef: string }): Promise<null> {
+  const command = await ctx.db.query('moneyFundingCommands')
+    .withIndex('by_commandRef', (query) => query.eq('commandRef', args.commandRef)).unique()
+  if (command === null) return null
+  await enqueueEmail(ctx, {
+    eventKind: 'funding_receipt',
+    stream: 'transactional',
+    recipientPrincipalRef: command.actorPrincipalRef,
+    accountRef: command.accountRef,
+    sourceEventRef: command.commandRef,
+  })
+  return null
 }

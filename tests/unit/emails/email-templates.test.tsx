@@ -21,6 +21,19 @@ const INPUTS: Array<[string, EmailInput]> = [
   ['call failure spike', { eventKind: 'call_failure_spike', props: { siteUrl: SITE, body: 'Tool calls are failing more often than usual.', observedAt: '2026-10-10T00:00:00.000Z', unsubscribeUrl: UNSUBSCRIBE } }],
   ['statement', { eventKind: 'invoice_ready', props: { siteUrl: SITE, periodLabel: 'October 2026' } }],
   ['operator digest', { eventKind: 'operator_digest', props: { siteUrl: SITE, date: '2026-10-11', lines: ['2 stalled accounts', 'No exceptions'] } }],
+  ['funding receipt', { eventKind: 'funding_receipt', props: { siteUrl: SITE, amount: 'A$20.00' } }],
+  ['funding failed', { eventKind: 'funding_failed', props: { siteUrl: SITE } }],
+  ['task refunded', { eventKind: 'task_refunded', props: { siteUrl: SITE, amount: 'A$0.42', taskRef: 'call:abc123' } }],
+  ['task stuck', { eventKind: 'task_stuck', props: { siteUrl: SITE } }],
+  ['credit exhausted', { eventKind: 'credit_exhausted', props: { siteUrl: SITE } }],
+  ['key issued', { eventKind: 'key_issued', props: { siteUrl: SITE } }],
+  ['key revoked', { eventKind: 'key_revoked', props: { siteUrl: SITE } }],
+  ['account paused', { eventKind: 'account_paused', props: { siteUrl: SITE } }],
+  ['account restored', { eventKind: 'account_restored', props: { siteUrl: SITE } }],
+  ['role changed', { eventKind: 'role_changed', props: { siteUrl: SITE, role: 'Admin' } }],
+  ['team membership', { eventKind: 'team_membership_changed', props: { siteUrl: SITE } }],
+  ['email changed', { eventKind: 'email_changed', props: { siteUrl: SITE } }],
+  ['data request', { eventKind: 'data_request_received', props: { siteUrl: SITE } }],
 ]
 
 const byName = (name: string): EmailInput => {
@@ -98,6 +111,29 @@ describe('renderEmail', () => {
     expect(email.subject).toBe('Your October 2026 statement is ready')
     expect(email.text).toContain('Download statement')
     expect(email.text).not.toMatch(/tax invoice/iu)
+  })
+})
+
+describe('phase 2 notices', () => {
+  it('states a funding receipt amount as added to Credit, with fees and tax kept out of it', async () => {
+    const email = await renderEmail(byName('funding receipt'))
+    expect(email.subject).toBe('Receipt: A$20.00 added as Credit')
+    expect(email.text).toContain('Stripe fees and tax are not part of this amount')
+    expect(email.text).not.toMatch(/unsubscribe/iu)
+  })
+
+  it('names the refunded amount, that it went back to Credit and not the card, and the Task id', async () => {
+    const email = await renderEmail(byName('task refunded'))
+    expect(email.subject).toBe('Refunded: a Task did not complete')
+    expect(email.text).toContain('A$0.42 went back to your Credit, not your card')
+    expect(email.text).toContain('call:abc123')
+  })
+
+  it('keeps every phase 2 notice free of unsubscribe copy, since all of it is required mail', async () => {
+    for (const [, input] of INPUTS.slice(10)) {
+      const email = await renderEmail(input)
+      expect(email.text).not.toMatch(/unsubscribe/iu)
+    }
   })
 })
 

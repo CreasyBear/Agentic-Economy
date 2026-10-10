@@ -182,10 +182,12 @@ Packages, pinned to releases at least two weeks old (installed exact in `package
 - [ ] Add the digest line and bounce events -> a digest shows live counts
 
 ### Task 8: Phase 2 templates and triggers, dark
+**Status: PARTIAL.** Wired: funding receipt (retry-safe on replay), refund (managed-call remedy and x402 expiry). Not wired: funding failed, stuck, credit exhausted, key issued and revoked, paused and restored, role and team membership, email changed, data request, statement. Folding is not implemented. Tasks 9 and 10 wait on the split below.
 **Contract:** Needs: Tasks 6, 7 | Offers: funding receipt, funding failed, refund, stuck, Credit exhausted, key issued and revoked, paused and restored, role and team membership, email changed, data request, statement, wired but gated off
-**Touches:** `moneyManagedCallRemedy*.ts`, `moneyStripeWebhookWorker.ts`, `interactiveCredentialLifecycle.ts`, `security.ts`, `moneyCommercialPolicy.ts`, templates
+**Touches:** `moneyManagedCallRemedy*.ts`, `moneyStripeWebhookWorker.ts`, `moneyX402Expiry.ts`, `interactiveCredentialLifecycle.ts`, `security.ts`, `moneyCommercialPolicy.ts`, templates
 **Review:** idempotency-guardian
 - [ ] Wire `enqueueEmail` at each trigger behind the stream switch; money loaders read ledger rows and refuse on missing amounts; fold logic per Folding -> rows appear as `suppressed` with reason `stream_disabled`
+- [ ] Split pending Joel's call: 8a = funding receipt and refund (done); 8b = every remaining offer above plus Folding. Do not tick Task 8 done until 8b is wired or split off.
 
 ### Task 9: Phase 3 templates and triggers, dark
 **Contract:** Needs: Task 8 | Offers: welcome, provider lifecycle, first paid Task, payout, failed payout, weekly summary, offboarding, exception alert

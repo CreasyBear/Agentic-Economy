@@ -5,6 +5,7 @@ import { Webhook } from 'svix'
 import { components, internal } from '../../../convex/_generated/api'
 import { AUTHORITY_REQUEST_TTL_MS } from '../../../convex/lib/capabilityExecution/callLifecycle/admissionApprovals'
 import { enqueueEmail } from '../../../convex/lib/principalAccount/notifications/enqueue'
+import { moneyNoticeAmount } from '../../../convex/lib/principalAccount/notifications/delivery'
 import type { Id } from '../../../convex/_generated/dataModel'
 import { emailAddressHash } from '../../../convex/lib/principalAccount/notifications/suppression'
 import { signUnsubscribeToken } from '../../../convex/lib/principalAccount/notifications/unsubscribe'
@@ -1240,5 +1241,46 @@ describe('email deliverability observability', () => {
       batch: [{ event: 'ae.email.bounced', properties: { stream: 'transactional', event_kind: 'agent_approval_requested', permanent: true } }],
     })
     expect(batches[0]).not.toContain('owner@example.test')
+  })
+})
+
+describe('phase 2 email gate and money amounts', () => {
+  const enqueuePhase2 = (backend: InteractiveAuthorityBackend, eventKind: 'key_issued' | 'task_refunded') =>
+    backend.run((ctx) => enqueueEmail(ctx, {
+      eventKind,
+      stream: 'transactional',
+      recipientPrincipalRef: PRINCIPAL_REF,
+      accountRef: ACCOUNT_REF,
+      sourceEventRef: `phase2:${eventKind}`,
+    }))
+
+  it('suppresses a phase 2 email while AE_EMAIL_PHASE2_ENABLED is unset', async () => {
+    const backend = await createNotificationBackend()
+    await seedAuthority(backend)
+
+    await expect(enqueuePhase2(backend, 'key_issued')).resolves.toBe('suppressed')
+    const rows = await listDeliveryRows(backend)
+    expect(rows).toEqual([expect.objectContaining({ state: 'suppressed', suppressCode: 'stream_disabled', eventKind: 'key_issued' })])
+    expect(rows[0]?.workId).toBeUndefined()
+  })
+
+  it('enqueues a phase 2 email once the gate is on, and dedupes the same source', async () => {
+    vi.stubEnv('AE_EMAIL_PHASE2_ENABLED', 'true')
+    const backend = await createNotificationBackend()
+    await seedAuthority(backend)
+
+    await expect(enqueuePhase2(backend, 'task_refunded')).resolves.toBe('enqueued')
+    await expect(enqueuePhase2(backend, 'task_refunded')).resolves.toBe('exists')
+    const rows = await listDeliveryRows(backend)
+    expect(rows).toEqual([expect.objectContaining({ state: 'pending', eventKind: 'task_refunded', required: true })])
+  })
+
+  it('accepts only canonical AUD money from the ledger and refuses anything else', () => {
+    expect(moneyNoticeAmount({ currency: 'AUD', units: '4200000', exponent: 6 })).toBe('A$4.20')
+    expect(moneyNoticeAmount({ currency: 'AUD', units: '20000000', exponent: 6 })).toBe('A$20.00')
+    expect(moneyNoticeAmount({ currency: 'USD', units: '4200000', exponent: 6 })).toBeUndefined()
+    expect(moneyNoticeAmount({ currency: 'AUD', units: '04200000', exponent: 6 })).toBeUndefined()
+    expect(moneyNoticeAmount({ currency: 'AUD', units: '4200000' })).toBeUndefined()
+    expect(moneyNoticeAmount(undefined)).toBeUndefined()
   })
 })

@@ -3938,6 +3938,12 @@
   {
     "visibility": "internal",
     "module": "notifications",
+    "method": "enqueueFundingReceipt",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "notifications",
     "method": "enqueueMoneyUsageAlerts",
     "kind": "mutation"
   },
