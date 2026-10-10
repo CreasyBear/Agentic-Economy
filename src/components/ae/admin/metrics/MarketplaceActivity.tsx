@@ -76,7 +76,7 @@ function FundingSummary({ funding, range }: Readonly<{
           <div className="min-w-0 p-related" key={measure.label}>
             <dt className="text-muted-foreground">{measure.label}</dt>
             <dd className="mt-intra text-lg font-medium tabular-nums">{measure.value}</dd>
-            <dd className="mt-intra text-xs"><a className="underline underline-offset-4" href={measure.href}>{measure.action}</a></dd>
+            <dd className="mt-intra text-xs"><a className="inline-flex min-h-touch items-center underline underline-offset-4" href={measure.href}>{measure.action}</a></dd>
           </div>
         ))}
       </dl>

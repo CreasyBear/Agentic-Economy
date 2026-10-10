@@ -108,7 +108,6 @@ function renderCallPage(view: AdminCallView = uncertainView) {
           minimal={false}
           mobileNavOpen={false}
           setMobileNavOpen={() => undefined}
-          elevated={false}
           hydrated
           chatFrame={false}
         />

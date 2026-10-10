@@ -190,6 +190,14 @@ describe('Arc Tool input review', () => {
     expect(screen.getByRole('group', { name: chatToolPanel.inputLegend })).toHaveAttribute('aria-busy', 'false')
   })
 
+  it('marks an incomplete JSON field invalid only after the user edits it', () => {
+    render(<ToolPanelForm view={{ ...review, incomplete: 'unfinished' }} idPrefix="touch-form" onInputTextChange={vi.fn()} />)
+    const input = screen.getByRole('textbox', { name: chatToolPanel.jsonLabel })
+    expect(input).not.toHaveAttribute('aria-invalid')
+    fireEvent.change(input, { target: { value: '{' } })
+    expect(input).toHaveAttribute('aria-invalid', 'true')
+  })
+
   it('retains the Tool heading focus and makes a closed loading panel inert', () => {
     const props = { option: { id: 'tool:weather', name: 'Weather lookup', href: '/tools/tool:weather', price: 'A$0.01', readiness: 'ready' as const, selectable: true }, message: 'Sydney', open: true, runMode: 'run' as const, generating: false, focusOnOpen: true, onRun: vi.fn(), onAddCredit: vi.fn(), onClose: vi.fn(), panelId: 'weather-review' }
     const { rerender } = render(<ToolPanel {...props} />)

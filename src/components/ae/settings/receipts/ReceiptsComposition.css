@@ -2,8 +2,8 @@
  * usage-billing invoice table. The block owns the row and status layout. */
 .arc-receipt-actions { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-2); }
 .arc-receipt-note { color: var(--text-muted); font-size: var(--text-sm); line-height: var(--leading-body); overflow-wrap: anywhere; }
-.arc-receipt-link { border-radius: 4px; padding: 2px 4px; color: var(--foreground); text-decoration: underline; text-underline-offset: 4px; transition: background-color var(--duration-fast) var(--ease-standard); }
-.arc-receipt-link:focus-visible { outline: none; background: var(--surface-muted); }
+.arc-receipt-link { margin-block: calc(var(--space-3) * -1); padding: var(--space-3) 4px; display: inline-flex; align-items: center; border-radius: 4px; color: var(--foreground); text-decoration: underline; text-underline-offset: 4px; transition: background-color var(--duration-fast) var(--ease-standard); }
+.arc-receipt-link:focus-visible { background: var(--surface-muted); outline: 2px solid var(--focus-ring); outline-offset: 3px; }
 .arc-receipt-pagination { display: flex; justify-content: center; padding-top: var(--space-4); }
 @media (hover: hover) and (pointer: fine) { .arc-receipt-link:hover { background: var(--surface-muted); } }
 @media (prefers-reduced-motion: reduce) { .arc-receipt-link { transition: none; } }
