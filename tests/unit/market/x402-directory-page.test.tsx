@@ -12,6 +12,7 @@ import type { SearchResult, ToolChoiceSearchOutput } from '@/modules/registry/to
 import { PublicToolRegistrySchemaVersion, type PublicToolRef } from '@/modules/capability-supply/public'
 import { loadCanonicalMarketSearch, loadMarketRouteData, marketLoaderDeps, marketUsesCanonicalSearch, validateMarketSearch } from '@/modules/market/market-route-data'
 import type * as DemandFunctions from '@/modules/market-demand/market-demand.functions'
+import { REASON_COPY_FALLBACK } from '@/content/reason-copy'
 // The rate-limit setup preloads degrade and its telemetry dependency. Reload
 // that graph so this file's capture mock observes the real degrade calls.
 vi.hoisted(() => vi.resetModules())
@@ -417,7 +418,7 @@ it('keeps Provider price evidence secondary and settlement networks off Tool car
   expect(screen.getByRole('columnheader', { name: 'Access' })).toBeTruthy()
   expect(screen.queryByRole('columnheader', { name: 'Volume' })).toBeNull()
   const row = screen.getByRole('link', { name: 'Tool 0' }).closest('tr')
-  expect(row?.textContent).toContain('External listing · inspect')
+  expect(row?.textContent).toContain('Currently unavailable')
   const priceCell = row?.querySelectorAll('td')[2]
   const [buyerPrice, sourcePrice] = priceCell?.querySelectorAll('p') ?? []
   expect(buyerPrice?.textContent).toBe('US$1')
@@ -972,7 +973,7 @@ const searchRows = [
     freshness: { source: 'supply_projection', state: 'fresh', completedAt: Date.UTC(2026, 8, 27), staleAfterMs: 10800000 },
   },
   {
-    id: directoryId, source: 'coinbase', access: 'external_listing',
+    id: directoryId, source: 'coinbase', access: 'unavailable',
     title: 'External Forecast', summary: 'Published weather endpoint', provider: 'example.com',
     actionClass: 'retrieve', objectClass: 'data', readiness: 'unverified',
     sourcePrice: '1 USDC',
@@ -1264,12 +1265,12 @@ describe('canonical Market search', () => {
     expect(screen.queryByRole('link', { name: 'Tool 0' })).toBeNull()
     expect(toolHref(screen.getByRole('link', { name: 'Weather Forecast' })).pathname).toBe(`/tools/${encodeURIComponent(admittedRef)}`)
     expect(toolHref(screen.getByRole('link', { name: 'External Forecast' })).pathname).toBe('/api/v1/registry/detail')
-    expect(screen.getByText('AE-callable · ready')).toBeTruthy()
-    expect(screen.getByText('External listing · not AE-callable')).toBeTruthy()
-    expect(screen.getByText('Indicative AUD · A$0.01')).toBeTruthy()
-    expect(screen.getByText('Provider price · US$1')).toBeTruthy()
-    expect(screen.getByText(/AE supply projection · fresh/)).toBeTruthy()
-    expect(screen.getByText(/Coinbase Bazaar index · stale/)).toBeTruthy()
+    const resultTable = screen.getByRole('table', { name: 'Canonical search results' })
+    expect(within(resultTable).getByText('Callable')).toBeTruthy()
+    expect(within(resultTable).getByText('Unavailable')).toBeTruthy()
+    expect(within(resultTable).getByText('A$0.01')).toBeTruthy()
+    expect(within(resultTable).getByText('US$1')).toBeTruthy()
+    expect(resultTable.textContent).not.toContain(REASON_COPY_FALLBACK)
     expect(searchMarketToolsServer).toHaveBeenNthCalledWith(1, expect.objectContaining({ data: { query: 'weather', limit: 8, filters: { category: 'research', provider: 'example.com', networkId: 'eip155:8453', priceBand: 'lt_0_01' } } }))
     await waitFor(() => expect((screen.getByRole('button', { name: 'Next page' }) as HTMLButtonElement).disabled).toBe(false))
     fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
@@ -1384,7 +1385,7 @@ describe('canonical Market search', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
     const externalRow = within(table).getByRole('row', { name: /External Forecast/ })
     fireEvent.click(within(externalRow).getByRole('button', { name: 'Inspect External Forecast' }))
-    expect(within(await screen.findByRole('dialog')).getByText('External listing · not AE-callable')).toBeTruthy()
+    expect(within(await screen.findByRole('dialog')).getByText('Currently unavailable')).toBeTruthy()
   })
   it('saves exact admitted and Bazaar search identities without retaining listed prices', async () => {
     searchMarketToolsServer.mockResolvedValueOnce({ ...searchMeta, kind: 'match', results: searchRows } satisfies ToolChoiceSearchOutput)

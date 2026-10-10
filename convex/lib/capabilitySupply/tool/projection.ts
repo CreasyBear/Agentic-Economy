@@ -26,7 +26,7 @@ import { capabilitySupplyGraphPorts } from '../graphPorts/ports'
 import { readManagedX402InspectionTargetForQualifiedCandidate } from '../currentTool/inspection'
 import { toolProviderRouteabilityIsFrozen } from '../providerOffboarding/freeze'
 import { toCapabilityBindingRow, toCapabilityOfferingRow } from '../../../capabilitySupplyRowMappers'
-import { directoryListingEntry } from '../../../capabilitySupplyDirectoryEligibility'
+import { directoryListingRow } from '../../../capabilitySupplyDirectoryEligibility'
 import { publicAuthenticationFor, publicToolParameterMappingsFor, publicToolTransportFor } from './transport'
 
 const CURRENT_TOOL_PROJECTION_DROP_REASONS = [
@@ -41,7 +41,6 @@ const CURRENT_TOOL_PROJECTION_DROP_REASONS = [
   'malformed_offering',
   'malformed_binding',
   'malformed_price',
-  'directory_ineligible',
 ] as const
 
 type CurrentToolProjectionDropReason = typeof CURRENT_TOOL_PROJECTION_DROP_REASONS[number]
@@ -112,10 +111,8 @@ export async function toolRecordProjection(
   if (publicationInputQuality(contractResult.contract) !== undefined) {
     return { kind: 'dropped', reason: 'opaque_input_schema' }
   }
-  const directoryEntry = await directoryListingEntry(ctx, publication.authorityMode, publication.sourceRouteRef)
-  if (!directoryEntry.eligible) {
-    return { kind: 'dropped', reason: 'directory_ineligible' }
-  }
+  // Directory eligibility is a ranking signal on the index row, never a gate on a published Tool.
+  const directoryRow = await directoryListingRow(ctx, publication.authorityMode, publication.sourceRouteRef)
   // Human-legible canonical page (`/tools/<providerHost>/<slug>`), same
   // fields `x402DirectoryIndex.ts:canonicalUrlForTool` reverse-looks-up
   // separately for the `/tools/$toolRef` redirect - reusing the eligibility
@@ -123,12 +120,12 @@ export async function toolRecordProjection(
   // never joined a directory row (Provider-owned Tools have no directory
   // row today and so get no canonical URL yet; they need a slug source of
   // their own as a follow-up) or the row predates the slug backfill.
-  const canonical = directoryEntry.row?.providerKey === undefined || directoryEntry.row.slug === undefined
+  const canonical = directoryRow?.providerKey === undefined || directoryRow.slug === undefined
     ? undefined
     : {
-        providerHost: directoryEntry.row.providerKey,
-        slug: directoryEntry.row.slug,
-        path: `/tools/${directoryEntry.row.providerKey}/${directoryEntry.row.slug}`,
+        providerHost: directoryRow.providerKey,
+        slug: directoryRow.slug,
+        path: `/tools/${directoryRow.providerKey}/${directoryRow.slug}`,
       }
   let offering
   let binding

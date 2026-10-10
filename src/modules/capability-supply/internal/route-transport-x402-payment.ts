@@ -101,11 +101,13 @@ export async function prepareX402PaymentMaterial(
   const requirement = selection?.requirement
     ?? configuredX402Requirement(challenge, configuration)
   if (requirement === undefined) {
+    const payeeChanged = challenge.accepts.some((candidate) =>
+      configuredX402RequirementMatches({ ...candidate, payTo: configuration.payTo }, configuration))
     return {
       kind: 'refused',
       observation: refuseBeforeAuthorization(
         requestDigest,
-        'payment_requirement_unsupported',
+        payeeChanged ? 'payee_changed' : 'payment_requirement_unsupported',
         paymentChallengeDigest,
       ),
     }
@@ -264,6 +266,21 @@ export function freshX402ChallengeSelection(
   return requirement === undefined
     ? undefined
     : { challenge: freshChallenge, requirement }
+}
+
+/** Names a fresh 402 that differs from the committed requirement only in price or only in payee. */
+export function x402RequirementDriftCode(
+  committed: X402ChallengeSelection,
+  fresh: X402Challenge,
+): 'price_changed' | 'payee_changed' | 'payment_provider_requirement_stale' {
+  if (!x402ResourcesEquivalent(committed.challenge.resource, fresh.resource)) {
+    return 'payment_provider_requirement_stale'
+  }
+  const differsOnlyIn = (field: 'amount' | 'payTo') => fresh.accepts.some((candidate) =>
+    x402RequirementsEquivalent({ ...committed.requirement, [field]: candidate[field] }, candidate))
+  if (differsOnlyIn('amount')) return 'price_changed'
+  if (differsOnlyIn('payTo')) return 'payee_changed'
+  return 'payment_provider_requirement_stale'
 }
 
 function configuredX402Requirement(

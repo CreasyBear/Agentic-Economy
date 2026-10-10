@@ -4,7 +4,9 @@ import { toolPlanQuoteAction } from '@/modules/capability-execution/plan/quote.a
 import {
   toolQuoteAction,
 } from '@/modules/capability-execution/quote.actions'
+import { parseCallableRef } from '@/modules/common/tool-ref'
 import {
+  toolQuoteInputSchema,
   toolQuoteResultSchema,
   projectToolQuoteRefusal,
   type ToolQuoteRefusalCode,
@@ -18,6 +20,20 @@ const toolRef = `operation:v1:${'a'.repeat(64)}`
 const input = { city: 'Perth' }
 
 describe('tool.quote continuations', () => {
+  it.each([
+    [toolRef, 'operation'],
+    [`registry:${'f'.repeat(64)}`, 'listing'],
+    ['https://api.example.com/v1/weather?city=Seoul', 'url'],
+  ])('accepts %s as one %s ref in one parser', (ref, kind) => {
+    expect(parseCallableRef(ref)).toEqual({ kind, ref })
+    expect(toolQuoteInputSchema.safeParse({ toolRef: ref, input }).success).toBe(true)
+  })
+
+  it.each(['http://api.example.com/x', 'registry:abc', `operation:v1:${'A'.repeat(64)}`, ' https://api.example.com', 'https://', 'ftp://x.test/y', `https://${'a'.repeat(9000)}.test`])('rejects %s', ref => {
+    expect(parseCallableRef(ref)).toBeUndefined()
+    expect(toolQuoteInputSchema.safeParse({ toolRef: ref, input }).success).toBe(false)
+  })
+
   it.each([toolQuoteAction, toolPlanQuoteAction])('discloses unpaid Provider inspection in $id metadata', action => {
     expect(action.effect).toMatchObject({ class: 'disclosure', reversible: false, recipientKind: 'provider_system', spendExposure: 'none' })
     expect(action.invocationContract.consequenceClass).toBe('communication')

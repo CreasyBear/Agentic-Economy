@@ -81,13 +81,13 @@ it.each(['answered', 'failed', 'unanswered'] as const)('keeps selected detail un
 it.each(['found', 'external'])('discloses %s external inspection and never promotes it to input review', kind => {
   const card = projectToolCard({ type: 'tool-registry_tools_describe', state: 'output-available', output: {
     kind, tool: { id: `registry:${'c'.repeat(64)}`, source: 'coinbase',
-      access: 'external_listing', title: 'Outside lookup', readiness: 'ready' },
+      access: 'unavailable', title: 'Outside lookup', readiness: 'ready' },
   } })
   if (card === null) throw new Error('Missing external detail card')
   const turn = projectGenerativeTurn({ id: 'external', role: 'assistant', text: '', tools: [card], blocks: [] })
   render(<OptionsGrid view={turn.options} onReview={vi.fn()} onSelect={vi.fn()} />)
   expect(screen.queryByRole('button', { name: 'Review inputs' })).not.toBeInTheDocument()
-  expect(screen.getByText(/External listing.*not callable through Agentic Economy/iu)).toBeInTheDocument()
+  expect(screen.getByText('Outside lookup')).toBeInTheDocument()
 })
 
 it('asks about the exact external listing using its registry identity', () => {
@@ -96,7 +96,7 @@ it('asks about the exact external listing using its registry identity', () => {
   render(<ChatTranscript onSuggest={onSuggest} messages={[{ id: 'outside', role: 'assistant', parts: [{
     type: 'tool-registry_tools_search', state: 'output-available', output: {
       kind: 'scoped', results: [{ id: externalRef, source: 'coinbase',
-        access: 'external_listing', title: 'Shared title', readiness: 'unverified' }],
+        access: 'unavailable', title: 'Shared title', readiness: 'unverified' }],
     },
   }] }]} />)
   fireEvent.click(screen.getByRole('button', { name: 'Ask about this Tool' }))
@@ -111,7 +111,7 @@ it('keeps legacy opaque external listings inspectable without an invalid detail 
   render(<ChatTranscript onSuggest={onSuggest} messages={[{ id: 'legacy', role: 'assistant', parts: [{
     type: 'tool-registry_tools_search', state: 'output-available', output: {
       kind: 'scoped', results: [{ id: 'historical-directory-id', source: 'coinbase',
-        access: 'external_listing', title: 'Outside', readiness: 'unverified' }],
+        access: 'unavailable', title: 'Outside', readiness: 'unverified' }],
     },
   }] }]} />)
   expect(screen.getByRole('link', { name: 'Outside' })).toHaveAttribute('href',

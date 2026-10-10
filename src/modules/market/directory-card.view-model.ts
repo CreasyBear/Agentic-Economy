@@ -74,7 +74,7 @@ export function directoryPriceContext(entry: X402DirectoryEntry): string {
     ? `${entry.prices.length} Provider payment options · source ${listed}`
     : `Provider lists ${listed} per Call`
   if (entry.audEstimate === undefined) return source
-  return `${entry.choice?.access === 'external_listing' || entry.choice === undefined ? 'Provider-listed estimate' : 'Indicative before Quote'} · ${source}`
+  return `${entry.choice?.access === 'ae_callable' ? 'Indicative before Quote' : 'Provider-listed estimate'} · ${source}`
 }
 
 export function directoryDate(value: string): string {
@@ -206,7 +206,7 @@ export type DirectoryToolCardModel = Readonly<{
   providerLine: string
   priceLabel: string
   priceContext: string
-  access: 'external_listing' | 'ae_callable' | 'setup_required' | 'unavailable'
+  access: 'ae_callable' | 'setup_required' | 'unavailable'
   accessLabel: string
   toolRef?: string
   sourceRouteRef?: string
@@ -251,11 +251,10 @@ export function toDirectoryToolCardModel(entry: X402DirectoryEntry): DirectoryTo
     title,
     providerHost,
     slug,
-    access: entry.choice?.access ?? 'external_listing',
+    access: entry.choice?.access ?? 'unavailable',
     accessLabel: entry.choice?.access === 'ae_callable' ? 'AE callable'
       : entry.choice?.access === 'setup_required' ? 'Connect to call'
-      : entry.choice?.access === 'unavailable' ? 'Currently unavailable'
-      : 'External listing · inspect',
+      : 'Currently unavailable',
     ...(entry.choice?.toolRef === undefined ? {} : { toolRef: entry.choice.toolRef }),
     ...(entry.choice?.sourceRouteRef === undefined ? {} : { sourceRouteRef: entry.choice.sourceRouteRef }),
     providerLine,

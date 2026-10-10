@@ -32,7 +32,7 @@ it('shows published contribution fields without treating a listing as a callable
   expect(screen.queryByText('authorization')).toBeNull()
   expect(screen.getByText(model.priceLabel)).toBeTruthy()
   expect(screen.getByText(model.priceContext)).toBeTruthy()
-  expect(screen.getByText('External listing · inspect')).toBeTruthy()
+  expect(screen.getByText('Currently unavailable')).toBeTruthy()
   expect(screen.queryByRole('button', { name: /Call|Buy|Add to bag/u })).toBeNull()
   expect(screen.getByRole('link', { name: 'Inspect Tool' }).getAttribute('href')).toBe('/tools/provider.example.com/company-lookup')
 })

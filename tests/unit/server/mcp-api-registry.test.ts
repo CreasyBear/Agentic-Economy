@@ -29,9 +29,9 @@ beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development'))
 
 describe('MCP host adapter registry', () => {
   it.each([
-    { requestOrigin: 'http://app.aecon.ai', canonical: 'https://app.aecon.ai', expectedOrigin: 'https://app.aecon.ai' },
-    { requestOrigin: 'http://localhost:3000', canonical: undefined, expectedOrigin: 'http://localhost:3000' },
-  ])('keeps inspection continuations on the trusted origin for $requestOrigin', async ({ requestOrigin, canonical, expectedOrigin }) => {
+    { requestOrigin: 'http://app.aecon.ai', canonical: 'https://app.aecon.ai' },
+    { requestOrigin: 'http://localhost:3000', canonical: undefined },
+  ])('points a listing row at Quote without echoing an untrusted host for $requestOrigin', async ({ requestOrigin, canonical }) => {
     vi.stubEnv('AE_CANONICAL_BASE_URL', canonical)
     vi.stubEnv('AE_CANONICAL_HOST_ALLOWLIST', undefined)
     vi.stubEnv('VERCEL_URL', undefined)
@@ -42,11 +42,11 @@ describe('MCP host adapter registry', () => {
       assessed: { source: 'all', scope: 'complete', examined: 1, coverage: 'complete' },
       pagination: { limit: 8, hasMore: false }, partialResults: false, next: [],
       results: [{
-        id: 'opaque-1', source: 'coinbase', access: 'external_listing', title: 'External Tool',
+        id: 'registry:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', source: 'coinbase', access: 'ae_callable', toolRef: 'registry:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', title: 'External Tool',
         summary: 'Retrieve data', provider: 'Outside', actionClass: 'retrieve', objectClass: 'data',
         readiness: 'unverified', price: { kind: 'unavailable' },
-        detailRef: '/api/v1/registry/detail?id=opaque-1',
-        next: [],
+        detailRef: '/api/v1/registry/detail?id=registry:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+        next: [], signals: { calls: 0, payers30d: 12 },
       }],
     }))
     const response = await handleMcpRequest(new Request(`${requestOrigin}/mcp`, {
@@ -62,10 +62,11 @@ describe('MCP host adapter registry', () => {
     }))
     expect(response.status).toBe(200)
     const body = await readMcpBody(response)
-    expect(JSON.stringify(body.result?.content)).toContain(`${expectedOrigin}/api/v1/registry/detail?id=opaque-1`)
+    expect((body.result?.content as { text: string }[])[0]?.text).toContain('Quote External Tool: ae_tool_quote({"toolRef":"registry:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}) with caller-owned input.')
+    expect((body.result?.content as { text: string }[])[0]?.text).toContain('  External Tool: No AE calls yet · 12 payers')
     expect(JSON.stringify(body.result)).not.toContain('untrusted.example')
     if (canonical !== undefined) expect(JSON.stringify(body.result)).not.toContain('http://app.aecon.ai')
-    expect(body.result?.structuredContent).toMatchObject({ result: { results: [{ id: 'opaque-1' }] } })
+    expect(body.result?.structuredContent).toMatchObject({ result: { results: [{ id: 'registry:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' }] } })
   })
 
   it('calls the registered registry search action with MCP attribution', async () => {
@@ -232,10 +233,10 @@ describe('MCP host adapter registry', () => {
           next: [{ action: 'registry.tools.describe', authority: 'public', args: { toolRef } }],
         },
         {
-          id: 'opaque-1', source: 'coinbase', access: 'external_listing', title: 'External Tool',
+          id: 'registry:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', source: 'coinbase', access: 'ae_callable', toolRef: 'registry:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', title: 'External Tool',
           summary: 'Retrieve data', provider: 'Outside', actionClass: 'retrieve', objectClass: 'data',
           readiness: 'unverified', price: { kind: 'unavailable' },
-          detailRef: '/api/v1/registry/detail?id=opaque-1',
+          detailRef: '/api/v1/registry/detail?id=registry:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
           next: [],
         },
       ],
@@ -248,7 +249,7 @@ describe('MCP host adapter registry', () => {
     }))
 
     for (const [id, expected] of [
-      [31, ['ae_registry_tools_describe(', '/api/v1/registry/detail?id=opaque-1']],
+      [31, ['ae_registry_tools_describe(', 'ae_tool_quote({\\"toolRef\\":\\"registry:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\\"})']],
       [32, ['Search unavailable', 'ae_registry_tools_search(']],
     ] as const) {
       const response = await postMcp({

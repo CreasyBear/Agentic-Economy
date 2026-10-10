@@ -390,6 +390,70 @@ describe('market-terminal authenticated Tool Call', () => {
     expect(stdout).not.toContain('idem-cli-one')
   })
 
+  it('quotes a directory listing id once and calls the Tool the Quote resolved it to', async () => {
+    setApiKey('ae-test-caller-key')
+    vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    const listingRef = `registry:${'f'.repeat(64)}`
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse(toolQuote()))
+      .mockResolvedValueOnce(jsonResponse(completedCall()))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await runCallCommand([listingRef], { ...options, input: '{}', idempotencyKey: 'idem-listing' })
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ toolRef: listingRef, input: {} })
+    expect(fetchMock.mock.calls[1]?.[0]).toBe('https://market.example/api/v1/tools/call')
+    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toEqual({ quoteRef, idempotencyKey: 'idem-listing' })
+  })
+
+  it('resumes a retained listing Call locally without a second Quote', async () => {
+    setApiKey('ae-test-caller-key')
+    const deadline = controlRequestDeadline(60_000)
+    const reachedCall = Promise.withResolvers<void>()
+    const listingRef = `registry:${'e'.repeat(64)}`
+    try {
+      const fetchMock = vi.fn<typeof fetch>()
+        .mockResolvedValueOnce(jsonResponse(toolQuote()))
+        .mockImplementationOnce((_url, init) => {
+          const response = stalledBody(init!.signal!)
+          reachedCall.resolve()
+          return Promise.resolve(response)
+        })
+      vi.stubGlobal('fetch', fetchMock)
+      const pending = runCallCommand([listingRef], { ...options, input: '{}', idempotencyKey: 'idem-listing-timeout' })
+      await Promise.race([reachedCall.promise, pending.then(() => { throw new Error('Call completed without stalling') })])
+      deadline.expire()
+      await pending.catch(() => undefined)
+      await expect(runCallCommand([listingRef], { ...options, input: '{}' })).rejects.toMatchObject({ code: 'call-recovery-required' })
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+    } finally {
+      deadline.restore()
+    }
+  })
+
+  it('re-quotes once when the price changed before signing, then calls the fresh Quote', async () => {
+    setApiKey('ae-test-caller-key')
+    vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    const freshQuoteRef = `operation-commitment:v1:${'d'.repeat(64)}`
+    const priceChanged = { kind: 'refused', toolRef, code: 'price_changed', retryable: false, nextAction: 'Request a new Quote at the current price.' }
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse(toolQuote()))
+      .mockResolvedValueOnce(jsonResponse(priceChanged))
+      .mockResolvedValueOnce(jsonResponse({ ...toolQuote(), quoteRef: freshQuoteRef }))
+      .mockResolvedValueOnce(jsonResponse(priceChanged))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await runCallCommand([toolRef], { ...options, input: '{}', idempotencyKey: 'idem-requote' })
+
+    expect(fetchMock.mock.calls.map(([url, init]) => [url, JSON.parse(String(init?.body))])).toEqual([
+      ['https://market.example/api/v1/tools/quote', { toolRef, input: {} }],
+      ['https://market.example/api/v1/tools/call', { quoteRef, idempotencyKey: 'idem-requote' }],
+      ['https://market.example/api/v1/tools/quote', { toolRef, input: {} }],
+      ['https://market.example/api/v1/tools/call', { quoteRef: freshQuoteRef, idempotencyKey: 'idem-requote:requote' }],
+    ])
+  })
+
   it('reads piped JSON input and sends the same canonical Tool payload', async () => {
     setApiKey('ae-test-caller-key')
     vi.spyOn(process.stdout, 'write').mockImplementation(() => true)

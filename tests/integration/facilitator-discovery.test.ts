@@ -1,7 +1,7 @@
 import { convexTest } from 'convex-test'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { admitFacilitatorDiscoveryItems } from '../../convex/facilitatorDiscoveryAction'
+import { admitFacilitatorDiscoveryItems } from '@/modules/capability-supply/server'
 import { api, internal } from '../../convex/_generated/api'
 import schema from '../../convex/schema'
 import { toolRecordProjection } from '../../convex/lib/capabilitySupply/tool/projection'
@@ -342,25 +342,6 @@ describe('facilitator discovery reconciliation', () => {
     expect(withdrawalAttempt).toMatchObject({ withdrawn: 0 })
     await expect(backend.run(async (ctx) => await ctx.db.query('capabilityPublications').unique()))
       .resolves.toMatchObject({ disposition: 'current', authorityMode: 'ae_curated_external' })
-  })
-
-  it('reports admission and reconciliation skips in the action total', async () => {
-    const backend = convexTest(schema, convexModules)
-    const workload = await seedFacilitatorDiscoveryWorkload(backend)
-    const response = new Response(JSON.stringify({
-      items: [timezoneFixture.paymentRequired, { malformed: true }],
-    }), { status: 200, headers: { 'content-type': 'application/json' } })
-    vi.stubGlobal('fetch', vi.fn(async () => response.clone()))
-    try {
-      await expect(backend.action(internal.facilitatorDiscoveryAction.run, { workload })).resolves.toEqual({
-        pages: 2,
-        admitted: 2,
-        skipped: 3,
-        complete: true,
-      })
-    } finally {
-      vi.unstubAllGlobals()
-    }
   })
 
   it('does not create a business for malformed input or withdraw on a partial run', async () => {

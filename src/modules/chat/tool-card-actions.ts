@@ -13,7 +13,7 @@ export type ChatChoiceAction = Readonly<{
  * unique current choices: the latest shortlist replaces broad results; latest
  * explicit details take priority, including over later broad reads.
  * Review only opens canonical input review; fresh detail and authority still
- * gate a Call. External and unavailable rows cannot acquire review eligibility.
+ * gate a Call. Listing-ref and unavailable rows cannot acquire review eligibility.
  * Empty/non-choice input returns no actions; inputs are never mutated.
  */
 export function projectChatChoiceActions(cards: readonly ToolCardProjection[]): readonly ChatChoiceAction[] {
@@ -22,8 +22,7 @@ export function projectChatChoiceActions(cards: readonly ToolCardProjection[]): 
   for (const card of cards) {
     if (card.kind !== 'choices') continue
     const actions = card.choices.map((choice): ChatChoiceAction => {
-      const eligible = !choice.belowMatch && choice.access !== 'external_listing'
-        && choice.readiness !== 'unavailable' && isPublicToolRef(choice.toolRef)
+      const eligible = !choice.belowMatch && choice.readiness !== 'unavailable' && isPublicToolRef(choice.toolRef)
       return {
         choice,
         toolId: card.toolId,

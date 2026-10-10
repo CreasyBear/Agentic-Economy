@@ -263,7 +263,7 @@ describe('capability operation invocation worker charge/x402', () => {
     expect(worker.state.unknownCharges).toHaveLength(0)
     expect(worker.state.records.at(-1)).toMatchObject({
       state: 'refused',
-      result: { kind: 'refused', code: 'provider_refused' },
+      result: { kind: 'refused', code: 'payment_unavailable', retryable: false },
     })
   })
   it('releases a definite no-authorization refusal only after proving no payment attempt exists', async () => {
@@ -286,7 +286,7 @@ describe('capability operation invocation worker charge/x402', () => {
     expect(worker.state.unknownCharges).toHaveLength(0)
     expect(worker.state.records.at(-1)).toMatchObject({
       state: 'refused',
-      result: { kind: 'refused', code: 'provider_refused' },
+      result: { kind: 'refused', code: 'payment_unavailable', retryable: false, nextAction: expect.stringMatching(/Nothing was charged/u) },
     })
   })
   it.each([

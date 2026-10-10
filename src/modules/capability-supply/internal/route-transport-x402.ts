@@ -21,6 +21,7 @@ import {
   decodeX402Challenge,
   freshX402ChallengeSelection,
   prepareX402PaymentMaterial,
+  x402RequirementDriftCode,
   type X402Challenge,
   type X402ChallengeSelection,
 } from './route-transport-x402-payment'
@@ -206,7 +207,7 @@ export async function invokeX402(
   )
   if (paymentSignature === undefined || paymentSignature.length === 0) {
     return {
-      ...refused('x402', requestDigest, false, 'payment_signature_unavailable'),
+      ...refused('x402', requestDigest, false, runtime.readX402SigningRefusal?.() ?? 'payment_signature_unavailable'),
       paymentChallengeDigest,
       paymentAuthorizationStatus: 'created',
       paymentSubmissionStatus: 'not_submitted',
@@ -728,7 +729,9 @@ async function readFreshX402Challenge(
     return {
       kind: 'refused',
       observation: {
-        ...refused('x402', requestDigest, false, 'payment_provider_requirement_stale'),
+        ...refused('x402', requestDigest, false, freshChallenge === undefined
+          ? 'payment_provider_requirement_stale'
+          : x402RequirementDriftCode(committed, freshChallenge)),
         queryReleaseStatus: 'released',
         paymentChallengeDigest: committedChallengeDigest,
         paymentAuthorizationStatus: 'not_created',

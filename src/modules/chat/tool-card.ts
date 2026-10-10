@@ -7,7 +7,7 @@ import { getStatusPresentation } from '@/lib/ui/status-presentation'
 import { chatClarifyInputSchema, storedClarifyAnswer } from '@/modules/chat/agent-turn.contracts'
 import { addRef, boundedString, collectToolRefs, directoryChoiceFields, isExternalChatLookupRef, matchedCount } from '@/modules/chat/tool-card-search'
 import { isRecord } from '@/modules/common/is-record'
-import { isPublicToolRef } from '@/modules/common/tool-ref'
+import { isPublicToolRef, parseCallableRef } from '@/modules/common/tool-ref'
 import { publicToolDisplayPriceSchema } from '@/modules/capability-supply/tool-schemas'
 import type { PublicToolAuthentication } from '@/modules/capability-supply/public'
 import { readPosture, readPrice } from './internal/tool-card-compare'
@@ -210,19 +210,19 @@ function firstSearchNext(output: Record<string, unknown>): RegistryNextAction | 
 
 function rowFromChoiceFields(value: unknown): ToolChoiceRow | null {
   if (!isRecord(value)) return null
-  if (value.access === 'external_listing' && isExternalChatLookupRef(value.id)
-    && value.source === 'coinbase' && typeof value.title === 'string') {
+  if (value.source === 'coinbase' && isExternalChatLookupRef(value.id) && typeof value.title === 'string') {
     const provider = stringField(value.provider)
+    const access = stringField(value.access)
     return {
       toolRef: value.id,
       detailHref: `/api/v1/registry/detail?id=${encodeURIComponent(value.id)}`,
-      title: stringField(value.title) ?? 'External listing',
+      title: stringField(value.title) ?? value.id,
       ...(provider === undefined ? {} : { provider }),
       ...choicePriceFields(value),
       ...directoryChoiceFields(value),
       ...(value.readiness === 'ready' || value.readiness === 'unverified' || value.readiness === 'unavailable'
         ? { readiness: value.readiness } : {}),
-      access: 'external_listing',
+      ...(access === undefined ? {} : { access }),
     }
   }
   const refs: string[] = []
@@ -314,7 +314,11 @@ function projectStoredChoice(value: unknown): ToolChoiceRow | null {
   if (!isRecord(value)) return null
   const refs: string[] = []
   addRef(refs, value.toolRef)
-  const toolRef = refs[0] ?? (value.access === 'external_listing' && isExternalChatLookupRef(value.toolRef) ? value.toolRef : undefined)
+  // A directory row keeps its listing ref and registry detail link through stored history.
+  const listing = refs[0] === undefined && isExternalChatLookupRef(value.toolRef)
+    && (parseCallableRef(value.toolRef)?.kind === 'listing'
+      || typeof value.detailHref === 'string' && value.detailHref.startsWith('/api/v1/registry/detail?'))
+  const toolRef = refs[0] ?? (listing ? value.toolRef as string : undefined)
   const title = stringField(value.title)
   if (toolRef === undefined || title === undefined) return null
   const provider = stringField(value.provider)
@@ -329,8 +333,7 @@ function projectStoredChoice(value: unknown): ToolChoiceRow | null {
   const access = stringField(value.access)
   return {
     toolRef,
-    ...(value.access === 'external_listing'
-      ? { detailHref: `/api/v1/registry/detail?id=${encodeURIComponent(toolRef)}` } : {}),
+    ...(listing ? { detailHref: `/api/v1/registry/detail?id=${encodeURIComponent(toolRef)}` } : {}),
     title,
     ...(provider === undefined ? {} : { provider }),
     ...directoryChoiceFields(value),
@@ -338,7 +341,7 @@ function projectStoredChoice(value: unknown): ToolChoiceRow | null {
     ...(price === undefined || priceValidUntil === undefined ? {} : { priceValidUntil }),
     ...(readiness === undefined ? {} : { readiness }),
     ...(access === undefined ? {} : { access }),
-    ...(value.callable === true && access !== 'external_listing' ? { callable: true } : {}),
+    ...(value.callable === true && !listing ? { callable: true } : {}),
     ...(value.belowMatch === true ? { belowMatch: true } : {}),
   }
 }

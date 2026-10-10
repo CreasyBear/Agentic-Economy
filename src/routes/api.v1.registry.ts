@@ -18,6 +18,7 @@ import { isInvalidRegistryCursorError } from '@/routes/api.businesses'
 import { decodeOpaqueCursor, encodeOpaqueCursor } from '@/modules/registry/opaque-cursor'
 import { toolCatalogPaginationSchema } from '@/modules/registry/tool-choice-contracts'
 import { readDirectoryFreshnessField } from '@/modules/market/x402-directory-index.server'
+import type { DirectoryChoice } from '@/modules/market/x402-directory'
 
 const requestQuery = z.strictObject({
   query: z.string().max(200).default(''),
@@ -35,6 +36,7 @@ type RegistryCompactRow = Readonly<{
   source: 'coinbase' | 'provider'
   sourceRouteRef?: string
   toolRef?: string
+  choice: DirectoryChoice
   title: string
   summary: string
   provider: string
@@ -140,7 +142,8 @@ export async function handleApiRegistryRequest(
           const page = projection.page.map(row => ({
             id: row.id,
             source: row.source,
-            access: row.toolRef === undefined ? 'external_listing' : 'ae_callable',
+            access: row.choice.access,
+            ...(row.choice.reason === undefined ? {} : { reason: row.choice.reason }),
             ...(row.sourceRouteRef === undefined ? {} : { sourceRouteRef: row.sourceRouteRef }),
             ...(row.toolRef === undefined ? {} : { toolRef: row.toolRef }),
             title: row.title,

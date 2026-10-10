@@ -119,6 +119,7 @@ export type X402PaymentCallbacks = Pick<
   | 'prepareX402PaymentAuthorization'
   | 'readX402PaymentAuthorization'
   | 'readX402PaymentAuthorizationByDigest'
+  | 'readX402SigningRefusal'
   | 'markX402PaymentPossiblySubmitted'
   | 'observeX402PaymentAttempt'
   | 'checkpointX402Response'

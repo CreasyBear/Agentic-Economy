@@ -133,12 +133,15 @@ describe('official Bazaar admission regressions', () => {
       },
     })
 
+    const undeclared = { kind: 'x402', resource: { paymentRequired: { extensions: {} } } } as never
+    expect(materializeOfficialBazaarX402Import(undeclared)).toEqual({
+      kind: 'admitted',
+      discovery: { kind: 'absent' },
+      source: undeclared,
+    })
     expect(materializeOfficialBazaarX402Import({
       kind: 'x402',
-      resource: { paymentRequired: { extensions: {} } },
-    } as never)).toEqual({
-      kind: 'refused',
-      discovery: { kind: 'absent' },
-    })
+      resource: { paymentRequired: { extensions: { bazaar: { info: {} } } } },
+    } as never)).toMatchObject({ kind: 'refused', discovery: { kind: 'refused' } })
   })
 })

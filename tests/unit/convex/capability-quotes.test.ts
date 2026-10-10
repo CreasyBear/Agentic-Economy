@@ -394,6 +394,61 @@ describe('direct Quote handlers', () => {
     expect(await backend.run(ctx => ctx.db.query('capabilityCalls').take(1))).toEqual([])
   })
 
+  describe('listing and URL refs', () => {
+    const listingRef = `registry:${'c'.repeat(64)}`
+    const urlRef = 'https://402timezones.vercel.app/api/timezone'
+    const handler = (quote as unknown as { _handler: (ctx: unknown, args: unknown) => Promise<unknown> })._handler
+    async function readyAgent() {
+      const backend = convexTestWithMarketComponents()
+      const fixture = await admitDiscoveredToolFixture(backend, { withoutExample: true })
+      const owner = await publishedBusinessOwner(backend, 'listing-quote-buyer')
+      await seedCommercialPolicies(backend, 'listing-quote', Date.now())
+      await seedTreasuryReadinessFacts(backend, { observation: 'create' })
+      await seedPaymentReadiness(backend)
+      const agent = await seedAgent(backend, owner, fixture.toolRef, 'listing-quote', '20000000')
+      return { backend, fixture, agent }
+    }
+
+    it.each([listingRef, urlRef])('resolves %s inside Quote after admission and quotes the operation ref', async (ref) => {
+      const { backend, fixture, agent } = await readyAgent()
+      const resolve = vi.fn(async () => ({ kind: 'ready', toolRef: fixture.toolRef }))
+      const result = await handler({ runMutation: backend.mutation, runAction: resolve }, await withSourceWrite('protected_action', {
+        operationKey: 'listing-quote:ref', correlationId: 'listing-quote:ref',
+        principal: agent.principal, toolRef: ref, input: { invalid: 'input' },
+      }))
+      expect(resolve).toHaveBeenCalledTimes(1)
+      expect(resolve.mock.calls[0]).toMatchObject([expect.anything(), { resource: ref }])
+      expect(result).toMatchObject({ kind: 'refused', code: 'input_invalid', toolRef: fixture.toolRef })
+    })
+
+    it('does not resolve or publish for an unadmitted caller', async () => {
+      const { backend, agent } = await readyAgent()
+      const resolve = vi.fn()
+      const result = await handler({ runMutation: backend.mutation, runAction: resolve }, {
+        operationKey: 'listing-quote:unsigned', correlationId: 'listing-quote:unsigned',
+        principal: agent.principal, toolRef: listingRef, input: {},
+      })
+      expect(result).toMatchObject({ kind: 'refused', code: 'inspection_unavailable', reason: 'missing_source_write_admission' })
+      expect(resolve).not.toHaveBeenCalled()
+    })
+
+    it.each([
+      ['resource_not_found', 'tool_not_found', false],
+      ['source_unavailable', 'inspection_unavailable', true],
+      ['chain_unsupported', 'tool_unsupported', false],
+    ] as const)('names %s as %s without charging', async (reason, code, retryable) => {
+      const { backend, agent } = await readyAgent()
+      const resolve = vi.fn(async () => ({ kind: 'unavailable', reason }))
+      const result = await handler({ runMutation: backend.mutation, runAction: resolve }, await withSourceWrite('protected_action', {
+        operationKey: `listing-quote:${reason}`, correlationId: `listing-quote:${reason}`,
+        principal: agent.principal, toolRef: listingRef, input: {},
+      }))
+      expect(result).toMatchObject({ kind: 'refused', code, retryable, reason, toolRef: listingRef })
+      expect(await backend.run(ctx => ctx.db.query('capabilityQuotes').take(1))).toEqual([])
+      expect(await backend.run(ctx => ctx.db.query('capabilityCalls').take(1))).toEqual([])
+    })
+  })
+
   it('refuses shared legal-account exposure without issuing a Quote or advising a top-up', async () => {
     const backend = convexTestWithMarketComponents()
     const suffix = 'quote-account-exposure'
@@ -911,7 +966,7 @@ describe('direct Quote handlers', () => {
     try {
       expect(await backend.action(internal.capabilityCallLiveX402.inspect, {
         principal: agent.principal, toolRef: fixture.toolRef, input,
-      })).toEqual({ kind: 'refused' })
+      })).toEqual({ kind: 'refused', reason: 'inspection_request_failed' })
       expect(targetCheck).toHaveBeenCalledOnce()
       expect(send).not.toHaveBeenCalled()
     } finally { targetCheck.mockRestore(); send.mockRestore() }

@@ -8,17 +8,30 @@ import { capabilitySupplyGraphPorts } from '../../capabilitySupply/graphPorts/po
 import { toPublicationRow, toPublishedBusiness } from '../../capabilitySupply/graphPorts/rows'
 import { toolRecord, toolRecordProjection, type PreloadedCurrentToolRecords } from '../../capabilitySupply/tool/projection'
 import { toCapabilityBindingRow, toCapabilityOfferingRow } from '../../../capabilitySupplyRowMappers'
+import { directoryListingId } from './ingestion'
+
+/**
+ * A row with no current publication is callable by its listing ref, which Quote resolves and
+ * publishes, unless the index already named why Quote would refuse it. A row indexed before
+ * admission was stored stays callable; Quote decides it.
+ */
+function unpublishedChoice(row: Doc<'marketDirectorySearchEntries'>): DirectoryChoice {
+  const at = row.sourceRouteRef === undefined ? {} : { sourceRouteRef: row.sourceRouteRef }
+  if (row.admission?.kind === 'unavailable') return { access: 'unavailable', reason: row.admission.reason, ...at }
+  return { access: 'ae_callable', toolRef: row.documentId ?? directoryListingId(row.resource), ...at }
+}
 
 /** Exact current publication identity alone never establishes Call readiness. */
-export async function currentDirectoryChoice(ctx: QueryCtx, sourceRouteRef: string | undefined, now: number): Promise<DirectoryChoice> {
+export async function currentDirectoryChoice(ctx: QueryCtx, row: Doc<'marketDirectorySearchEntries'>, now: number): Promise<DirectoryChoice> {
   const environment = deploymentPaymentEnvironment(env)
   if (environment === undefined) return { access: 'unavailable' }
-  if (sourceRouteRef === undefined) return { access: 'external_listing' }
+  const sourceRouteRef = row.sourceRouteRef
+  if (sourceRouteRef === undefined) return unpublishedChoice(row)
   const publication = await ctx.db.query('capabilityPublications')
     .withIndex('by_sourceRouteRef_and_disposition', q => q.eq('sourceRouteRef', sourceRouteRef).eq('disposition', 'current'))
     .filter(q => q.eq(q.field('runtimeEnvironment'), environment))
     .unique()
-  if (publication === null) return { access: 'external_listing', sourceRouteRef }
+  if (publication === null) return unpublishedChoice(row)
   const record = await toolRecord(ctx, publication, now)
   if (record === undefined) return { access: 'unavailable', sourceRouteRef }
   const posture = availability({
@@ -35,7 +48,7 @@ export function choiceForDirectoryPage(ctx: QueryCtx, now: number): (row: Doc<'m
     const key = row.sourceRouteRef ?? String(row._id)
     let choice = choices.get(key)
     if (choice === undefined) {
-      choice = currentDirectoryChoice(ctx, row.sourceRouteRef, now)
+      choice = currentDirectoryChoice(ctx, row, now)
       choices.set(key, choice)
     }
     return choice
@@ -133,12 +146,8 @@ export async function choicesForDirectoryRows(
     }, now).posture
     byRef.set(sourceRouteRef, { access: posture === 'routeable' ? 'ae_callable' : posture, sourceRouteRef, toolRef: publication.toolRef })
   }))
-  for (const sourceRouteRef of refs) if (!byRef.has(sourceRouteRef)) byRef.set(sourceRouteRef, { access: 'external_listing', sourceRouteRef })
-  return new Map(rows.map(row => {
-    const key = row.sourceRouteRef ?? String(row._id)
-    const choice = row.sourceRouteRef === undefined
-      ? { access: 'external_listing' as const }
-      : byRef.get(row.sourceRouteRef) ?? { access: 'external_listing' as const, sourceRouteRef: row.sourceRouteRef }
-    return [key, choice]
-  }))
+  return new Map(rows.map(row => [
+    row.sourceRouteRef ?? String(row._id),
+    (row.sourceRouteRef === undefined ? undefined : byRef.get(row.sourceRouteRef)) ?? unpublishedChoice(row),
+  ]))
 }

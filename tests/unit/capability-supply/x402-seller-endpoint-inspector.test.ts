@@ -1,3 +1,4 @@
+import { isPublicHttpTarget } from '@/modules/network-guard/public'
 import { describe, expect, it, vi } from 'vitest'
 
 import {
@@ -148,7 +149,7 @@ describe('x402 seller endpoint inspector', () => {
       now: () => 1_000,
       validatePublicTarget: async () => true,
       send: async () => paymentRequiredResponse(challenge([supportedAccept({ payTo: '0x0000000000000000000000000000000000000003' })])),
-    })).resolves.toEqual({ kind: 'refused' })
+    })).resolves.toEqual({ kind: 'refused', reason: 'payee_changed' })
   })
 
   it.each(['GET', 'POST'] as const)(
@@ -427,5 +428,21 @@ describe('x402 seller endpoint inspector', () => {
     expect(malformed).toMatchObject({ kind: 'refused', reason: 'target_invalid' })
     expect(privateTarget).toMatchObject({ kind: 'refused', reason: 'target_not_public' })
     expect(send).not.toHaveBeenCalled()
+  })
+
+  it('refuses a non-default port before any lookup or request, and accepts an explicit :443', async () => {
+    const send = vi.fn(async () => paymentRequiredResponse())
+    const validatePublicTarget = vi.fn(async () => true)
+    expect(await inspectX402SellerEndpoint({ endpointUrl: 'https://seller.example.com:8443/pay', method: 'GET' }, { validatePublicTarget, send }))
+      .toMatchObject({ kind: 'refused', reason: 'target_invalid' })
+    expect(validatePublicTarget).not.toHaveBeenCalled()
+    expect(send).not.toHaveBeenCalled()
+    expect(await inspectX402SellerEndpoint({ endpointUrl: 'https://seller.example.com:443/pay', method: 'GET' }, { validatePublicTarget: async () => false, send }))
+      .toMatchObject({ kind: 'refused', reason: 'target_not_public' })
+  })
+
+  it.each(['192.0.0.8', '192.0.2.1', '198.51.100.7', '203.0.113.9', '2001:db8::1', '100::1'])('treats special-purpose address %s as not public', async (address) => {
+    const resolver = { lookup: async () => [{ address }] }
+    expect(await isPublicHttpTarget(new URL('https://seller.example.com/pay'), resolver)).toBe(false)
   })
 })

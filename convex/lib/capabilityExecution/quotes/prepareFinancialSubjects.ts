@@ -1,5 +1,5 @@
 import { assertFinancialEnvironment } from '../../money/formance/contracts'
-import { v } from 'convex/values'
+import { v, type Infer } from 'convex/values'
 
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
@@ -27,7 +27,7 @@ import { readManagedX402InspectionTarget } from '../../capabilitySupply/currentT
 import { readAgentPaymentAdmission } from '../../money/treasury/paymentAdmission'
 import { readCommercialPolicyGate } from '../../../moneyCommercialPolicy'
 import { principalValue } from '../callLifecycle/contracts'
-import { resolveCurrentAgentAuthority } from '../callLifecycle/agentCallAuthority'
+import { hasCurrentAgentGrant, resolveCurrentAgentAuthority } from '../callLifecycle/agentCallAuthority'
 import { requireSourceWrite } from '../../security/sourceWrite/admission'
 import { sourceWriteArgs } from '../../security/sourceWrite/contracts'
 import { resolveAndBindLegalCustomer } from '../../money/legalCustomer/binding'
@@ -52,17 +52,50 @@ export const prepareFinancialSubjectsArgs = {
   principal: principalValue,
   toolRef: v.string(),
   input: jsonObject,
+  // Set by Quote after admitCallableResolve consumed the signed admission (which covers the
+  // named `toolRef`) and resolved a listing or URL; the nonce is not consumed twice.
+  resolvedToolRef: v.optional(v.string()),
 }
 
 export const prepareFinancialSubjectsResult = financialSubjectsResult
 
 export async function prepareFinancialSubjectsHandler(
   ctx: MutationCtx,
-  args: QuoteArgs,
+  args: QuoteArgs & Readonly<{ resolvedToolRef?: string }>,
 ): Promise<FinancialSubjectsResult> {
+  const { resolvedToolRef, ...signed } = args
+  if (resolvedToolRef !== undefined) return await prepareFinancialSubjectsCore(ctx, { ...signed, toolRef: resolvedToolRef })
+  const sourceWrite = await requireSourceWrite(ctx, signed, 'protected_action')
+  if (sourceWrite.kind === 'rejected') return { kind: 'refused', code: 'inspection_unavailable', reason: sourceWrite.reason }
+  return await prepareFinancialSubjectsCore(ctx, signed)
+}
+
+export const admitCallableResolveArgs = {
+  operationKey: v.string(),
+  correlationId: v.string(),
+  ...sourceWriteArgs,
+  principal: principalValue,
+  toolRef: v.string(),
+  input: jsonObject,
+}
+
+export const admitCallableResolveResult = v.union(
+  v.object({ kind: v.literal('admitted') }),
+  v.object({ kind: v.literal('refused'), code: v.union(v.literal('inspection_unavailable'), v.literal('grant_not_found')), reason: v.optional(v.string()) }),
+)
+
+/**
+ * Consume-then-act: claims the signed admission's nonce and confirms a current Agent grant
+ * before Quote resolves a listing or URL, so neither a replay nor a grantless caller reaches
+ * the outbound probe or the directory publish.
+ */
+export async function admitCallableResolveHandler(
+  ctx: MutationCtx,
+  args: QuoteArgs,
+): Promise<Infer<typeof admitCallableResolveResult>> {
   const sourceWrite = await requireSourceWrite(ctx, args, 'protected_action')
   if (sourceWrite.kind === 'rejected') return { kind: 'refused', code: 'inspection_unavailable', reason: sourceWrite.reason }
-  return await prepareFinancialSubjectsCore(ctx, args)
+  return await hasCurrentAgentGrant(ctx, args.principal, Date.now()) ? { kind: 'admitted' } : { kind: 'refused', code: 'grant_not_found' }
 }
 
 /** Called only after the public source-write gate or the trusted chat mutation's live turn/grant check. */

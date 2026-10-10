@@ -226,9 +226,12 @@ describe('public external registry route', () => {
     vi.clearAllMocks()
   })
 
+  const registryId = (index: number) => `registry:${index.toString(16).padStart(64, '0')}`
   const registryEntry = (index: number, summary = 'Search company data.') => ({
-    id: `registry:${index.toString(16).padStart(64, '0')}`,
+    id: registryId(index),
     source: 'coinbase' as const,
+    toolRef: registryId(index),
+    choice: { access: 'ae_callable' as const, toolRef: registryId(index) },
     title: `Companies search ${index}`,
     summary,
     provider: 'Treg provider',
@@ -264,14 +267,13 @@ describe('public external registry route', () => {
     expect(body).toMatchObject({
       schemaVersion: 'api-registry:v4', query: 'companies', kind: 'ok',
       pagination: { limit: 8, hasMore: false },
-      page: [{ id: registryEntry(1).id, access: 'external_listing', detailRef: `/api/v1/registry/detail?id=${encodeURIComponent(registryEntry(1).id)}` }],
+      page: [{ id: registryEntry(1).id, access: 'ae_callable', toolRef: registryEntry(1).id, detailRef: `/api/v1/registry/detail?id=${encodeURIComponent(registryEntry(1).id)}` }],
     })
     expect(body.freshness).toEqual({
       source: 'x402_directory', state: 'fresh', completedAt: directoryCompletedAt,
       staleAfterMs: 36 * 60 * 60 * 1000,
     })
     expect(JSON.stringify(body)).not.toMatch(/metadataJson|schemaJson|secret source|secret schema|searchMethod/u)
-    expect(body.page[0]).not.toHaveProperty('toolRef')
     expect(query).toHaveBeenCalledWith(
       expect.anything(), { query: 'companies', paginationOpts: { cursor: null, numItems: 8 } },
     )
@@ -353,7 +355,7 @@ describe('public external registry route', () => {
     expect(foreign.status).toBe(400)
   })
 
-  it('loads exact source metadata/schema only by indexed ID, without inventing a ToolRef', async () => {
+  it('loads exact source metadata/schema only by indexed ID and names the listing ref Quote accepts', async () => {
     setHttpRateLimitAdmissionForTests(async () => ({ ok: true }))
     const id = registryEntry(1).id
     const query = vi.fn(async (ref: unknown) => {
@@ -363,7 +365,7 @@ describe('public external registry route', () => {
       expect(getFunctionName(ref as never)).toBe('x402DirectoryIndex:detailById')
       return {
         kind: 'found', coverage: { generation: 'g1', completedAt: Date.now() },
-        item: { entry: { metadataJson: '{"source":"verbatim"}', input: { schemaJson: '{"type":"object"}' } } },
+        item: { choice: { access: 'ae_callable', toolRef: id }, entry: { metadataJson: '{"source":"verbatim"}', input: { schemaJson: '{"type":"object"}' } } },
       }
     })
     setPublicSourceTransportForTests({ query, mutation: vi.fn(), action: vi.fn() } as never)
@@ -371,11 +373,11 @@ describe('public external registry route', () => {
     expect(response.status).toBe(200)
     const body = await response.json()
     expect(body).toMatchObject({
-      schemaVersion: 'api-registry-detail:v1', id, kind: 'found', access: 'external_listing',
+      schemaVersion: 'api-registry-detail:v1', id, kind: 'found', access: 'ae_callable',
       item: { entry: { metadataJson: '{"source":"verbatim"}', input: { schemaJson: '{"type":"object"}' } } },
     })
-    expect(body.warning).toContain('cannot Quote or Call')
-    expect(JSON.stringify(body)).not.toContain('toolRef')
+    expect(body.item.choice).toEqual({ access: 'ae_callable', toolRef: id })
+    expect(body).not.toHaveProperty('warning')
     expect(query).toHaveBeenCalledWith(expect.anything(), { id })
     const missing = await handleApiRegistryDetailRequest(new Request('https://ae.test/api/v1/registry/detail?id=nope'))
     expect(missing.status).toBe(400)

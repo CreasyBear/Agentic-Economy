@@ -65,8 +65,8 @@ const directoryEntrySchema = z.strictObject({
     calls30d: z.number().optional(), payers30d: z.number().optional(), lastCalledAt: z.string().optional(),
   }).optional(),
   choice: z.strictObject({
-    access: z.enum(['external_listing', 'ae_callable', 'setup_required', 'unavailable']),
-    toolRef: z.string().optional(), sourceRouteRef: z.string().optional(),
+    access: z.enum(['ae_callable', 'setup_required', 'unavailable']),
+    toolRef: z.string().optional(), sourceRouteRef: z.string().optional(), reason: z.string().optional(),
   }).optional(),
   audEstimate: z.string().optional(),
 })
@@ -126,7 +126,7 @@ export const savedToolsSaveAction = defineAction({
   id: SAVED_TOOLS_ROUTE_CONTRACTS.save.actionId, name: 'Save Tool', summary: 'Save a currently resolved Tool identity to the authenticated account.',
   boundaries: ['Stores identity only, never a price, schema, credential or Call input.', 'Does not Quote or Call.'],
   schema: savedToolSaveInputSchema, outputSchema: savedToolSaveResultSchema,
-  parameters: [{ name: 'kind', type: 'string', description: 'ae_callable or external_listing.', required: true }, { name: 'toolRef', type: 'string', description: 'Callable Tool reference.', required: false }, { name: 'resource', type: 'string', description: 'External listing resource URL.', required: false }, { name: 'id', type: 'string', description: 'Compact external result ID; resolves before saving.', required: false }],
+  parameters: [{ name: 'kind', type: 'string', description: 'ae_callable or a saved directory listing.', required: true }, { name: 'toolRef', type: 'string', description: 'Callable Tool reference.', required: false }, { name: 'resource', type: 'string', description: 'Directory listing resource URL.', required: false }, { name: 'id', type: 'string', description: 'Compact external result ID; resolves before saving.', required: false }],
   readOnly: false, effect: { class: 'external_state_change', reversible: true, recipientKind: 'none', dataClasses: ['saved_tool_identity'], spendExposure: 'none', approval: 'none' },
   surfaces: ['http', 'mcp', 'cli'], mcp: { idempotent: true, openWorld: false, destructive: false }, credentialAdmission: { scope: MARKET_TOOLS_CALL_SCOPE, authority: 'descriptor_classified' },
   invocationContract: { version: SAVED_TOOLS_ROUTE_CONTRACTS.save.contractVersion, consequenceClass: 'external_effect', materialInputPaths: ['kind', 'toolRef', 'resource', 'id'], authorityRequirement: 'principal', retryClass: 'replayable', expectedEvidence: ['saved_tool_identity'], safeContinuations: ['market.savedTools.list'], invalidationConditions: ['tool_identity_changed', 'credential_revoked'] },
@@ -136,7 +136,7 @@ export const savedToolsRemoveAction = defineAction({
   id: SAVED_TOOLS_ROUTE_CONTRACTS.remove.actionId, name: 'Remove saved Tool', summary: 'Remove an exact saved identity even if the original Tool has gone.',
   boundaries: ['Only the owning account’s identity can be removed.', 'No Quote or Call state is changed.'],
   schema: savedToolRemoveInputSchema, outputSchema: savedToolRemoveResultSchema,
-  parameters: [{ name: 'kind', type: 'string', description: 'ae_callable or external_listing.', required: true }, { name: 'toolRef', type: 'string', description: 'Callable Tool reference.', required: false }, { name: 'resource', type: 'string', description: 'External listing resource URL.', required: false }],
+  parameters: [{ name: 'kind', type: 'string', description: 'ae_callable or a saved directory listing.', required: true }, { name: 'toolRef', type: 'string', description: 'Callable Tool reference.', required: false }, { name: 'resource', type: 'string', description: 'Directory listing resource URL.', required: false }],
   readOnly: false, effect: { class: 'external_state_change', reversible: true, recipientKind: 'none', dataClasses: ['saved_tool_identity'], spendExposure: 'none', approval: 'none' },
   surfaces: ['http', 'mcp', 'cli'], mcp: { idempotent: true, openWorld: false, destructive: true }, credentialAdmission: { scope: MARKET_TOOLS_CALL_SCOPE, authority: 'descriptor_classified' },
   invocationContract: { version: SAVED_TOOLS_ROUTE_CONTRACTS.remove.contractVersion, consequenceClass: 'external_effect', materialInputPaths: ['kind', 'toolRef', 'resource'], authorityRequirement: 'principal', retryClass: 'replayable', expectedEvidence: ['saved_tool_removal'], safeContinuations: ['market.savedTools.list'], invalidationConditions: ['tool_identity_changed', 'credential_revoked'] },

@@ -3,8 +3,8 @@
  * declarations, the deployment manifest and their tests all derive from this
  * list, so a workload is added or retired in one place.
  */
-export type WorkloadInterval = Readonly<{ minutes: number }> | Readonly<{ hours: number }>
-export type WorkloadDaily = Readonly<{ hourUTC: number; minuteUTC: number }>
+type WorkloadInterval = Readonly<{ minutes: number }> | Readonly<{ hours: number }>
+type WorkloadDaily = Readonly<{ hourUTC: number; minuteUTC: number }>
 
 
 export type ScheduledWorkload = Readonly<{
@@ -24,7 +24,9 @@ export const SCHEDULED_WORKLOADS = [
   { name: 'reconcile promotional credit', workloadKind: 'reconciliation', handler: 'reconcilePromotionalCredit', interval: { minutes: 1 } },
   { name: 'reconcile due facilitator invocations', workloadKind: 'reconciliation', handler: 'reconcileDueFacilitatorInvocations', interval: { minutes: 15 } },
   { name: 'expire stale pending approvals', workloadKind: 'reconciliation', handler: 'expireStalePendingApprovals', interval: { minutes: 5 } },
-  { name: 'refresh facilitator discovery', workloadKind: 'cron', handler: 'refreshFacilitatorDiscovery', interval: { hours: 6 } },
+  // No timer: the directory index is the only crawler. Quote's resolve borrows this
+  // workload identity on demand to publish one selected listing.
+  { name: 'refresh facilitator discovery', workloadKind: 'cron', handler: 'refreshFacilitatorDiscovery' },
   { name: 'refresh USDC/AUD reference rate', workloadKind: 'cron', handler: 'refreshReferenceRate', interval: { hours: 6 } },
   // 7 days (168h), not 24h: refreshAgenticEconomyApiRegistry rewrites ~14,541
   // resources when it actually runs (~225,000 function calls - see cost
@@ -46,6 +48,8 @@ export const SCHEDULED_WORKLOADS = [
 ] as const satisfies readonly ScheduledWorkload[]
 
 export type ScheduledWorkloadName = typeof SCHEDULED_WORKLOADS[number]['name']
+/** Workloads that run on a Convex timer; on-demand workloads have neither interval nor daily. */
+export type TimedWorkloadName = Extract<typeof SCHEDULED_WORKLOADS[number], { interval: WorkloadInterval } | { daily: WorkloadDaily }>['name']
 
 /** Names of workloads that run on a Convex cron timer, sorted for manifests. */
 export const SCHEDULED_WORKLOAD_JOB_NAMES = [
@@ -62,9 +66,8 @@ export const SCHEDULED_WORKLOAD_JOB_NAMES = [
   'refresh Agentic Economy API registry',
   'refresh capability supply readiness',
   'refresh current market presence',
-  'refresh facilitator discovery',
   'refresh USDC/AUD reference rate',
   'refresh market flow',
   'refresh payment readiness',
   'snapshot marketplace metrics day',
-] as const satisfies readonly ScheduledWorkloadName[]
+] as const satisfies readonly TimedWorkloadName[]

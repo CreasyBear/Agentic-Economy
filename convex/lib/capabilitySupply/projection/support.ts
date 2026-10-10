@@ -2,7 +2,6 @@ import type { Id } from '../../../_generated/dataModel'
 import { type OfferingSupportProjection } from '../../../../src/modules/catalog/public'
 import { MAX_ELIGIBLE_SUPPLY, qualifySuppliedCandidate } from '../../../../src/modules/capability-supply/public'
 import { capabilitySupplyGraphPorts } from '../graphPorts/ports'
-import { directoryListingEligible } from '../../../capabilitySupplyDirectoryEligibility'
 import { catalogOfferingOrigin, readCapabilityBinding, readCapabilityOffering, readCapabilityPublication } from './capabilityRows'
 import type { CapabilityProjectionReadDb } from './reads'
 
@@ -60,17 +59,7 @@ export async function deriveBusinessOfferingSupportFromCapabilitySupply(
     })
     const readinessObservedAt = publication.readinessObservedAt
     const expiry = publication.readinessValidUntil
-    // Same directory quality bar applied to the admitted registry's Tool
-    // reads (capabilitySupplyDirectoryEligibility.ts:directoryListingEligible):
-    // reviewed-tier (provider_owned/ae_curated_external) is exempt; a
-    // listed-tier publication (third_party_gateway/observed_external) must
-    // still clear the directory's eligibility bar to count as routeable
-    // here. No catalog_offering-origin publication is listed-tier today
-    // (facilitator discovery only ever publishes standalone-origin
-    // offerings), so this is currently a no-op guard against that changing
-    // silently rather than an active filter.
     const routeable = qualification.status === 'eligible'
-      && await directoryListingEligible({ db }, publication.authorityMode, publication.sourceRouteRef)
     const next: OfferingSupportProjection = routeable
       ? {
           integrated: true,

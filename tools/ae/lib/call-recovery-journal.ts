@@ -30,6 +30,8 @@ export type CallRecoveryRecord = z.infer<typeof journalSchema>
 export type CallRecoveryRequest = Readonly<{
   origin: string
   toolRef: string
+  /** The listing id or URL the caller named; the request is keyed on it so a rerun resumes before any Quote. */
+  requestedRef?: string
   input: Record<string, unknown>
   idempotencyKey?: string
 }>
@@ -37,7 +39,7 @@ export type CallRecoveryRequest = Readonly<{
 function directory(): string { return join(dirname(configPath()), 'calls') }
 function recordPath(ref: string): string { return join(directory(), `call-${ref}.json`) }
 function requestDigest(request: CallRecoveryRequest): string {
-  return canonicalDigest({ origin: new URL(request.origin).origin, toolRef: request.toolRef, input: request.input }).slice('sha256:'.length)
+  return canonicalDigest({ origin: new URL(request.origin).origin, toolRef: request.requestedRef ?? request.toolRef, input: request.input }).slice('sha256:'.length)
 }
 function requestIndex(request: CallRecoveryRequest): string { return join(directory(), `request-${requestDigest(request)}.json`) }
 function identityIndex(request: CallRecoveryRequest): string | undefined {

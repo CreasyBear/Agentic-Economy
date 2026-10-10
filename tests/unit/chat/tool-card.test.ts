@@ -61,7 +61,7 @@ describe('search result state', () => {
 
   it('saves only the actual exhausted search input, preserving selected source and filters in history', () => {
     const input = { query: 'Regional grid capacity forecast', source: 'coinbase' as const,
-      filters: { category: 'energy', access: 'external_listing' as const }, limit: 8 }
+      filters: { category: 'energy', access: 'ae_callable' as const }, limit: 8 }
     const output = {
       kind: 'noMatch', schemaVersion: PublicToolRegistrySchemaVersion,
       query: input.query, results: [], reason: 'No suitable Tool in the assessed supply.',
@@ -91,7 +91,7 @@ describe('search result state', () => {
 
   it('offers only signed-in chat an explicit Save and keeps the same scoped intent on repeat clicks', async () => {
     const saveNeed = { query: 'Regional grid capacity forecast',
-      source: 'coinbase' as const, filters: { category: 'energy', access: 'external_listing' as const } }
+      source: 'coinbase' as const, filters: { category: 'energy', access: 'ae_callable' as const } }
     const projection: ToolCardProjection = {
       toolId: 'registry.tools.search', title: 'Search tools', kind: 'status', state: 'attention',
       summary: 'No suitable Tool', saveNeed,
@@ -174,7 +174,7 @@ describe('search result state', () => {
 
     const ineligibleRows = [
       { id: 'external-listing-one', title: 'External listing', source: 'coinbase',
-        access: 'external_listing', readiness: 'unverified' },
+        access: 'unavailable', readiness: 'unverified' },
       { toolRef: `operation:v1:${'c'.repeat(64)}`, title: 'Unavailable source', source: 'unavailable',
         access: 'setup_required', readiness: 'unverified' },
       { toolRef: `operation:v1:${'g'.repeat(64)}`, title: 'Unavailable access', source: 'current',
@@ -204,10 +204,10 @@ describe('search result state', () => {
     const output = {
       kind: 'scoped',
       results: [
-        { id: 'listing-one', source: 'coinbase', access: 'external_listing', title: 'Weather lookup',
+        { id: 'listing-one', source: 'coinbase', access: 'unavailable', title: 'Weather lookup',
           host: 'weather-one.example', resourcePath: '/v1/current', networkLabel: 'Base',
           sourcePrice: '0.002000 USDC', readiness: 'unverified' },
-        { id: 'listing-two', source: 'coinbase', access: 'external_listing', title: 'Weather lookup',
+        { id: 'listing-two', source: 'coinbase', access: 'unavailable', title: 'Weather lookup',
           host: 'weather-two.example', resourcePath: '/v2/forecast', networkLabel: 'Ethereum',
           sourcePrice: '0.003000 USDC', readiness: 'unverified' },
       ],

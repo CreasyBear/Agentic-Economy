@@ -8,7 +8,8 @@ import Decimal from 'decimal.js'
 import { directoryNetwork, directoryIndexRangesValid, x402DirectoryIndexInputSchema, REVIEWED_DIRECTORY_PROVIDER_HOSTS, type X402DirectoryIndexInput } from '@/modules/market/x402-directory-index'
 import type { Doc } from '../../../_generated/dataModel'
 import { env, type QueryCtx } from '../../../_generated/server'
-import { filterArgs, pageValue } from './contracts'
+import { directoryChoiceValue, filterArgs, pageValue } from './contracts'
+import { isPublicToolRef } from '@/modules/common/tool-ref'
 import { choiceForDirectoryPage, choicesForDirectoryRows } from './choices'
 import { activeDirectoryGeneration, compactDirectoryText, directoryCoverage, indexedDirectoryEntry } from './rows'
 
@@ -179,7 +180,7 @@ export const browseHandler = async (ctx: QueryCtx, args: Infer<typeof browseArgs
       page: withTool.map(({ row, entry, choice }) => ({
         ...indexedDirectoryEntry(entry, row), choice,
         ...(choice.sourceRouteRef === undefined ? {} : { sourceRouteRef: choice.sourceRouteRef }),
-        ...(choice.toolRef === undefined ? {} : { toolRef: choice.toolRef }),
+        ...(isPublicToolRef(choice.toolRef) ? { toolRef: choice.toolRef } : {}),
       })),
     }
   }
@@ -195,7 +196,7 @@ export const searchCompactArgs = v.object({
   provider: v.optional(v.string()),
   network: v.optional(v.string()),
   priceBand: v.optional(v.string()),
-  access: v.optional(v.union(v.literal('ae_callable'), v.literal('external_listing'))),
+  access: v.optional(v.literal('ae_callable')),
   paginationOpts: paginationOptsValidator,
 })
 export const searchCompactReturns = v.union(
@@ -206,10 +207,7 @@ export const searchCompactReturns = v.union(
     page: v.array(v.object({
       id: v.string(), source: v.union(v.literal('coinbase'), v.literal('provider')),
       sourceRouteRef: v.optional(v.string()), toolRef: v.optional(v.string()),
-      choice: v.optional(v.object({
-        access: v.union(v.literal('external_listing'), v.literal('ae_callable'), v.literal('setup_required'), v.literal('unavailable')),
-        sourceRouteRef: v.optional(v.string()), toolRef: v.optional(v.string()),
-      })),
+      choice: directoryChoiceValue,
       title: v.string(), summary: v.string(), provider: v.string(), network: v.string(),
       actionClass: actionClassValue, objectClass: objectClassValue, category: v.optional(v.string()),
       completedAt: v.number(), minimumUsdPrice: v.optional(v.string()),
@@ -272,7 +270,7 @@ export const searchCompactHandler = async (ctx: QueryCtx, args: Infer<typeof sea
   const page = await filter(rows, async row => {
     if (access === undefined) return true
     const choice = await choiceFor(row)
-    return access === 'ae_callable' ? choice.access === 'ae_callable' : choice.access !== 'ae_callable'
+    return choice.access === 'ae_callable'
   }).paginate({
     ...paginationOpts, cursor: nativeCursor, maximumRowsRead: Math.min(paginationOpts.maximumRowsRead ?? 512, access === undefined ? 512 : 48),
     maximumBytesRead: Math.min(paginationOpts.maximumBytesRead ?? 1024 * 1024, 1024 * 1024),

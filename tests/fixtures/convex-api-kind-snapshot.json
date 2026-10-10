@@ -1664,6 +1664,12 @@
   {
     "visibility": "internal",
     "module": "capabilityQuotes",
+    "method": "admitCallableResolve",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "capabilityQuotes",
     "method": "issueQuote",
     "kind": "mutation"
   },
@@ -2386,12 +2392,6 @@
     "module": "facilitatorDiscovery",
     "method": "reconcile",
     "kind": "mutation"
-  },
-  {
-    "visibility": "internal",
-    "module": "facilitatorDiscoveryAction",
-    "method": "run",
-    "kind": "action"
   },
   {
     "visibility": "public",
@@ -4274,12 +4274,6 @@
   {
     "visibility": "internal",
     "module": "workloadCron",
-    "method": "refreshFacilitatorDiscovery",
-    "kind": "action"
-  },
-  {
-    "visibility": "internal",
-    "module": "workloadCron",
     "method": "refreshMarketFlow",
     "kind": "action"
   },
@@ -4398,7 +4392,7 @@
     "kind": "query"
   },
   {
-    "visibility": "public",
+    "visibility": "internal",
     "module": "x402Directory",
     "method": "resolve",
     "kind": "action"

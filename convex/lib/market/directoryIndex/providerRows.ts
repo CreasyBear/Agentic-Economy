@@ -149,11 +149,12 @@ export async function upsertProviderDirectoryRows(
       provider: providerKey, providerKey, eligible: true, source: 'provider' as const,
       ...classes,
       ...compact,
-      sourceRouteRef: routeRef, slug, searchText,
+      sourceRouteRef: routeRef, slug, searchText, admission: { kind: 'quotable' as const },
       popularOrder: -1, updatedOrder: -1, ...searchAnalytics(entry, network, now),
     })
   }
-  const asIndexedSource: IndexedSource = { resource, entry, sourceJson: row.directorySourceJson, sourceDigest }
+  // A provider row exists only while its reviewed publication is current, so Quote can admit it.
+  const asIndexedSource: IndexedSource = { resource, entry, sourceJson: row.directorySourceJson, sourceDigest, admission: { kind: 'quotable' } }
   await writeFacetMembership(ctx, generation.generation, resource, asIndexedSource, category, networks, true, existing, previousEligible)
   await writeAnalytics(ctx, generation.generation, resource, entry, existing === null ? undefined : storedDirectoryEntry(existing))
   await refreshProviderLead(ctx, generation.generation, providerKey)

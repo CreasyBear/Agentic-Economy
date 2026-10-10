@@ -13,6 +13,7 @@ import type { X402DirectoryCatalogueResource } from '@/modules/market/x402-direc
 import { projectDirectoryListing } from '@/modules/registry/public'
 import type { ReferenceRate } from '@/modules/money/public'
 import { TOOL_UNAVAILABLE_COPY } from './public-tool-detail.contracts'
+import { REASON_COPY, REASON_COPY_FALLBACK } from '@/content/reason-copy'
 import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 
 export type DirectoryToolPageProps = Readonly<{ metadata: X402DirectoryCatalogueResource; providerHost: string; slug: string; referenceRate?: ReferenceRate }>
@@ -30,7 +31,9 @@ export function DirectoryToolPage({ metadata, providerHost, slug, referenceRate 
   const entry = metadata.item.entry
   const listing = projectDirectoryListing({ ...entry, title: directoryTitle(entry) })
   const view = projectToolObject(listing, `/tools/${encodeURIComponent(providerHost)}/${encodeURIComponent(slug)}`, readAt, referenceRate)
-  const indexedSourceRouteRef = metadata.kind === 'found' ? metadata.item.choice?.sourceRouteRef ?? metadata.item.sourceRouteRef : undefined
+  const choice = metadata.kind === 'found' ? metadata.item.choice : undefined
+  const callableRef = choice?.access === 'ae_callable' ? choice.toolRef : undefined
+  const indexedSourceRouteRef = metadata.kind === 'found' ? choice?.sourceRouteRef ?? metadata.item.sourceRouteRef : undefined
   const capability = entry.description || entry.category || entry.tags?.join(' ') || ''
   const alternativeHref = alternativeToolSearchHref(listing, capability, indexedSourceRouteRef)
   const slides: DetailSlide[] = [{
@@ -57,13 +60,15 @@ export function DirectoryToolPage({ metadata, providerHost, slug, referenceRate 
           <ToolFacts view={{ title: view.title, listing, readiness: view.readiness }} />
           {view.identity === undefined ? null : <p>{view.identity.kind === 'verified_provider' ? 'Provider' : view.identity.kind === 'publisher' ? 'Publisher' : 'Directory Host'}: {view.identity.kind === 'publisher' ? <span>{view.identity.name}</span> : <a href={view.identity.href}>{view.identity.name}</a>}</p>}
           {view.identity?.kind === 'publisher' && listing.identity.hostName.kind === 'present' && listing.hostPage.kind === 'present' ? <p>Directory Host: <a href={listing.hostPage.value}>{listing.identity.hostName.value}</a></p> : null}
-          <p>Directory or catalogue listing, not callable through AE.</p>
+          <p>{callableRef === undefined
+            ? `Currently unavailable. ${REASON_COPY[choice?.reason ?? 'fallback'] ?? REASON_COPY_FALLBACK}`
+            : `Quote it with ref ${callableRef} through the ae CLI, MCP or HTTP.`}</p>
           <p className="arc-pdp-provenance">Title source: {listing.identity.title.provenance.replaceAll('_', ' ')}</p>
           {view.price === undefined ? null : <p className="arc-pdp-provenance">Price source: {listing.facts.price.provenance.replaceAll('_', ' ')}</p>}
           {view.readiness.source === undefined ? null : <p className="arc-pdp-provenance">Readiness source: {listing.facts.readiness.provenance.replaceAll('_', ' ')}</p>}
         </>}
         context={<>
-          <p>Coinbase Bazaar directory listing only. No admitted AE Tool or verified execution Provider is attached to this listing. Inspect its source input before use; no AE Quote or Call is available here.</p>
+          <p>Coinbase Bazaar directory listing. A Quote reads the live price, payee and network from the endpoint; nothing is charged until you Call.</p>
           {listing.facts.price.kind === 'present' && listing.facts.price.value.kind !== 'quote_required' && listing.facts.price.value.currency === 'USDC' ? <p>Provider-listed source price: {listing.facts.price.value.kind === 'range' ? `${listing.facts.price.value.minimum}–${listing.facts.price.value.maximum}` : listing.facts.price.value.amount} USDC per Call.</p> : null}
           {entry.output?.exampleJson === undefined ? <p>No example output was published.</p> : null}
         </>}

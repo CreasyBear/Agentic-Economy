@@ -32,7 +32,8 @@ import {
 import { compactDirectoryStatus, readCompactDirectoryPage } from './internal/compact-directory-search'
 import { compactDirectoryRows } from './internal/compact-directory-projection'
 import { resolveToolCompare } from './internal/tool-compare-resolution'
-import { readToolLatencyEvidence } from './internal/tool-latency-source'
+import { readSearchEvidence, readToolLatencyEvidence } from './internal/tool-latency-source'
+import { rankSearchRowsByEvidence } from './search-signals'
 import { rankCompactDirectoryRows, rankToolSearchForRegistry, TOOL_SEARCH_ASSESSMENT_LIMIT, type RegistryToolAssessment } from './tool-reranker'
 import {
   marketToolsCursorScope,
@@ -137,7 +138,7 @@ export const registryToolsSearchAction = defineAction({
     }
     signal?.throwIfAborted()
     const freshness = await readSupplyProjectionFreshness(Date.now(), sourceOptions)
-    const admittedWanted = data.source !== 'coinbase' && data.filters?.access !== 'external_listing'
+    const admittedWanted = data.source !== 'coinbase'
     const directoryWanted = data.source !== 'current'
     const directoryStatus = directoryWanted ? await compactDirectoryStatus(sourceOptions) : undefined
     signal?.throwIfAborted()
@@ -259,7 +260,7 @@ export const registryToolsSearchAction = defineAction({
       const result = assessment.result.kind === 'ok'
         ? { ...assessment.result, items: assessment.result.items.filter(item => admittedRows.some(row => row.toolRef === item.toolRef)) }
         : empty
-      const output = projectToolSearchChoices(result, data.filters, assessment, freshness, data.limit, {
+      const projected = projectToolSearchChoices(result, data.filters, assessment, freshness, data.limit, {
         query: data.query,
         source,
         ...(data.source === undefined ? {} : { searchSource: data.source }), ...(data.cursor === undefined ? {} : { searchCursor: data.cursor }),
@@ -272,6 +273,11 @@ export const registryToolsSearchAction = defineAction({
         externalExamined: examined,
         ...(recipient === undefined ? {} : { recipient }),
       })
+      const evidence = await readSearchEvidence(projected.results.flatMap(row => row.toolRef === undefined ? [] : [row.toolRef]))
+      signal?.throwIfAborted()
+      const output = projected.kind === 'match' || projected.kind === 'scoped'
+        ? { ...projected, results: rankSearchRowsByEvidence(projected.results, evidence) }
+        : projected
       const budget = searchPageBudget(output, pageSize, admittedRows.length, externalRows.length, externalLimit)
       if (budget.kind === 'fit') return deliver(output)
       if (budget.kind === 'shrink_external') {

@@ -5,6 +5,7 @@ import { directoryNetwork, directoryEntryMatchesFilters, directoryProviderKey, x
 import { env, type QueryCtx } from '../../../_generated/server'
 import { coverageValue, directoryEntryValue, indexedEntryValue, unavailableValue } from './contracts'
 import { admittedToolRef } from './browse'
+import { currentDirectoryChoice } from './choices'
 import { readCurrentPublishedTool } from '../../capabilitySupply/currentTool/reads'
 import { activeDirectoryGeneration, canonicalSlugForToolRef, directoryCoverage, indexedDirectoryEntry, storedDirectoryEntry } from './rows'
 
@@ -72,7 +73,8 @@ export const resourceHandler = async (ctx: QueryCtx, args: Infer<typeof resource
     const row = selected === null ? null : await ctx.db.get(selected.entryId)
     if (row === null || selected === null) return { kind: 'not_found' as const }
     const toolRef = await admittedToolRef(ctx, selected.sourceRouteRef)
-    return { kind: 'found' as const, coverage: directoryCoverage(generation), item: { ...indexedDirectoryEntry(row, selected), ...(toolRef === undefined ? {} : { toolRef }) } }
+    const choice = await currentDirectoryChoice(ctx, selected, Date.now())
+    return { kind: 'found' as const, coverage: directoryCoverage(generation), item: { ...indexedDirectoryEntry(row, selected), choice, ...(toolRef === undefined ? {} : { toolRef }) } }
   }
 
 /** Exact opaque document ID: no title/host heuristics and no admission by description. */
@@ -93,9 +95,10 @@ export const detailByIdHandler = async (ctx: QueryCtx, args: Infer<typeof detail
     .unique()
   if (row === null) return { kind: 'not_found' as const }
   const toolRef = await admittedToolRef(ctx, row.sourceRouteRef)
+  const choice = await currentDirectoryChoice(ctx, row, Date.now())
   return {
     kind: 'found' as const, coverage: directoryCoverage(generation),
-    item: { ...indexedDirectoryEntry(entry, row), ...(toolRef === undefined ? {} : { toolRef }) },
+    item: { ...indexedDirectoryEntry(entry, row), choice, ...(toolRef === undefined ? {} : { toolRef }) },
   }
 }
 
@@ -121,7 +124,8 @@ export const bySlugHandler = async (ctx: QueryCtx, args: Infer<typeof bySlugArgs
     const row = selected === null ? null : await ctx.db.get(selected.entryId)
     if (row === null || selected === null) return { kind: 'not_found' as const }
     const toolRef = await admittedToolRef(ctx, selected.sourceRouteRef)
-    return { kind: 'found' as const, coverage: directoryCoverage(generation), item: { ...indexedDirectoryEntry(row, selected), ...(toolRef === undefined ? {} : { toolRef }) } }
+    const choice = await currentDirectoryChoice(ctx, selected, Date.now())
+    return { kind: 'found' as const, coverage: directoryCoverage(generation), item: { ...indexedDirectoryEntry(row, selected), choice, ...(toolRef === undefined ? {} : { toolRef }) } }
   }
 
 /**

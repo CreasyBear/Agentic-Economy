@@ -66,7 +66,7 @@ export async function runSavedCommand(args: readonly string[], options: CliOptio
       const { identity: saved, detail } = item
       const live = detail.kind === 'found'
         ? saved.kind === 'external_listing' && 'entry' in detail && detail.entry !== undefined
-          ? { title: detail.entry.title, price: directoryPrice(detail.entry), access: 'External listing · not AE-callable' }
+          ? { title: detail.entry.title, price: directoryPrice(detail.entry), access: detail.entry.choice?.access === 'ae_callable' ? 'AE-callable' : 'Unavailable' }
           : 'tool' in detail && detail.tool !== undefined
             ? { title: detail.tool.listing.label, price: formatDisplayPrice(detail.tool.commercial.displayPrice ?? { kind: 'unavailable' }) ?? 'AUD estimate unavailable', access: 'AE-callable' }
             : undefined

@@ -1,4 +1,5 @@
 import { isRecord } from '@/modules/common/is-record'
+import { parseCallableRef } from '@/modules/common/tool-ref'
 import { randomUUID } from 'node:crypto'
 import { Buffer } from 'node:buffer'
 import type { Readable } from 'node:stream'
@@ -7,6 +8,7 @@ import {
   callInputSchema,
   callMachineResultSchema,
   projectCallMachineResult,
+  requotableRefusal,
   type CallMachineResult,
 } from '@/modules/capability-execution/call-contracts'
 import {
@@ -229,7 +231,7 @@ async function observeResult(record: CallRecoveryRecord, result: CallMachineResu
   })
 }
 
-async function submitOrReadCall(record: CallRecoveryRecord, options: CliOptions): Promise<void> {
+async function submitOrReadCall(record: CallRecoveryRecord, options: CliOptions, requote?: () => Promise<void>): Promise<void> {
   const startedAt = Date.now()
   try {
     let result: CallMachineResult | CallStatusResult
@@ -257,6 +259,11 @@ async function submitOrReadCall(record: CallRecoveryRecord, options: CliOptions)
       if (result.kind === 'pending' && options.wait === true) result = await waitForCallResult(options, record, result)
     }
     record = await observeResult(record, result)
+    if (requote !== undefined && requotableRefusal(result)) {
+      await acknowledgeCallRecovery(record, { terminal: true })
+      if (!options.json) process.stderr.write(`Call refused before signing (${result.kind === 'refused' ? result.code : result.kind}); requesting one new Quote.\n`)
+      return await requote()
+    }
     const rendered: Record<string, unknown> = {
       ...callOutput(result, options),
       ...(record.callRef === undefined ? {} : { callRef: record.callRef }),
@@ -343,7 +350,7 @@ async function resolveToolQuote(
       ...(quote.data.continuation === undefined ? {} : { next: [quote.data.continuation] }),
     })
   }
-  if (quote.data.toolRef !== toolRef) {
+  if (parseCallableRef(toolRef)?.kind === 'operation' && quote.data.toolRef !== toolRef) {
     throw new CliFailure('The gateway returned a Quote for a different Tool.', { kind: 'UNAVAILABLE', code: 'tool-quote-result-invalid' })
   }
   return quote.data
@@ -411,14 +418,14 @@ export async function runCallCommand(
   stdin: Readable = process.stdin,
 ): Promise<void> {
   if (args[0] === 'resume') return resumeCall(args, options)
-  const { toolRef, quoteInputData } = await parseToolRefAndInput('call', args, options, stdin)
+  const { toolRef: namedRef, quoteInputData } = await parseToolRefAndInput('call', args, options, stdin)
   const credential = resolveAgentAccessCredential(options.baseUrl)
   if (credential === undefined) {
     const continuation = connectionContinuationForCli('buyer')
     throw new CliFailure('No AE agent credential is configured. Run ae connect, then repeat the same call.', {
       kind: 'UNAUTHENTICATED',
       code: 'agent_access_key_required',
-      detail: { toolRef, ...(continuation.command === undefined ? {} : { nextAction: continuation.command }) },
+      detail: { toolRef: namedRef, ...(continuation.command === undefined ? {} : { nextAction: continuation.command }) },
       suggestion: continuation.label,
       ...(continuation.command === undefined ? {} : { nextCommand: continuation.command }),
     })
@@ -426,28 +433,37 @@ export async function runCallCommand(
 
   const apiKey = requireAgentAccessKey('call', options)
 
-  const recoveryRequest = { origin: options.baseUrl, toolRef, input: quoteInputData.input,
+  // Recovery keys on the ref the caller named, so a rerun resumes locally before any remote Quote.
+  const lookup = { origin: options.baseUrl, toolRef: namedRef, input: quoteInputData.input,
     ...(options.idempotencyKey?.trim() ? { idempotencyKey: options.idempotencyKey.trim() } : {}),
   }
-  const previous = findCallRecovery(recoveryRequest)
+  const previous = findCallRecovery(lookup)
   if (previous !== undefined) {
-    if (recoveryRequest.idempotencyKey === previous.command.idempotencyKey) return resumeRetainedCall(previous, options)
+    if (lookup.idempotencyKey === previous.command.idempotencyKey) return resumeRetainedCall(previous, options)
     throw pendingRecoveryFailure(previous, options)
   }
+  // A listing id or URL resolves inside the unpaid Quote; the retained Call records the Tool it resolved to.
+  const listingQuote = parseCallableRef(namedRef)?.kind === 'operation' ? undefined : await resolveToolQuote(namedRef, quoteInputData, apiKey, options)
+  const toolRef = listingQuote?.toolRef ?? namedRef
+  const recoveryRequest = listingQuote === undefined ? lookup : { ...lookup, toolRef, requestedRef: namedRef }
 
-  const quote = await resolveToolQuote(toolRef, quoteInputData, apiKey, options)
+  const submit = async (quote: Extract<ToolQuoteResult, { kind: 'committed' }>, idempotencyKey: string, requote?: () => Promise<void>) => {
+    const parsedCall = callCommandDescriptor.inputSchema.safeParse({ quoteRef: quote.quoteRef, idempotencyKey })
+    if (!parsedCall.success) throw new Error('tool_quote_projection_invalid')
+    const request = recoveryRequest.idempotencyKey === undefined ? recoveryRequest : { ...recoveryRequest, idempotencyKey }
+    const retained = await retainCallRecovery(request, {
+      quoteRef: parsedCall.data.quoteRef, accountRef: quote.account.accountRef, principalRef: quote.budget.principalRef,
+    }, parsedCall.data.idempotencyKey)
+    if (!retained.created) throw pendingRecoveryFailure(retained.record, options)
+    if (!options.json) process.stderr.write(`Call prepared: toolRef=${toolRef}. Recovery: ${resumeCommand(retained.record, options)}\n`)
+    await submitOrReadCall(retained.record, options, requote)
+  }
   const idempotencyKey = resolveIdempotencyKey(options)
-  const parsedCall = callCommandDescriptor.inputSchema.safeParse({
-    quoteRef: quote.quoteRef,
-    idempotencyKey,
+  // One automatic re-quote, only for a refusal that never reached signing; the retry gets its own Call identity.
+  await submit(listingQuote ?? await resolveToolQuote(toolRef, quoteInputData, apiKey, options), idempotencyKey, async () => {
+    const fresh = await resolveToolQuote(toolRef, quoteInputData, apiKey, options)
+    await submit(fresh, recoveryRequest.idempotencyKey === undefined ? resolveIdempotencyKey(options) : `${idempotencyKey}:requote`)
   })
-  if (!parsedCall.success) throw new Error('tool_quote_projection_invalid')
-  const retained = await retainCallRecovery(recoveryRequest, {
-    quoteRef: parsedCall.data.quoteRef, accountRef: quote.account.accountRef, principalRef: quote.budget.principalRef,
-  }, parsedCall.data.idempotencyKey)
-  if (!retained.created) throw pendingRecoveryFailure(retained.record, options)
-  if (!options.json) process.stderr.write(`Call prepared: toolRef=${toolRef}. Recovery: ${resumeCommand(retained.record, options)}\n`)
-  await submitOrReadCall(retained.record, options)
 }
 /** Select without effects, or purchase only the caller's complete exact-input request. */
 export async function runProcureCommand(args: readonly string[], options: CliOptions, stdin: Readable = process.stdin): Promise<void> {

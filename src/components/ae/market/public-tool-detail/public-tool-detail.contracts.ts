@@ -69,7 +69,6 @@ export const TOOL_UNAVAILABLE_COPY = {
     nextStep: 'Browse Market.',
     action: { label: 'Browse Market', to: '/market' },
   },
-  bazaar_missing: notReady('The Provider has not published enough for an agent to call this service.'),
   bazaar_discovery_invalid: notReady("The Provider's listing cannot be read as a service an agent can call."),
   schema_missing: notReady('The Provider has not published the input an agent would send.'),
   transport_unsupported: notReady('The connection the Provider published is one an agent cannot use here.'),
@@ -79,6 +78,7 @@ export const TOOL_UNAVAILABLE_COPY = {
   amount_invalid: notReady("The Provider's price cannot be read."),
   payment_terms_invalid: notReady("The Provider's payment terms cannot be read."),
   resource_invalid: notReady("The Provider's service address cannot be read."),
+  resource_not_payable: notReady('The address did not ask for an x402 payment, so there is nothing to pay for.'),
   source_invalid: notReady("The Provider's listing source cannot be read."),
 } satisfies Record<X402DirectoryResolutionReason, ToolUnavailableCopy>
 

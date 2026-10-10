@@ -12,6 +12,9 @@ import {
   issueQuoteResult,
 } from './lib/capabilityExecution/quotes/issueQuote'
 import {
+  admitCallableResolveArgs,
+  admitCallableResolveHandler,
+  admitCallableResolveResult,
   prepareFinancialSubjectsArgs,
   prepareFinancialSubjectsHandler,
   prepareFinancialSubjectsResult,
@@ -39,6 +42,12 @@ export const issueQuote = internalMutation({
   args: issueQuoteArgs,
   returns: issueQuoteResult,
   handler: issueQuoteHandler,
+})
+
+export const admitCallableResolve = internalMutation({
+  args: admitCallableResolveArgs,
+  returns: admitCallableResolveResult,
+  handler: admitCallableResolveHandler,
 })
 
 export const prepareFinancialSubjects = internalMutation({

@@ -14,7 +14,7 @@ const externalDetailSchema = z.strictObject({
   kind: z.literal('external'),
   tool: z.strictObject({
     id: z.string(), toolRef: z.string(), title: z.string(), description: z.string(),
-    source: z.literal('coinbase'), access: z.literal('external_listing'),
+    source: z.literal('coinbase'), access: z.enum(['ae_callable', 'unavailable']), reason: z.string().optional(),
     readiness: z.literal('unverified'), provider: z.string(),
     input: z.unknown().optional(), output: z.unknown().optional(),
   }),
@@ -40,9 +40,12 @@ export function createReadTools(reserve: ReserveChatTool) {
           if (detail.kind !== 'found') return failure('registry.tools.describe', 'tool_unavailable')
           if (detail.item.toolRef === undefined) {
             const entry = detail.item.entry
+            const choice = detail.item.choice
+            const access = choice?.access === 'ae_callable' ? 'ae_callable' as const : 'unavailable' as const
             return projectedModelFacingOutput('registry.tools.describe', externalDetailSchema, () => ({
               kind: 'external', tool: {
-                id: toolRef, toolRef, source: 'coinbase', access: 'external_listing', readiness: 'unverified',
+                id: toolRef, toolRef, source: 'coinbase', access, readiness: 'unverified',
+                ...(choice?.reason === undefined ? {} : { reason: choice.reason }),
                 title: entry.title, description: entry.description, provider: entry.provider,
                 ...(entry.input === undefined ? {} : { input: entry.input }),
                 ...(entry.output === undefined ? {} : { output: entry.output }),

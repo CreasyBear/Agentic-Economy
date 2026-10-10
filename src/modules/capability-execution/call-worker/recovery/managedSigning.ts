@@ -82,10 +82,10 @@ export async function reconcileManagedSigningRecovery(
     work.recovered.toolRef,
     work.recovered.environment,
     { admitSigning: async (intent) => attempt.custodyGeneration === undefined ? false
-      : await admitManagedX402Signing(ctx, {
+      : (await admitManagedX402Signing(ctx, {
         custodyRef: attempt.custodyRef, authorizationDigest: attempt.authorizationDigest,
         custodyGeneration: attempt.custodyGeneration,
-      }, intent, 'forensic_replay') },
+      }, intent, 'forensic_replay')).kind === 'admitted' },
   )
   observeStage(args.callRef, `cdp_replay_${replay.kind}`, unresolvedReplayDiagnostic(replay))
   if (replay.kind !== 'definitive_rejection') return projectPersistedRecovery(work.recovered)

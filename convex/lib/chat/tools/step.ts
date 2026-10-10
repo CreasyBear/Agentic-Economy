@@ -103,13 +103,12 @@ export function chatActionMessages(messages: readonly ModelMessage[], steps: rea
   for (const step of steps) for (const result of step.toolResults) add(result.toolName, result.output)
   const actions = projectChatChoiceActions(cards).map(({ choice, reviewInputs, compare }) => ({
     toolRef: choice.toolRef, title: choice.title,
-    purchase: choice.access === 'external_listing' ? 'not_available_through_ae'
-      : reviewInputs ? 'review_required' : 'unavailable',
+    purchase: reviewInputs ? 'review_required' : 'unavailable',
     indicativePrice: choice.price ?? null,
     actions: [...(!reviewInputs && !choice.belowMatch && isDetailToolRef(choice.toolRef) ? ['Ask about this Tool'] : []), ...(reviewInputs ? ['Review inputs'] : []), ...(compare ? ['Compare'] : [])],
   }))
   const base = messages.filter(message => message.role !== 'system' || !message.content.startsWith(ACTION_CONTEXT_PREFIX))
-  return [...base, { role: 'system', content: `${ACTION_CONTEXT_PREFIX}${JSON.stringify(actions)}. Name only available actions for these current choices. A selected detail read overrides earlier discovery facts. Detail inspection is read-only and cannot obtain a Quote or unlock a purchase. Never offer a Quote or Call for not_available_through_ae or unavailable. A null indicativePrice means unknown; output fields do not establish what a price includes. With no suitable action, ask a useful refinement instead of directing the user to an earlier refused Tool.` }]
+  return [...base, { role: 'system', content: `${ACTION_CONTEXT_PREFIX}${JSON.stringify(actions)}. Name only available actions for these current choices. A selected detail read overrides earlier discovery facts. Detail inspection is read-only and cannot obtain a Quote or unlock a purchase. Never offer a Quote or Call for unavailable. A null indicativePrice means unknown; output fields do not establish what a price includes. With no suitable action, ask a useful refinement instead of directing the user to an earlier refused Tool.` }]
 }
 
 export function hasChatContext(messages: readonly ModelMessage[]): boolean {

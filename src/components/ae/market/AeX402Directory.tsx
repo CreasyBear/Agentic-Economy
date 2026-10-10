@@ -35,6 +35,7 @@ import type { X402MarketplaceHome } from '@/modules/market/x402-marketplace-home
 import { DirectoryComparison } from './DirectoryComparison'
 import { DirectoryFilters } from './DirectoryFilters'
 import { DirectoryProviderList } from './DirectoryProviderList'
+import { isPublicToolRef } from '@/modules/common/tool-ref'
 import { useProviderCataloguePages } from './useProviderCataloguePages'
 import { DirectorySavedToolsProvider, useDirectorySavedTools } from './DirectorySavedTools'
 import { toDirectoryToolCardModel, toSavedDirectoryRowModel } from '@/modules/market/directory-card.view-model'
@@ -431,14 +432,14 @@ function DirectoryMarketplace({ canonicalSearch: routeSearch, page, compareEntri
       {result.kind === 'unavailable' ? <p className="text-sm text-muted-foreground">The search could not complete. No recommendation was made.</p> : null}
       {canonicalSearch.refreshing ? <p role="status" aria-label="Refreshing search results" className="text-sm text-muted-foreground">Refreshing search results…</p> : null}
       {result.results.length === 0 ? null : <CanonicalSearchResults layout={layout} results={result.results} {...(result.freshness === undefined ? {} : { sourceFreshness: result.freshness })} renderActions={item => {
-        const identity = item.toolRef !== undefined && item.access !== 'external_listing'
+        const identity = isPublicToolRef(item.toolRef)
           ? { kind: 'ae_callable' as const, toolRef: item.toolRef }
           : { kind: 'external_listing' as const, id: item.id }
         const compareRef = searchCompareReference(item)
         return <>
           {authLoaded && isSignedIn
-            ? <Button type="button" variant="secondary" size="sm" disabled={saved.status !== 'ready' || saved.pending(identity)} aria-busy={saved.pending(identity)} {...(saved.status === 'failed' ? {} : { 'aria-pressed': saved.isSavedIdentity(identity) })} onClick={() => saved.toggleIdentity(identity)}>{saved.status === 'failed' ? 'Saved status unavailable' : saved.isSavedIdentity(identity) ? 'Remove saved Tool' : 'Save Tool'}</Button>
-            : <Link to="/sign-in/$" params={{ _splat: '' }} search={signInFor(identity)} className={cn(actionLinkClassName('secondary', 'sm'))}>Sign in to save</Link>}
+            ? <Button type="button" variant="ghost" size="sm" disabled={saved.status !== 'ready' || saved.pending(identity)} aria-busy={saved.pending(identity)} {...(saved.status === 'failed' ? {} : { 'aria-pressed': saved.isSavedIdentity(identity) })} onClick={() => saved.toggleIdentity(identity)}>{saved.status === 'failed' ? 'Saved status unavailable' : saved.isSavedIdentity(identity) ? 'Remove saved Tool' : 'Save Tool'}</Button>
+            : <Link to="/sign-in/$" params={{ _splat: '' }} search={signInFor(identity)} className={cn(actionLinkClassName('ghost', 'sm'))}>Sign in to save</Link>}
           <Button type="button" variant="ghost" size="sm" disabled={compareRef === undefined || (compareRefs.length >= 4 && !compareRefs.includes(compareRef))} aria-pressed={compareRef !== undefined && compareRefs.includes(compareRef)} onClick={() => { if (compareRef !== undefined) changeComparison(compareRef) }}>{compareRef !== undefined && compareRefs.includes(compareRef) ? 'Remove comparison' : 'Compare'}</Button>
         </>
       }} />}

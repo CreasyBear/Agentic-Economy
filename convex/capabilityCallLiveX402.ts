@@ -27,7 +27,7 @@ const liveRequirementResult = v.union(
       observedAt: v.number(),
     }),
   }),
-  v.object({ kind: v.literal('refused') }),
+  v.object({ kind: v.literal('refused'), reason: v.string() }),
 )
 
 /**
@@ -47,12 +47,12 @@ export const inspect = internalAction({
       const strict = await ctx.runQuery(internal.capabilitySupplyTools.readCurrentPublishedToolSnapshot, { toolRef: args.toolRef })
       const operation = strict === null ? undefined : parsePublishedToolSnapshot(strict.toolJson)
       if (operation === undefined) return { kind: 'operation_not_found' as const }
-      return operation.pricingConfig.kind === 'fixed_aud' ? { kind: 'not_required' as const } : { kind: 'refused' as const }
+      return operation.pricingConfig.kind === 'fixed_aud' ? { kind: 'not_required' as const } : { kind: 'refused' as const, reason: 'tool_unsupported' }
     }
     const operation = JSON.parse(snapshot.targetJson) as LiveX402InspectionTarget & { targetDigest: string; contract: CapabilityContract }
     try {
-      if (openCapabilityDecisionModel(operation.contract).validateInput(args.input).kind !== 'valid') return { kind: 'refused' as const }
-    } catch (cause) { return degradeBackend(cause, { kind: 'refused' as const }, { site: 'inspect', reason: 'invalid_response' }) }
+      if (openCapabilityDecisionModel(operation.contract).validateInput(args.input).kind !== 'valid') return { kind: 'refused' as const, reason: 'input_invalid' }
+    } catch (cause) { return degradeBackend(cause, { kind: 'refused' as const, reason: 'input_invalid' }, { site: 'inspect', reason: 'invalid_response' }) }
     const result = await inspectLiveX402Requirement(operation, args.input, {
       beforeSend: async () => {
         const current = await ctx.runQuery(internal.capabilitySupplyCurrentTool.readManagedX402InspectionSnapshot, { toolRef: args.toolRef })
@@ -84,7 +84,7 @@ export const inspect = internalAction({
       toolRef: args.toolRef, targetDigest: operation.targetDigest,
       requirementDigest: result.requirement.requirementDigest, observedAt: result.requirement.observedAt,
     })
-    return recorded ? result : { kind: 'refused' as const }
+    return recorded ? result : { kind: 'refused' as const, reason: 'inspection_not_recorded' }
   },
 })
 
@@ -99,10 +99,10 @@ export const bindPersistedManagedRequirement = internalAction({
     if (snapshot === null) return { kind: 'operation_not_found' as const }
     const operation = JSON.parse(snapshot.targetJson) as LiveX402InspectionTarget & { contract: CapabilityContract }
     try {
-      if (openCapabilityDecisionModel(operation.contract).validateInput(args.input).kind !== 'valid') return { kind: 'refused' as const }
-    } catch (cause) { return degradeBackend(cause, { kind: 'refused' as const }, { site: 'bindPersistedManagedRequirement', reason: 'invalid_response' }) }
+      if (openCapabilityDecisionModel(operation.contract).validateInput(args.input).kind !== 'valid') return { kind: 'refused' as const, reason: 'input_invalid' }
+    } catch (cause) { return degradeBackend(cause, { kind: 'refused' as const, reason: 'input_invalid' }, { site: 'bindPersistedManagedRequirement', reason: 'invalid_response' }) }
     const bound = persistedManagedX402Requirement(operation, args.input, Date.now())
-    if (bound.kind === 'not_required') return { kind: 'refused' as const }
+    if (bound.kind === 'not_required') return { kind: 'refused' as const, reason: 'tool_unsupported' }
     return bound
   },
 })

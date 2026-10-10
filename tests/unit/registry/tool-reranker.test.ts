@@ -38,7 +38,7 @@ describe('Jev x402 Tool Search Re-ranker (cookbooks/rerank_typesafe.md)', () => 
     expect(output).not.toHaveProperty('recommendation')
   })
   it.each([
-    { access: 'external_listing' }, { effects: ['data_release'] }, { dataUse: ['sensitive'] },
+    { effects: ['data_release'] }, { dataUse: ['sensitive'] },
     { currency: 'USD' }, { maximumPrice: { currency: 'AUD', units: '1', exponent: 6 } },
     { healthStatus: ['degraded'] }, { actionClass: 'retrieve' },
   ])('rechecks hard constraints on admitted descriptors at projection: %j', filters => {
@@ -72,7 +72,7 @@ describe('Jev x402 Tool Search Re-ranker (cookbooks/rerank_typesafe.md)', () => 
 
   it('rechecks explicit health on appended external rows while preserving their opaque identity when unconstrained', () => {
     const row = {
-      id: 'opaque:directory:identity', source: 'coinbase' as const, access: 'external_listing' as const,
+      id: 'opaque:directory:identity', source: 'coinbase' as const, access: 'unavailable' as const,
       title: 'Timezone conversion', summary: 'Convert between timezones', provider: 'Provider',
       actionClass: 'transform' as const, objectClass: 'location' as const, readiness: 'unverified' as const,
       price: { kind: 'unavailable' as const }, detailRef: '/api/v1/registry/detail?id=opaque',

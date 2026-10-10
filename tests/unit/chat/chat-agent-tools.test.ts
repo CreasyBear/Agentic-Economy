@@ -88,6 +88,7 @@ function externalDetailFixture(): Extract<FunctionReturnType<typeof api.x402Dire
       reportedTotal: 1, reportedTotalAtStart: 1, sourceChangedDuringScan: false, duplicateObservations: 0,
       pagesFetched: 1, startedAt: 1, completedAt: 2, completeness: 'completed_observed_scan' },
     item: { category: 'Search', categorySource: 'provider_declared', observedAt: 2, sourceDigest: 'test-digest',
+      choice: { access: 'ae_callable', toolRef: `registry:${'a'.repeat(64)}` },
       entry: { resource: 'https://provider.example/search', title: 'Search the web', description: 'Searches web pages',
         provider: 'Provider', protocol: 'http', metadataJson: '{}', prices: [],
         input: { fields: [{ name: 'q', path: 'q', location: 'queryParams', source: 'schema', type: 'string', required: true }],
@@ -248,7 +249,7 @@ describe('Tool chat Agent tools', () => {
     const runAction = vi.fn(async () => { throw new Error('Read-only detail must not resolve or admit supply') })
     const result = await invokeTool(createChatAgent(mockModel()), 'registry.tools.describe', toolCtx({ runQuery, runAction }), { toolRef: id })
     const output: unknown = typeof result === 'string' ? JSON.parse(result) : result
-    expect(output).toMatchObject({ kind: 'external', tool: { id, toolRef: id, title: 'Search the web', access: 'external_listing', input } })
+    expect(output).toMatchObject({ kind: 'external', tool: { id, toolRef: id, title: 'Search the web', access: 'ae_callable', input } })
     expect(runQuery).toHaveBeenCalledOnce()
     expect(runAction).not.toHaveBeenCalled()
   })
@@ -338,7 +339,7 @@ describe('Tool chat Agent tools', () => {
     ]
     const context = chatActionMessages(messages).findLast(message => message.role === 'system')?.content
     expect(context).toContain(toolRef)
-    expect(context).toContain('"purchase":"not_available_through_ae"')
+    expect(context).toContain('"purchase":"unavailable"')
     expect(context).toContain('"indicativePrice":null')
     expect(context).toContain('Ask about this Tool')
     expect(context).not.toContain('Review inputs')
@@ -610,17 +611,20 @@ describe('Tool chat Agent tools', () => {
     expect(explicitTestnet.results.map(item => item.toolRef)).toEqual([TOOL_CRYPTO_TX.toolRef])
   })
 
-  it('shows compact Bazaar rows as scoped external leads with an exact next page, never an AE Call', async () => {
+  it('shows compact Bazaar rows as quotable by their listing ref with an exact next page', async () => {
+    const listingRef = `registry:${'7'.repeat(64)}`
     const runAction = vi.fn()
     const runQuery = vi.fn(async (reference, _args: unknown) => {
       expect(getFunctionName(reference)).toBe('x402DirectoryIndex:searchCompactInternal')
       return {
         kind: 'ok', coverage: { generation: 'bazaar-7', completedAt: 100 },
         page: [
-          { id: 'directory-entry-7', source: 'coinbase', network: 'eip155:8453', title: 'Timezone API', summary: 'Convert timezones',
-            provider: 'External provider', actionClass: 'transform', objectClass: 'location', completedAt: 100 },
+          { id: listingRef, source: 'coinbase', network: 'eip155:8453', title: 'Timezone API', summary: 'Convert timezones',
+            provider: 'External provider', actionClass: 'transform', objectClass: 'location', completedAt: 100,
+            toolRef: listingRef, choice: { access: 'ae_callable', toolRef: listingRef } },
           { id: 'wrong-network', source: 'coinbase', network: 'eip155:84532', title: 'Timezone API', summary: 'Convert timezones',
-            provider: 'External provider', actionClass: 'transform', objectClass: 'location', completedAt: 100 },
+            provider: 'External provider', actionClass: 'transform', objectClass: 'location', completedAt: 100,
+            choice: { access: 'unavailable', reason: 'chain_unsupported' } },
         ],
         continueCursor: 'native-page-2', isDone: false,
       }
@@ -629,8 +633,8 @@ describe('Tool chat Agent tools', () => {
       runQuery: runQuery as ToolCtx['runQuery'], runAction: runAction as ToolCtx['runAction'],
     }), { query: 'convert timezone', source: 'coinbase' })
     expect(result).toMatchObject({
-      kind: 'scoped', assessed: { source: 'coinbase', coverage: 'partial', generation: 'bazaar-7' },
-      results: [{ id: 'directory-entry-7', access: 'external_listing', price: { kind: 'unavailable' },
+      kind: 'match', assessed: { source: 'coinbase', coverage: 'partial', generation: 'bazaar-7' },
+      results: [{ id: listingRef, access: 'ae_callable', toolRef: listingRef, price: { kind: 'unavailable' },
         next: [] }],
       next: [{ action: 'registry.tools.search', args: { query: 'convert timezone', cursor: 'x402:native-page-2' } }],
     })
@@ -640,10 +644,10 @@ describe('Tool chat Agent tools', () => {
       type: `tool-${CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.search']}`,
       state: 'output-available', output: result,
     })
-    expect(card).toMatchObject({ kind: 'choices', verdict: 'scoped',
-      choices: [{ access: 'external_listing', detailHref: '/api/v1/registry/detail?id=directory-entry-7' }] })
+    expect(card).toMatchObject({ kind: 'choices', verdict: 'match',
+      choices: [{ toolRef: listingRef, access: 'ae_callable', detailHref: `/api/v1/registry/detail?id=${encodeURIComponent(listingRef)}` }] })
     expect(projectToolCard(serializeToolCard(card!))).toMatchObject({ kind: 'choices',
-      choices: [{ access: 'external_listing', detailHref: '/api/v1/registry/detail?id=directory-entry-7' }] })
+      choices: [{ toolRef: listingRef, access: 'ae_callable', detailHref: `/api/v1/registry/detail?id=${encodeURIComponent(listingRef)}` }] })
   })
 
   it('never declares a completed no-match when the directory page is unavailable', async () => {
@@ -693,7 +697,7 @@ describe('Tool chat Agent tools', () => {
       inputJson: JSON.stringify({ source: 'coinbase', limit: 4 }),
     })
     expect(result).toMatchObject({
-      kind: 'scoped', assessed: { coverage: 'partial' },
+      kind: 'match', assessed: { coverage: 'partial' },
       next: [{ action: 'registry.tools.search', args: { query: 'weather in Sydney', cursor: signedCursor } }],
       pagination: { nextCursor: signedCursor, hasMore: true },
     })
@@ -764,8 +768,8 @@ describe('Tool chat Agent tools', () => {
         await invokeTool(createChatAgent(mockModel()), 'registry.tools.search', ctx,
           { query, source: 'coinbase', ...(cursor === undefined ? {} : { cursor }) },
           cursor === undefined ? [] : [{ role: 'user', content: 'Show the next page of timezone conversion APIs' }]))
-      expect(output.kind).toBe('scoped')
-      if (output.kind !== 'scoped') throw new Error('Lost scoped Bazaar page')
+      expect(output.kind).toBe('match')
+      if (output.kind !== 'match') throw new Error('Lost Bazaar page')
       expect(new TextEncoder().encode(JSON.stringify(output)).byteLength).toBeLessThanOrEqual(16 * 1024)
       observed.push(...output.results.map(row => row.id))
       cursor = output.pagination.nextCursor
@@ -1051,6 +1055,18 @@ describe('Tool chat Agent tools', () => {
       idempotencyKey: `chat-invoke:${digest}`,
       quoteRef: COMMITMENT_REF,
     })
+  })
+
+  it('spends the tool budget before a URL Quote resolves, so an over-budget step makes no fetch', async () => {
+    const runAction = vi.fn(async (_reference: Parameters<ToolCtx['runAction']>[0], _args: unknown) => ({ kind: 'unavailable', reason: 'resource_not_found' }))
+    const agent = createChatAgent(mockModel(), AUTHORITY)
+    const ctx = toolCtx({ runAction: runAction as ToolCtx['runAction'] })
+    const urls = Array.from({ length: MAX_CHAT_TOOL_CALLS + 1 }, (_, index) => `https://seller.example/api/paid?n=${index}`)
+
+    const results = await Promise.all(urls.map(async (url) => await invokeTool(agent, 'tool.quote', ctx, { toolRef: url, input: {} })))
+
+    expect(results.at(-1)).toEqual({ kind: 'chat_tool_refused', toolId: 'tool.quote', reason: 'tool_limit' })
+    expect(runAction.mock.calls.map(([, args]) => args)).toEqual(urls.slice(0, MAX_CHAT_TOOL_CALLS).map((resource) => ({ resource })))
   })
 
   it('fails composition when a canonical contract no longer declares the chat surface', () => {

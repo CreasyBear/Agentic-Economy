@@ -64,7 +64,6 @@ export function projectOptionsFromCard(
       selectable: !choice.belowMatch
         && (listing === undefined || listing.canonicalToolRef.kind === 'present'),
       detailRequestable: isDetailToolRef(choice.toolRef),
-      ...(choice.access === 'external_listing' ? { source: 'External listing · not callable through Agentic Economy' } : {}),
       ...(reviewInputs ? { reviewInputs: true } : {}),
       ...(Object.keys(facts).length === 0 ? {} : { facts }),
     }
@@ -111,13 +110,10 @@ export function projectWorkFromCards(cards: readonly ToolCardProjection[]): Work
   const compared = cards.filter((card) => card.kind === 'choices' && card.toolId === 'registry.tools.compare')
   const latestComparison = compared.at(-1)
   const found = new Set(searched.flatMap((card) => card.kind === 'choices' ? card.choices
-    .filter((choice) => !choice.belowMatch && choice.access !== 'external_listing').map((choice) => choice.toolRef) : []))
-  const external = new Set(searched.flatMap((card) => card.kind === 'choices' ? card.choices
-    .filter((choice) => choice.access === 'external_listing').map((choice) => choice.toolRef) : []))
+    .filter((choice) => !choice.belowMatch).map((choice) => choice.toolRef) : []))
   const summary = [
     found.size > 0 ? `Found ${found.size} tool${found.size === 1 ? '' : 's'}` : '',
-    external.size > 0 ? `${external.size} external listing${external.size === 1 ? '' : 's'} to inspect` : '',
-    searched.length > 0 && found.size === 0 && external.size === 0 ? 'Search found no matching Tools' : '',
+    searched.length > 0 && found.size === 0 ? 'Search found no matching Tools' : '',
     latestComparison?.kind === 'choices' ? `Compared ${latestComparison.choices.length}` : '',
   ].filter(Boolean).join(' · ') || `${cards.length} step${cards.length === 1 ? '' : 's'}`
   return {

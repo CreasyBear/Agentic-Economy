@@ -20,11 +20,9 @@ import {
   inspectSource,
   normalizedFromSchemas,
   validHttpsUrl,
-  type CapabilityContractMetadata,
   type CapabilityPublicationImport,
   type CapabilityPublicationImportResult,
 } from "./publication-importer-types";
-import { admitBazaarFromPaymentRequired } from "./publication-importer-x402-bazaar";
 
 export async function importX402Capability(
   input: Extract<CapabilityPublicationImport, { kind: "x402" }>,
@@ -65,31 +63,22 @@ export async function importX402Capability(
   if (endpoint === undefined || resource === undefined) {
     return { kind: "refused", reason: "transport_unsupported" };
   }
-  const bazaar = admitBazaarFromPaymentRequired(paymentRequired);
-  if (bazaar.kind === "refused") {
-    return { kind: "refused", reason: bazaar.reason };
+  // One importer: Bazaar is admitted only by the Node discovery action, which
+  // writes its schemas onto the resource. A raw declaration here fails closed.
+  if (isRecord(paymentRequired.extensions) && Object.hasOwn(paymentRequired.extensions, "bazaar")) {
+    return { kind: "refused", reason: "bazaar_discovery_invalid" };
   }
-  const inputSchema =
-    bazaar.kind === "admitted" ? bazaar.inputSchema : resource.inputSchema;
-  const outputSchema =
-    bazaar.kind === "admitted" ? bazaar.outputSchema : resource.outputSchema;
+  const { inputSchema, outputSchema } = resource;
   if (!isRecord(inputSchema) || !isRecord(outputSchema)) {
     return { kind: "refused", reason: "schema_missing" };
   }
   const method: "GET" | "POST" | undefined =
-    bazaar.kind === "admitted"
-      ? bazaar.method
-      : resource.method === undefined
-        ? "POST"
-        : resource.method === "GET" || resource.method === "POST"
-          ? resource.method
-          : undefined;
-  const query =
-    bazaar.kind === "admitted"
-      ? bazaar.query
-      : method === "GET"
-        ? sourceQueryMapping(resource.query)
+    resource.method === undefined
+      ? "POST"
+      : resource.method === "GET" || resource.method === "POST"
+        ? resource.method
         : undefined;
+  const query = method === "GET" ? sourceQueryMapping(resource.query) : undefined;
   const bodyPointer = resource.bodyPointer === "/body" ? "/body" as const : undefined;
   const queryObjectPointer = resource.queryObjectPointer === "/query" ? "/query" as const : undefined;
   const path = resource.path === undefined ? undefined : sourceQueryMapping(resource.path, true);
@@ -102,9 +91,7 @@ export async function importX402Capability(
     (resource.queryObjectPointer !== undefined && queryObjectPointer === undefined) ||
     (query !== undefined && queryObjectPointer !== undefined) ||
     (method === "GET" && query === undefined && queryObjectPointer === undefined) ||
-    (method === "POST" &&
-      bazaar.kind !== "admitted" &&
-      resource.query !== undefined)
+    (method === "POST" && resource.query !== undefined)
   ) {
     return { kind: "refused", reason: "selector_invalid" };
   }
@@ -112,10 +99,7 @@ export async function importX402Capability(
     {
       inputSchema: inputSchema as Readonly<Record<string, JsonValue>>,
       outputSchema: outputSchema as Readonly<Record<string, JsonValue>>,
-      contract:
-        bazaar.kind === "admitted"
-          ? contractForBazaarSchemas(input.contract)
-          : input.contract,
+      contract: input.contract,
       authority: input.commercial.authority,
       credential: { kind: "public_upstream" },
       resolutionRoot: input.resource,
@@ -223,22 +207,6 @@ export async function importX402Capability(
       },
     },
   });
-}
-
-/**
- * Bazaar schemas replace caller-authored pointers. Admit re-derives
- * annotations, data-use, and completion evidence from the extract.
- */
-function contractForBazaarSchemas(
-  contract: CapabilityContractMetadata,
-): CapabilityContractMetadata {
-  return {
-    ...contract,
-    customerAnnotations: [],
-    dataUse: [],
-    evidence: [],
-    effects: contract.effects.filter((effect) => effect.class !== "data_release"),
-  };
 }
 
 function sourceQueryMapping(value: unknown, path = false):

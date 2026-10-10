@@ -76,7 +76,7 @@ function ChoiceRow({ choice }: { choice: ToolChoiceRow }) {
       </div>
       <div className="arc-listing-info arc-tool-choice-info">
         <h4 className="arc-tool-choice-title">{choice.title}</h4>
-        {choice.access === undefined ? null : <p className="arc-tool-choice-access">{choice.access === 'external_listing' ? 'External listing · not callable through AE' : choice.access}</p>}
+        {choice.access === undefined ? null : <p className="arc-tool-choice-access">{choice.access}</p>}
         {choice.price === undefined ? null : <AeToolPrice price={choice.price}
           {...(choice.priceValidUntil === undefined ? {} : { validUntil: choice.priceValidUntil })}
           size="sm" className="arc-tool-choice-price" />}
@@ -107,9 +107,7 @@ function CompareTable({ choices }: { choices: readonly ToolChoiceRow[] }) {
     {
       id: 'access',
       feature: 'Access',
-      values: valuesFor((choice) => choice.access === undefined
-        ? 'Not published'
-        : choice.access === 'external_listing' ? 'External listing · not callable through AE' : choice.access),
+      values: valuesFor((choice) => choice.access ?? 'Not published'),
       retainWhenSame: true,
     },
     ...(choices.some((choice) => choice.belowMatch === true)

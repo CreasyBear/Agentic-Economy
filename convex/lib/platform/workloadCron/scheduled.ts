@@ -44,14 +44,6 @@ export async function expireStalePendingApprovalsHandler(ctx: WorkloadCronMutati
 }
 
 
-export async function refreshFacilitatorDiscoveryHandler(ctx: WorkloadCronActionContext): Promise<null> {
-  return await runAdmittedAction(
-    ctx,
-    'refresh facilitator discovery',
-    internal.facilitatorDiscoveryAction.run,
-    {},
-  )
-}
 export async function refreshReferenceRateHandler(ctx: WorkloadCronActionContext): Promise<null> {
   return await runAdmittedAction(ctx, 'refresh USDC/AUD reference rate', internal.referenceRateRefresh.run, {})
 }

@@ -53,7 +53,7 @@ const externalSearch = {
   ...matchingSearch,
   kind: 'match' as const,
   results: matchingSearch.results.slice(0, 1).map(({ toolRef: _toolRef, ...row }) => ({
-    ...row, id: 'external:timezone', source: 'coinbase' as const, access: 'external_listing' as const,
+    ...row, id: 'external:timezone', source: 'coinbase' as const, access: 'unavailable' as const,
     detailRef: 'external:timezone',
     next: [],
   })),

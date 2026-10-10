@@ -1,98 +1,17 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { isRecord } from '@/modules/common/is-record'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
 import type { RouteTransportObservation } from '../route-transport-runtime'
 
-export type X402ExecutionContext =
-  | Readonly<{
-      kind: 'market'
-      paymentProfile: 'base-usdc-exact' | 'base-sepolia-usdc-exact'
-    }>
-
 export type X402SettlementStatus = 'settled' | 'not_settled' | 'unknown'
 
-export type EconomicRail =
-  | 'provider_direct_x402'
-  | 'brokered_x402'
-  | 'ae_internal'
-
-export type PaymentLaneAdmission =
-  | Readonly<{
-      kind: 'admitted'
-      lane: 'brokered' | 'provider_direct_x402'
-    }>
-  | Readonly<{
-    kind: 'refused'
-    lane: 'provider_direct_x402'
-    code: 'payment_lane_not_brokered'
-  }>
-  | Readonly<{
-      kind: 'refused'
-      lane: EconomicRail
-    code: 'payment_lane_execution_context_invalid'
-  }>
+/** V1 brokers every market Call so AE validates output before value moves and answers for the charge. */
+export type EconomicRail = 'brokered_x402' | 'ae_internal'
 
 export function economicRailForCall(input: Readonly<{
   isX402: boolean
 }>): EconomicRail {
   return input.isX402 ? 'brokered_x402' : 'ae_internal'
-}
-
-/**
- * V1 brokers every market call so AE can validate the output before value moves, take its rake on
- * settlement, and answer for the charge when the buyer disputes it. A provider-direct rail settles
- * between buyer and provider outside AE's ledger and forfeits all three, so the Operation worker
- * always selects the brokered lane. Non-production keeps the lower-level direct rail admitted for
- * host-parity and provider-conformance tests; it is not a public Operation execution lane.
- */
-export function paymentLaneAdmission(
-  input: Readonly<{
-    rail: EconomicRail
-    environment: string
-    executionContext?: X402ExecutionContext
-  }>,
-): PaymentLaneAdmission {
-  const explicitContext = input.executionContext
-  const resolvedContext = (
-    input.environment === 'sandbox'
-    || input.environment === 'production'
-  )
-    ? x402ExecutionContextForFacts({
-        environment: input.environment,
-        ...(explicitContext === undefined
-          ? {}
-          : { executionContext: explicitContext }),
-      })
-    : undefined
-  if (
-    explicitContext !== undefined
-    && resolvedContext === undefined
-  ) {
-    return {
-      kind: 'refused',
-      lane: input.rail,
-      code: 'payment_lane_execution_context_invalid',
-    }
-  }
-  switch (input.rail) {
-    case 'ae_internal':
-      return { kind: 'admitted', lane: 'brokered' }
-    case 'brokered_x402':
-      return { kind: 'admitted', lane: 'brokered' }
-    case 'provider_direct_x402':
-      return input.environment === 'production'
-        ? {
-          kind: 'refused',
-          lane: 'provider_direct_x402',
-          code: 'payment_lane_not_brokered',
-        }
-        : { kind: 'admitted', lane: 'provider_direct_x402' }
-    default: {
-      const _exhaustive: never = input.rail
-      return _exhaustive
-    }
-  }
 }
 
 export function x402SettlementStatusForObservation(
@@ -116,36 +35,6 @@ export function x402SettlementStatusForObservation(
   }
 }
 
-function x402ExecutionContextForFacts(input: Readonly<{
-  environment: 'sandbox' | 'production'
-  executionContext?: X402ExecutionContext
-}>): X402ExecutionContext | undefined {
-  if (input.executionContext === undefined) {
-    return input.environment === 'production'
-      ? { kind: 'market', paymentProfile: 'base-usdc-exact' }
-      : { kind: 'market', paymentProfile: 'base-sepolia-usdc-exact' }
-  }
-  const context: unknown = input.executionContext
-  if (!isRecord(context)) return undefined
-  if (context.kind === 'market') {
-    const expectedProfile = input.environment === 'production'
-      ? 'base-usdc-exact'
-      : 'base-sepolia-usdc-exact'
-    return hasExactKeys(context, ['kind', 'paymentProfile'])
-      && context.paymentProfile === expectedProfile
-      ? { kind: 'market', paymentProfile: expectedProfile }
-      : undefined
-  }
-  return undefined
-}
-
-function hasExactKeys(value: Readonly<Record<string, unknown>>, expected: readonly string[]): boolean {
-  const actual = Object.keys(value).sort()
-  const sortedExpected = [...expected].sort()
-  return actual.length === sortedExpected.length
-    && actual.every((key, index) => key === sortedExpected[index])
-}
-
 export function x402ActionEffectStatus(
   observation: RouteTransportObservation,
 ): 'not_released' | 'released' | 'unknown' {
@@ -163,7 +52,6 @@ export function x402ActionEffectStatus(
 
 export function chargeSettlementOutcome(
   observation: RouteTransportObservation,
-  economicRail: EconomicRail,
   contractValidOutput = true,
 ): 'not_released' | 'released' | 'unknown' {
   if (
@@ -176,9 +64,7 @@ export function chargeSettlementOutcome(
     || observation.settlementEvidence?.kind === 'unknown'
     || observation.quoteDeliveryStatus === 'unknown'
   ) return 'unknown'
-  if (!contractValidOutput) {
-    return economicRail === 'provider_direct_x402' ? 'unknown' : 'not_released'
-  }
+  if (!contractValidOutput) return 'not_released'
   return observation.releaseStarted ? 'released' : 'not_released'
 }
 

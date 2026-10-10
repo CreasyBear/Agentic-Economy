@@ -13,7 +13,7 @@ import {
   reconcileBusinessSupplyProjectionsHandler, reconcilePromotionalCreditHandler, reconcilePaidCallReportsHandler,
   reconcileDueFacilitatorInvocationsHandler, refreshAgenticEconomyApiRegistryHandler,
   refreshCapabilitySupplyReadinessHandler, refreshCurrentMarketPresenceHandler,
-  refreshFacilitatorDiscoveryHandler, refreshMarketFlowHandler,
+  refreshMarketFlowHandler,
   refreshReferenceRateHandler, refreshPaymentReadinessHandler,
   snapshotMarketplaceMetricsDayHandler, reconcileTreasuryBalancesHandler,
 } from './lib/platform/workloadCron/scheduled'
@@ -70,11 +70,6 @@ export const expireStalePendingApprovals = internalMutation({
 })
 
 
-export const refreshFacilitatorDiscovery = internalAction({
-  args: {},
-  returns: v.null(),
-  handler: refreshFacilitatorDiscoveryHandler,
-})
 export const refreshReferenceRate = internalAction({
   args: {},
   returns: v.null(),

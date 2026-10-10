@@ -160,7 +160,7 @@ describe('provider directory rows (Well 8 Lane C)', () => {
       query: 'lookup', access: 'ae_callable', paginationOpts: { cursor: null, numItems: 8 },
     })).toMatchObject({ kind: 'ok', page: [] })
     const nonCallable = await backend.query(api.x402DirectoryIndex.searchCompact, {
-      query: 'lookup', access: 'external_listing', paginationOpts: { cursor: null, numItems: 8 },
+      query: 'lookup', paginationOpts: { cursor: null, numItems: 8 },
     })
     expect(nonCallable).toMatchObject({ kind: 'ok', page: [{
       id: entry?.documentId, source: 'provider', sourceRouteRef: ROUTE_REF,
@@ -191,7 +191,7 @@ describe('provider directory rows (Well 8 Lane C)', () => {
       expect(withoutPricingEntry?.networks).toEqual([])
       expect(JSON.parse(withoutPricingEntry?.directoryEntryJson ?? '{}').prices).toEqual([])
       expect(await backend.query(api.x402DirectoryIndex.searchCompact, {
-        query: 'lookup', access: 'external_listing', paginationOpts: { cursor: null, numItems: 8 },
+        query: 'lookup', paginationOpts: { cursor: null, numItems: 8 },
       })).toMatchObject({ kind: 'ok', page: [] })
     }
     await backend.run(async (ctx) => upsertProviderDirectoryRows(ctx, publication))
@@ -231,7 +231,7 @@ describe('provider directory rows (Well 8 Lane C)', () => {
       publicationRef: publication.publicationRef, publicationRevision: publication.revision,
     })
     const repaired = await backend.query(api.x402DirectoryIndex.searchCompact, {
-      query: 'lookup', access: 'external_listing', paginationOpts: { cursor: null, numItems: 8 },
+      query: 'lookup', paginationOpts: { cursor: null, numItems: 8 },
     })
     expect(repaired).toMatchObject({ kind: 'ok', page: [{ source: 'provider', title: 'Provider Lookup' }] })
 
@@ -247,7 +247,7 @@ describe('provider directory rows (Well 8 Lane C)', () => {
       publicationRef: publication.publicationRef, publicationRevision: 1,
     })
     expect(await backend.query(api.x402DirectoryIndex.searchCompact, {
-      query: 'lookup', access: 'external_listing', paginationOpts: { cursor: null, numItems: 8 },
+      query: 'lookup', paginationOpts: { cursor: null, numItems: 8 },
     })).toMatchObject({ kind: 'ok', page: [{ source: 'provider', title: 'Provider Lookup' }] })
   })
 

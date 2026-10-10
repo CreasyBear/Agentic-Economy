@@ -65,7 +65,7 @@ const callableRow = {
   next: [{ action: 'registry.tools.describe' as const, authority: 'public' as const, args: { toolRef: callableRef } }],
 }
 const externalRow = {
-  id: 'external:weather', source: 'coinbase' as const, access: 'external_listing' as const,
+  id: 'external:weather', source: 'coinbase' as const, access: 'unavailable' as const,
   title: 'External Weather', summary: 'Weather source.', provider: 'External',
   actionClass: 'retrieve' as const, objectClass: 'data' as const, readiness: 'unverified' as const,
   price: { kind: 'unavailable' as const }, detailRef: 'external:weather',

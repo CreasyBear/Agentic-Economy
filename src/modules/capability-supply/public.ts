@@ -314,9 +314,6 @@ export type {
 } from './internal/cdp-x402-payment-signer'
 export {
   decideFacilitatorDiscoveryItem,
-  FACILITATOR_DISCOVERY_URLS,
-  isAllowlistedFacilitatorDiscoveryUrl,
-  parseFacilitatorDiscoveryPage,
   paymentRequiredFromDiscoveryItem,
 } from './internal/facilitator-discovery-ingest'
 export {
@@ -448,14 +445,7 @@ export {
   type SupplyCommandActor,
   type SupplyAuditEventRow,
 } from './internal/shared'
-export {
-  paymentLaneAdmission,
-  transportObservationDigest,
-} from './internal/x402-call-policy'
-export type {
-  EconomicRail,
-  PaymentLaneAdmission,
-} from './internal/x402-call-policy'
+export { transportObservationDigest } from './internal/x402-call-policy'
 export {
   x402DefaultAssetFacts,
   x402LegacyDiscoveryInfo,

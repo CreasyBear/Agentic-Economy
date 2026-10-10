@@ -96,7 +96,7 @@ describe('production surface isolation', () => {
     const rows: IndexedSource[] = ['base-sepolia', 'base'].map(network => {
       const resource = `https://provider.test/${network}`
       const source = { resource, type: 'http' }
-      return { resource, sourceJson: JSON.stringify(source), sourceDigest: canonicalDigest(source), entry: {
+      return { resource, sourceJson: JSON.stringify(source), sourceDigest: canonicalDigest(source), admission: { kind: 'quotable' as const }, entry: {
         resource, title: `Sandbox weather ${network}`, description: 'Sandbox weather lookup',
         protocol: 'http', provider: 'provider.test', metadataJson: '', category: 'Weather', tags: [],
         activity: { calls30d: 5, payers30d: 2 }, output: { fields: [], schemaJson: '{}' },
@@ -130,7 +130,7 @@ describe('production surface isolation', () => {
         { toolCallId: 'isolation-search', messages: [{ role: 'user', content: 'Find sandbox weather testnet Tools' }] },
       ])
     })
-    expect(search).toMatchObject({ kind: 'scoped', results: [{ title: 'Sandbox weather base' }] })
+    expect(search).toMatchObject({ kind: 'match', results: [{ title: 'Sandbox weather base', access: 'ae_callable' }] })
     expect(JSON.stringify(search)).not.toContain('base-sepolia')
   })
 

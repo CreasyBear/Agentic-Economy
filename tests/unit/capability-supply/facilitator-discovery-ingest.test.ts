@@ -3,12 +3,9 @@ import { dirname, resolve } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { admitFacilitatorDiscoveryItems as admitOfficialFacilitatorDiscoveryItems } from "../../../convex/facilitatorDiscoveryAction";
+import { admitFacilitatorDiscoveryItems as admitOfficialFacilitatorDiscoveryItems } from "@/modules/capability-supply/server";
 import {
   decideFacilitatorDiscoveryItem,
-  FACILITATOR_DISCOVERY_URLS,
-  isAllowlistedFacilitatorDiscoveryUrl,
-  parseFacilitatorDiscoveryPage,
   paymentRequiredFromDiscoveryItem,
 } from "@/modules/capability-supply/public";
 import syntheticPostPaymentRequiredFixture from "../../fixtures/x402-bazaar/synthetic-post-payment-required.json";
@@ -32,6 +29,8 @@ const noBazaarItem = {
       asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
       payTo: "0xbA667287B8Ef89565F8fD7AcD4d22Ce98E0f39cd",
       amount: "1000",
+      maxTimeoutSeconds: 60,
+      extra: { name: "USD Coin", version: "2" },
     },
   ],
 };
@@ -151,7 +150,28 @@ describe("facilitator discovery ingest", () => {
     expect(decideFacilitatorDiscoveryItem({
       ...noBazaarItem,
       resource: "https://example.test/no-bazaar",
-    }, undefined, "sandbox")).toEqual({ kind: "skip", reason: "bazaar_missing" });
+    }, undefined, "production")).toMatchObject({ kind: "admit" });
+  });
+
+  it("admits a listing without Bazaar metadata or payers as a no-input GET on its listed URL", async () => {
+    vi.stubEnv("AE_DEPLOYMENT_ENVIRONMENT", "production");
+    const admission = await admitOfficialFacilitatorDiscoveryItems([
+      noBazaarItem,
+      { ...noBazaarItem, resource: { url: "https://example.test/one-payer" }, quality: { l30DaysUniquePayers: 1 } },
+      { ...mainnetSyntheticPost, quality: { l30DaysUniquePayers: 0 } },
+    ]);
+    expect(admission.skipped).toEqual([]);
+    expect(admission.admitted).toHaveLength(3);
+    expect(JSON.parse(admission.admitted[0]?.sourceImportJson ?? "{}")).toMatchObject({
+      resource: {
+        resourceUrl: "https://example.test/no-bazaar",
+        method: "GET",
+        query: [],
+        inputSchema: { type: "object", properties: {}, additionalProperties: false },
+        outputSchema: { type: ["object", "array", "string", "number", "boolean", "null"] },
+      },
+    });
+    expect(admission.admitted[0]?.execution).toMatchObject({ method: "GET", endpoint: { url: "https://example.test/no-bazaar" } });
   });
 
   it("names discovered offerings as jobs instead of URL paths", () => {
@@ -205,27 +225,10 @@ describe("facilitator discovery ingest", () => {
     expect(await admitOfficialFacilitatorDiscoveryItems([mainnetSyntheticPost])).toMatchObject({ admitted: [] });
   });
 
-  it("allowlists PayAI and CDP REST catalogs only", () => {
-    expect(FACILITATOR_DISCOVERY_URLS).toEqual([
-      "https://api.cdp.coinbase.com/platform/v2/x402/discovery/resources",
-      "https://facilitator.payai.network/discovery/resources",
-    ]);
-    expect(
-      isAllowlistedFacilitatorDiscoveryUrl(
-        "https://facilitator.payai.network/discovery/resources",
-      ),
-    ).toBe(true);
-    expect(
-      isAllowlistedFacilitatorDiscoveryUrl(
-        "https://x402.org/facilitator/discovery/resources",
-      ),
-    ).toBe(false);
-  });
-
-  it("admits official Base Sepolia Bazaar HTTP while skipping missing Bazaar and MCP", async () => {
+  it("admits official Base Sepolia Bazaar HTTP while skipping mainnet-only and MCP rows", async () => {
     expect(decideFacilitatorDiscoveryItem(noBazaarItem, undefined, "sandbox")).toEqual({
       kind: "skip",
-      reason: "bazaar_missing",
+      reason: "chain_unsupported",
     });
     vi.stubEnv("AE_DEPLOYMENT_ENVIRONMENT", "development");
     const mcpAndTestnet = await admitOfficialFacilitatorDiscoveryItems([mcpItem, baseSepoliaSyntheticPost]);
@@ -243,14 +246,11 @@ describe("facilitator discovery ingest", () => {
 
   it("admits at least two recorded bazaar resources through the Node action boundary", async () => {
     expect(timezonePaymentRequired).toBeDefined();
-    const page = parseFacilitatorDiscoveryPage({
-      items: [timezonePaymentRequired, mainnetSyntheticPost, noBazaarItem, mcpItem],
-    });
-    expect(page?.items).toHaveLength(4);
+    const page = { items: [timezonePaymentRequired, mainnetSyntheticPost, mcpItem] };
     vi.stubEnv("AE_DEPLOYMENT_ENVIRONMENT", "production");
-    const production = await admitOfficialFacilitatorDiscoveryItems(page!.items);
+    const production = await admitOfficialFacilitatorDiscoveryItems(page.items);
     vi.stubEnv("AE_DEPLOYMENT_ENVIRONMENT", "development");
-    const sandbox = await admitOfficialFacilitatorDiscoveryItems(page!.items);
+    const sandbox = await admitOfficialFacilitatorDiscoveryItems(page.items);
     const result = { admitted: [...production.admitted, ...sandbox.admitted], skipped: [...production.skipped, ...sandbox.skipped] };
     expect(result.admitted).toHaveLength(2);
     expect(result.skipped.length).toBeGreaterThanOrEqual(2);
@@ -296,10 +296,7 @@ describe("facilitator discovery ingest", () => {
     });
   });
 
-  it("admits a full page but refuses an accept list above 20", async () => {
-    expect(parseFacilitatorDiscoveryPage({ items: Array.from({ length: 100 }, () => noBazaarItem) })?.items)
-      .toHaveLength(100);
-    expect(parseFacilitatorDiscoveryPage({ items: Array.from({ length: 101 }, () => noBazaarItem) })).toBeUndefined();
+  it("refuses an accept list above 20", async () => {
     const tooManyAccepts = {
       ...mainnetSyntheticPost,
       accepts: Array.from({ length: 21 }, () => mainnetSyntheticPost.accepts[0]),
@@ -312,10 +309,31 @@ describe("facilitator discovery ingest", () => {
     });
   });
 
+  it.each([
+    ["a non-EVM payee", { payTo: "not-an-address" }],
+    ["a non-EIP-3009 transfer method", { extra: { name: "USD Coin", version: "2", assetTransferMethod: "permit2" } }],
+    ["a missing timeout", { maxTimeoutSeconds: undefined }],
+  ])("refuses a listing whose only lane has %s, as the call path would", async (_label, override) => {
+    vi.stubEnv("AE_DEPLOYMENT_ENVIRONMENT", "production");
+    const item = { ...noBazaarItem, accepts: [{ ...noBazaarItem.accepts[0]!, ...override }] };
+    expect(await admitOfficialFacilitatorDiscoveryItems([item])).toMatchObject({
+      admitted: [], skipped: [{ kind: "skip", reason: "payment_terms_invalid" }],
+    });
+  });
+
+  it("refuses two payable lanes as ambiguous instead of pinning the first", async () => {
+    vi.stubEnv("AE_DEPLOYMENT_ENVIRONMENT", "production");
+    const lane = noBazaarItem.accepts[0]!;
+    const item = { ...noBazaarItem, accepts: [lane, { ...lane, payTo: "0x1111111111111111111111111111111111111111" }] };
+    expect(await admitOfficialFacilitatorDiscoveryItems([item])).toMatchObject({
+      admitted: [], skipped: [{ kind: "skip", reason: "payment_terms_invalid" }],
+    });
+  });
+
   it("keeps the Bazaar SDK out of the default mutation import tree", () => {
     const root = resolve(dirname(import.meta.filename), "../../..");
     const mutationPath = resolve(root, "convex/facilitatorDiscovery.ts");
-    const actionPath = resolve(root, "convex/facilitatorDiscoveryAction.ts");
+    const actionPath = resolve(root, "convex/x402Directory.ts");
     const mutationImports = collectStaticImportTree(mutationPath, root);
     const actionImports = collectStaticImportTree(actionPath, root);
     expect(mutationImports).not.toContain("@x402/extensions/bazaar");

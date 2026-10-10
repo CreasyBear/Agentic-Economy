@@ -44,7 +44,7 @@ describe('Quote-committed x402 request', () => {
     } else {
       expect(result).toMatchObject({ disposition: 'refused',
         failureCode: freshAmount === 'timeout' ? 'network_timeouterror'
-          : freshAmount === 'signer_unavailable' ? 'payment_signature_unavailable' : 'payment_provider_requirement_stale',
+          : freshAmount === 'signer_unavailable' ? 'payment_signature_unavailable' : 'price_changed',
         queryReleaseStatus: freshAmount === 'timeout' ? 'unknown' : 'released', paymentSubmissionStatus: 'not_submitted' })
       expect(sign).toHaveBeenCalledTimes(freshAmount === 'signer_unavailable' ? 1 : 0)
       expect(send).toHaveBeenCalledTimes(1)

@@ -6,6 +6,7 @@ import '../../setup/jsdom-platform'
 import { CanonicalSearchResults } from '@/components/ae/market/CanonicalSearchResults'
 import type { SearchResult, SupplyProjectionFreshness } from '@/modules/registry/tool-choice-contracts'
 import { type PublicToolRef } from '@/modules/capability-supply/public'
+import { REASON_COPY, REASON_COPY_FALLBACK } from '@/content/reason-copy'
 
 const admittedRef = `operation:v1:${'a'.repeat(64)}` as PublicToolRef
 const externalId = `registry:${'b'.repeat(64)}`
@@ -24,6 +25,7 @@ const currentResult = {
   price: { kind: 'indicative', label: 'A$900719925474099.01' },
   detailRef: admittedRef,
   next: [{ action: 'registry.tools.describe', args: { toolRef: admittedRef }, authority: 'public' }],
+  signals: { calls: 4, successRate: 3 / 4, payers30d: 30 },
   freshness: {
     source: 'supply_projection',
     state: 'fresh',
@@ -35,7 +37,8 @@ const currentResult = {
 const externalResult = {
   id: externalId,
   source: 'coinbase',
-  access: 'external_listing',
+  access: 'unavailable',
+  reason: 'chain_unsupported',
   title: 'External Forecast',
   summary: 'Published weather endpoint',
   provider: 'example.com',
@@ -112,22 +115,24 @@ describe('canonical search results', () => {
     renderResults(searchRows)
     const table = screen.getByRole('table', { name: 'Canonical search results' })
 
-    expect(table.closest('[data-mobile-layout]')?.getAttribute('data-mobile-layout')).toBe('scroll')
+    expect(table.closest('[data-mobile-layout]')?.getAttribute('data-mobile-layout')).toBe('cards')
     expect(within(table).getAllByRole('columnheader').map(header => header.textContent?.trim())).toEqual([
-      'Tool', 'Provider or Host', 'Access', 'Price', 'Freshness', 'Actions',
+      'Tool', 'Provider or host', 'Access', 'Price', 'AE calls completed', 'Payers (30d)', 'Actions',
     ])
     const rows = within(table).getAllByRole('row').slice(1)
     expect(rows.map(row => within(row).getByRole('link').textContent?.trim())).toEqual([
       'Weather Forecast', 'External Forecast', 'Unpriced Forecast',
     ])
 
-    expect(within(rows[0]!).getByText('AE-callable · ready')).toBeTruthy()
-    expect(within(rows[0]!).getByText('Indicative AUD · A$900719925474099.01')).toBeTruthy()
-    expect(within(rows[0]!).getByText('AE supply projection · fresh · refreshed 27 Sept 2026')).toBeTruthy()
-    expect(within(rows[1]!).getByText('External listing · not AE-callable')).toBeTruthy()
-    expect(within(rows[1]!).getByText('Provider price · US$1')).toBeTruthy()
-    expect(within(rows[1]!).getByText('Coinbase Bazaar index · stale · refreshed 26 Sept 2026')).toBeTruthy()
-    expect(within(rows[2]!).getByText('Price unavailable')).toBeTruthy()
+    const cell = (row: HTMLElement, column: string) => row.querySelector(`td[data-column="${column}"]`)
+    expect(rows.map(row => cell(row, 'access')?.textContent?.trim())).toEqual(['Callable', 'Unavailable', 'Callable'])
+    expect(within(rows[1]!).getByText('Unavailable').closest('[title]')?.getAttribute('title')).toBe(REASON_COPY.chain_unsupported)
+    expect(rows.map(row => cell(row, 'price')?.textContent?.trim())).toEqual(['A$900719925474099.01', 'US$1', 'No price'])
+    expect(cell(rows[0]!, 'price')?.className).toContain('text-end')
+    expect(rows.map(row => cell(row, 'calls')?.textContent?.trim())).toEqual(['3 of 4', '0', '3 of 4'])
+    expect(rows.map(row => cell(row, 'payers')?.textContent?.trim())).toEqual(['30', '–', '30'])
+    expect(cell(rows[0]!, 'calls')?.className).toContain('tabular-nums')
+    expect(table.textContent).not.toMatch(/refreshed|verified|Indicative AUD|Provider price/)
 
     expect(within(rows[0]!).getByRole('link').getAttribute('href')).toBe(`/tools/${encodeURIComponent(admittedRef)}`)
     expect(within(rows[1]!).getByRole('link').getAttribute('href')).toBe(`/api/v1/registry/detail?id=${externalId}`)
@@ -138,13 +143,31 @@ describe('canonical search results', () => {
     const { freshness: _externalFreshness, ...externalWithoutFreshness } = externalResult
     const archivedCurrent = { ...unavailablePriceResult, freshness: { ...currentResult.freshness, state: 'stale' as const, completedAt: Date.UTC(2026, 8, 26) } }
     renderResults([currentWithoutFreshness, externalResult, archivedCurrent, { ...externalWithoutFreshness, id: 'registry:missing', title: 'Undated External' }], undefined, currentResult.freshness)
-    const rows = within(screen.getByRole('table', { name: 'Canonical search results' })).getAllByRole('row').slice(1)
-    expect(within(rows[0]!).getByText('AE supply projection · fresh · refreshed 27 Sept 2026')).toBeTruthy()
-    expect(within(rows[1]!).getByText('Coinbase Bazaar index · stale · refreshed 26 Sept 2026')).toBeTruthy()
-    expect(within(rows[2]!).getByText('AE supply projection · stale · refreshed 26 Sept 2026')).toBeTruthy()
-    expect(within(rows[3]!).getByText('Coinbase Bazaar index · freshness unavailable')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Inspect Weather Forecast' }))
-    expect(detailText(await screen.findByRole('dialog'), 'Freshness')).toBe('AE supply projection · fresh · refreshed 27 Sept 2026')
+    const expected = [
+      ['Weather Forecast', 'Fresh · refreshed 27 Sept 2026', 'AE supply projection'],
+      ['External Forecast', 'Stale · refreshed 26 Sept 2026', 'Coinbase Bazaar index'],
+      ['Unpriced Forecast', 'Stale · refreshed 26 Sept 2026', 'AE supply projection'],
+      ['Undated External', 'Freshness unavailable', 'Coinbase Bazaar index'],
+    ] as const
+    for (const [title, freshness, source] of expected) {
+      fireEvent.click(screen.getByRole('button', { name: `Inspect ${title}` }))
+      const dialog = await screen.findByRole('dialog')
+      expect(detailText(dialog, 'Freshness')).toBe(freshness)
+      expect(detailText(dialog, 'Source')).toBe(source)
+      fireEvent.keyDown(dialog, { key: 'Escape', code: 'Escape' })
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    }
+  })
+
+  it('names a reasonless unavailable row plainly instead of the generic error sentence', async () => {
+    const { reason: _reason, ...reasonless } = externalResult
+    renderResults([reasonless])
+    const row = within(screen.getByRole('table', { name: 'Canonical search results' })).getAllByRole('row')[1]!
+    expect(within(row).getByText('Unavailable').closest('[title]')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Inspect External Forecast' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(detailText(dialog, 'Access')).toBe('Currently unavailable')
+    expect(dialog.textContent).not.toContain(REASON_COPY_FALLBACK)
   })
 
   it('opens the real Inspect dialog with complete current facts and does not imply a save or call', async () => {
@@ -158,9 +181,13 @@ describe('canonical search results', () => {
     expect(detailText(dialog, 'Provider')).toBe('Weather Co')
     expect(detailText(dialog, 'Access')).toBe('AE-callable · ready')
     expect(detailText(dialog, 'Price')).toBe('Indicative AUD · A$900719925474099.01')
-    expect(detailText(dialog, 'Freshness')).toBe('AE supply projection · fresh · refreshed 27 Sept 2026')
-    expect(detailText(dialog, 'Source')).toBe('current')
+    expect(detailText(dialog, 'AE calls')).toBe('3 of 4 completed')
+    expect(detailText(dialog, 'Payers (30d)')).toBe('30')
+    expect(detailText(dialog, 'Freshness')).toBe('Fresh · refreshed 27 Sept 2026')
+    expect(detailText(dialog, 'Source')).toBe('AE supply projection')
     expect(detailText(dialog, 'ID')).toBe(admittedRef)
+    expect(within(dialog).getAllByText(admittedRef, { selector: 'code[title]' })).toHaveLength(2)
+    expect(within(dialog).getByRole('button', { name: 'Copy ID' })).toBeTruthy()
     expect(detailText(dialog, 'Tool reference')).toBe(admittedRef)
     expect(within(dialog).getByRole('link', { name: 'Open Tool detail' }).getAttribute('href')).toBe(`/tools/${encodeURIComponent(admittedRef)}`)
     expect(within(dialog).queryByRole('button', { name: /Save|Call|Purchase/ })).toBeNull()
@@ -206,7 +233,7 @@ describe('canonical search results', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Inspect External Forecast' }))
     const dialog = await screen.findByRole('dialog')
-    expect(detailText(dialog, 'Source')).toBe('coinbase')
+    expect(detailText(dialog, 'Source')).toBe('Coinbase Bazaar index')
     expect(detailText(dialog, 'ID')).toBe(currentResult.id)
     expect(detailText(dialog, 'Provider-listed source')).toBe('1 USDC')
 
@@ -234,7 +261,7 @@ describe('canonical search results', () => {
     expect(within(screen.getByRole('dialog')).getByText('Updated forecast for a city')).toBeTruthy()
     expect(detailText(screen.getByRole('dialog'), 'Provider')).toBe('Weather Co, updated')
     expect(detailText(screen.getByRole('dialog'), 'Price')).toBe('Indicative AUD · A$2.50')
-    expect(detailText(screen.getByRole('dialog'), 'Freshness')).toBe('AE supply projection · stale · refreshed 28 Sept 2026')
+    expect(detailText(screen.getByRole('dialog'), 'Freshness')).toBe('Stale · refreshed 28 Sept 2026')
     expect(screen.queryByText('Forecast for a city')).toBeNull()
   })
 })

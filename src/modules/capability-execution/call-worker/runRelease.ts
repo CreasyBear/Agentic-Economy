@@ -456,7 +456,7 @@ export async function releaseCallRun(
     }
     // Delivery and payment consequences use the declared contract; semantic suspicion is advisory.
     const outputValidation = parseContractOutput(observation, descriptor)
-    const deliveryOutcome = chargeSettlementOutcome(observation, economicRail, outputValidation.valid)
+    const deliveryOutcome = chargeSettlementOutcome(observation, outputValidation.valid)
     const settlement = deliveryOutcome === 'unknown'
       ? {
           kind: 'reconciliation_required' as const,

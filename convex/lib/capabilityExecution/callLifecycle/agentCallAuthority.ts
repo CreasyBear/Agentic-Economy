@@ -225,6 +225,22 @@ function delegationResourceForPurpose(
   return grant.toolAccess === 'all_admitted' ? '*' : grant.toolRefs[0]
 }
 
+/**
+ * The caller is a current Agent with an active grant carrying the call scope. Used before Quote
+ * resolves a listing or URL; the per-Tool delegation is checked against the resolved ref after.
+ */
+export async function hasCurrentAgentGrant(
+  ctx: Pick<QueryCtx, 'db'>,
+  candidate: CallPrincipal,
+  now: number,
+): Promise<boolean> {
+  if (!validAuthorityRequest(candidate, now, { kind: 'receipt_list' })) return false
+  const canonical = await resolveCanonicalAgentContext(ctx, candidate.credentialId, now)
+  if (canonical === null || !candidateMatchesCanonical(candidate, canonical)) return false
+  const storedAgent = await loadCurrentStoredAgent(ctx, candidate, canonical, now)
+  return storedAgent !== null && await loadCurrentActiveGrant(ctx, storedAgent, canonical, now) !== null
+}
+
 export async function resolveCurrentAgentAuthority(
   ctx: Pick<QueryCtx, 'db'>,
   candidate: CallPrincipal,

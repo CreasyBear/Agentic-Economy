@@ -16,7 +16,7 @@ import { CHAT_TOOL_NAME_MAP } from '@/modules/chat/tool-card'
 import type { QuoteResult } from '../../capabilityExecution/quotes/contracts'
 import { contractFor, descriptionFor, failure, type ReserveChatTool } from './contracts'
 import { projectedModelFacingOutput } from './output'
-import { callableToolRef } from './callableRef'
+import { resolveCallableRef } from '../../capabilityExecution/quotes/quoteAction'
 
 const quoteRef = makeFunctionReference<'action', {
   authority: TrustedChatAuthority; operationKey: string; correlationId: string;
@@ -42,6 +42,11 @@ function pause(ms: number): Promise<void> {
   const { promise, resolve } = Promise.withResolvers<void>()
   setTimeout(resolve, ms)
   return promise
+}
+
+async function callableToolRef(ctx: ToolCtx | ActionCtx, ref: string): Promise<string | null> {
+  const resolved = await resolveCallableRef(ctx, ref)
+  return resolved.kind === 'ready' ? resolved.toolRef : null
 }
 
 export function createPurchaseTools(authority: TrustedChatAuthority & { kind: 'agent_key' }, reserve: ReserveChatTool) {
@@ -101,10 +106,10 @@ export function createPurchaseTools(authority: TrustedChatAuthority & { kind: 'a
         description: descriptionFor(toolQuoteContract),
         inputSchema: chatToolQuoteInputSchema as z.ZodType<ToolQuoteInput>,
         execute: async (ctx: ToolCtx, input: ToolQuoteInput) => {
-          const toolRef = await callableToolRef(ctx, input.toolRef)
-          if (toolRef === null) return failure('tool.quote', 'tool_unavailable')
           const denied = reserve('tool.quote')
           if (denied !== null) return denied
+          const toolRef = await callableToolRef(ctx, input.toolRef)
+          if (toolRef === null) return failure('tool.quote', 'tool_unavailable')
           if (!await ctx.runQuery(payableAdmissionRef, { authority, toolRef })) {
             return failure('tool.quote', 'turn_stopped')
           }

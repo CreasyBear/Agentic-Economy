@@ -1,4 +1,5 @@
-import { isPublicToolRef, x402NetworkLabel } from '@/modules/capability-supply/public'
+import { x402NetworkLabel } from '@/modules/capability-supply/public'
+import { isPublicToolRef, parseCallableRef } from '@/modules/common/tool-ref'
 import { CATALOGUE_STALE_AFTER_MS, sourceFreshnessState } from '@/modules/common/freshness'
 import { REFERENCE_RATE_MAX_AGE_MS, formatDisplayPrice, parseDecimalExactAmount, type ReferenceRate } from '@/modules/money/public'
 import type { SearchResult } from '../tool-choice-contracts'
@@ -11,7 +12,7 @@ export type CompactDirectoryPage =
       id: string
       sourceRouteRef?: string
       toolRef?: string
-      choice?: Readonly<{ access: SearchResult['access']; toolRef?: string; sourceRouteRef?: string }>
+      choice?: Readonly<{ access: SearchResult['access']; toolRef?: string; sourceRouteRef?: string; reason?: string }>
       title: string
       summary: string
       provider: string
@@ -22,6 +23,7 @@ export type CompactDirectoryPage =
       minimumUsdPrice?: string
       network?: string
       resource?: string
+      payers30d?: number
     }>[]
     continueCursor: string
     isDone: boolean
@@ -42,12 +44,13 @@ export function compactDirectoryRows(page: Extract<CompactDirectoryPage, { kind:
     staleAfterMs: CATALOGUE_STALE_AFTER_MS,
   }
   return page.page.map(item => {
-    // Older pages without qualified choice never gain Call access from toolRef alone.
-    const exactToolRef = item.choice?.toolRef
-    const toolRef = exactToolRef !== undefined && isPublicToolRef(exactToolRef) ? exactToolRef : undefined
-    // An invalid or absent join never grants the callable posture.
-    const access = item.choice?.access === 'ae_callable' && toolRef === undefined
-      ? 'unavailable' : item.choice?.access ?? 'external_listing'
+    // A row read without a choice is not callable.
+    const choice = item.choice ?? { access: 'unavailable' as const }
+    // A callable row is quoted by its operation ref, or by its listing ref before publication.
+    const refKind = parseCallableRef(choice.toolRef)?.kind
+    const toolRef = refKind === 'operation' || refKind === 'listing' ? choice.toolRef : undefined
+    // An invalid or absent ref never grants the callable posture.
+    const access = choice.access === 'ae_callable' && toolRef === undefined ? 'unavailable' : choice.access
     const amount = item.minimumUsdPrice === undefined ? undefined : parseDecimalExactAmount('USDC', item.minimumUsdPrice, 6)
     const displayPrice = amount === undefined ? undefined : formatDisplayPrice({
       kind: 'indicative',
@@ -62,7 +65,8 @@ export function compactDirectoryRows(page: Extract<CompactDirectoryPage, { kind:
       id: item.id,
       source: 'coinbase' as const,
       access,
-      ...(access === 'external_listing' || toolRef === undefined ? {} : { toolRef }),
+      ...(toolRef === undefined ? {} : { toolRef }),
+      ...(choice.reason === undefined ? {} : { reason: choice.reason }),
       ...(item.sourceRouteRef === undefined ? {} : { sourceRouteRef: item.sourceRouteRef }),
       ...(amount === undefined ? {} : { sourcePrice: `${item.minimumUsdPrice} USDC` }),
       title: Array.from(item.title).slice(0, 72).join(''),
@@ -77,12 +81,14 @@ export function compactDirectoryRows(page: Extract<CompactDirectoryPage, { kind:
       actionClass: item.actionClass,
       objectClass: item.objectClass,
       ...(item.category === undefined ? {} : { category: Array.from(item.category).slice(0, 80).join('') }),
-      readiness: access === 'ae_callable' ? 'ready' as const : access === 'unavailable' ? 'unavailable' as const : 'unverified' as const,
+      // A listing ref is unverified until its Quote reads the live 402.
+      readiness: access === 'ae_callable' && refKind === 'operation' ? 'ready' as const : access === 'unavailable' ? 'unavailable' as const : 'unverified' as const,
       price: displayPrice === undefined ? { kind: 'unavailable' as const } : { kind: 'indicative' as const, label: displayPrice },
-      detailRef: toolRef ?? `/api/v1/registry/detail?id=${encodeURIComponent(item.id)}`,
-      next: toolRef === undefined
-        ? []
-        : [{ action: 'registry.tools.describe' as const, args: { toolRef }, authority: 'public' as const }],
+      detailRef: refKind === 'operation' && toolRef !== undefined ? toolRef : `/api/v1/registry/detail?id=${encodeURIComponent(item.id)}`,
+      next: refKind === 'operation' && isPublicToolRef(toolRef)
+        ? [{ action: 'registry.tools.describe' as const, args: { toolRef }, authority: 'public' as const }]
+        : [],
+      ...(item.payers30d === undefined ? {} : { signals: { calls: 0, payers30d: item.payers30d } }),
       freshness,
     }
   })

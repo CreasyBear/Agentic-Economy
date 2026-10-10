@@ -30,7 +30,6 @@ import {
   refreshAgenticEconomyApiRegistryHandler,
   refreshCapabilitySupplyReadinessHandler,
   refreshCurrentMarketPresenceHandler,
-  refreshFacilitatorDiscoveryHandler,
   refreshReferenceRateHandler,
   observeX402TreasuryHandler,
   reconcileTreasuryBalancesHandler,
@@ -80,7 +79,6 @@ const EXPECTED_BINDINGS = {
   'refresh capability supply readiness': 'workloadCron:refreshCapabilitySupplyReadiness',
   'reconcile business supply projections': 'workloadCron:reconcileBusinessSupplyProjections',
   'refresh current market presence': 'workloadCron:refreshCurrentMarketPresence',
-  'refresh facilitator discovery': 'workloadCron:refreshFacilitatorDiscovery',
   'refresh USDC/AUD reference rate': 'workloadCron:refreshReferenceRate',
   'observe x402 treasury': 'workloadCron:observeX402Treasury',
   'reconcile treasury balances': 'workloadCron:reconcileTreasuryBalances',
@@ -93,7 +91,6 @@ const ACTION_HANDLERS = [
   reconcileDueFacilitatorInvocationsHandler,
   reconcilePromotionalCreditHandler,
   reconcilePaidCallReportsHandler,
-  refreshFacilitatorDiscoveryHandler,
   refreshReferenceRateHandler,
   refreshAgenticEconomyApiRegistryHandler,
   observeX402TreasuryHandler,
@@ -107,7 +104,6 @@ const ACTION_HANDLER_WORKLOAD_NAMES = [
   'reconcile due facilitator invocations',
   'reconcile promotional credit',
   'reconcile paid Call reports',
-  'refresh facilitator discovery',
   'refresh USDC/AUD reference rate',
   'refresh Agentic Economy API registry',
   'observe x402 treasury',
@@ -152,10 +148,8 @@ describe('System workload cron boundary', () => {
       Object.entries(convexCrons.crons).map(([name, job]) => [name, job.name]),
     )).toEqual(EXPECTED_BINDINGS)
     expect(Object.values(convexCrons.crons).every((job) => JSON.stringify(job.args) === '[{}]')).toBe(true)
-    expect(convexCrons.crons['refresh facilitator discovery']?.schedule).toEqual({
-      type: 'interval',
-      hours: 6,
-    })
+    // Resolve borrows this workload on demand; the directory index is the only crawler.
+    expect(convexCrons.crons['refresh facilitator discovery']).toBeUndefined()
     expect(convexCrons.crons['expire stale pending approvals']?.schedule).toEqual({
       type: 'interval',
       minutes: 5,
@@ -178,7 +172,8 @@ describe('System workload cron boundary', () => {
   })
 
   it('declares every cron as one canonical workload Principal and Account with no exemption', () => {
-    expect(WORKLOAD_CRON_DECLARATIONS.map(({ name }) => name).sort()).toEqual(Object.keys(EXPECTED_BINDINGS).sort())
+    // 'refresh facilitator discovery' stays declared with no timer: Quote's resolve borrows it on demand.
+    expect(WORKLOAD_CRON_DECLARATIONS.map(({ name }) => name).sort()).toEqual([...Object.keys(EXPECTED_BINDINGS), 'refresh facilitator discovery'].sort())
     expect(WORKLOAD_CRON_DECLARATIONS.every((declaration) => (
       declaration.authority === 'canonical_workload'
       && declaration.actorPrincipalRef === SYSTEM_WORKLOAD_PRINCIPAL_REF
@@ -447,8 +442,8 @@ describe('System workload cron boundary', () => {
   it('preserves an unknown external target outcome instead of translating or retrying it', async () => {
     const uncertain = new Error('external_outcome_unknown')
     const context = new FakeRuntimeContext(canonicalDb(), uncertain)
-    await expect(refreshFacilitatorDiscoveryHandler(context.action())).rejects.toBe(uncertain)
-    expect(context.dispatches).toEqual(['facilitatorDiscoveryAction:run'])
+    await expect(refreshReferenceRateHandler(context.action())).rejects.toBe(uncertain)
+    expect(context.dispatches).toEqual(['referenceRateRefresh:run'])
   })
 
   it.each([

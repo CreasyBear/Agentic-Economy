@@ -38,7 +38,6 @@ vi.mock("@/modules/market/x402-marketplace-home.functions", () => ({ readX402Mar
 vi.mock("@/modules/market/market-flow.functions", () => ({ readMarketFlowRankServer: async () => undefined }));
 vi.mock("@/modules/market/x402-directory.functions", () => ({
   readX402DirectoryServer: async () => ({ kind: "ok", items: [], offset: 0, limit: 20 }),
-  prepareX402DirectoryResourceServer: vi.fn(),
 }));
 
 beforeEach(() => {

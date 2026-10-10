@@ -32,7 +32,7 @@ import {
   readX402EvmReceipt,
 } from './x402Settlement'
 import { X402_MANAGED_CUSTODY_REF } from './x402ManagedCustodyRef'
-import { admitManagedX402Signing } from './x402SigningAdmission'
+import { admitManagedX402Signing, type ManagedX402SigningRefusal } from './x402SigningAdmission'
 import { captureBackendException, degradeBackend } from '@/lib/observability/degrade-backend'
 import {
   currentManagedCustodyConfiguration,
@@ -65,6 +65,7 @@ export async function readX402Authorization(
     requestFingerprint?: string
     requestFingerprintContext?: CdpX402RequestFingerprintContext
     authorityExpiresAt?: number
+    onSigningRefused?: (reason: ManagedX402SigningRefusal) => void
   }>,
 ): Promise<string | undefined> {
   const custodyConfiguration = expected.useCustodySigner === true
@@ -112,6 +113,7 @@ export async function readX402Authorization(
       requestFingerprint,
       requestFingerprintContext,
       expected.authorityExpiresAt,
+      expected.onSigningRefused,
     )
   }
   return await signAndRecordSandboxAuthorization(ctx, material)
@@ -179,7 +181,8 @@ async function signAndCommitManagedAuthorization(
   requestFingerprint: string,
   requestFingerprintContext: CdpX402RequestFingerprintContext,
   authorityExpiresAt: number,
-  ownsSigningClaim = false,
+  ownsSigningClaim: boolean,
+  onSigningRefused?: (reason: ManagedX402SigningRefusal) => void,
 ): Promise<string | undefined> {
   const custodyConfiguration = currentManagedCustodyConfiguration(
     material,
@@ -247,10 +250,14 @@ async function signAndCommitManagedAuthorization(
   const paymentSignature = await createCdpEvmX402PaymentSignature(request, {
     requestFingerprintContext,
     authorityExpiresAt,
-    admitSigning: async (intent) => await admitManagedX402Signing(ctx, {
-      custodyRef: material.custodyRef, authorizationDigest: material.authorizationDigest,
-      custodyGeneration: custodyConfiguration.credentialGeneration,
-    }, intent),
+    admitSigning: async (intent) => {
+      const admission = await admitManagedX402Signing(ctx, {
+        custodyRef: material.custodyRef, authorizationDigest: material.authorizationDigest,
+        custodyGeneration: custodyConfiguration.credentialGeneration,
+      }, intent)
+      if (admission.kind === 'refused') onSigningRefused?.(admission.reason)
+      return admission.kind === 'admitted'
+    },
     ...(persistedIntent === undefined
       ? {
           onUnsignedMaterial: async (intent) => {
@@ -308,6 +315,7 @@ async function readOrClaimManagedAuthorization(
   requestFingerprint: string,
   requestFingerprintContext: CdpX402RequestFingerprintContext,
   authorityExpiresAt: number,
+  onSigningRefused?: (reason: ManagedX402SigningRefusal) => void,
 ): Promise<string | undefined> {
   const custodyConfiguration = currentManagedCustodyConfiguration(
     material,
@@ -321,6 +329,8 @@ async function readOrClaimManagedAuthorization(
       requestFingerprint,
       requestFingerprintContext,
       authorityExpiresAt,
+      false,
+      onSigningRefused,
     )
   }
 
@@ -352,6 +362,7 @@ async function readOrClaimManagedAuthorization(
         requestFingerprintContext,
         authorityExpiresAt,
         isClaimWinner,
+        onSigningRefused,
       )
     },
   })
@@ -391,6 +402,7 @@ export function createX402PaymentCallbacks(
     ? undefined
     : Date.parse(input.dispatch.authority.expiresAt)
   const managedBuyer = input.useCustodySigner === true
+  let signingRefusal: ManagedX402SigningRefusal | undefined
 
   const settleManagedPreparationFailure = async (
     attempt: X402AttemptMaterial | null | undefined,
@@ -572,6 +584,7 @@ export function createX402PaymentCallbacks(
         ...(authorityExpiresAt === undefined || !Number.isSafeInteger(authorityExpiresAt)
           ? {}
           : { authorityExpiresAt }),
+        onSigningRefused: (reason: ManagedX402SigningRefusal) => { signingRefusal = reason },
       } : {}),
     })
     if (signature === undefined || signature.length === 0) {
@@ -585,6 +598,7 @@ export function createX402PaymentCallbacks(
   }
 
   return {
+    readX402SigningRefusal: () => signingRefusal,
     verifyX402Settlement: async ({
       response,
       requirement,

@@ -31,7 +31,7 @@ describe('directory page choices', () => {
   beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production'))
   afterEach(() => { vi.unstubAllEnvs(); project.mockReset() })
 
-  it('reads each publication join once and keeps a missing publication external', async () => {
+  it('reads each publication join once and makes an unpublished admitted row callable by its listing ref', async () => {
     const calls: string[] = []
     const publication = {
       offeringId: 'offering-a', bindingId: 'binding-a', businessId: 'business-a', toolRef: 'tool-a',
@@ -46,7 +46,8 @@ describe('directory page choices', () => {
     const rows = [
       { _id: 'row-a', sourceRouteRef: 'route-a' },
       { _id: 'row-a-again', sourceRouteRef: 'route-a' },
-      { _id: 'row-b' },
+      { _id: 'row-b', documentId: `registry:${'b'.repeat(64)}`, admission: { kind: 'quotable' } },
+      { _id: 'row-c', documentId: `registry:${'c'.repeat(64)}`, admission: { kind: 'unavailable', reason: 'chain_unsupported' } },
     ] as never
     const choices = await choicesForDirectoryRows(ctx, rows, Date.now())
     expect(calls.filter(call => call.startsWith('capabilityPublications:'))).toHaveLength(2)
@@ -56,10 +57,11 @@ describe('directory page choices', () => {
     expect(calls.filter(call => call.startsWith('get:'))).toEqual(['get:business-a'])
     expect(project).toHaveBeenCalledTimes(1)
     expect(choices.get('route-a')).toMatchObject({ access: 'ae_callable', toolRef: 'tool-a', sourceRouteRef: 'route-a' })
-    expect(choices.get('row-b')).toEqual({ access: 'external_listing' })
+    expect(choices.get('row-b')).toEqual({ access: 'ae_callable', toolRef: `registry:${'b'.repeat(64)}` })
+    expect(choices.get('row-c')).toEqual({ access: 'unavailable', reason: 'chain_unsupported' })
   })
 
-  it.each(['production', 'development'] as const)('leaves an opposite-environment publication external in %s', async declaration => {
+  it.each(['production', 'development'] as const)('ignores an opposite-environment publication and falls back to the row admission in %s', async declaration => {
     vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', declaration)
     const calls: string[] = []
     const oppositeEnvironment = declaration === 'production' ? 'sandbox' : 'production'
@@ -68,8 +70,9 @@ describe('directory page choices', () => {
         ? [{ sourceRouteRef: 'route-a', disposition: 'current', runtimeEnvironment: oppositeEnvironment, toolRef: 'wrong-env-tool' }] : null),
       get: async () => { throw new Error('opposite_environment_joined') },
     } } as never
-    const choices = await choicesForDirectoryRows(ctx, [{ _id: 'row-a', sourceRouteRef: 'route-a' }] as never, Date.now())
-    expect(choices.get('route-a')).toEqual({ access: 'external_listing', sourceRouteRef: 'route-a' })
+    const row = { _id: 'row-a', sourceRouteRef: 'route-a', documentId: `registry:${'a'.repeat(64)}`, admission: { kind: 'unavailable', reason: 'chain_unsupported' } }
+    const choices = await choicesForDirectoryRows(ctx, [row] as never, Date.now())
+    expect(choices.get('route-a')).toEqual({ access: 'unavailable', reason: 'chain_unsupported', sourceRouteRef: 'route-a' })
     expect(calls).toContain(`capabilityPublications:sourceRouteRef=route-a`)
     expect(project).not.toHaveBeenCalled()
   })

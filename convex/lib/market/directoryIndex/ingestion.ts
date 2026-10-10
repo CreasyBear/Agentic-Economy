@@ -1,10 +1,9 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { sourceRouteRef } from '@/modules/capability-supply/public'
 import { directoryNetwork, directoryProviderKey, isDirectoryEntryEligible, type DirectoryRecencyBand } from '@/modules/market/x402-directory-index'
 import type { Id } from '../../../_generated/dataModel'
 import type { MutationCtx } from '../../../_generated/server'
 import { searchAnalytics, writeAnalytics } from './analytics'
-import type { IndexedSource } from './contracts'
+import type { IndexedSource, ListingAdmission } from './contracts'
 import { listingIdentityDigest } from './listingDigest'
 import { resolveDirectorySlug, toggleEligibleFacetMembership, writeFacetMembership } from './membership'
 import { refreshProviderLead } from './providerLead'
@@ -15,8 +14,12 @@ const MAX_ENTRY_BYTES = 768 * 1024
 const MAX_SOURCE_BYTES = 384 * 1024
 const encoder = new TextEncoder()
 
-function documentId(resource: string): string {
+/** The `registry:<hex>` listing ref of a Coinbase-indexed resource. */
+export function directoryListingId(resource: string): string {
   return `registry:${canonicalDigest({ source: 'coinbase', resource }).slice(7)}`
+}
+function sameAdmission(stored: ListingAdmission | undefined, next: ListingAdmission): boolean {
+  return stored?.kind === next.kind && (stored.kind === 'quotable' || stored.reason === (next as { reason: string }).reason)
 }
 export type WriteOutcome = 'inserted' | 'unchanged' | 'activity_patched' | 'rewritten'
 
@@ -46,7 +49,7 @@ export async function writeSource(ctx: MutationCtx, generation: string, item: In
     || encoder.encode(item.sourceJson).byteLength > MAX_SOURCE_BYTES
     || encoder.encode(JSON.stringify(item)).byteLength > MAX_ENTRY_BYTES) throw new Error('directory_source_entry_invalid')
   const entry = item.entry
-  const id = documentId(item.resource)
+  const id = directoryListingId(item.resource)
   const previous = await ctx.db.query('marketExternalRegistryEntries')
     .withIndex('by_generation_and_documentId', q => q.eq('generation', generation).eq('documentId', id)).unique()
   if (previous !== null && previous.source !== 'coinbase') throw new Error('directory_source_identity_conflict')
@@ -61,13 +64,12 @@ export async function writeSource(ctx: MutationCtx, generation: string, item: In
   if (previous !== null && previous.sourceDigest === item.sourceDigest) {
     const classChanged = previous.actionClass !== classes.actionClass || previous.objectClass !== classes.objectClass
     await ctx.db.patch(previous._id, { lastSeenRunAt: runStartedAt, ...(classChanged ? classes : {}) })
-    if (classChanged) {
-      const searchRows = await ctx.db.query('marketDirectorySearchEntries')
-        .withIndex('by_generation_and_resource', q => q.eq('generation', generation).eq('resource', item.resource)).take(130)
-      for (const row of searchRows) {
-        if (row.actionClass !== classes.actionClass || row.objectClass !== classes.objectClass || row.documentId !== id || row.title !== compact.title || row.summary !== compact.summary) {
-          await ctx.db.patch(row._id, { ...classes, ...compact })
-        }
+    const searchRows = await ctx.db.query('marketDirectorySearchEntries')
+      .withIndex('by_generation_and_resource', q => q.eq('generation', generation).eq('resource', item.resource)).take(130)
+    for (const row of searchRows) {
+      if (row.actionClass !== classes.actionClass || row.objectClass !== classes.objectClass || row.documentId !== id || row.title !== compact.title || row.summary !== compact.summary
+        || !sameAdmission(row.admission, item.admission)) {
+        await ctx.db.patch(row._id, { ...classes, ...compact, admission: item.admission })
       }
     }
     return 'unchanged'
@@ -107,9 +109,10 @@ export async function writeSource(ctx: MutationCtx, generation: string, item: In
         || row.lastCalledBand !== next.lastCalledBand || row.payerDepth !== next.payerDepth || row.lastActivatedAt !== next.lastActivatedAt
         || row.actionClass !== classes.actionClass || row.objectClass !== classes.objectClass
         || row.documentId !== id || row.title !== compact.title || row.summary !== compact.summary
+        || !sameAdmission(row.admission, item.admission)
       if (changed) {
         await ctx.db.patch(row._id, {
-          popularOrder, updatedOrder, eligible,
+          popularOrder, updatedOrder, eligible, admission: item.admission,
           minimumUsdPrice: next.minimumUsdPrice, minimumUsdPriceOrder: next.minimumUsdPriceOrder,
           priceOrder: next.priceOrder, priceBand: next.priceBand,
           payersOrder: next.payersOrder, adoptionBand: next.adoptionBand, depthBand: next.depthBand, lastCalledBand: next.lastCalledBand,
@@ -141,14 +144,9 @@ export async function writeSource(ctx: MutationCtx, generation: string, item: In
   })
   const providerKey = directoryProviderKey(entry.provider)
   const slug = await resolveDirectorySlug(ctx, generation, providerKey, item.resource, entry.method)
-  // Computed from the same raw resource JSON that flows into
-  // admitFacilitatorDiscoveryItems at resolve time (item.sourceJson ==
-  // stableStringify(source.resource) there), so the digest this produces is
-  // bit-for-bit identical to capabilityPublications.sourceRouteRef once the
-  // resource is admitted - the join in x402DirectoryIndex.ts relies on that.
-  const routeRef = sourceRouteRef({
-    sourceKind: 'x402', sourceSelector: {}, sourceDescriptorJson: item.sourceJson, endpointUrl: item.resource,
-  })
+  // Derived at prepare time by admittedSourceRoute from the admitted draft, the
+  // same derivation publication uses, so it equals capabilityPublications.sourceRouteRef.
+  const routeRef = item.sourceRouteRef
   // Well 8 Lane C tie-break: a reviewed-tier publication's provider row wins
   // this sourceRouteRef (upsertProviderDirectoryRows absorbs any Coinbase row
   // sharing it at write time). While that claim stands, Coinbase's own scan
@@ -189,7 +187,7 @@ export async function writeSource(ctx: MutationCtx, generation: string, item: In
   for (const network of ['*', ...networks]) {
     await ctx.db.insert('marketDirectorySearchEntries', {
       generation, resource: item.resource, entryId, network, category, provider: entry.provider.toLowerCase(), providerKey, eligible, searchText,
-      slug, ...(routeRef === undefined ? {} : { sourceRouteRef: routeRef }),
+      slug, ...(routeRef === undefined ? {} : { sourceRouteRef: routeRef }), admission: item.admission,
       ...classes,
       ...compact,
       popularOrder, updatedOrder, ...searchAnalytics(entry, network, observedAt),

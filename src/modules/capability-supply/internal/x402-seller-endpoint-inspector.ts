@@ -300,6 +300,8 @@ function publicHttpsUrl(value: string): URL | undefined {
     const url = new URL(value)
     if (
       url.protocol !== 'https:'
+      // Default port only (OWASP SSRF: restrict outbound ports); WHATWG URL drops an explicit :443.
+      || url.port !== ''
       || url.username.length > 0
       || url.password.length > 0
       || url.hash.length > 0

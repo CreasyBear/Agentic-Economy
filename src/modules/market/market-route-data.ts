@@ -312,7 +312,7 @@ async function resolveMarketCompareEntry(resource: string, signal: AbortSignal):
     if (result.kind === 'found' || result.kind === 'found_upstream') {
       const admitted = result.item.entry.choice
       const toolRef = result.kind === 'found' && isPublicToolRef(result.item.toolRef) ? result.item.toolRef
-        : admitted?.access !== 'external_listing' && isPublicToolRef(admitted?.toolRef) ? admitted.toolRef : undefined
+        : isPublicToolRef(admitted?.toolRef) ? admitted.toolRef : undefined
       if (toolRef !== undefined) {
         const detail = await readPublicToolDetailRouteServer({ data: { toolRef }, signal })
         signal.throwIfAborted()

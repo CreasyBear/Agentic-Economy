@@ -41,6 +41,7 @@ import type { PublicToolDetailProps } from '@/components/ae/market/public-tool-d
 import { DirectoryToolPage } from '@/components/ae/market/public-tool-detail/DirectoryToolPage'
 import { Route as DirectoryRoute } from '@/routes/tools.$providerHost.$slug'
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
+import { REASON_COPY_FALLBACK } from '@/content/reason-copy'
 
 const sourceRecord = {
   operationId: 'operation:invoice.extract',
@@ -664,6 +665,7 @@ describe('/tools/$providerHost/$slug', () => {
   })
 
   it('passes fresh source rate to a directory-only detail and never claims an AE input recipient', async () => {
+    const registryRef = `registry:${'c'.repeat(64)}`
     const metadata = { kind: 'found_upstream' as const, item: { entry } }
     const referenceRate = { source: 'coinbase' as const, base: 'USDC' as const, quote: 'AUD' as const, rate: '1.5', fetchedAt: Date.now() }
     readDirectoryDetailMock.mockResolvedValue({ metadata, referenceRate })
@@ -680,7 +682,9 @@ describe('/tools/$providerHost/$slug', () => {
     render(<RouterContextProvider router={router}><DirectoryToolPage metadata={metadata} providerHost="example.test" slug="invoices" referenceRate={referenceRate} /></RouterContextProvider>)
     expect(screen.getByText('A$0.01 per Call')).toBeTruthy()
     expect(screen.getByText(/Provider-listed source price: 0.000001 USDC/)).toBeTruthy()
-    expect(screen.getByText(/No admitted AE Tool or verified execution Provider/)).toBeTruthy()
+    expect(screen.getByText(`Currently unavailable. ${REASON_COPY_FALLBACK}`)).toBeTruthy()
+    expect(screen.queryByText(/Quote it with ref/)).toBeNull()
+    expect(document.body.textContent).not.toMatch(/recipient/i)
     expect(screen.getByRole('button', { name: 'Search for a similar Tool' })).toBeTruthy()
     expect(screen.queryByRole('link', { name: /Try in chat/ })).toBeNull()
 
@@ -696,9 +700,12 @@ describe('/tools/$providerHost/$slug', () => {
       item: {
         entry, category: 'documents', categorySource: 'provider_declared',
         observedAt: 2_000, sourceDigest: 'digest', sourceRouteRef: `source-route:v1:${'b'.repeat(64)}`,
+        choice: { access: 'ae_callable', toolRef: registryRef },
       },
     }} providerHost="example.test" slug="invoices" referenceRate={referenceRate} /></RouterContextProvider>)
     expect(screen.getByRole('button', { name: 'Search callable alternatives' })).toBeTruthy()
+    expect(screen.getByText(`Quote it with ref ${registryRef} through the ae CLI, MCP or HTTP.`)).toBeTruthy()
+    expect(document.body.textContent).not.toMatch(/recipient/i)
   })
 })
 

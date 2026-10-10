@@ -15,7 +15,7 @@ export const toolCatalogFiltersValidator = v.object({
   )),
   category: v.optional(v.string()),
   provider: v.optional(v.string()),
-  access: v.optional(v.union(v.literal('ae_callable'), v.literal('external_listing'))),
+  access: v.optional(v.literal('ae_callable')),
   priceBand: v.optional(v.union(
     v.literal('lt_0_01'), v.literal('0_01_to_0_03'), v.literal('0_03_to_0_10'),
     v.literal('0_10_to_1'), v.literal('1_to_10'), v.literal('10_plus'), v.literal('unknown'),

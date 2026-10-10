@@ -6,7 +6,7 @@ import { degradeBackend } from '../../../../src/lib/observability/degrade-backen
 import { recordCallTerminal } from '@/lib/observability/journey'
 import type { MutationCtx } from '../../../_generated/server'
 import type { Doc } from '../../../_generated/dataModel'
-import { recordMarketEvidenceFact } from '../../../marketEvidence'
+import { recordInvocationRefused, recordMarketEvidenceFact } from '../../../marketEvidence'
 import { isBoundedJsonValue, type JsonValue } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { callResultValue, usageValue, parseContractOutput } from '@/modules/capability-execution/convex'
@@ -260,6 +260,9 @@ export async function projectRecoveryHandler(
       state, dispatchState, result: terminalResult, usage,
     }, args.now)
     if (state === 'completed') await recordRecoveredCompletion(ctx, row, args.now)
+    if (state === 'refused' && terminalResult?.kind === 'refused') {
+      await recordInvocationRefused(ctx, row.callRef, row.toolRef, terminalResult.code, args.now)
+    }
     return { kind: 'recorded' as const }
   }
   // Requires the current Call identity, not just a pre-quarantine context.
@@ -270,6 +273,9 @@ export async function projectRecoveryHandler(
   if (!recoveryProjectionTransitionAllowed(row, args)) return { kind: 'recorded' as const }
   recordCallTerminal(row.state, args.state)
   await ctx.db.patch(row._id, recoveryProjectionPatch(row, args))
+  if (args.state === 'refused' && args.result?.kind === 'refused') {
+    await recordInvocationRefused(ctx, row.callRef, row.toolRef, args.result.code, args.now)
+  }
   return { kind: 'recorded' as const }
 }
 
