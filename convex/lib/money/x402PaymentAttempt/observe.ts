@@ -6,6 +6,7 @@ import { loadByAttempt, loadByCustody } from './attempt'
 import { type EventArgs, type RecordObservationArgs, x402PaymentEventArgs, x402PaymentSettlementStatusValue } from './contracts'
 import { eventAttributionValid } from './identity'
 import { quarantinedOutputFromArgs, quarantinedOutputFromRow, sameQuarantinedOutput } from './quarantinedOutput'
+import { RESPONSE_RECOVERY_FIRST_DELAY_MS } from './responseRecovery'
 import { resolveX402SpendReservation } from './spendResolution'
 
 export const markX402PaymentPossiblySubmittedArgs = { ...x402PaymentEventArgs }
@@ -205,7 +206,7 @@ export async function checkpointX402ResponseHandler(
       ...(args.paymentResponseDigest === undefined ? [] : [`response-payment:${args.paymentResponseDigest}`]),
       ...(txRef === undefined ? [] : [txRef])])],
   })
-  if (txRef !== undefined) await ctx.scheduler.runAfter(60_000, internal.moneyX402PaymentAttempts.beginResponseRecovery, {
+  if (txRef !== undefined) await ctx.scheduler.runAfter(RESPONSE_RECOVERY_FIRST_DELAY_MS, internal.moneyX402PaymentAttempts.beginResponseRecovery, {
     callRef: args.dispatchRef, attempt: 0,
   })
   return null

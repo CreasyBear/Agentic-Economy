@@ -33,6 +33,20 @@
 :root {
   --focus-ring: var(--ring);
   --duration-spring: 580ms;
+  /* Brand kit: charts use Forest and Stone only. Overrides the vendor series
+     (blue, violet, orange) and its hue-rotating relative-colour set. */
+  --series-1: var(--ae-brand);
+  --series-2: var(--ae-stone);
+  --series-3: color-mix(in srgb, var(--ae-brand) 55%, var(--ae-surface));
+  --series-4: color-mix(in srgb, var(--ae-stone) 55%, var(--ae-fg));
+  /* No decorative gradients: vendor gradient tokens collapse to flat brand-neutral surfaces. */
+  --arc-gradient-from: var(--ae-surface-sunken);
+  --arc-gradient-to: var(--ae-surface-sunken);
+  --arc-gradient: var(--ae-surface-sunken);
+  --arc-gradient-foreground: var(--ae-fg);
+  --arc-gradient-soft: var(--ae-surface);
+  --arc-gradient-line: var(--ae-border);
+  --arc-gradient-ink: var(--ae-fg);
 }
 
 :root.dark {
@@ -55,14 +69,14 @@
   --border: var(--ae-border);
   --border-subtle: color-mix(in srgb, var(--ae-border) 55%, var(--ae-surface));
   --border-strong: var(--ae-border-strong);
-  --accent: var(--ae-ring);
-  --accent-strong: var(--ae-ring);
-  --accent-subtle: #e1e7de;
-  --accent-foreground: #e8e4da;
+  --accent: var(--ae-brand);
+  --accent-strong: var(--ae-brand-strong);
+  --accent-subtle: color-mix(in srgb, var(--ae-brand) 10%, var(--ae-surface));
+  --accent-foreground: var(--ae-on-brand);
   --focus-ring: var(--ae-ring);
-  --control-on: #24543d;
+  --control-on: var(--ae-brand);
   --control-fill: var(--control-on);
-  --control-glyph: #ffffff;
+  --control-glyph: var(--ae-on-brand);
   --control-track: var(--ae-surface-sunken);
   --control-track-hover: var(--ae-border);
   --control-thumb: #ffffff;
@@ -80,10 +94,6 @@
   --shadow-raised: var(--ae-shadow-overlay);
   --shadow-floating: var(--shadow-med);
   --duration-spring: 580ms;
-  --series-1: #1f7dcf;
-  --series-2: #7128a5;
-  --series-3: #e58f00;
-  --series-4: #009e84;
   color: var(--foreground);
   font-family: var(--font-body);
   font-weight: 400;
@@ -91,44 +101,15 @@
 
 /* AE uses `.dark` on the document instead of Arc's `data-theme="dark"`. */
 .dark .arc-market {
-  --accent-subtle: #253b2f;
-  --accent-foreground: #141414;
-  --control-on: #b7e7cc;
-  --control-glyph: #141414;
+  --control-glyph: var(--ae-on-brand);
   --control-track: #383838;
   --control-track-hover: #454545;
   --control-thumb-on: #141414;
   --control-fill: oklch(62% 0 0);
   --control-thumb-shadow: 0 0 0 .5px oklch(0% 0 0 / .3), 0 1px 2px oklch(0% 0 0 / .35), 0 2px 6px oklch(0% 0 0 / .2);
-  --success: #93efd0;
-  --warning: #ffcb62;
+  --success: var(--ae-brand);
+  --warning: color-mix(in oklch, var(--ae-warning) 60%, var(--ae-fg));
   --shadow-floating: var(--shadow-high);
-  --arc-gradient-from: oklch(38% .05 300);
-  --arc-gradient-to: oklch(40% .045 60);
-  --arc-gradient-foreground: oklch(96% .005 300);
-  --arc-gradient-soft: linear-gradient(135deg, oklch(23.5% .016 300), oklch(24% .014 65));
-  --arc-gradient-line: linear-gradient(100deg, oklch(48% .06 300), oklch(52% .055 65));
-  --arc-gradient-ink: linear-gradient(100deg, oklch(82% .07 300), oklch(86% .065 70));
-  --series-1: #55adff;
-  --series-2: #9c37be;
-  --series-3: #e66e00;
-  --series-4: #00a861;
-}
-
-@supports (color: oklch(from red clamp(.4, l * sign(max(c - .02, 0)) + .5, .8) c h)) {
-  .arc-market {
-    --series-1: oklch(from var(--accent) calc(l * sign(max(c - .02, 0)) + .58 * (1 - sign(max(c - .02, 0)))) calc(c * sign(max(c - .02, 0)) + .15 * (1 - sign(max(c - .02, 0)))) calc(h * sign(max(c - .02, 0)) + 250 * (1 - sign(max(c - .02, 0)))));
-    --series-2: oklch(from var(--accent) clamp(.45, l * sign(max(c - .02, 0)) + .58 * (1 - sign(max(c - .02, 0))) - 0.25, .76) .19 calc(h * sign(max(c - .02, 0)) + 250 * (1 - sign(max(c - .02, 0))) + 57));
-    --series-3: oklch(from var(--accent) clamp(.45, l * sign(max(c - .02, 0)) + .58 * (1 - sign(max(c - .02, 0))) + 0.14, .76) .18 calc(h * sign(max(c - .02, 0)) + 250 * (1 - sign(max(c - .02, 0))) + 184));
-    --series-4: oklch(from var(--accent) clamp(.45, l * sign(max(c - .02, 0)) + .58 * (1 - sign(max(c - .02, 0))), .76) .21 calc(h * sign(max(c - .02, 0)) + 250 * (1 - sign(max(c - .02, 0))) + 292));
-  }
-
-  .dark .arc-market {
-    --series-1: oklch(from var(--accent) calc(l * sign(max(c - .02, 0)) + .73 * (1 - sign(max(c - .02, 0)))) calc(c * sign(max(c - .02, 0)) + .15 * (1 - sign(max(c - .02, 0)))) calc(h * sign(max(c - .02, 0)) + 250 * (1 - sign(max(c - .02, 0)))));
-    --series-2: oklch(from var(--accent) clamp(.485, l * sign(max(c - .02, 0)) + .73 * (1 - sign(max(c - .02, 0))) - 0.19, .665) .21 calc(h * sign(max(c - .02, 0)) + 250 * (1 - sign(max(c - .02, 0))) + 66));
-    --series-3: oklch(from var(--accent) clamp(.485, l * sign(max(c - .02, 0)) + .73 * (1 - sign(max(c - .02, 0))) + 0.02, .665) .21 calc(h * sign(max(c - .02, 0)) + 250 * (1 - sign(max(c - .02, 0))) + 175));
-    --series-4: oklch(from var(--accent) clamp(.485, l * sign(max(c - .02, 0)) + .73 * (1 - sign(max(c - .02, 0))) - 0.1, .665) .18 calc(h * sign(max(c - .02, 0)) + 250 * (1 - sign(max(c - .02, 0))) + 270));
-  }
 }
 
 .ae-arc {
@@ -211,7 +192,6 @@
 }
 
 .dark [role="listbox"]:has([data-radix-select-viewport]) {
-  --accent-subtle: #253b2f;
   --accent-foreground: var(--ae-bg);
 }
 

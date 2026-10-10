@@ -13,7 +13,7 @@ import type { SourceFreshnessState } from '@/modules/common/freshness'
 import { readDirectoryFreshnessField } from '@/modules/market/x402-directory-index.server'
 import { isMoneyRefusal } from '@/modules/money/public'
 import { isRecord } from '@/modules/common/is-record'
-import { PAYMENT_READINESS_CHECK_KEYS, PAYMENT_READINESS_MAX_VALIDITY_MS, type PaymentReadinessView } from '@/modules/money/payment-readiness'
+import { PAYMENT_READINESS_CHECK_KEYS, PAYMENT_READINESS_GATING_KEYS, PAYMENT_READINESS_MAX_VALIDITY_MS, referenceRateFresh, type PaymentReadinessView } from '@/modules/money/payment-readiness'
 import { ALPHA_X402_PAYEE_SCREENING_POLICY } from '@/modules/money/x402-spend-admission'
 import { callPublicSourceQuery, createConvexServerFunctionAssertion, sourceQuery, type ConvexServerFunctionAssertion } from './convex-source'
 
@@ -194,7 +194,7 @@ export async function readServerReadiness(
           ? { payments: { status: 'failed' as const, code: 'payments_unavailable' } } : {}),
       },
       diagnostics,
-      commercial: await commercialPromise,
+      commercial: gateSellable(await commercialPromise, deployment.paymentEnvironment === 'production' ? 'failed' : undefined),
     }
   }
 
@@ -205,11 +205,15 @@ export async function readServerReadiness(
     production ? readBackendPaymentReadiness(env, config.convexUrl, options.fetch ?? globalThis.fetch, options.timeoutMs) : undefined,
   ])
   // Commercial reads can finish after the query. Authority is still evaluated
-  // at response completion; a previously green response cannot extend expiry.
+  // at response completion, on one clock; a previously green response cannot extend expiry.
+  const now = Date.now()
   const payments: ReadinessCheck | undefined = production
-    ? freshPaymentReadiness(paymentView, Date.now(), env)
+    ? freshPaymentReadiness(paymentView, now, env)
       ? { status: 'ready' } : { status: 'failed', code: 'payments_unavailable' }
     : undefined
+  // Only an observed rate can be stale; an unreadable view already fails the payments gate.
+  const observedRate = isRecord(paymentView) && isRecord(paymentView.checks) ? paymentView.checks.reference_rate : undefined
+  const rateStale = observedRate !== undefined && !referenceRateFresh(observedRate, now)
   if (convex.status === 'failed') {
     return {
       status: 'not_ready',
@@ -220,7 +224,7 @@ export async function readServerReadiness(
         ...(payments === undefined ? {} : { payments }),
       },
       diagnostics,
-      commercial,
+      commercial: gateSellable(commercial, payments?.status, rateStale),
     }
   }
 
@@ -233,8 +237,20 @@ export async function readServerReadiness(
       ...(payments === undefined ? {} : { payments }),
     },
     diagnostics,
-    commercial,
+    commercial: gateSellable(commercial, payments?.status, rateStale),
   }
+}
+
+/**
+ * Per-rail state is already catalogue (browse), quoting (quote) and funding (pay).
+ * A failed payments gate overrides the aggregate: nothing is sellable while it is red.
+ * An observed stale reference rate degrades quoting (quotes refuse without it) and so sellable.
+ */
+function gateSellable(
+  commercial: CommercialReadiness, payments: 'ready' | 'failed' | undefined, rateStale = false,
+): CommercialReadiness {
+  if (rateStale) return { ...commercial, quoting: 'unavailable', sellable: false }
+  return payments === 'failed' ? { ...commercial, sellable: false } : commercial
 }
 
 /**
@@ -280,7 +296,7 @@ function freshPaymentReadiness(value: unknown, now: number, environment: StringE
   const alphaPolicy = environment.AE_X402_PAYEE_SCREENING_POLICY === ALPHA_X402_PAYEE_SCREENING_POLICY
   if (alphaPolicy !== (checks.sanctions !== undefined && isRecord(checks.sanctions)
     && checks.sanctions.kind === 'deferred')) return false
-  return PAYMENT_READINESS_CHECK_KEYS.every(key => {
+  return PAYMENT_READINESS_GATING_KEYS.every(key => {
     const check = checks[key]
     return isRecord(check)
       && (check.kind === 'passed' || (key === 'sanctions' && check.kind === 'deferred'

@@ -29,7 +29,7 @@ export const WORKLOAD_CRON_DECLARATIONS = SCHEDULED_WORKLOADS.map((workload) =>
 ) as readonly ReturnType<typeof declaration<typeof SCHEDULED_WORKLOADS[number]['name'], typeof SCHEDULED_WORKLOADS[number]['handler']>>[]
 
 export type WorkloadCronName = typeof WORKLOAD_CRON_DECLARATIONS[number]['name']
-export type WorkloadCronActionContext = Pick<ActionCtx, 'runAction' | 'runQuery'>
+export type WorkloadCronActionContext = Pick<ActionCtx, 'runAction' | 'runMutation' | 'runQuery'>
 export type WorkloadCronMutationContext = Pick<MutationCtx, 'db' | 'runMutation'>
 
 export type WorkloadCronSnapshot = AdmittedWorkloadContext & Readonly<{

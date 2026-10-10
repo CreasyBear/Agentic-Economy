@@ -51,7 +51,7 @@ describe('app shell command panel', () => {
   it('exposes Tool search on every page and restores focus after Cmd/Ctrl-K closes', async () => {
     renderAppShell()
 
-    const trigger = screen.getByRole('button', { name: 'Find Tools' })
+    const trigger = screen.getByRole('button', { name: 'Find tools' })
     expect(trigger.className.split(' ')).toContain(arcButton.md)
     expect(trigger.getAttribute('aria-expanded')).toBe('false')
 
@@ -70,7 +70,7 @@ describe('app shell command panel', () => {
   it('exposes mobile navigation state and restores its trigger after each close path', async () => {
     renderAppShell()
 
-    expect(screen.getByRole('button', { name: 'Find Tools' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Find tools' })).toBeTruthy()
     const trigger = screen.getByRole('button', { name: 'Open public menu' })
     expect(trigger.getAttribute('aria-expanded')).toBe('false')
     expect(trigger.getAttribute('aria-controls')).toBeNull()
@@ -147,7 +147,7 @@ describe('app shell command panel', () => {
       expect(screen.queryByRole('navigation', { name: 'Primary' })).toBeNull()
       expect(screen.queryByRole('button', { name: 'Open public menu' })).toBeNull()
     })
-    expect(screen.getByRole('button', { name: 'Find Tools' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Find tools' })).toBeTruthy()
   })
 })
 

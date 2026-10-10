@@ -19,3 +19,24 @@
 @media (pointer: coarse), (hover: none) {
   .arc-record-action { min-height: 44px; }
 }
+
+/* Below 620px every record table folds rows into wrapped lines and the header into a strip of sort controls (Arc sortable-data-table responsive contract). */
+@media (max-width: 620px) {
+  /* The resizable desktop grid declares inline pixel tracks. Card presentation
+     keeps its stored sizes but fits the local viewport instead of that track. */
+  .arc-record-root[data-mobile-layout="cards"] [data-slot="scroll-area-content"] { width: 100%; min-width: 0 !important; max-width: 100%; }
+  .arc-record-root[data-mobile-layout="cards"] [data-slot="data-grid-table-viewport"] { width: 100% !important; max-width: 100%; }
+  .arc-record-root[data-mobile-layout="cards"] .arc-record-table { display: block; width: 100% !important; min-width: 0; max-width: 100%; }
+  .arc-record-root[data-mobile-layout="cards"] .arc-record-table thead { display: block; }
+  .arc-record-root[data-mobile-layout="cards"] .arc-record-table thead tr { display: flex; align-items: center; gap: var(--space-1); padding: var(--space-1) var(--space-2); overflow-x: auto; }
+  .arc-record-root[data-mobile-layout="cards"] .arc-record-table th { display: block; width: auto !important; flex: none; position: static; border: 0; padding: 0; background: transparent; }
+  .arc-record-root[data-mobile-layout="cards"] .arc-record-table th button { min-height: 44px; }
+  .arc-record-root[data-mobile-layout="cards"] .arc-record-table tbody { display: block; width: 100%; }
+  .arc-record-root[data-mobile-layout="cards"] .arc-record-table tbody tr { display: flex; width: 100%; min-height: 44px; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 6px 12px; border-bottom: 1px solid var(--border-subtle); }
+  .arc-record-root[data-mobile-layout="cards"] .arc-record-table td { display: block; width: auto !important; min-width: 0; max-width: 100%; height: auto; border: 0; padding: 0; white-space: normal; }
+  .arc-record-root[data-mobile-layout="cards"] .arc-record-table td:first-child,
+  .arc-record-root[data-mobile-layout="cards"] .arc-record-table td[data-column="__ae_selection"] + td { flex: 1 1 0; font-weight: 500; }
+  .arc-record-root[data-mobile-layout="cards"] .arc-record-table td[data-column="__ae_selection"] { flex: 0 0 44px; }
+  .arc-record-root[data-mobile-layout="cards"] .arc-record-table td[data-numeric] { margin-left: auto; }
+  .arc-record-root[data-mobile-layout="cards"] .arc-record-table :is(th, td)[data-slot*="fill-"] { display: none; }
+}

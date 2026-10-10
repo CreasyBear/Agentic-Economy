@@ -3,10 +3,10 @@ import { AeOwnerCredit } from '@/components/ae/console/owner-credit/AeOwnerCredi
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeSettingsStack } from '@/components/ae/layout/AeSection'
 
-import { useOwnerCredit } from './useOwnerCredit'
+import { useOwnerCredit, type OwnerCreditReads } from './useOwnerCredit'
 
-export function AeOwnerCreditPage() {
-  const credit = useOwnerCredit()
+export function AeOwnerCreditPage({ reads }: { reads?: OwnerCreditReads }) {
+  const credit = useOwnerCredit(reads)
 
   return (
     <AeOperatorPage

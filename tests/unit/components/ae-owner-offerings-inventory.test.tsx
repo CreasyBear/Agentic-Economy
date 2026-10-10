@@ -286,7 +286,7 @@ describe('AeOwnerOfferingsList (W-34)', () => {
       'Tool', 'Status', 'Price', 'Calls', 'Next action',
     ])
     expect(cells.filter((cell) => cell.hasAttribute('data-numeric')).map((cell) => cell.getAttribute('data-label')))
-      .toEqual(['Calls'])
+      .toEqual(['Price', 'Calls'])
 
     const secondRow = rows[2]
     expect(secondRow).toBeDefined()

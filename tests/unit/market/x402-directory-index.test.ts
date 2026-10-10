@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { SEARCH_QUERY_MAX_LENGTH } from '@/modules/common/search-query'
 import { x402DirectoryInputSchema } from '@/modules/market/x402-directory'
-import { directoryAdoptionBand, directoryBasePayTo, directoryEntryMatchesFilters, directoryNetwork, directoryPriceBand, directorySlugBase, minimumDirectoryUsdPrice, x402DirectoryIndexInputSchema } from '@/modules/market/x402-directory-index'
+import { directoryAdoptionBand, directoryBasePayTo, directoryEntryMatchesFilters, directoryNetwork, directoryPriceBand, directorySlugBase, directoryStorefrontEntry, minimumDirectoryUsdPrice, x402DirectoryIndexInputSchema } from '@/modules/market/x402-directory-index'
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
 const { query, upstream } = vi.hoisted(() => ({ query: vi.fn(), upstream: vi.fn() }))
 vi.mock('@/lib/server/convex-source', () => ({ sourceQuery: (name: string) => name, callPublicSourceQuery: query }))
@@ -120,4 +120,21 @@ describe('directory hard filters', () => {
     })).toEqual(indexUnavailable)
   })
 
+})
+
+
+describe('directoryStorefrontEntry', () => {
+  it.each([
+    ['local-weather.io', true],
+    ['beta-bank.com', true],
+    ['preview-labs.com', true],
+    ['api.demo-co.com', true],
+    ['acme.workers.dev', true],
+    ['api.test.acme.com', false],
+    ['acme-sandbox.com', false],
+    ['staging.acme.com', false],
+    ['testnet.acme.io', false],
+  ])('%s is a storefront: %s', (host, expected) => {
+    expect(directoryStorefrontEntry({ provider: host, resource: `https://${host}/tool` })).toBe(expected)
+  })
 })

@@ -1,0 +1,184 @@
+/* Layout only: OpenRouter model page / Airbnb listing. Arc components own their own look. */
+.page {
+  width: 100%;
+  max-width: 75rem;
+  margin-inline: auto;
+  padding: var(--space-5) var(--space-4) var(--space-12);
+  background: var(--background);
+}
+
+.crumbs { margin-inline-start: calc(var(--space-3) * -1); }
+
+.header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+  padding-block: var(--space-5) var(--space-8);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.provider {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+.provider a { color: inherit; text-underline-offset: 3px; }
+.provider span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* The shared title is already fitted to a whole clause, so the heading shows all of it. */
+.title {
+  max-width: 32ch;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--foreground);
+  font-family: var(--font-display);
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  text-wrap: balance;
+}
+
+.summary {
+  max-width: 62ch;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-base);
+  line-height: var(--leading-body);
+  text-wrap: pretty;
+}
+
+.meta { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.meta > * { min-width: 0; max-width: 100%; }
+.activity { color: var(--text-secondary); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+
+.ref {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+.ref code {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-8);
+  padding-top: var(--space-8);
+}
+
+.main { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; align-content: start; gap: var(--space-5); }
+.aside { display: none; grid-template-columns: minmax(0, 1fr); min-width: 0; align-content: start; gap: var(--space-5); }
+
+/* Airbnb listing: a sticky reserve card beside the content on wide screens, a fixed full-width price bar on phones. */
+.bar {
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4) calc(var(--space-3) + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow-floating);
+}
+/* The bar's height, so the footer and the last focused control are never under it (WCAG 2.4.11). */
+.barSpace { height: calc(var(--control-height-md) + var(--space-6) + env(safe-area-inset-bottom, 0px)); }
+@media (max-width: 63.99rem) {
+  .page :is(input, select, textarea, button, a, [tabindex]) { scroll-margin-bottom: calc(var(--control-height-md) + var(--space-8) + env(safe-area-inset-bottom, 0px)); }
+}
+.barPrice {
+  min-width: 0;
+  margin: 0;
+  color: var(--foreground);
+  font-size: var(--text-lg);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+.barPrice { white-space: nowrap; }
+.barPrice span { color: var(--text-secondary); font-size: var(--text-sm); }
+
+@media (min-width: 64rem) {
+  .layout { grid-template-columns: minmax(0, 1fr) 23rem; gap: var(--space-12); }
+  .aside { display: grid; position: sticky; top: calc(var(--space-12) + var(--space-8)); align-self: start; }
+  .bar, .barSpace { display: none; }
+}
+
+/* The price is the page's one fact: large, regular weight, figures aligned. */
+.reserve h3 { font-size: var(--text-2xl); font-weight: 400; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+.reserveBody { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); margin-top: var(--space-5); }
+.actionSlot { display: grid; min-height: var(--control-height-lg); align-items: center; }
+.bar .actionSlot { width: 10rem; min-height: var(--control-height-md); }
+
+.section {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  gap: var(--space-3);
+  padding-top: var(--space-8);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.endpoint {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--foreground);
+  font-size: var(--text-sm);
+}
+#connect { scroll-margin-top: var(--space-12); }
+.method { color: var(--text-secondary); }
+
+.endpoint code {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+
+.panel { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; gap: var(--space-5); padding-top: var(--space-5); }
+
+.sectionHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.sectionHead h2, .sectionHead h3 {
+  margin: 0;
+  color: var(--foreground);
+  font-size: var(--text-lg);
+  font-weight: 500;
+}
+
+.muted { margin: 0; color: var(--text-secondary); font-size: var(--text-sm); line-height: var(--leading-body); }
+
+.facts { display: grid; gap: var(--space-2); margin: 0; }
+.facts div { display: flex; justify-content: space-between; gap: var(--space-3); font-size: var(--text-sm); }
+.facts dt { color: var(--text-secondary); }
+.facts dd { margin: 0; color: var(--foreground); font-variant-numeric: tabular-nums; text-align: end; }
+
+.stack { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; gap: var(--space-3); }
+.full { width: 100%; justify-content: center; }
+.inlineLink { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+
+/* Skeleton rows hold the real row's height: the crumb, the tabs row, the phone bar. */
+.skeletonRow { display: grid; flex: 1; min-height: var(--control-height-md); align-items: center; }

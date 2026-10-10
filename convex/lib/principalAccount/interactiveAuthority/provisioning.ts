@@ -24,6 +24,7 @@ import {
   readInteractiveSessionRevocationCutoff,
   requireCurrentInteractiveSession,
 } from './sessionProof'
+import { emitJourneyEvent } from '../../journey/events'
 
 function interactiveOwnerDigest(kind: string, tokenIdentifier: string): string {
   return canonicalDigest({ kind, tokenIdentifier }).slice('sha256:'.length, 'sha256:'.length + 32)
@@ -333,6 +334,7 @@ async function provisionOwnerIdentity(
       idempotencyRef: `create:${accountRef}`,
     },
   })
+  await emitJourneyEvent(ctx, accountRef, 'signed_up')
   await ctx.db.insert('externalIdentityBindings', {
     bindingRef,
     principalRef,

@@ -18,6 +18,7 @@ import '../../setup/jsdom-platform'
 import '../../setup/jsdom-dialog'
 
 import type { OperatorSurface } from '@/lib/operator/operator-context'
+import { rememberOperatorContext, rememberedOperatorContext } from '@/lib/operator/operator-context-memory'
 import { ChatHeader } from '@/components/ae/chat/chat-session/components/ChatHeader'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
 import { AeAppShell } from '@/components/ae/layout/AeAppShell'
@@ -66,7 +67,13 @@ beforeEach(() => {
   clerkSignedIn.isLoaded = true
   clerkSignedIn.orgRole = 'org:admin'
   clerkSignedIn.orgId = null
+  clerkSignedIn.sessionId = 'session-current'
   vi.stubEnv('VITE_CONVEX_URL', 'http://127.0.0.1:3210')
+  // clerk-js's browser global, kept equal to the mocked useAuth identity.
+  Object.defineProperty(window, 'Clerk', { configurable: true, get: () => clerkSignedIn.value
+    ? { user: { id: clerkSignedIn.userId }, session: { id: clerkSignedIn.sessionId },
+      organization: clerkSignedIn.orgId === null ? null : { id: clerkSignedIn.orgId } }
+    : { user: null, session: null, organization: null } })
 })
 
 afterEach(() => {
@@ -168,7 +175,7 @@ describe('AeAppShell', () => {
     expect(screen.getByTestId('skip-to-content').getAttribute('href')).toBe('#main-content')
 
     const nav = screen.getByRole('navigation', { name: 'Primary' })
-    expect(['Market', 'For agents', 'For providers']).toEqual(
+    expect(['Tools', 'Docs', 'For providers']).toEqual(
       Array.from(nav.querySelectorAll('a')).map((link) => link.textContent),
     )
     expect(screen.getByRole('link', { name: 'Sign in' }).className).toMatch(/md:inline-flex/)
@@ -186,7 +193,7 @@ describe('AeAppShell', () => {
     expect(slot).not.toBeNull()
     expect(brand.compareDocumentPosition(slot!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(slot!.parentElement?.className ?? '').not.toMatch(/ms-auto/)
-    expect(slot!.compareDocumentPosition(screen.getByRole('button', { name: 'Find Tools' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(slot!.compareDocumentPosition(screen.getByRole('button', { name: 'Find tools' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('keeps chat controls connected and the draft focused as authentication replaces the header slot', () => {
@@ -225,7 +232,7 @@ describe('AeAppShell', () => {
     expect(screen.queryByRole('link', { name: 'Agentic Economy home' })).toBeNull()
     const nav = within(drawer).getByRole('navigation', { name: 'Primary' })
     expect(within(nav).getAllByRole('link').map(link => [link.textContent, link.getAttribute('href')])).toEqual([
-      ['Market', '/market'], ['For agents', '/for-agents'], ['For providers', '/for-providers'],
+      ['Tools', '/market'], ['Docs', '/developers/api'], ['For providers', '/for-providers'],
     ])
     expect(within(drawer).getByRole('link', { name: 'Sign in' }).getAttribute('href')).toBe('/sign-in')
     const close = within(drawer).getByRole('button', { name: 'Close public menu' })
@@ -273,6 +280,45 @@ describe('AeAppShell', () => {
       within(roleNavigation('Admin')).getByRole('menuitem', { name: label }).textContent
     )).toEqual(['Overview', 'Search', 'Exceptions', 'Providers', 'Metrics', 'Audit'])
     expect(screen.queryByRole('navigation', { name: 'Owner primary navigation' })).toBeNull()
+  })
+
+  it('opens the Admin submenu on mouse hover, keeps it open through a click, and opens it from Enter', async () => {
+    clerkSignedIn.value = true
+    entitlement.isAuthenticated = true
+    entitlement.result = authorized(['owner', 'admin'])
+    renderAppShell('/owner/operations')
+    let trigger = within(workspaceNavigation()).getByRole('menuitem', { name: 'Admin' })
+    fireEvent.pointerEnter(trigger, { pointerType: 'mouse' })
+    fireEvent.mouseEnter(trigger)
+    fireEvent.pointerMove(trigger, { pointerType: 'mouse' })
+    fireEvent.mouseMove(trigger)
+    expect(within(await screen.findByRole('menu', { name: 'Admin' })).getByRole('menuitem', { name: 'Overview' }).getAttribute('href')).toBe('/admin')
+    fireEvent.pointerDown(trigger, { pointerType: 'mouse', button: 0 })
+    fireEvent.mouseDown(trigger, { button: 0 })
+    fireEvent.pointerUp(trigger, { pointerType: 'mouse', button: 0 })
+    fireEvent.mouseUp(trigger, { button: 0 })
+    fireEvent.click(trigger, { button: 0 })
+    await new Promise(resolve => setTimeout(resolve, 50))
+    expect(screen.getByRole('menu', { name: 'Admin' })).toBeTruthy()
+    cleanup()
+    renderAppShell('/owner/operations')
+    trigger = within(workspaceNavigation()).getByRole('menuitem', { name: 'Admin' })
+    trigger.focus()
+    fireEvent.keyDown(trigger, { key: 'Enter' })
+    fireEvent.click(trigger, { detail: 0 })
+    expect(await screen.findByRole('menu', { name: 'Admin' })).toBeTruthy()
+  })
+
+  it('keeps the remembered operator context equal to the live subscription for this session only', () => {
+    rememberOperatorContext(undefined)
+    clerkSignedIn.value = true
+    entitlement.isAuthenticated = true
+    entitlement.result = authorized(['owner', 'admin'])
+    const view = renderAppShell('/owner/operations')
+    expect(rememberedOperatorContext()).toEqual(authorized(['owner', 'admin']))
+    entitlement.result = { ...authorized(['owner']), authScope: { organizationId: null, sessionId: 'session-other' } }
+    view.rerenderShell()
+    expect(rememberedOperatorContext()).toBeUndefined()
   })
 
   it('marks the active Admin destination inside its submenu', () => {
@@ -384,6 +430,22 @@ it('external session revocation immediately removes the previous protected conte
   expect(screen.queryByRole('textbox', { name: 'Protected operation context' })).toBeNull()
 })
 
+
+it.each([['signs out', false, 'session-current'], ['changes session', true, 'session-next']] as const)('forgets the remembered operator context and re-admits when Clerk %s', async (_label, signedIn, nextSession) => {
+  clerkSignedIn.value = true
+  clerkSignedIn.sessionId = 'session-current'
+  const view = renderAppShell('/owner/settings')
+  const invalidate = vi.spyOn(view.router, 'invalidate').mockResolvedValue(undefined)
+  rememberOperatorContext({ kind: 'denied', reason: 'canonical_owner_required' })
+  view.rerenderShell()
+  expect(invalidate).not.toHaveBeenCalled()
+  expect(rememberedOperatorContext()).toBeDefined()
+  clerkSignedIn.value = signedIn
+  clerkSignedIn.sessionId = nextSession
+  view.rerenderShell()
+  await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(1))
+  expect(rememberedOperatorContext()).toBeUndefined()
+})
 
 it('continues to use the existing leave confirmation instead of switching Account directly', async () => {
   clerkSignedIn.value = true
@@ -504,5 +566,5 @@ function renderAppShell(pathname = clerkSignedIn.value ? '/market' : '/', childr
 
   const tree = () => <RouterContextProvider router={router}><ThemeProvider><AeAppShell>{children}</AeAppShell></ThemeProvider></RouterContextProvider>
   const view = render(tree())
-  return { rerenderShell: () => view.rerender(tree()), unmount: view.unmount }
+  return { rerenderShell: () => view.rerender(tree()), unmount: view.unmount, router }
 }

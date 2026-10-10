@@ -16,7 +16,7 @@ export interface EmptyStateProps {
   label?: string;
   // arc-patch: preserve caller-owned live-region and title semantics.
   role?: "status" | "alert";
-  titleAs?: "h2" | "h3" | "p";
+  titleAs?: "h1" | "h2" | "h3" | "p";
 }
 
 const exitFast: Transition = { duration: motionTokens.duration.fast, ease: [...motionTokens.ease.standard] };

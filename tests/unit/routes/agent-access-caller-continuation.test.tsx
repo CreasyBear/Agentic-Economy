@@ -33,6 +33,10 @@ const routeHarness = vi.hoisted(() => ({
   decideApprovalRef: Symbol('decide-approval'),
 }))
 
+vi.mock('@/components/ae/agent-access/home/components/useHomeIntentQuestion', () => ({
+  useHomeIntentQuestion: () => ({ intent: undefined, answer: vi.fn() }),
+}))
+
 vi.mock('@tanstack/react-router', () => ({
   Link: ({ to, params, search, children }: { to: string; params?: Record<string, string>; search?: Record<string, string>; children?: ReactNode }) => {
     const path = Object.entries(params ?? {}).reduce((value, [name, parameter]) => value.replace(`$${name}`, encodeURIComponent(parameter)), to)

@@ -4,8 +4,10 @@
 import { OrganizationSwitcher, useAuth } from '@clerk/tanstack-react-start'
 import { Link, useLocation } from '@tanstack/react-router'
 import { useConvexAuth, useQuery } from 'convex/react'
+import { useEffect } from 'react'
 import { BookOpenIcon, Building2Icon, CodeIcon, MenuIcon, ShieldIcon, StoreIcon, type LucideIcon } from 'lucide-react'
 import { api } from '../../../../../convex/_generated/api'
+import { rememberOperatorContext } from '@/lib/operator/operator-context-memory'
 import { AeRenderErrorBoundary } from '@/components/ae/feedback/AeObservabilityErrorBoundary'
 import { APP_NAVIGATION, resolveAppDestination, type AppDestination } from '@/lib/navigation/app-navigation'
 import { Button } from '@/components/ui/button'
@@ -71,6 +73,9 @@ function AuthorizedMenu() {
     && context.userId === auth.userId
     && context.authScope?.organizationId === (auth.orgId ?? null)
     && context.authScope?.sessionId === (auth.sessionId ?? null)
+  useEffect(() => {
+    if (context !== undefined) rememberOperatorContext(matchesScope ? context : undefined)
+  }, [context, matchesScope])
   const access = matchesScope && context.kind === 'authorized'
     ? { owner: context.accountRef !== undefined && context.allowedSurfaces.includes('owner'), admin: context.allowedSurfaces.includes('admin'), developer: context.allowedSurfaces.includes('developer') }
     : noAccess

@@ -1,3 +1,5 @@
+import { SITE_NAV } from '@/content/brand-copy'
+
 export type AppDestinationId =
   | 'market'
   | 'chat'
@@ -112,7 +114,7 @@ export const APP_NAVIGATION: readonly AppDestination[] = [
   },
 ]
 
-export type PublicDestinationId = 'market' | 'for-agents' | 'for-providers'
+export type PublicDestinationId = 'market' | 'docs' | 'for-providers'
 
 export type PublicDestination = Readonly<{
   id: PublicDestinationId
@@ -121,9 +123,10 @@ export type PublicDestination = Readonly<{
 }>
 
 export const PUBLIC_NAVIGATION: readonly PublicDestination[] = [
-  { id: 'market', label: 'Market', to: '/market' },
-  { id: 'for-agents', label: 'For agents', to: '/for-agents' },
-  { id: 'for-providers', label: 'For providers', to: '/for-providers' },
+  // The same three as the footer's Product column, with the same words.
+  { id: 'market', label: SITE_NAV.tools, to: '/market' },
+  { id: 'docs', label: SITE_NAV.docs, to: '/developers/api' },
+  { id: 'for-providers', label: SITE_NAV.providers, to: '/for-providers' },
 ]
 
 export function appDestination(id: AppDestinationId): AppDestination {

@@ -94,6 +94,7 @@ type PreferencesView = Readonly<{
   invoiceReady: boolean
   teamMembershipChanged: boolean
   agentApprovalRequested: boolean
+  stalledStepEmails: boolean
   revision: number
   updatedAt: number | null
   isVirtualDefault: boolean
@@ -112,6 +113,7 @@ type UpdatePreferencesInput = Readonly<{
   invoiceReady?: boolean
   teamMembershipChanged?: boolean
   agentApprovalRequested?: boolean
+  stalledStepEmails?: boolean
   expectedRevision: number
   correlationRef: string
   idempotencyRef: string
@@ -155,6 +157,7 @@ const VIRTUAL_DEFAULTS: Omit<PreferencesView, 'accountRef' | 'principalRef'> = {
   invoiceReady: true,
   teamMembershipChanged: true,
   agentApprovalRequested: true,
+  stalledStepEmails: false,
   revision: 0,
   updatedAt: null,
   isVirtualDefault: true,
@@ -351,6 +354,30 @@ describe('notification preferences', () => {
     await expect(updatePreferences(backend, payload)).resolves.toEqual({
       kind: 'replayed',
       revision: 1,
+    })
+  })
+
+  it('N18: stalled step emails turn on and survive updates to other preferences', async () => {
+    const backend = createBackend()
+    await seedAuthority(backend)
+
+    await expect(updatePreferences(backend, updatePayload({
+      stalledStepEmails: true,
+      correlationRef: correlationRef('n18-on'),
+      idempotencyRef: idempotencyRef('n18-on'),
+    }))).resolves.toEqual({ kind: 'updated', revision: 1 })
+    await expect(readPreferences(backend)).resolves.toMatchObject({ stalledStepEmails: true, revision: 1 })
+
+    await updatePreferences(backend, updatePayload({
+      agentApprovalRequested: false,
+      expectedRevision: 1,
+      correlationRef: correlationRef('n18-other'),
+      idempotencyRef: idempotencyRef('n18-other'),
+    }))
+    await expect(readPreferences(backend)).resolves.toMatchObject({
+      stalledStepEmails: true,
+      agentApprovalRequested: false,
+      revision: 2,
     })
   })
 
@@ -703,5 +730,132 @@ describe('approval notification deliveries', () => {
       else process.env.AE_SITE_URL = previousSiteUrl
       vi.useRealTimers()
     }
+  })
+})
+
+describe('stalled step notification deliveries', () => {
+  async function seedStalledOwner(backend: InteractiveAuthorityBackend, stalledStepEmails: boolean | undefined) {
+    await seedAuthority(backend)
+    await updatePreferences(backend, updatePayload({
+      correlationRef: correlationRef('stalled-pref'),
+      idempotencyRef: idempotencyRef('stalled-pref'),
+    }))
+    await backend.run(async (ctx) => {
+      const row = await ctx.db.query('userNotificationPreferences').first()
+      if (row !== null) await ctx.db.patch(row._id, { stalledStepEmails })
+      await ctx.db.insert('journeyEvents', {
+        accountRef: ACCOUNT_REF,
+        name: 'signed_up',
+        eventKey: `${ACCOUNT_REF}:signed_up`,
+        createdAt: Date.now() - 48 * 3600_000,
+      })
+    })
+  }
+
+  const enqueueStalled = (backend: InteractiveAuthorityBackend) =>
+    backend.action(internal.notifications.sweepStalledStepEmails, {})
+
+  it('sends nothing while the deployment flag is off', async () => {
+    const backend = await createNotificationBackend()
+    await seedStalledOwner(backend, true)
+
+    await enqueueStalled(backend)
+    await expect(listDeliveryRows(backend)).resolves.toHaveLength(0)
+  })
+
+  it('sends nothing when the owner has not opted in', async () => {
+    vi.stubEnv('AE_STALLED_EMAILS_ENABLED', 'true')
+    const backend = await createNotificationBackend()
+    await seedStalledOwner(backend, undefined)
+
+    await enqueueStalled(backend)
+    await expect(listDeliveryRows(backend)).resolves.toHaveLength(0)
+  })
+
+  it('enqueues exactly one email per stalled step across runs', async () => {
+    vi.stubEnv('AE_STALLED_EMAILS_ENABLED', 'true')
+    const backend = await createNotificationBackend()
+    await seedStalledOwner(backend, true)
+
+    await enqueueStalled(backend)
+    await enqueueStalled(backend)
+    const rows = await listDeliveryRows(backend)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({
+      recipientPrincipalRef: PRINCIPAL_REF,
+      accountRef: ACCOUNT_REF,
+      eventKind: 'stalled_not_funded',
+      sourceEventRef: ACCOUNT_REF,
+      state: 'pending',
+      workId: expect.any(String),
+    })
+  })
+
+  it('reaches every stalled step in one run, so a later step is not starved by an earlier one', async () => {
+    vi.stubEnv('AE_STALLED_EMAILS_ENABLED', 'true')
+    const backend = await createNotificationBackend()
+    await seedStalledOwner(backend, true)
+    await backend.run(async (ctx) => {
+      await ctx.db.insert('journeyEvents', {
+        accountRef: ACCOUNT_REF, name: 'funded', eventKey: `${ACCOUNT_REF}:funded`, createdAt: Date.now() - 30 * 3600_000,
+      })
+    })
+
+    await enqueueStalled(backend)
+    await expect(listDeliveryRows(backend)).resolves.toEqual([expect.objectContaining({ eventKind: 'stalled_no_agent' })])
+  })
+
+  it('one-click unsubscribe turns stalled-step emails off for that owner and account only', async () => {
+    vi.stubEnv('AE_STALLED_EMAILS_ENABLED', 'true')
+    const backend = await createNotificationBackend()
+    await seedStalledOwner(backend, true)
+    await enqueueStalled(backend)
+    const [delivery] = await listDeliveryRows(backend)
+    if (delivery === undefined) throw new Error('delivery_missing')
+
+    await expect(backend.mutation(internal.notifications.unsubscribeStalled, { deliveryRef: 'notification:unknown' })).resolves.toBe(false)
+    await expect(backend.mutation(internal.notifications.unsubscribeStalled, { deliveryRef: delivery.deliveryRef })).resolves.toBe(true)
+    await expect(readPreferences(backend)).resolves.toMatchObject({ stalledStepEmails: false, agentApprovalRequested: true })
+  })
+
+  it('builds a stalled email with a footer unsubscribe link and the RFC 8058 target', async () => {
+    vi.stubEnv('AE_STALLED_EMAILS_ENABLED', 'true')
+    vi.stubEnv('AE_SITE_URL', 'https://ae.example.test')
+    vi.stubEnv('CONVEX_SITE_URL', 'https://convex.example.test/')
+    const backend = await createNotificationBackend()
+    await seedStalledOwner(backend, true)
+    await enqueueStalled(backend)
+    const [delivery] = await listDeliveryRows(backend)
+    if (delivery === undefined) throw new Error('delivery_missing')
+
+    const context = await backend.query(internal.notifications.readNotificationContext, { deliveryId: delivery._id })
+    const unsubscribeUrl = `https://convex.example.test/notifications/unsubscribe?d=${encodeURIComponent(delivery.deliveryRef)}`
+    expect(context).toMatchObject({ kind: 'ready', unsubscribeUrl })
+    expect(context.kind === 'ready' ? context.text : '').toContain(`Stop these emails: ${unsubscribeUrl}`)
+  })
+
+  it('enqueues the operator digest on the notification workpool', async () => {
+    const backend = await createNotificationBackend()
+    await expect(backend.mutation(internal.operatorDigest.enqueue, {})).resolves.toBeNull()
+  })
+
+  it('reports an operator digest the workpool gave up on', async () => {
+    const backend = await createNotificationBackend()
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    await backend.mutation(internal.operatorDigest.completeDigest, { workId: 'work_1' as WorkId, context: null, result: { kind: 'failed', error: 'resend_503' } })
+    await backend.mutation(internal.operatorDigest.completeDigest, { workId: 'work_2' as WorkId, context: null, result: { kind: 'success', returnValue: null } })
+    const degraded = error.mock.calls.filter(([prefix]) => prefix === '[ae.degraded]')
+    expect(degraded).toHaveLength(1)
+    expect(String(degraded[0]?.[1])).toContain('sendOperatorDigest')
+  })
+
+  it('renders an invalid unsubscribe link as a page that points to notification settings', async () => {
+    vi.stubEnv('AE_SITE_URL', 'https://ae.example.test/')
+    const backend = await createNotificationBackend()
+    const response = await backend.fetch('/notifications/unsubscribe?d=notification:unknown', { method: 'POST' })
+    expect(response.status).toBe(404)
+    const html = await response.text()
+    expect(html).toContain('<html lang="en">')
+    expect(html).toContain('<a href="https://ae.example.test/owner/settings/notifications">notification settings</a>')
   })
 })

@@ -14,24 +14,28 @@ export const paymentReadinessSourceChecksValue = v.object({
 })
 export type PaymentReadinessSourceChecks = Infer<typeof paymentReadinessSourceChecksValue>
 
-/** Current source facts in one read transaction; a snapshot cannot extend their original expiry. */
+/**
+ * Current source facts in one read transaction, judged at this query's own clock.
+ * A caller-supplied probe start would race this clock across runtimes; the snapshot
+ * still caps expiry at its probe start, so a later query clock cannot extend it.
+ */
 export async function readPaymentReadinessSourceChecks(
   ctx: QueryCtx,
-  args: { environment: 'sandbox' | 'production'; now: number },
+  args: { environment: 'sandbox' | 'production' },
 ): Promise<PaymentReadinessSourceChecks> {
-  if (deploymentPaymentEnvironment(env) !== args.environment
-    || !Number.isSafeInteger(args.now) || args.now < 0 || args.now > Date.now()) {
+  const now = Date.now()
+  if (deploymentPaymentEnvironment(env) !== args.environment) {
     const failed = failure('readiness_environment_mismatch')
     return { reference_rate: failed, commercial_policy: failed, treasury: failed }
   }
   const [rate, policy, treasury] = await Promise.all([
-    readReferenceRate(ctx.db, args.now),
-    readCommercialPolicyGate(ctx.db, { ...args,
+    readReferenceRate(ctx.db, now),
+    readCommercialPolicyGate(ctx.db, { ...args, now,
       ...(args.environment === 'sandbox' ? { sandboxFixture: 'managed_x402_deterministic_v1' as const } : {}) }),
-    readTreasuryPaymentReadinessCheck(ctx, args.environment, args.now),
+    readTreasuryPaymentReadinessCheck(ctx, args.environment, now),
   ])
   let commercial: PaymentReadinessCheck = policy.kind === 'refused'
-    ? failure(policy.code) : { kind: 'passed', validUntil: args.now + 10 * 60_000 }
+    ? failure(policy.code) : { kind: 'passed', validUntil: now + 10 * 60_000 }
   if (policy.kind === 'admitted' && args.environment === 'production') {
     const approvals = await Promise.all(policy.policyRefs.map(policyRef => ctx.db.query('moneyCommercialPolicies')
       .withIndex('by_policyRef', q => q.eq('policyRef', policyRef)).unique()))

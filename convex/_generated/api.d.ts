@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as accountIntents from "../accountIntents.js";
 import type * as actionExecutionControl from "../actionExecutionControl.js";
 import type * as adminCallContent from "../adminCallContent.js";
 import type * as adminConsoleActivity from "../adminConsoleActivity.js";
@@ -103,6 +104,7 @@ import type * as facilitatorDiscoveryAction from "../facilitatorDiscoveryAction.
 import type * as http from "../http.js";
 import type * as interactiveAuthority from "../interactiveAuthority.js";
 import type * as interactiveCredentialLifecycle from "../interactiveCredentialLifecycle.js";
+import type * as journeyEvents from "../journeyEvents.js";
 import type * as lib_actionExecution_control_contracts from "../lib/actionExecution/control/contracts.js";
 import type * as lib_actionExecution_control_observation from "../lib/actionExecution/control/observation.js";
 import type * as lib_actionExecution_control_reads from "../lib/actionExecution/control/reads.js";
@@ -491,6 +493,8 @@ import type * as lib_dev_seed_sandboxReference from "../lib/dev/seed/sandboxRefe
 import type * as lib_dev_seed_sandboxSpending from "../lib/dev/seed/sandboxSpending.js";
 import type * as lib_dev_seed_sandboxTestnet from "../lib/dev/seed/sandboxTestnet.js";
 import type * as lib_dev_seed_sandboxTransport from "../lib/dev/seed/sandboxTransport.js";
+import type * as lib_journey_events from "../lib/journey/events.js";
+import type * as lib_journey_stalled from "../lib/journey/stalled.js";
 import type * as lib_market_demandSignals_contracts from "../lib/market/demandSignals/contracts.js";
 import type * as lib_market_demandSignals_credential from "../lib/market/demandSignals/credential.js";
 import type * as lib_market_demandSignals_owner from "../lib/market/demandSignals/owner.js";
@@ -682,6 +686,8 @@ import type * as lib_principalAccount_memberships_membershipUpdated from "../lib
 import type * as lib_principalAccount_notifications_delivery from "../lib/principalAccount/notifications/delivery.js";
 import type * as lib_principalAccount_notifications_enqueue from "../lib/principalAccount/notifications/enqueue.js";
 import type * as lib_principalAccount_notifications_preferences from "../lib/principalAccount/notifications/preferences.js";
+import type * as lib_principalAccount_notifications_resend from "../lib/principalAccount/notifications/resend.js";
+import type * as lib_principalAccount_notifications_stalled from "../lib/principalAccount/notifications/stalled.js";
 import type * as lib_principalAccount_notifications_usageAlerts from "../lib/principalAccount/notifications/usageAlerts.js";
 import type * as lib_principalAccount_notifications_usageHistory from "../lib/principalAccount/notifications/usageHistory.js";
 import type * as lib_principalAccount_notifications_usagePolicyAudit from "../lib/principalAccount/notifications/usagePolicyAudit.js";
@@ -784,6 +790,7 @@ import type * as notificationDelivery from "../notificationDelivery.js";
 import type * as notificationWorkpool from "../notificationWorkpool.js";
 import type * as notifications from "../notifications.js";
 import type * as operatorContext from "../operatorContext.js";
+import type * as operatorDigest from "../operatorDigest.js";
 import type * as personalAccount from "../personalAccount.js";
 import type * as platformLaunch from "../platformLaunch.js";
 import type * as providerConsequenceHttp from "../providerConsequenceHttp.js";
@@ -825,6 +832,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  accountIntents: typeof accountIntents;
   actionExecutionControl: typeof actionExecutionControl;
   adminCallContent: typeof adminCallContent;
   adminConsoleActivity: typeof adminConsoleActivity;
@@ -920,6 +928,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   interactiveAuthority: typeof interactiveAuthority;
   interactiveCredentialLifecycle: typeof interactiveCredentialLifecycle;
+  journeyEvents: typeof journeyEvents;
   "lib/actionExecution/control/contracts": typeof lib_actionExecution_control_contracts;
   "lib/actionExecution/control/observation": typeof lib_actionExecution_control_observation;
   "lib/actionExecution/control/reads": typeof lib_actionExecution_control_reads;
@@ -1308,6 +1317,8 @@ declare const fullApi: ApiFromModules<{
   "lib/dev/seed/sandboxSpending": typeof lib_dev_seed_sandboxSpending;
   "lib/dev/seed/sandboxTestnet": typeof lib_dev_seed_sandboxTestnet;
   "lib/dev/seed/sandboxTransport": typeof lib_dev_seed_sandboxTransport;
+  "lib/journey/events": typeof lib_journey_events;
+  "lib/journey/stalled": typeof lib_journey_stalled;
   "lib/market/demandSignals/contracts": typeof lib_market_demandSignals_contracts;
   "lib/market/demandSignals/credential": typeof lib_market_demandSignals_credential;
   "lib/market/demandSignals/owner": typeof lib_market_demandSignals_owner;
@@ -1499,6 +1510,8 @@ declare const fullApi: ApiFromModules<{
   "lib/principalAccount/notifications/delivery": typeof lib_principalAccount_notifications_delivery;
   "lib/principalAccount/notifications/enqueue": typeof lib_principalAccount_notifications_enqueue;
   "lib/principalAccount/notifications/preferences": typeof lib_principalAccount_notifications_preferences;
+  "lib/principalAccount/notifications/resend": typeof lib_principalAccount_notifications_resend;
+  "lib/principalAccount/notifications/stalled": typeof lib_principalAccount_notifications_stalled;
   "lib/principalAccount/notifications/usageAlerts": typeof lib_principalAccount_notifications_usageAlerts;
   "lib/principalAccount/notifications/usageHistory": typeof lib_principalAccount_notifications_usageHistory;
   "lib/principalAccount/notifications/usagePolicyAudit": typeof lib_principalAccount_notifications_usagePolicyAudit;
@@ -1601,6 +1614,7 @@ declare const fullApi: ApiFromModules<{
   notificationWorkpool: typeof notificationWorkpool;
   notifications: typeof notifications;
   operatorContext: typeof operatorContext;
+  operatorDigest: typeof operatorDigest;
   personalAccount: typeof personalAccount;
   platformLaunch: typeof platformLaunch;
   providerConsequenceHttp: typeof providerConsequenceHttp;

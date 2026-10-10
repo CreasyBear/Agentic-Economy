@@ -1,10 +1,14 @@
 import Decimal from 'decimal.js'
-import { formatCurrencyAmount, parseDecimalExactAmount } from '@/modules/money/public'
+import { formatCurrencyAmount, formatExactAmount, parseDecimalExactAmount } from '@/modules/money/public'
 import type { TreasurySnapshot } from '@/modules/money/treasury-report'
 
 export function treasuryMoney(units: string, currency: 'USDC' | 'AUD' = 'USDC'): string {
   const negative = units.startsWith('-')
   return `${negative ? '−' : ''}${formatCurrencyAmount({ currency, units: negative ? units.slice(1) : units, exponent: 6 })}`
+}
+/** Table figure for a column whose header carries the currency. */
+export function treasuryFigure(units: string): string {
+  return formatExactAmount({ currency: 'USDC', exponent: 6, units }) ?? 'Unavailable'
 }
 export function sumTreasuryUnits(...units: string[]): string {
   return units.reduce((total, value) => total + BigInt(value), 0n).toString()

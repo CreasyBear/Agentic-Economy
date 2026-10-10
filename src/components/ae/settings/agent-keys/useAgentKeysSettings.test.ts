@@ -64,6 +64,9 @@ vi.mock('@/components/ae/agent-access/home/useAeAgentAccessHome', () => ({
     showSetup: false,
   }),
 }))
+vi.mock('@/components/ae/agent-access/home/components/useHomeIntentQuestion', () => ({
+  useHomeIntentQuestion: () => ({ intent: undefined, answer: vi.fn() }),
+}))
 
 import { useAgentKeysSettings } from './useAgentKeysSettings'
 import { AeAgentKeysSettings } from './AeAgentKeysSettings'
@@ -180,6 +183,7 @@ describe('Agent keys settings revocation', () => {
     }))
 
     fireEvent.change(screen.getByLabelText('Agent name'), { target: { value: 'Research bot' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Set spending limits' }))
     fireEvent.click(screen.getByRole('button', { name: 'Review access' }))
     fireEvent.click(screen.getByRole('button', { name: 'Issue key' }))
 

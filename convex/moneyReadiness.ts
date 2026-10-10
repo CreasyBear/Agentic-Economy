@@ -17,7 +17,7 @@ export const publish = internalMutation({
 })
 
 export const readSourceChecks = internalQuery({
-  args: { environment: paymentReadinessEnvironmentValue, now: v.number() },
+  args: { environment: paymentReadinessEnvironmentValue },
   returns: paymentReadinessSourceChecksValue,
   handler: readPaymentReadinessSourceChecks,
 })

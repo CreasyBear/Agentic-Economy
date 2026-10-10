@@ -839,6 +839,35 @@ describe('Account AUD funding through Formance', () => {
     expect(rows.documents).toHaveLength(2)
   })
 
+  it('records funded on the first credited funding and topped_up per later funding', async () => {
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    const fixture = await publishedBusinessOwner(backend, 'funding-journey')
+    const settle = async (slug: string) => {
+      const bound = await reserveBoundAm10Funding(fixture, slug)
+      const event = am10PaidCheckoutEvent({
+        stripeEventId: `evt_journey_${slug}`,
+        eventType: 'checkout.session.completed',
+        commandRef: bound.commandRef,
+        evidence: bound.evidence,
+        payloadDigest: sha256('f'),
+      })
+      const args = { event, readback: bound.evidence, operationKey: 'moneyStripeWebhookWorker:fulfillReturn', correlationId: event.stripeEventId }
+      await fixture.owner.mutation(internal.moneyAccountFunding.prepareVerifiedEventFromInbox, args)
+      await expect(fixture.owner.mutation(
+        internal.moneyAccountFunding.finalizeVerifiedEventFromInbox,
+        { ...args, formanceTransactionRef: `formance:journey:${slug}` },
+      )).resolves.toMatchObject({ kind: 'accepted', status: 'applied' })
+    }
+    await settle('journey-one')
+    await settle('journey-two')
+    const events = await backend.run(async ctx => await ctx.db.query('journeyEvents').collect())
+    const account = fixture.canonicalAccountRef
+    expect(events.map(event => [event.name, event.eventKey])).toEqual([
+      ['funded', `${account}:funded`],
+      ['topped_up', `${account}:topped_up:account-funding:am10-journey-two`],
+    ])
+  })
+
   it('replays a second paid checkout on an already-succeeded funding command', async () => {
     const backend = convexTestWithMarketComponents()
     const fixture = await publishedBusinessOwner(backend, 'formance-funding-second-paid')

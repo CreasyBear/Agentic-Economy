@@ -10,6 +10,7 @@ const productJourneySchema = z.strictObject({
   phase: z.enum(['attempted', 'observed', 'delayed', 'failed']),
   surface: z.enum(['app', 'sign_in', 'sign_up', 'market', 'command_search', 'tool', 'support', 'status']),
   queryLength: z.number().int().min(0).max(8192).optional(),
+  callableCount: z.number().int().min(0).max(1_000_000).optional(),
   resultCount: z.number().int().min(0).max(1_000_000).optional(),
   listingKind: z.enum(['ae_callable', 'external_listing']).optional(),
   hasReturnDestination: z.boolean().optional(),

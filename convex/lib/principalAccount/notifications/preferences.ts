@@ -33,6 +33,7 @@ export const readPreferencesResult = v.object({
   invoiceReady: v.boolean(),
   teamMembershipChanged: v.boolean(),
   agentApprovalRequested: v.boolean(),
+  stalledStepEmails: v.boolean(),
   revision: v.number(),
   updatedAt: v.union(v.number(), v.null()),
   isVirtualDefault: v.boolean(),
@@ -48,6 +49,7 @@ export const updatePreferencesArgs = {
   invoiceReady: v.optional(v.boolean()),
   teamMembershipChanged: v.optional(v.boolean()),
   agentApprovalRequested: v.optional(v.boolean()),
+  stalledStepEmails: v.optional(v.boolean()),
   expectedRevision: v.number(),
   correlationRef: v.string(),
   idempotencyRef: v.string(),
@@ -65,6 +67,7 @@ type PreferenceFields = Readonly<{
   invoiceReady: boolean
   teamMembershipChanged: boolean
   agentApprovalRequested: boolean
+  stalledStepEmails: boolean
 }>
 
 const VIRTUAL_DEFAULT_PREFERENCE_FIELDS: PreferenceFields = {
@@ -75,6 +78,7 @@ const VIRTUAL_DEFAULT_PREFERENCE_FIELDS: PreferenceFields = {
   invoiceReady: true,
   teamMembershipChanged: true,
   agentApprovalRequested: true,
+  stalledStepEmails: false,
 }
 
 function validateCorrelationRef(value: string): void {
@@ -153,6 +157,7 @@ function preferenceFieldsFromRow(row: Doc<'userNotificationPreferences'>): Prefe
     invoiceReady: row.invoiceReady,
     teamMembershipChanged: row.teamMembershipChanged,
     agentApprovalRequested: row.agentApprovalRequested ?? true,
+    stalledStepEmails: row.stalledStepEmails ?? false,
   }
 }
 
@@ -167,6 +172,7 @@ function patchMatchesExisting(
     invoiceReady?: boolean
     teamMembershipChanged?: boolean
     agentApprovalRequested?: boolean
+    stalledStepEmails?: boolean
   }>,
 ): boolean {
   if (args.lowCreditBalance !== undefined && args.lowCreditBalance !== existing.lowCreditBalance) {
@@ -199,6 +205,12 @@ function patchMatchesExisting(
   ) {
     return false
   }
+  if (
+    args.stalledStepEmails !== undefined
+    && args.stalledStepEmails !== (existing.stalledStepEmails ?? false)
+  ) {
+    return false
+  }
   if(args.usageAlertPolicy!==undefined){const policy=existing.usageAlertPolicy
     if(policy===undefined||canonicalDigest(args.usageAlertPolicy)!==canonicalDigest({enabled:policy.enabled,failurePercent:policy.failurePercent,minimumCalls:policy.minimumCalls,spendWarningPercent:policy.spendWarningPercent}))return false}
   return true
@@ -214,6 +226,7 @@ function mergePreferencePatch(
     invoiceReady?: boolean
     teamMembershipChanged?: boolean
     agentApprovalRequested?: boolean
+    stalledStepEmails?: boolean
   }>,
 ): PreferenceFields {
   return {
@@ -224,6 +237,7 @@ function mergePreferencePatch(
     invoiceReady: args.invoiceReady ?? base.invoiceReady,
     teamMembershipChanged: args.teamMembershipChanged ?? base.teamMembershipChanged,
     agentApprovalRequested: args.agentApprovalRequested ?? base.agentApprovalRequested,
+    stalledStepEmails: args.stalledStepEmails ?? base.stalledStepEmails,
   }
 }
 
@@ -272,6 +286,7 @@ export async function updatePreferencesHandler(
     callFailureSpike?: boolean
     invoiceReady?: boolean
     agentApprovalRequested?: boolean
+    stalledStepEmails?: boolean
     teamMembershipChanged?: boolean
     expectedRevision: number
     correlationRef: string

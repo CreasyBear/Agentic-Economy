@@ -1115,7 +1115,7 @@ describe.sequential('durable Tool chat messaging and shares', () => {
               toolRef: ref,
               title: `Tool ${index + 1}`,
               provider: 'Provider',
-              price: 'A$0.01',
+              price: 'A$0.000001',
               readiness: 'ready',
             })),
             count: 5,
