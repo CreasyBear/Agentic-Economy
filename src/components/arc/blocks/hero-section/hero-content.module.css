@@ -9,7 +9,7 @@
 .actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-3); margin-top: var(--space-3); }
 .action { display: inline-flex; height: var(--control-height-md); align-items: center; justify-content: center; gap: var(--space-2); border: 1px solid transparent; border-radius: var(--radius-control); padding: 0 var(--space-5); font: inherit; font-size: var(--text-sm); font-weight: 500; text-decoration: none; white-space: nowrap; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: transform var(--duration-fast) var(--ease-standard), background-color var(--duration-fast) var(--ease-standard), opacity var(--duration-fast) var(--ease-standard); }
 .action:active { transform: scale(.97); }
-.primary { background: var(--foreground); color: var(--background); }
+.primary { background: var(--accent); color: var(--accent-foreground); }
 .secondary { border-color: var(--border); background: var(--surface); color: var(--foreground); }
 @media (hover: hover) and (pointer: fine) {
   .primary:hover { opacity: .9; }

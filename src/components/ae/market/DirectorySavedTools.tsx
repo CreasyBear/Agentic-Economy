@@ -52,11 +52,11 @@ export function DirectorySavedToolsProvider({ children }: Readonly<{ children: R
       if (id !== generation.current || currentOwner.current !== owner) return
       setLoaded(result.kind === 'available'
         ? { owner, items: result.items, status: 'ready' }
-        : { owner, items: [], status: 'failed', error: result.code === 'unauthenticated' ? 'Sign in to see Saved Tools.' : 'Saved Tools could not be loaded. Try again.' })
+        : { owner, items: [], status: 'failed', error: result.code === 'unauthenticated' ? 'Sign in to see your saved tools.' : 'Saved tools didn’t load. Try again.' })
     }).catch(cause => {
       if (id === generation.current && currentOwner.current === owner) {
         degrade(cause, undefined, { site: 'DirectorySavedToolsProvider.refresh', reason: 'source_unavailable' })
-        setLoaded({ owner, items: [], status: 'failed', error: 'Saved Tools could not be loaded. Try again.' })
+        setLoaded({ owner, items: [], status: 'failed', error: 'Saved tools didn’t load. Try again.' })
       }
     })
   }, [owner])
@@ -84,15 +84,15 @@ export function DirectorySavedToolsProvider({ children }: Readonly<{ children: R
     const action = existing === undefined ? saveToolForOwner({ data: identity }) : removeToolForOwner({ data: existing })
     void action.then(result => {
       if (result.kind === 'refused' || result.kind === 'error') {
-        setSaveError({ owner, message: result.code === 'limit_reached' ? 'You can save up to 100 Tools. Remove one to make space.'
-          : result.code === 'not_found' ? 'This Tool is no longer available. Search again for a current Tool.'
-            : result.code === 'unauthenticated' ? 'Sign in to save Tools.' : 'Saved Tools could not be changed. Try again.' })
+        setSaveError({ owner, message: result.code === 'limit_reached' ? 'You can save up to 100 tools. Remove one to make space.'
+          : result.code === 'not_found' ? 'This tool is no longer listed. Search again for a current one.'
+            : result.code === 'unauthenticated' ? 'Sign in to save tools.' : 'Your saved tools didn’t change. Try again.' })
         return
       }
       if (currentOwner.current === owner) refresh()
     }).catch(cause => {
       degrade(cause, undefined, { site: 'DirectorySavedToolsProvider.toggleIdentity', reason: 'source_unavailable' })
-      setSaveError({ owner, message: 'Saved Tools could not be changed. Try again.' })
+      setSaveError({ owner, message: 'Your saved tools didn’t change. Try again.' })
     })
       .finally(() => {
         inFlight.current.delete(key)

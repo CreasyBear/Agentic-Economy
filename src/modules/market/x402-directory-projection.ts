@@ -54,13 +54,14 @@ function schemaNode(value: unknown, ...path: string[]): Record<string, unknown> 
   return isRecord(node) ? node : undefined
 }
 
-function schemaSummary(schema: Record<string, unknown> | undefined): string | undefined {
-  if (schema === undefined || !isRecord(schema.properties)) return undefined
+/** A JSON schema as its first named fields, e.g. "Inputs: query (required), limit, +2 more". */
+export function jsonSchemaFieldSummary(schema: unknown, label: 'Inputs' | 'Returns'): string | undefined {
+  if (!isRecord(schema) || !isRecord(schema.properties)) return undefined
   const fields = Object.keys(schema.properties)
-  if (fields.length === 0) return 'No named input fields declared'
+  if (fields.length === 0) return label === 'Inputs' ? 'No named input fields declared' : 'No named output fields declared'
   const required = new Set(Array.isArray(schema.required) ? schema.required.filter((item): item is string => typeof item === 'string') : [])
   const shown = fields.slice(0, 5).map((field) => `${text(field, 48) ?? 'field'}${required.has(field) ? ' (required)' : ''}`)
-  return `Inputs: ${shown.join(', ')}${fields.length > shown.length ? `, +${fields.length - shown.length} more` : ''}`
+  return `${label}: ${shown.join(', ')}${fields.length > shown.length ? `, +${fields.length - shown.length} more` : ''}`
 }
 
 function timestamp(value: unknown): string | undefined {
@@ -181,7 +182,7 @@ export function projectX402DirectoryEntry(resource: unknown): X402DirectoryEntry
   const outputSummary = outputDescription ?? (outputType === undefined
     ? schemaType === undefined ? undefined : `${schemaType} response schema declared by the provider`
     : `${outputType.toUpperCase()} response declared by the provider`)
-  const inputSummary = schemaSummary(declaredInputs)
+  const inputSummary = jsonSchemaFieldSummary(declaredInputs, 'Inputs')
   const updatedAt = timestamp(record.lastUpdated)
   const quality = schemaNode(record, 'quality')
   const calls30d = count(quality?.l30DaysTotalCalls)

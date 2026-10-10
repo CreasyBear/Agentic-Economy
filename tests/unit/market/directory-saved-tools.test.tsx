@@ -113,7 +113,7 @@ describe('account-bound Saved Tools', () => {
     show()
     await screen.findByText('ready')
     fireEvent.click(screen.getByRole('button', { name: 'Toggle admitted' }))
-    expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'Saved Tools could not be changed. Try again.')
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'Your saved tools didn’t change. Try again.')
     expect(screen.getByText('Admitted saved: false')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Toggle admitted' }))
     await waitFor(() => expect(screen.getByText('Admitted saved: true')).toBeTruthy())

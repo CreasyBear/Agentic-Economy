@@ -179,7 +179,7 @@ describe('indexed catalogue server boundary', () => {
     expect(query).toHaveBeenCalledWith('referenceRateRefresh:current', {})
     query.mockImplementation(async (name: string) => name === 'referenceRateRefresh:current' ? rate : upstreamDetail)
     expect(await readX402DirectoryCatalogueResource({ resource: entry.resource })).toEqual({
-      ...upstreamDetail, item: { entry: { ...upstreamDetail.item.entry, audEstimate: 'A$0.01' } },
+      ...upstreamDetail, item: { entry: { ...upstreamDetail.item.entry, audEstimate: 'A$0.0013' } },
     })
     query.mockImplementation(async (name: string) => name === 'referenceRateRefresh:current' ? null : found)
     expect(await readX402DirectoryCatalogueResource({ resource: entry.resource })).toEqual(found)

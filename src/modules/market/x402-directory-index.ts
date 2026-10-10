@@ -190,6 +190,20 @@ export function directoryProviderKey(provider: string): string {
 }
 
 /**
+ * Testnets are excluded by the listing's own network (CAIP-2 id) in the catalogue read. The host check only
+ * catches an explicit sandbox marker: words like local, beta, preview, demo or dev are real business names
+ * (local-weather.io, beta-bank.com), so they never hide a listing. The top-level domain is skipped.
+ */
+const NON_PRODUCTION_LABEL = /(^|[.-])(test|testnet|staging|sandbox)([.-]|$)/iu
+const rehearsalHost = (host: string) => NON_PRODUCTION_LABEL.test(host.split('.').slice(0, -1).join('.'))
+const resourceHost = (resource: string) => { try { return new URL(resource).hostname } catch { return '' } }
+
+/** A listing a buyer can shop: neither its provider nor its resource URL is a test or demo host. */
+export function directoryStorefrontEntry(entry: Pick<X402DirectoryEntry, 'provider' | 'resource'>): boolean {
+  return !rehearsalHost(directoryProviderKey(entry.provider)) && !rehearsalHost(resourceHost(entry.resource))
+}
+
+/**
  * Kebab slug for the canonical `/tools/<providerKey>/<slug>` URL
  * (docs pattern: RapidAPI `/provider/api`, npm `/package/name`). Derived from
  * the resource's URL path only - the query string and hash never contribute,

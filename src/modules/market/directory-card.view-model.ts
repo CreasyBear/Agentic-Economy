@@ -1,5 +1,4 @@
 import Decimal from 'decimal.js'
-import { formatRelativeTime } from '@/lib/ui/format-time'
 import { captureRouteException } from '@/lib/observability/capture-route-exception'
 import type { X402DirectoryFacet } from '@/modules/market/x402-directory-catalogue'
 import { directoryProviderKey, directorySlugBase, minimumDirectoryUsdPrice } from '@/modules/market/x402-directory-index'
@@ -9,7 +8,36 @@ import type { SavedDirectoryTool, SavedToolListItem, SavedToolSaveInput } from '
 import { formatDisplayPrice } from '@/modules/money/public'
 import { degrade } from '@/lib/observability/degrade'
 
-export { absorbProviderEntries, DIRECTORY_LIST_PAGE_SIZE, groupDirectoryProviders } from './internal/directory-provider-pagination'
+import { directoryCardCopy } from './internal/directory-card-copy'
+
+export { absorbProviderEntries, groupDirectoryProviders } from './internal/directory-provider-pagination'
+export { directoryLede, readableCardText } from './internal/directory-card-copy'
+
+/** Readiness in plain words, the same on every card, row and tool page: only aecon-callable tools run through aecon today. */
+export const DIRECTORY_READINESS = {
+  ae_callable: { label: 'Ready to call', tone: 'success' },
+  setup_required: { label: 'Needs setup', tone: 'warning' },
+  unavailable: { label: 'Unavailable', tone: 'neutral' },
+} as const
+
+/** No listed price, in the same words on every card, row and comparison. */
+export const PRICE_UNAVAILABLE = 'Price unavailable'
+
+const activityCount = (count: number, one: string, many: string) => `${count.toLocaleString('en-AU')} ${count === 1 ? one : many}`
+
+/**
+ * Usage in one phrase, the same everywhere: "15 calls · 11 buyers in 30 days". The directory counts a
+ * rolling 30 days. Real counts only; a missing or zero count is left out, never shown.
+ */
+export function directoryActivityLabel(activity: X402DirectoryEntry['activity']): string | undefined {
+  const calls = activity?.calls30d
+  const buyers = activity?.payers30d
+  const parts = [
+    calls === undefined || !Number.isSafeInteger(calls) || calls <= 0 ? undefined : activityCount(calls, 'call', 'calls'),
+    buyers === undefined || !Number.isSafeInteger(buyers) || buyers <= 0 ? undefined : activityCount(buyers, 'buyer', 'buyers'),
+  ].filter((part): part is string => part !== undefined)
+  return parts.length === 0 ? undefined : `${parts.join(' · ')} in 30 days`
+}
 
 /** Select the lowest recognised USDC option, preferring exact when amounts tie. */
 function selectedDirectoryUsdPrice(entry: X402DirectoryEntry) {
@@ -64,12 +92,17 @@ function groupDigits(whole: string): string {
 }
 
 /** Buyer-facing provenance for a directory price before AE admission and Quote. */
-export function directoryPriceContext(entry: X402DirectoryEntry): string {
+/** The provider's own listed price behind the card price, for example "0.01 USDC". */
+function directoryListedPrice(entry: X402DirectoryEntry): string | undefined {
   const selected = selectedDirectoryUsdPrice(entry)
-  if (selected === undefined) return ''
+  if (selected === undefined) return undefined
   const formattedSource = formatListedAmount(selected.amount)
-  if (formattedSource === undefined) return ''
-  const listed = `${selected.price.scheme === 'upto' ? 'up to ' : ''}${formattedSource} USDC`
+  return formattedSource === undefined ? undefined : `${selected.price.scheme === 'upto' ? 'up to ' : ''}${formattedSource} USDC`
+}
+
+export function directoryPriceContext(entry: X402DirectoryEntry): string {
+  const listed = directoryListedPrice(entry)
+  if (listed === undefined) return ''
   const source = entry.prices.length > 1
     ? `${entry.prices.length} Provider payment options · source ${listed}`
     : `Provider lists ${listed} per Call`
@@ -206,6 +239,8 @@ export type DirectoryToolCardModel = Readonly<{
   providerLine: string
   priceLabel: string
   priceContext: string
+  /** Set when `priceLabel` is an AUD estimate: the provider's listed price it was estimated from. */
+  priceEstimateSource?: string
   access: 'ae_callable' | 'setup_required' | 'unavailable'
   accessLabel: string
   toolRef?: string
@@ -223,12 +258,14 @@ export type DirectoryToolCardModel = Readonly<{
 }>
 
 export function toDirectoryToolCardModel(entry: X402DirectoryEntry): DirectoryToolCardModel {
-  const title = directoryTitle(entry)
+  const rawTitle = directoryTitle(entry)
+  const copy = directoryCardCopy(entry, rawTitle, directoryGlance(entry, rawTitle))
+  const title = copy.title
   const slug = entry.slug ?? directorySlugBase(entry.resource)
   const providerHost = directoryProviderKey(entry.provider)
   const rawDescription = entry.description !== title && !repeatsTitle(title, entry.description) ? entry.description : undefined
   const outputLabel = directoryOutputLabel(entry)
-  const glance = directoryGlance(entry, title)
+  const glance = copy.summary
   const providerLine = directoryProviderLine(entry)
   const calls30d = entry.activity?.calls30d
   const payers30d = entry.activity?.payers30d
@@ -237,30 +274,23 @@ export function toDirectoryToolCardModel(entry: X402DirectoryEntry): DirectoryTo
   const lastCalledAt = entry.activity?.lastCalledAt
   const lastReported = lastCalledAt === undefined ? undefined : directoryDate(lastCalledAt)
   const bazaarTitle = lastReported === undefined
-    ? 'Coinbase Bazaar volume, not an Agentic Economy Call.'
-    : `Coinbase Bazaar volume, not an Agentic Economy Call. Last reported ${lastReported}.`
-  const relativePaid = lastCalledAt === undefined ? undefined : formatRelativeTime(lastCalledAt)
-  const paidFact = relativePaid === undefined ? undefined : `paid ${relativePaid === 'just now' ? 'recently' : relativePaid}`
-  const factsLine = [
-    payers30d !== undefined && payers30d > 0 && payersLabel !== undefined ? `${payersLabel} buyers` : undefined,
-    calls30d !== undefined && callsLabel !== undefined ? `${callsLabel} calls this month` : undefined,
-    paidFact,
-    entry.audEstimate === undefined ? undefined : `from ${entry.audEstimate}`,
-  ].filter((fact): fact is string => fact !== undefined).join(' · ')
+    ? 'Reported by the x402 directory.'
+    : `Reported by the x402 directory. Last call ${lastReported}.`
+  const factsLine = directoryActivityLabel(entry.activity) ?? ''
+  const estimateSource = entry.audEstimate === undefined || directoryPrice(entry) === '' ? undefined : directoryListedPrice(entry)
   return {
     title,
     providerHost,
     slug,
     access: entry.choice?.access ?? 'unavailable',
-    accessLabel: entry.choice?.access === 'ae_callable' ? 'AE callable'
-      : entry.choice?.access === 'setup_required' ? 'Connect to call'
-      : 'Currently unavailable',
+    accessLabel: DIRECTORY_READINESS[entry.choice?.access ?? 'unavailable'].label,
     ...(entry.choice?.toolRef === undefined ? {} : { toolRef: entry.choice.toolRef }),
     ...(entry.choice?.sourceRouteRef === undefined ? {} : { sourceRouteRef: entry.choice.sourceRouteRef }),
     providerLine,
     initials: directoryInitials(providerLine),
     priceLabel: directoryPrice(entry),
     priceContext: directoryPriceContext(entry),
+    ...(estimateSource === undefined ? {} : { priceEstimateSource: estimateSource }),
     tags: [...new Set([...(entry.category === undefined ? [] : [entry.category]), ...(entry.tags ?? [])])].slice(0, 2),
     ...(rawDescription !== undefined && rawDescription !== '' ? { description: rawDescription } : {}),
     ...(outputLabel === undefined ? {} : { outputLabel }),
@@ -306,8 +336,8 @@ export function toSavedDirectoryRowModel(item: SavedToolListItem): SavedDirector
   if (item.detail.kind !== 'found') return {
     title: 'Tool no longer available',
     provider: item.identity.kind === 'ae_callable' ? item.identity.toolRef : item.identity.resource,
-    price: 'Current price unavailable',
-    access: 'Unavailable · removable',
+    price: PRICE_UNAVAILABLE,
+    access: DIRECTORY_READINESS.unavailable.label,
   }
   if ('tool' in item.detail) {
     const { tool } = item.detail
@@ -315,7 +345,7 @@ export function toSavedDirectoryRowModel(item: SavedToolListItem): SavedDirector
       title: tool.listing.label,
       provider: tool.business.name,
       price: formatDisplayPrice(tool.commercial.displayPrice) ?? '',
-      access: 'AE-callable',
+      access: DIRECTORY_READINESS.ae_callable.label,
       toolRef: tool.toolRef,
     }
   }
@@ -345,15 +375,6 @@ export type DirectoryToolPageModel = Readonly<{
   methodLabel: string
   payments: readonly Readonly<{ network: string; amount: string }>[]
 }>
-
-function directoryActivityLine(calls: string, payers: string, lastCalled: string): string | undefined {
-  const parts = [
-    ...(calls === '—' ? [] : [`${calls} ${calls === '1' ? 'call' : 'calls'} in 30 days`]),
-    ...(payers === '—' ? [] : [`${payers} ${payers === '1' ? 'payer' : 'payers'}`]),
-    ...(lastCalled === '—' ? [] : [`last used ${lastCalled}`]),
-  ]
-  return parts.length === 0 ? undefined : parts.join(' · ')
-}
 
 function fieldLabel(name: string): string {
   const words = directoryFieldWords(name) ?? name.replace(/[_./-]+/g, ' ').trim().toLowerCase()
@@ -395,7 +416,7 @@ function serviceDescription(entry: X402DirectoryEntry, title: string): string {
 
 /** Facts for deciding whether a listed service fits, before any Agentic Economy Call. */
 export function toDirectoryToolPageModel(entry: X402DirectoryEntry): DirectoryToolPageModel {
-  const title = directoryTitle(entry)
+  const { title } = toDirectoryToolCardModel(entry)
   const returns = directoryOutputLabel(entry) ?? entry.outputSummary?.trim()
   const lastCalled = entry.activity?.lastCalledAt === undefined ? undefined : directoryDate(entry.activity.lastCalledAt)
   const providerLine = directoryProviderLine(entry)
@@ -404,7 +425,7 @@ export function toDirectoryToolPageModel(entry: X402DirectoryEntry): DirectoryTo
   const callsLabel = countLabel(entry.activity?.calls30d) ?? '—'
   const payersLabel = countLabel(entry.activity?.payers30d) ?? '—'
   const lastCalledLabel = lastCalled ?? '—'
-  const line = directoryActivityLine(callsLabel, payersLabel, lastCalledLabel)
+  const line = directoryActivityLabel(entry.activity)
   return {
     description: serviceDescription(entry, title),
     providerLine,
@@ -478,12 +499,12 @@ export function toDirectoryServiceSurface(
       const calls = countLabel(entry.activity?.calls30d) ?? '—'
       const payers = countLabel(entry.activity?.payers30d) ?? '—'
       return {
-        title: directoryTitle(entry),
+        title: toDirectoryToolCardModel(entry).title,
         path: endpointPath(entry.resource),
         price: directoryPrice(entry),
         calls,
         payers,
-        activity: calls === '—' && payers === '—' ? 'Calls not reported' : `${calls} calls · ${payers} payers · last 30 days`,
+        activity: directoryActivityLabel(entry.activity) ?? 'Calls not reported',
         providerHost: directoryProviderKey(entry.provider),
         slug: entry.slug ?? directorySlugBase(entry.resource),
         current: entry.resource === current.resource,

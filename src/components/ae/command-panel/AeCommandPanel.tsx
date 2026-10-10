@@ -73,11 +73,11 @@ export function AeCommandPanel({
             variant="secondary"
             size="md"
             className="arc-market arc-command-trigger"
-            aria-label="Find Tools"
+            aria-label="Find tools"
             aria-controls={PANEL_CONTENT_ID}
           >
             <SearchIcon aria-hidden="true" />
-            <span className="arc-command-trigger-label">Find Tools</span>
+            <span className="arc-command-trigger-label">Find tools</span>
             <kbd className="arc-command-trigger-key">
               ⌘K
             </kbd>

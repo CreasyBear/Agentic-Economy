@@ -26,7 +26,7 @@ async function settleLookup() {
   await act(async () => { vi.advanceTimersByTime(200) })
 }
 
-it('finds Hosts beyond the twelve suggestions, preserves the latest lookup, and resets selection, clear and reopen with the real Arc combobox', async () => {
+it('finds providers beyond the twelve suggestions, preserves the latest lookup, and resets selection, clear and reopen with the real Arc combobox', async () => {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
   const change = vi.fn()
   const initialHosts = Array.from({ length: 12 }, (_, index) => `host-${index}.example`)
@@ -45,12 +45,12 @@ it('finds Hosts beyond the twelve suggestions, preserves the latest lookup, and 
     return <ProviderFacetPicker selected={selected} onChange={host => { change(host); setSelected(host) }} />
   }
   render(<Picker />)
-  const input = screen.getByRole('combobox', { name: 'Directory Hosts' }) as HTMLInputElement
+  const input = screen.getByRole('combobox', { name: 'Provider' }) as HTMLInputElement
   expect(mocks.read).not.toHaveBeenCalled()
   act(() => input.focus())
   await settleLookup()
   expect(screen.getAllByRole('option')).toHaveLength(12)
-  fireEvent.click(screen.getByRole('button', { name: 'Load more matching Hosts' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Show more providers' }))
   await act(async () => {})
   expect(mocks.read).toHaveBeenLastCalledWith({ data: { providerCursor: 'whole-next' } })
   expect(screen.getByRole('option', { name: 'z-late.example' })).toBeTruthy()

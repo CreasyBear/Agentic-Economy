@@ -11,9 +11,11 @@ import {
   marketLoaderDeps,
   retainedMarketCatalogue,
   loadCanonicalMarketSearch,
-  type MarketCanonicalSearchPage,
+  marketShowsLandingRows,
   toggleMarketCompareRef,
 } from "@/modules/market/market-route-data";
+import { renderHook, waitFor } from '@testing-library/react';
+import { useRankedSearch } from '@/components/ae/market/useRankedSearch';
 import { resolveCanonicalBaseUrl } from "@/lib/server/canonical-url";
 
 vi.mock("@/lib/server/canonical-url.functions", () => ({
@@ -36,9 +38,6 @@ vi.mock("@/modules/market/market-comparison.functions", () => ({ readMarketExter
 vi.mock("@/modules/market/market-tool-search.functions", () => ({ searchMarketToolsServer: reads.search }));
 vi.mock("@/modules/market/x402-marketplace-home.functions", () => ({ readX402MarketplaceHomeServer: reads.home }));
 vi.mock("@/modules/market/market-flow.functions", () => ({ readMarketFlowRankServer: async () => undefined }));
-vi.mock("@/modules/market/x402-directory.functions", () => ({
-  readX402DirectoryServer: async () => ({ kind: "ok", items: [], offset: 0, limit: 20 }),
-}));
 
 beforeEach(() => {
   for (const read of Object.values(reads)) read.mockReset();
@@ -69,7 +68,8 @@ describe('market route error recovery', () => {
   it.each([null, undefined, 'private upstream failure', new Error('private upstream failure')])(
     'renders safe retry guidance for an unknown failure: %s', error => {
       const html = renderMarketError(error);
-      expect(html).toContain('Try again to fetch the current catalog and comparison. No Tool was called.');
+      expect(html).toContain('We couldn’t reach the tool index. Try again. Nothing was charged.');
+      expect(html).toContain('Try again</span>');
       expect(html).not.toContain('private upstream failure');
     },
   );
@@ -79,7 +79,7 @@ describe('market route error recovery', () => {
     { name: 'ZodError', message: 'private validation detail' },
   ])('retains specific guidance for directory validation failures', error => {
     const html = renderMarketError(error);
-    expect(html).toContain('A directory search or filter is invalid. Check the address and try again. No broader search was run.');
+    expect(html).toContain('A search or filter in the address isn’t valid. Check it and try again.');
     expect(html).not.toContain('private validation detail');
   });
 });
@@ -247,26 +247,15 @@ describe('indexed directory route', () => {
     expect(reads.home).not.toHaveBeenCalled();
   });
 
-  it('loads discovery without requesting unpainted catalogue sections or facets', async () => {
+  it('opens on the Tools view and reads the catalogue, not a landing collection', async () => {
     const loader = Route.options.loader;
     if (typeof loader !== 'function') throw new Error('loader_missing');
     const data = await loader({ deps: {} } as never);
-    expect(data).toMatchObject({ view: 'discover', home: undefined, overview: undefined, page: { items: [] } });
-    expect(reads.catalogue).not.toHaveBeenCalled();
-    expect(reads.home).not.toHaveBeenCalled();
-    expect(reads.overview).not.toHaveBeenCalled();
-  });
-
-  it('does not depend on unused collection availability to show discovery', async () => {
-    reads.home.mockRejectedValueOnce(new Error('collections unavailable'));
-    const loader = Route.options.loader;
-    if (typeof loader !== 'function') throw new Error('loader_missing');
-
-    const data = await loader({ deps: {} } as never);
-
-    expect(data).toMatchObject({ view: 'discover', home: undefined });
+    expect(data).toMatchObject({ view: 'tools', page: { kind: 'ok', items: [] } });
+    expect(reads.catalogue).toHaveBeenCalledTimes(1);
     expect(reads.home).not.toHaveBeenCalled();
   });
+
 
   it('loads the Host index without waiting for unused Tool facets', async () => {
     reads.overview.mockImplementation(() => new Promise(() => {}));
@@ -328,14 +317,13 @@ describe('indexed directory route', () => {
     expect(reads.catalogue).not.toHaveBeenCalled();
     await loader({ deps: { providerCursor: 'legacy-host-page' } } as never);
     expect(reads.providers).toHaveBeenLastCalledWith(expect.objectContaining({ data: { providerCursor: 'legacy-host-page' } }));
-    // Existing constrained links still group matching Tool results; their constraints are never dropped.
+    // Providers always read the Host index: filters and an ordinal page never reroute it to the Tool catalogue.
     reads.providers.mockClear();
+    reads.catalogue.mockClear();
     await loader({ deps: validateMarketSearch({ view: 'providers', maxUsdPrice: 1 }) } as never);
-    expect(reads.catalogue).toHaveBeenLastCalledWith(expect.objectContaining({ data: { maxUsdPrice: 1, sort: 'adoption' } }));
-    expect(reads.providers).not.toHaveBeenCalled();
-    expect(marketLoaderDeps({ view: 'providers', page: 2 })).toEqual({ view: 'providers', page: 2 });
-    await loader({ deps: { view: 'providers', page: 2 } } as never);
-    expect(reads.providers).not.toHaveBeenCalled();
+    expect(reads.providers).toHaveBeenCalledTimes(1);
+    expect(reads.catalogue).not.toHaveBeenCalled();
+    expect(marketLoaderDeps({ view: 'providers', page: 2 })).toEqual({ view: 'providers' });
   });
 });
 
@@ -417,8 +405,7 @@ describe('Router-owned canonical Market search', () => {
     const market = createRoute({
       getParentRoute: () => root, path: '/market', validateSearch: validateMarketSearch,
       loaderDeps: ({ search }) => marketLoaderDeps(search),
-      beforeLoad: ({ matches, routeId }) => ({ previousCanonicalSearch: matches.find(match => match.routeId === routeId)?.loaderData as MarketCanonicalSearchPage | undefined }),
-      loader: ({ deps, abortController, context }) => loadCanonicalMarketSearch(deps, { signal: abortController.signal, previousCanonicalSearch: context.previousCanonicalSearch }),
+      loader: ({ deps }) => loadCanonicalMarketSearch(deps),
       ...(Route.options.staleTime === undefined ? {} : { staleTime: Route.options.staleTime }),
       ...(Route.options.preload === undefined ? {} : { preload: Route.options.preload }),
     })
@@ -427,36 +414,32 @@ describe('Router-owned canonical Market search', () => {
     await router.load()
     return router
   }
-  it('returns to the complete filtered input and loaded continuation without reading again', async () => {
+  it('returns to the same filtered search from a Tool page without reading again', async () => {
     reads.search.mockResolvedValue(result)
     const router = await routerForSearch()
-    await router.navigate({ to: '/market', search: { view: 'tools', query: 'weather', network: 'eip155:8453', indexCursor: 'opaque:page/two', page: 2 } })
+    const search = { view: 'tools', query: 'weather', network: 'eip155:8453' } as const
+    await router.navigate({ to: '/market', search })
     const page = router.state.matches.at(-1)?.loaderData
     await router.navigate({ to: '/tools/$toolRef', params: { toolRef: 'fixture' } })
-    await router.navigate({ to: '/market', search: { view: 'tools', query: 'weather', network: 'eip155:8453', indexCursor: 'opaque:page/two', page: 2 } })
+    await router.navigate({ to: '/market', search })
     expect(router.state.matches.at(-1)?.loaderData).toEqual(page)
-    expect(reads.search).toHaveBeenCalledTimes(2)
-    expect(reads.search).toHaveBeenLastCalledWith(expect.objectContaining({ data: { query: 'weather', limit: 8, filters: { networkId: 'eip155:8453' }, cursor: 'opaque:page/two' } }))
+    expect(reads.search).toHaveBeenCalledTimes(1)
+    expect(reads.search).toHaveBeenLastCalledWith(expect.objectContaining({ data: { query: 'weather', limit: 8, filters: { networkId: 'eip155:8453' } } }))
     await router.navigate({ to: '/market', search: { view: 'tools', query: 'weather', network: 'eip155:1' } })
-    expect(reads.search).toHaveBeenCalledTimes(3)
+    expect(reads.search).toHaveBeenCalledTimes(2)
   })
-  it('retires a slow continuation before it can replace a newer search or its cached page', async () => {
+  it('lets a newer search replace a slow one, and never caches the slow result under the newer input', async () => {
     reads.search.mockResolvedValue(result)
     const router = await routerForSearch()
     const old = deferred<typeof result>()
     reads.search.mockReturnValueOnce(old.promise).mockResolvedValueOnce({ ...result, query: 'storm' })
-    const obsolete = router.navigate({ to: '/market', search: { view: 'tools', query: 'weather', indexCursor: 'opaque:old', page: 2 } })
+    const obsolete = router.navigate({ to: '/market', search: { view: 'tools', query: 'rain' } })
     await vi.waitFor(() => expect(reads.search).toHaveBeenCalledTimes(2))
-    const signal = reads.search.mock.calls[1]?.[0].signal as AbortSignal
     await router.navigate({ to: '/market', search: { view: 'tools', query: 'storm' } })
-    expect(signal.aborted).toBe(true)
     old.resolve(result)
     await obsolete
     expect(router.state.location.search.query).toBe('storm')
     expect(router.state.matches.at(-1)?.loaderData).toMatchObject({ input: { query: 'storm' }, result: { query: 'storm' } })
-    reads.search.mockResolvedValueOnce(result)
-    await router.navigate({ to: '/market', search: { view: 'tools', query: 'weather', indexCursor: 'opaque:old', page: 2 } })
-    expect(reads.search).toHaveBeenCalledTimes(4)
   })
   it('does not launch an external search when a typed-query link is merely preloaded', async () => {
     reads.search.mockResolvedValue(result)
@@ -464,32 +447,43 @@ describe('Router-owned canonical Market search', () => {
     await router.preloadRoute({ to: '/market', search: { view: 'tools', query: 'private new draft' } })
     expect(reads.search).toHaveBeenCalledTimes(1)
   })
-  it('keeps the exact last-good page in the Router cache after a failed refresh and detail round trip', async () => {
-    reads.search.mockResolvedValueOnce(result).mockRejectedValueOnce(new Error('refresh unavailable'))
-    const router = await routerForSearch()
-    await router.invalidate({ filter: match => match.routeId === '/market' })
-    expect(router.state.matches.at(-1)?.loaderData).toMatchObject({ result, refreshFailed: true })
-    await router.navigate({ to: '/tools/$toolRef', params: { toolRef: 'fixture' } })
-    await router.navigate({ to: '/market', search: { view: 'tools', query: 'weather', network: 'eip155:8453' } })
-    expect(router.state.matches.at(-1)?.loaderData).toMatchObject({ result, refreshFailed: true })
-    expect(reads.search).toHaveBeenCalledTimes(2)
+  it('cancels the ranked search when the route aborts and still resolves', async () => {
+    reads.search.mockImplementation(({ signal }: { signal: AbortSignal }) => new Promise((_resolve, reject) => {
+      signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+    }))
+    const route = new AbortController()
+    const pending = loadCanonicalMarketSearch({ view: 'tools', query: 'weather' }, { signal: route.signal })
+    const signal = reads.search.mock.calls[0]?.[0].signal as AbortSignal
+    route.abort()
+    await expect(pending).resolves.toMatchObject({ result: undefined })
+    expect(signal.aborted).toBe(true)
   })
-  it('bounds a transport that never settles and aborts its read signal', async () => {
+  it('resolves with no result when the query cannot form a ranked search', async () => {
+    await expect(loadCanonicalMarketSearch({ view: 'tools', query: '   ' })).resolves.toEqual({ input: undefined, result: undefined })
+    expect(reads.search).not.toHaveBeenCalled()
+  })
+  it('settles the ranked search state when its source rejects', async () => {
+    const source = Promise.reject(new Error('lost'))
+    const { result } = renderHook(() => useRankedSearch(source))
+    await waitFor(() => expect(result.current).toEqual({ status: 'ready', page: { input: undefined, result: undefined } }))
+  })
+  it('bounds a transport that stalls until its read signal fires and resolves with no result', async () => {
     vi.useFakeTimers()
-    reads.search.mockReturnValue(new Promise(() => {}))
+    const timeout = vi.spyOn(AbortSignal, 'timeout').mockImplementation(ms => {
+      const controller = new AbortController()
+      setTimeout(() => controller.abort(new DOMException('Read timed out', 'TimeoutError')), ms)
+      return controller.signal
+    })
+    reads.search.mockImplementation(({ signal }: { signal: AbortSignal }) => new Promise((_resolve, reject) => {
+      signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+    }))
     try {
       const pending = loadCanonicalMarketSearch({ view: 'tools', query: 'weather' })
       const signal = reads.search.mock.calls[0]?.[0].signal as AbortSignal
       await vi.advanceTimersByTimeAsync(15_000)
       await expect(pending).resolves.toMatchObject({ input: { query: 'weather' }, result: undefined })
       expect(signal.aborted).toBe(true)
-    } finally { vi.useRealTimers() }
-  })
-  it('marks failed canonical refreshes for last-good display retention', () => {
-    const catalogue = { kind: 'ok', source: 'index' } as const
-    const good = { page: { kind: 'ok' }, catalogue, canonicalSearch: { input: { query: 'weather', limit: 8 }, result } }
-    const failed = { ...good, canonicalSearch: { ...good.canonicalSearch, result: undefined } }
-    expect(retainedMarketCatalogue(good as never, failed as never)).toEqual({ shown: good, retainPrevious: true })
+    } finally { timeout.mockRestore(); vi.useRealTimers() }
   })
 })
 
@@ -531,5 +525,22 @@ describe('complete Market route deadline', () => {
       await expect(pending).resolves.toMatchObject({ page: { kind: 'ok' }, catalogue: { kind: 'ok' }, compareEntries: [{ resource: toolRef, missing: true }] })
       expect(reads.tool.mock.calls[0]?.[0].signal.aborted).toBe(true)
     } finally { timeout.mockRestore(); vi.useRealTimers() }
+  })
+})
+
+
+describe('marketShowsLandingRows', () => {
+  it.each([
+    [{ view: 'tools' }, true],
+    [{}, true],
+    [{ view: 'tools', page: 2 }, false],
+    [{ view: 'tools', query: 'weather' }, false],
+    [{ view: 'tools', sort: 'price_asc' }, false],
+    [{ view: 'tools', curatedOnly: true }, false],
+    [{ view: 'tools', curatedOnly: false }, true],
+    [{ view: 'providers' }, false],
+    [{ view: 'saved' }, false],
+  ])('%j shows landing rows: %s', (search, expected) => {
+    expect(marketShowsLandingRows(search as never)).toBe(expected)
   })
 })

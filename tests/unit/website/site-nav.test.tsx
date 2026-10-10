@@ -41,19 +41,19 @@ import { AeSiteDrawerNav, AeSitePrimaryNav } from '@/components/ae/website'
 afterEach(cleanup)
 
 describe('canonical public navigation', () => {
-  it('renders the public primary set with hairlines and an active catalogue mark', () => {
+  it('renders the public primary set with hairlines and an active Tools mark', () => {
     clerkSignedIn.value = false
     routerLocation.pathname = '/market'
     routerLocation.hash = ''
     render(<AeSitePrimaryNav />)
 
     const nav = screen.getByRole('navigation', { name: 'Primary' })
-    expect(within(nav).getByRole('link', { name: 'Market' }).getAttribute('href')).toBe('/market')
-    expect(within(nav).getByRole('link', { name: 'For agents' }).getAttribute('href')).toBe('/for-agents')
+    expect(within(nav).getByRole('link', { name: 'Tools' }).getAttribute('href')).toBe('/market')
+    expect(within(nav).getByRole('link', { name: 'Docs' }).getAttribute('href')).toBe('/developers/api')
     expect(within(nav).getByRole('link', { name: 'For providers' }).getAttribute('href')).toBe('/for-providers')
     expect(within(nav).queryByRole('link', { name: 'Calls' })).toBeNull()
-    expect(within(nav).getByRole('link', { name: 'Market' }).getAttribute('aria-current')).toBe('page')
-    expect(within(nav).getByRole('link', { name: 'For agents' }).getAttribute('aria-current')).toBeNull()
+    expect(within(nav).getByRole('link', { name: 'Tools' }).getAttribute('aria-current')).toBe('page')
+    expect(within(nav).getByRole('link', { name: 'Docs' }).getAttribute('aria-current')).toBeNull()
     expect(nav.textContent).not.toMatch(/Product|Resources|Customers|Pricing/i)
   })
 
@@ -66,14 +66,14 @@ describe('canonical public navigation', () => {
 
   it('keeps compact drawer labels filtered by audience', () => {
     clerkSignedIn.value = false
-    routerLocation.pathname = '/for-agents'
+    routerLocation.pathname = '/for-providers'
     routerLocation.hash = ''
     render(<AeSiteDrawerNav onNavigate={() => undefined} />)
 
     const nav = screen.getByRole('navigation', { name: 'Primary' })
     expect(within(nav).queryByRole('link', { name: 'Calls' })).toBeNull()
     expect(within(nav).getAllByRole('link')).toHaveLength(3)
-    expect(within(nav).getByRole('link', { name: 'For agents' }).getAttribute('aria-current')).toBe('page')
+    expect(within(nav).getByRole('link', { name: 'For providers' }).getAttribute('aria-current')).toBe('page')
   })
 
   it('renders no drawer destination row when signed in', () => {
@@ -83,14 +83,14 @@ describe('canonical public navigation', () => {
     expect(screen.queryByRole('navigation', { name: 'Primary' })).toBeNull()
   })
 
-  it('marks Market current for Tool detail routes owned by Market', () => {
+  it('marks Tools current for Tool detail routes owned by Market', () => {
     clerkSignedIn.value = false
     routerLocation.pathname = '/tools/example'
     routerLocation.hash = ''
     render(<AeSitePrimaryNav />)
 
     const nav = screen.getByRole('navigation', { name: 'Primary' })
-    expect(within(nav).getByRole('link', { name: 'Market' }).getAttribute('aria-current')).toBe('page')
-    expect(within(nav).getByRole('link', { name: 'For agents' }).getAttribute('aria-current')).toBeNull()
+    expect(within(nav).getByRole('link', { name: 'Tools' }).getAttribute('aria-current')).toBe('page')
+    expect(within(nav).getByRole('link', { name: 'Docs' }).getAttribute('aria-current')).toBeNull()
   })
 })

@@ -47,7 +47,7 @@ export function ProviderFacetPicker({ selected, onChange }: Readonly<{ selected:
   const options = (state.prefix === prefix ? state.items : []).map(item => ({ value: item.key, label: item.label, keywords: [item.key] }))
   if (selected && !options.some(option => option.value === selected)) options.push({ value: selected, label: selected, keywords: [selected] })
   return <div className="ae-market-host-picker">
-    <Combobox label="Directory Hosts" placeholder="Search all Hosts by name…" options={options} value={selected ?? ''}
+    <Combobox label="Provider" placeholder="Search providers" options={options} value={selected ?? ''}
       onValueChange={value => { setPrefix(''); onChange(value || undefined) }}
       onFocus={() => { setActive(true); setPrefix('') }}
       onClickCapture={() => setPrefix('')}
@@ -56,10 +56,10 @@ export function ProviderFacetPicker({ selected, onChange }: Readonly<{ selected:
         if (event.key === 'Escape' || ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && event.currentTarget.getAttribute('aria-expanded') !== 'true')) setPrefix('')
       }}
       onInput={event => setPrefix(event.currentTarget.value.trim().toLowerCase())} maxLength={200}
-      description="Search the whole indexed directory by hostname prefix."
-      emptyMessage={state.busy || state.prefix !== prefix ? 'Searching Hosts…' : state.failed ? 'Host lookup unavailable.' : 'No matching Hosts.'} />
-    {state.busy ? <p role="status">Searching the directory…</p> : null}
-    {state.failed ? <div role="alert"><p>Host lookup could not finish.</p><Button type="button" variant="ghost" size="sm" onClick={() => state.cursor === undefined ? setRetry(value => value + 1) : void more()}>Retry Host lookup</Button></div> : null}
-    {state.cursor === undefined || state.failed ? null : <Button type="button" variant="ghost" size="sm" disabled={state.busy} onClick={() => void more()}>Load more matching Hosts</Button>}
+      description="Type the start of a provider’s web address."
+      emptyMessage={state.busy || state.prefix !== prefix ? 'Searching providers…' : state.failed ? 'Providers didn’t load.' : 'No matching providers.'} />
+    {state.busy ? <p role="status">Searching providers…</p> : null}
+    {state.failed ? <div role="alert"><p>Providers didn’t load.</p><Button type="button" variant="ghost" size="sm" onClick={() => state.cursor === undefined ? setRetry(value => value + 1) : void more()}>Try again</Button></div> : null}
+    {state.cursor === undefined || state.failed ? null : <Button type="button" variant="ghost" size="sm" disabled={state.busy} onClick={() => void more()}>Show more providers</Button>}
   </div>
 }

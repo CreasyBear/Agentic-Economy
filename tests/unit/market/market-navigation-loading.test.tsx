@@ -35,7 +35,7 @@ function data(view: View): Data {
     view, page: { kind: 'ok', items: [], offset: 0, limit: 24 },
     catalogue: { kind: 'ok', source: 'index', page: { kind: 'ok', items: [], offset: 0, limit: 24, mode: 'browse', appliedFilters: {} }, searchMethod: 'native_index', isDone: true },
     overview: { kind: 'unavailable', reason: 'source_unavailable' }, providers: undefined,
-    home: undefined, compareEntries: [], jevRecipient: null, chatRecipient: null,
+    compareEntries: [], jevRecipient: null,
   }
 }
 function deferred<T>() {
@@ -49,7 +49,7 @@ async function market(loader: (view: View) => Promise<Data>, initial = '/market?
   const root = createRootRoute()
   const route = createRoute({
     getParentRoute: () => root, path: '/market', validateSearch: validateMarketSearch,
-    loaderDeps: ({ search }) => ({ ...marketLoaderDeps(search), view: search.view ?? 'discover' }),
+    loaderDeps: ({ search }) => ({ ...marketLoaderDeps(search), view: search.view ?? 'tools' }),
     loader: ({ deps }) => loader(deps.view),
     pendingMs,
     pendingComponent: () => <p>Whole page pending</p>,
@@ -65,7 +65,7 @@ describe('market navigation loading boundary', () => {
   it('selects a requested view immediately, keeps its frame mounted through a slow load, and rejects an obsolete response', async () => {
     const providers = deferred<Data>()
     const collections = deferred<Data>()
-    const router = await market(view => view === 'providers' ? providers.promise : view === 'discover' ? collections.promise : Promise.resolve(data(view)))
+    const router = await market(view => view === 'providers' ? providers.promise : view === 'saved' ? collections.promise : Promise.resolve(data(view)))
     const input = screen.getByRole('textbox', { name: 'Retained market input' })
     fireEvent.change(input, { target: { value: 'Keep this draft' } })
     act(() => { void router.navigate({ to: '/market', search: { view: 'providers' } }) })
@@ -76,15 +76,14 @@ describe('market navigation loading boundary', () => {
     expect(screen.queryByText('Whole page pending')).toBeNull()
     expect(screen.getByRole('textbox', { name: 'Retained market input' })).toBe(input)
     expect((input as HTMLInputElement).value).toBe('Keep this draft')
-    act(() => { void router.navigate({ to: '/market', search: { view: 'discover' } }) })
-    await screen.findByText('Loading discover')
+    act(() => { void router.navigate({ to: '/market', search: { view: 'saved' } }) })
+    await screen.findByText('Loading saved')
     await act(async () => { providers.resolve(data('providers')) })
-    expect(screen.getByText('Loading discover')).toBeTruthy()
+    expect(screen.getByText('Loading saved')).toBeTruthy()
     expect(screen.queryByText('Committed: providers · 0')).toBeNull()
-    await act(async () => { collections.resolve(data('discover')) })
-    await screen.findByRole('heading', { name: 'Intelligence, put to work.' })
+    await act(async () => { collections.resolve(data('saved')) })
+    await screen.findByText('Committed: saved · 0')
     expect(screen.queryByRole('status')).toBeNull()
-    expect(screen.queryByRole('textbox', { name: 'Retained market input' })).toBeNull()
   })
 
   it.each([
@@ -93,14 +92,14 @@ describe('market navigation loading boundary', () => {
   ])('keeps the requested canonical query and filter visible when its read fails: %j', async requested => {
     const initial = { query: 'weather', network: 'eip155:8453' }
     const input = (search: typeof initial) => ({ query: search.query, limit: 8, filters: { networkId: search.network } })
-    let next: Data = { ...data('tools'), canonicalSearch: {
+    let next: Data = { ...data('tools'), canonicalSearch: Promise.resolve({
       input: input(initial),
       result: { kind: 'match', schemaVersion: PublicToolRegistrySchemaVersion, query: 'weather', results: [], partialResults: true,
         assessed: { source: 'all', scope: 'page', examined: 0, coverage: 'partial', generation: 'one', completedAt: 1 },
         pagination: { limit: 8, hasMore: false }, next: [] },
-    } }
+    }) }
     const router = await market(() => Promise.resolve(next), '/market?view=tools&query=weather&network=eip155%3A8453')
-    next = { ...data('tools'), canonicalSearch: { input: input(requested), result: undefined } }
+    next = { ...data('tools'), canonicalSearch: Promise.resolve({ input: input(requested), result: undefined }) }
     await act(async () => { await router.navigate({ to: '/market', search: { view: 'tools', ...requested } }) })
     expect(screen.getByText(`Shown query: ${requested.query} · Network: ${requested.network}`)).toBeTruthy()
     expect(screen.queryByRole('alert')).toBeNull()
@@ -114,30 +113,8 @@ describe('market navigation loading boundary', () => {
     await screen.findByText('Loading providers')
     await act(async () => { providers.resolve({ ...data('providers'), page: { kind: 'unavailable', reason: 'source_unavailable' }, catalogue: { kind: 'unavailable', reason: 'source_unavailable' } }) })
     await screen.findByText('Committed: tools · 0')
-    expect(screen.getByRole('alert').textContent).toContain('The previous catalogue is still shown.')
+    expect(screen.getByRole('status').textContent).toContain('you’re seeing the last results that loaded')
     expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy()
     await waitFor(() => expect(screen.queryByText('Loading providers')).toBeNull())
   })
-
-  it('shows the requested unavailable catalogue instead of retaining the synthetic landing', async () => {
-    const router = await market(view => Promise.resolve(view === 'tools'
-      ? { ...data('tools'), page: { kind: 'unavailable', reason: 'source_unavailable' }, catalogue: { kind: 'unavailable', reason: 'source_unavailable' } }
-      : data(view)), '/market')
-    await screen.findByRole('heading', { name: 'Intelligence, put to work.' })
-    await act(async () => { await router.navigate({ to: '/market', search: { view: 'tools' } }) })
-    expect(screen.getByText('Committed: tools · unavailable')).toBeTruthy()
-    expect(screen.queryByRole('alert')).toBeNull()
-    expect(screen.queryByRole('heading', { name: 'Intelligence, put to work.' })).toBeNull()
-  })
-
-  it('opens a category with existing constraints and transfers keyboard focus to the results', async () => {
-    const router = await market(view => Promise.resolve(data(view)), '/market?view=discover&maxUsdPrice=2&layout=grid')
-    const category = await screen.findByRole('link', { name: /Finance.*Pricing/ })
-    category.focus()
-    fireEvent.click(category)
-    await screen.findByText('Committed: tools · 0')
-    expect(router.state.location.search).toMatchObject({ view: 'tools', query: 'Finance', sort: 'relevance', maxUsdPrice: 2, layout: 'grid' })
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Tool market' })))
-  })
-
 })
