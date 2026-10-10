@@ -53,7 +53,7 @@ describe('founder record controls', () => {
     const table = screen.getByRole('table', { name: 'Loaded purchases' })
     expect(within(table).getAllByText('A$1.234567')).toHaveLength(2)
     expect(within(table).getAllByText('Funding not classified')).toHaveLength(2)
-    expect(screen.queryByRole('button', { name: /Sort by Payment/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Sort by Amount/ })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Sort by Purchase' }))
     expect(screen.getByRole('button', { name: 'Sort by Purchase' }).closest('th')?.getAttribute('aria-sort')).toBe('ascending')
     const links = within(table).getAllByRole('link', { name: /Tool/ })

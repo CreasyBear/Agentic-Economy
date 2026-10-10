@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { type ReactNode } from 'react'
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react'
 import { RouterContextProvider, createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
@@ -37,6 +37,7 @@ vi.mock('@/components/ae/layout/AeOperatorPage', () => ({
 
 import { BROWSER_READ_TIMEOUT_MS } from '@/lib/bounded-read'
 import { AeActivity } from '@/components/ae/activity/AeActivity'
+import { useActivityReports } from '@/components/ae/activity/useActivityReports'
 import type { ActivityLoaderResult } from '@/components/ae/activity/activity.contracts'
 import { Route as ActivityRoute } from '@/routes/_operator/activity'
 
@@ -164,12 +165,12 @@ describe('Calls side-surface recovery', () => {
       expect(screen.getByRole('heading', { name: 'Period totals' })).toBeTruthy()
       expect(screen.getByText('No saved reports for this Account.')).toBeTruthy()
     }
-    expect(serverMocks.readReports).not.toHaveBeenCalled()
+    // Deferred data: the reports read starts with the primary read, in the same window.
+    expect(serverMocks.readReports).toHaveBeenCalledExactlyOnceWith({ data: refreshedRange, signal: expect.any(AbortSignal) })
     expect(serverMocks.savedReports).not.toHaveBeenCalled()
     expect(serverMocks.reportingPolicy).not.toHaveBeenCalled()
     await act(async () => { completeRefresh(primary); await navigation })
-    await waitFor(() => expect(serverMocks.readReports).toHaveBeenCalledOnce())
-    expect(serverMocks.readReports.mock.calls[0]?.[0].data).toEqual(refreshedRange)
+    expect(serverMocks.readReports).toHaveBeenCalledOnce()
     expect(serverMocks.savedReports).toHaveBeenCalledOnce()
     expect(serverMocks.reportingPolicy).toHaveBeenCalledOnce()
     expect(screen.getByRole('row', { name: /Tool confirmed/u })).toBeTruthy()
@@ -227,7 +228,45 @@ describe('Calls side-surface recovery', () => {
     expect(invalidate).not.toHaveBeenCalled()
   })
 
+  it('starts the reports read with the primary read and renders totals from the loader promise', async () => {
+    let completePrimary!: (value: unknown) => void
+    serverMocks.readPrimary.mockReturnValueOnce(new Promise(resolve => { completePrimary = resolve }))
+    serverMocks.readReports.mockResolvedValue({ usage, spend })
+    const pending = loadActivity({ deps: { range: '7d' } })
+    const primaryData = serverMocks.readPrimary.mock.calls[0]?.[0].data
+    expect(serverMocks.readReports).toHaveBeenCalledExactlyOnceWith({ data: primaryData, signal: expect.any(AbortSignal) })
+    expect(primaryData.periodEndAt - primaryData.periodStartAt).toBe(7 * 86_400_000)
+    completePrimary({ kind: 'available', calls: { page: [callRow('early', 'completed', 1)], isDone: true, continueCursor: '' }, plans: [] })
+    const result = await pending
+    renderActivity(result)
+    await waitFor(() => expect(screen.getByText('Gross settled charges').parentElement?.textContent).toContain('A$1.00'))
+    expect(serverMocks.readReports).toHaveBeenCalledOnce()
+  })
+
+  it('adopts a new loader reports promise instead of the first one it awaited', async () => {
+    const base = { kind: 'available' as const, calls: { page: [], isDone: true, continueCursor: '' }, plans: [],
+      usage: { kind: 'pending' as const }, spend: { kind: 'pending' as const }, periodStart: 'p',
+      periodStartAt: 1, periodEndAt: 2, dateRangeFilter: '30d' as const }
+    const { result, rerender } = renderHook(({ reports }) => useActivityReports({ ...base, reports }),
+      { initialProps: { reports: new Promise<never>(() => {}) as Promise<{ usage: typeof usage; spend: typeof spend }> } })
+    rerender({ reports: Promise.resolve({ usage, spend }) })
+    await waitFor(() => expect(result.current.reports.usage).toEqual(usage))
+    expect(serverMocks.readReports).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['unavailable', () => serverMocks.readPrimary.mockResolvedValue({ kind: 'unavailable' })],
+    ['rejected', () => serverMocks.readPrimary.mockRejectedValue(new Error('source offline'))],
+  ])('cancels the started reports read when the primary read is %s', async (_, primary) => {
+    primary()
+    serverMocks.readReports.mockReturnValue(new Promise(() => {}))
+    await expect(loadActivity()).resolves.toEqual({ kind: 'unavailable' })
+    const reportsSignal: AbortSignal = serverMocks.readReports.mock.calls[0]?.[0].signal
+    expect(reportsSignal.aborted).toBe(true)
+  })
+
   it('uses one fixed 30-day window for all owner reads and defaults to 50-row history', async () => {
+    serverMocks.readReports.mockResolvedValue({ usage: { kind: 'empty' }, spend: { kind: 'empty' } })
     serverMocks.readPrimary.mockResolvedValue({ kind: 'available', calls: { page: [], isDone: true, continueCursor: '' }, plans: [] })
     const loader = loadActivity
     const result = await loader()
@@ -235,8 +274,7 @@ describe('Calls side-surface recovery', () => {
     expect(result.periodEndAt - result.periodStartAt).toBe(30 * 86_400_000)
     const range = { periodStartAt: result.periodStartAt, periodEndAt: result.periodEndAt }
     expect(serverMocks.readPrimary).toHaveBeenCalledWith({ data: range, signal: expect.any(AbortSignal) })
-    expect(serverMocks.readReports).not.toHaveBeenCalled()
-    serverMocks.readReports.mockResolvedValue({ usage: { kind: 'empty' }, spend: { kind: 'empty' } })
+    expect(serverMocks.readReports).toHaveBeenCalledExactlyOnceWith({ data: range, signal: expect.any(AbortSignal) })
     renderActivity(result)
     await waitFor(() => expect(serverMocks.readReports).toHaveBeenCalledExactlyOnceWith({ data: range, signal: expect.any(AbortSignal) }))
     await waitFor(() => expect(screen.getByText('Gross settled charges').parentElement?.textContent).toContain('A$0.00'))
@@ -244,6 +282,7 @@ describe('Calls side-surface recovery', () => {
   })
 
   it('uses midnight UTC for Today and forwards the exact Agent to the report request', async () => {
+    serverMocks.readReports.mockResolvedValue({ usage: { kind: 'empty' }, spend: { kind: 'not_requested' } })
     serverMocks.readPrimary.mockResolvedValue({ kind: 'available', calls: { page: [], isDone: true, continueCursor: '' }, plans: [] })
     const loader = loadActivity
     const result = await loader({ deps: { agent: 'principal:exact', range: 'today' } })
@@ -257,7 +296,6 @@ describe('Calls side-surface recovery', () => {
     expect(serverMocks.readPrimary).toHaveBeenCalledWith({ data: {
       principalRef: 'principal:exact', periodStartAt: result.periodStartAt, periodEndAt: result.periodEndAt,
     }, signal: expect.any(AbortSignal) })
-    serverMocks.readReports.mockResolvedValue({ usage: { kind: 'empty' }, spend: { kind: 'not_requested' } })
     renderActivity(result)
     await waitFor(() => expect(serverMocks.readReports).toHaveBeenCalledExactlyOnceWith({ data: {
       principalRef: 'principal:exact', periodStartAt: result.periodStartAt, periodEndAt: result.periodEndAt,
@@ -275,7 +313,7 @@ describe('Calls side-surface recovery', () => {
     await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
     expect(signal.aborted).toBe(true)
     expect(serverMocks.readPrimary).toHaveBeenCalledOnce()
-    expect(serverMocks.readReports).not.toHaveBeenCalled()
+    expect(serverMocks.readReports.mock.calls[0]?.[0].signal.aborted).toBe(true)
     expect(routeDiagnostics.capture).not.toHaveBeenCalled()
   })
 
@@ -363,7 +401,7 @@ describe('Calls side-surface recovery', () => {
     const attention = screen.getByRole('region', { name: 'Needs attention' })
     expect(within(attention).getAllByText('Tool contradictory')).toHaveLength(1)
     expect(within(attention).getAllByText('Needs review').length).toBeGreaterThan(0)
-    expect(screen.getByRole('columnheader', { name: /Purchase status/u })).toBeTruthy()
+    expect(screen.getByRole('columnheader', { name: /^Status/u })).toBeTruthy()
   })
 
   it('preserves loaded Calls and the cursor when pagination fails, then retries that continuation', async () => {

@@ -35,6 +35,8 @@ const SchemaExport = z.object({
 const durableTables = [
   'principals',
   'accounts',
+  'accountIntents',
+  'journeyEvents',
   'accountOwnerships',
   'accountExternalOrganizationBindings',
   'accountSecurityPolicies',

@@ -7,6 +7,7 @@ import { actionExecutionTransactArgs } from '../../../lib/actionExecution/contro
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { isRecord } from '@/modules/common/is-record'
 import { recordMarketEvidenceFact } from '../../../marketEvidence'
+import { emitJourneyEvent } from '../../journey/events'
 import { materializePurchaseResolutionRecord } from './purchaseResolutionMaterialize'
 import { assertCallResultJson, canonicalCommandReadbackMatches, commandMatchesDispatch, persistedDispatchMatches, type OpenDispatchValue } from './callIdentity'
 import type { CallDispatchMutationResult, CallDispatchProjectionShape } from './contracts'
@@ -57,6 +58,33 @@ async function terminalFinalizationResult(
   if (!await canonicalCommandReadbackMatches(ctx, command)) return { kind: 'refused', code: 'outer_state_refused' }
   const attempt = command.currentAttemptWrite as { attemptRef: string; effectGeneration: number }
   return { kind: 'duplicate', attemptRef: attempt.attemptRef, effectGeneration: attempt.effectGeneration }
+}
+
+const WEEK_MS = 7 * 24 * 3600_000
+
+/** first_call fires on the first completed Call. activated fires on the first completed Call that
+ * carries a receipt. retained_w1 is week-1 retention: a receipted Call 7 to 14 days after activation.
+ * Each is idempotent per account. */
+export async function journeyForFinalization(
+  ctx: MutationCtx,
+  row: Pick<CallRow, 'callRef' | 'ownerId'>,
+  projection: Pick<CallDispatchProjectionShape, 'state' | 'result'>,
+  finalizedAt: number,
+): Promise<void> {
+  if (projection.state !== 'completed') return
+  await emitJourneyEvent(ctx, row.ownerId, 'first_call')
+  const result = projection.result
+  const receipt = result !== undefined && 'receipt' in result ? result.receipt : undefined
+  if (receipt === undefined) return
+  const activated = await ctx.db.query('journeyEvents')
+    .withIndex('by_eventKey', q => q.eq('eventKey', `${row.ownerId}:activated`))
+    .unique()
+  if (activated === null) {
+    await emitJourneyEvent(ctx, row.ownerId, 'activated')
+    return
+  }
+  const sinceActivated = finalizedAt - activated.createdAt
+  if (sinceActivated >= WEEK_MS && sinceActivated < 2 * WEEK_MS) await emitJourneyEvent(ctx, row.ownerId, 'retained_w1')
 }
 
 async function recordFinalizationEvidence(
@@ -117,6 +145,7 @@ export async function finalizeDispatchHandler(
   })
   await upsertCallProjection(ctx, row, normalizedProjection, finalizedAt)
   await materializePurchaseResolutionRecord(ctx, row, normalizedProjection, finalizedAt)
+  await journeyForFinalization(ctx, row, normalizedProjection, finalizedAt)
   await recordFinalizationEvidence(ctx, row, normalizedProjection.state)
   // Commit recovery scheduling with the stopped Call. Closing the browser cannot
   // abandon this job; it reads the original nonce and never sends a new payment.

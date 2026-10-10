@@ -71,7 +71,7 @@ vi.mock('@/components/ae/command-panel', () => ({
 import { AeAppShell } from '@/components/ae/layout/AeAppShell'
 import { ThemeProvider } from '@/components/ae/theme/ThemeProvider'
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
-import { OperatorChromeProvider } from '@/components/ae/layout/OperatorChromeContext'
+import { OperatorChromeProvider, useOperatorFrameChrome } from '@/components/ae/layout/OperatorChromeContext'
 import { OperatorRouteError, OperatorRouteNotFound, OperatorRoutePending } from '@/components/ae/layout/AeRouteStates'
 import {
   OPERATOR_SURFACE_FORBIDDEN_MESSAGE,
@@ -226,6 +226,12 @@ describe('operator shell nested chrome', () => {
     expect(within(stack).getByText('Publish the exact tools agents can inspect and call.')).toBeTruthy()
     expect(screen.queryByRole('heading', { name: 'Loading workspace' })).toBeNull()
     expect(screen.getByLabelText('Loading workspace')).toBeTruthy()
+  })
+
+  it.each([['/agent-access', 'Agents'], ['/admin/audit-events', 'Audit']])('titles a first-entry pending state at %s after its destination', async (pathname, title) => {
+    const FrameTitle = () => <output aria-label="Frame title">{useOperatorFrameChrome()?.title}</output>
+    renderAt(<OperatorChromeProvider><FrameTitle /><OperatorRoutePending /></OperatorChromeProvider>, pathname)
+    await waitFor(() => expect(screen.getByLabelText('Frame title').textContent).toBe(title))
   })
 
   it('keeps parent chrome when a nested route fails to load', async () => {

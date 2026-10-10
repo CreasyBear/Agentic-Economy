@@ -144,7 +144,7 @@ function toResolutionRowModel(row: AdminResolutionRow): AdminResolutionRowModel 
       ? adminObjectHref({ kind: 'call', ref: parsed.ref })
       : `/admin/calls/${encodeURIComponent(row.callRef)}`,
     terminalStateLabel: purchaseTerminalLabel(row.terminalState),
-    resolvedAtLabel: formatTimestamp(row.resolvedAt, 'Australia/Perth'),
+    terminalStateTone: row.terminalState === 'completed' ? 'success' : row.terminalState === 'disputed' ? 'warning' : 'neutral',
     resolvedAtIso: timestampIso(row.resolvedAt),
   }
 }

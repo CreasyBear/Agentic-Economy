@@ -70,14 +70,12 @@ export function buildAdminCallObjectViewModel(view: AdminCallObjectView): AdminC
     activity: view.timeline
       .map((entry, index) => ({
         id: `${entry.at}:${index}:${entry.eventType}`,
-        at: formatTimestamp(entry.at, 'Australia/Perth'),
+        at: entry.at,
         eventType: entry.eventType,
         actorRef: entry.actorRef ?? ADMIN_CALL_OBJECT_COPY.notRecorded,
         outcome: entry.outcome ?? ADMIN_CALL_OBJECT_COPY.notRecorded,
-        sortAt: entry.at,
       }))
-      .sort((left, right) => right.sortAt - left.sortAt)
-      .map(({ sortAt: _sortAt, ...row }) => row),
+      .sort((left, right) => right.at - left.at),
   }
 }
 

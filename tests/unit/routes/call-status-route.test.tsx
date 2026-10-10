@@ -2,8 +2,8 @@ import type { ActivityReturnScope } from '@/lib/call-recovery/activity-return-sc
 /**
  * @vitest-environment jsdom
  */
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { RouterContextProvider, createMemoryHistory, createRootRoute, createRoute, createRouter } from '@tanstack/react-router'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { RouterContextProvider, RouterProvider, createMemoryHistory, createRootRoute, createRoute, createRouter } from '@tanstack/react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createElement } from 'react'
 import '../../setup/jsdom-platform'
@@ -14,6 +14,21 @@ const readStatusMock = vi.hoisted(() => vi.fn())
 const cancelMock = vi.hoisted(() => vi.fn())
 const reconcileMock = vi.hoisted(() => vi.fn())
 
+const watch = vi.hoisted(() => {
+  const listeners = new Set<() => void>()
+  const store = { value: undefined as undefined | { state: string; updatedAt: number }, listeners,
+    emit(value: { state: string; updatedAt: number }) { store.value = value; for (const listener of listeners) listener() } }
+  return store
+})
+vi.mock('convex/react', async () => {
+  const { useSyncExternalStore } = await import('react')
+  return {
+    useQuery: (_query: unknown, args: unknown) => useSyncExternalStore(
+      (listener) => { watch.listeners.add(listener); return () => { watch.listeners.delete(listener) } },
+      () => args === 'skip' ? undefined : watch.value),
+    useConvexConnectionState: () => ({ isWebSocketConnected: true, hasEverConnected: true }),
+  }
+})
 vi.mock('@/modules/capability-execution/call-recovery.functions', () => ({
   readOwnerCallStatusServer: readStatusMock,
   cancelOwnerCallServer: cancelMock,
@@ -86,6 +101,7 @@ afterEach(() => {
   cleanup()
   window.localStorage.clear()
   readStatusMock.mockReset()
+  watch.value = undefined
   cancelMock.mockReset()
   reconcileMock.mockReset()
   vi.restoreAllMocks()
@@ -543,6 +559,29 @@ describe('/calls/$callRef', () => {
     expect(readStatusMock).toHaveBeenCalledWith({ data: { callRef } })
     expect(screen.queryByText('In progress')).toBeNull()
     expect(screen.getByText('Current status refreshed. Purchase status: Resolved — failed.')).toBeTruthy()
+  })
+
+  it('re-runs the route loader and shows the new state when the watched Call row changes', async () => {
+    readStatusMock.mockResolvedValueOnce({ kind: 'found', version: 1, callRef, toolRef, state: 'in_progress' })
+      .mockResolvedValueOnce({ kind: 'found', version: 2, callRef, toolRef, state: 'terminal', evidenceHash: 'sha256:watched' })
+    watch.value = { state: 'pending', updatedAt: 1 }
+    const rootRoute = createRootRoute()
+    const callRoute = createRoute({ getParentRoute: () => rootRoute, path: '/calls/$callRef',
+      loader: Route.options.loader as (ctx: { params: { callRef: string } }) => Promise<unknown>,
+      component: Route.options.component as () => ReturnType<typeof createElement> })
+    const routeTree = rootRoute.addChildren([callRoute,
+      createRoute({ getParentRoute: () => rootRoute, path: '/tools/$toolRef' }),
+      createRoute({ getParentRoute: () => rootRoute, path: '/activity' })])
+    vi.spyOn(Route, 'useSearch').mockReturnValue({} as never)
+    vi.spyOn(Route, 'useLoaderData').mockImplementation((() => callRoute.useLoaderData()) as never)
+    const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: [`/calls/${callRef}`] }) })
+    await router.load()
+    render(<RouterProvider router={router} />)
+    await waitFor(() => expect(screen.getAllByText('In progress').length).toBeGreaterThan(0))
+    expect(readStatusMock).toHaveBeenCalledTimes(1)
+    act(() => watch.emit({ state: 'completed', updatedAt: 2 }))
+    await waitFor(() => expect(screen.getAllByText('Call finished').length).toBeGreaterThan(0))
+    expect(readStatusMock).toHaveBeenCalledTimes(2)
   })
 
   it('renders a new route-keyed Call immediately without mirroring the previous record', () => {

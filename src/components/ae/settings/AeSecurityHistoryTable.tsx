@@ -1,4 +1,5 @@
 import type { AeRecordTableFeatures } from '@/components/ae/operator/AeOperatorDataTable'
+import { enumLabel } from '@/lib/ui/enum-label'
 import { useEffect, useMemo, useState } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 
@@ -8,6 +9,9 @@ import { AeRecordTable } from '@/components/ae/operator/AeOperatorDataTable'
 import { Button } from '@/components/arc/button/button'
 import { Drawer, DrawerContent } from '@/components/ae/shared/base-ui/drawer/drawer'
 import { formatTimestamp } from '@/lib/ui/format-time'
+import { statusToneOf } from '@/lib/ui/status-presentation'
+import { RecordTime } from '@/components/ae/operator/RecordTime'
+import { Badge } from '@/components/arc/badge/badge'
 import type { AccountSecurityHistoryItem } from '@/modules/security/account-security'
 import './SecurityHistoryComposition.css'
 
@@ -68,7 +72,7 @@ export function AeSecurityHistoryTable({
         {selectedEvent === undefined ? null : (
           <DrawerContent
             title="Security event"
-            description={`${eventLabel(selectedEvent.eventType)} · ${humanize(selectedEvent.outcome)}`}
+            description={`${eventLabel(selectedEvent.eventType)} · ${enumLabel(selectedEvent.outcome)}`}
           >
             <AeFactList
               className="arc-security-drawer-facts"
@@ -150,13 +154,20 @@ function historyColumns(
     {
       id: 'activity',
       header: 'Activity',
-      accessorFn: (row) => `${row.eventType} ${row.outcome}`,
-      cell: ({ row }) => (
-        <span className="arc-security-activity" title={eventLabel(row.original.eventType)}>
-          <span className="arc-security-activity-name">{eventLabel(row.original.eventType)}</span>
-          <span className="arc-security-outcome">{humanize(row.original.outcome)}</span>
-        </span>
-      ),
+      accessorFn: (row) => eventLabel(row.eventType),
+      meta: { truncate: true },
+      cell: ({ row }) => <span className="arc-security-activity-name">{eventLabel(row.original.eventType)}</span>,
+    },
+    {
+      id: 'outcome',
+      header: 'Outcome',
+      accessorKey: 'outcome',
+      cell: ({ row }) => <Badge tone={statusToneOf(row.original.outcome)} size="sm">{enumLabel(row.original.outcome)}</Badge>,
+    },
+    {
+      accessorKey: 'sourceSystem',
+      header: 'Source',
+      cell: ({ row }) => sourceLabel(row.original.sourceSystem),
     },
     {
       id: 'time',
@@ -164,15 +175,10 @@ function historyColumns(
       accessorFn: (row) => row.observedAt ?? row.recordedAt,
       cell: ({ row }) => (
         <span className="arc-security-time">
-          <span>{row.original.observedAt === undefined ? 'Observed time unavailable' : `${formatTimestamp(row.original.observedAt, 'UTC')} UTC`}</span>
-          <span className="arc-security-recorded">Recorded {formatTimestamp(row.original.recordedAt, 'UTC')} UTC</span>
+          <RecordTime at={row.original.observedAt ?? row.original.recordedAt} />
+          {row.original.observedAt === undefined ? <span className="arc-security-recorded">Observed time unavailable</span> : null}
         </span>
       ),
-    },
-    {
-      accessorKey: 'sourceSystem',
-      header: 'Source',
-      cell: ({ row }) => sourceLabel(row.original.sourceSystem),
     },
     {
       id: 'evidence',
@@ -202,24 +208,19 @@ function historyColumns(
 }
 
 function actorLabel(value: string): string {
-  return humanize(value)
+  return enumLabel(value)
 }
 
 function eventLabel(value: string): string {
-  return humanize(value.replace(/^account\./u, ''))
+  return enumLabel(value.replace(/^account\./u, ''))
 }
 
 function targetLabel(value: string): string {
-  return humanize(value)
+  return enumLabel(value)
 }
 
 function sourceLabel(value: AccountSecurityHistoryItem['sourceSystem']): string {
   if (value === 'clerk_observed') return 'Clerk observed'
   if (value === 'provider_observed') return 'Provider observed'
   return 'AE recorded'
-}
-
-function humanize(value: string): string {
-  const words = value.replaceAll(/[._-]+/gu, ' ')
-  return `${words.charAt(0).toUpperCase()}${words.slice(1)}`
 }

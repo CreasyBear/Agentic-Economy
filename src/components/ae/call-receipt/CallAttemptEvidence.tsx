@@ -5,13 +5,21 @@ import { BillingHistory } from '@/components/ae/shared/arc-pro/billing-overview/
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeRecordTable } from '@/components/ae/operator/AeOperatorDataTable'
 import { formatTimestamp } from '@/lib/ui/format-time'
+import { Badge } from '@/components/arc/badge/badge'
+import { RecordTime } from '@/components/ae/operator/RecordTime'
+import { enumLabel } from '@/lib/ui/enum-label'
 import type { CallAttemptEvidence as Evidence } from '@/modules/capability-execution/call-attempt-evidence'
 type Attempt = Extract<Evidence, {kind: 'available'}>['attempts'][number]
+const outcomeTone: Record<Attempt['outcome'], 'success' | 'info' | 'warning' | 'danger' | 'neutral'> = {
+  running: 'info', returned: 'success', failed: 'danger', uncertain: 'warning', timed_out: 'danger', reconciled_not_released: 'neutral', reconciled_released: 'success',
+}
 export function CallAttemptEvidence({ evidence }: { evidence: Evidence }) {
   const columns = useMemo<ColumnDef<AeRecordTableFeatures, Attempt, unknown>[]>(() => [
-    { accessorKey: 'attemptNumber', header: 'Attempt' }, { accessorKey: 'effectGeneration', header: 'Effect generation' },
-    { accessorKey: 'release', header: 'Release evidence' }, { accessorKey: 'outcome', header: 'Outcome' },
-    { id: 'time', header: 'Recorded (UTC)', cell: ({row}) => formatTimestamp(row.original.recordedAt, 'UTC') },
+    { accessorKey: 'attemptNumber', header: 'Attempt', meta: { numeric: true } },
+    { accessorKey: 'outcome', header: 'Outcome', cell: ({row}) => <Badge tone={outcomeTone[row.original.outcome]} size="sm">{enumLabel(row.original.outcome)}</Badge> },
+    { accessorKey: 'effectGeneration', header: 'Effect generation', meta: { numeric: true } },
+    { accessorKey: 'release', header: 'Release', cell: ({row}) => enumLabel(row.original.release) },
+    { id: 'time', accessorKey: 'recordedAt', header: 'Recorded', cell: ({row}) => <RecordTime at={row.original.recordedAt} /> },
   ], [])
   if (evidence.kind !== 'available') return <AeSection title="Execution evidence"><p className="text-sm text-muted-foreground">{evidence.kind === 'not_recorded' ? 'No durable execution attempts were recorded for this Call.' : 'Execution evidence is unavailable.'}</p></AeSection>
   return <AeSection title="Execution evidence" description="Recorded attempts and audit transitions from the existing durable execution system.">

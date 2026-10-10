@@ -42,17 +42,17 @@ export function AeCapabilityList({ catalog }: AeCapabilityListProps) {
       {
         id: 'access',
         accessorFn: (item) => item.accessPaths.length,
-        meta: { label: 'Access' },
-        header: 'Access',
-        cell: ({ row }) =>
-          row.original.accessPaths.length === 0 ? (
-            'No access route'
-          ) : (
+        meta: { label: 'Access', numeric: true },
+        header: ({ column }) => <AeOperatorSortableHeader label="Access" column={column} />,
+        cell: ({ row }) => {
+          const count = row.original.accessPaths.length
+          if (count === 0) return 'No access route'
+          return (
             <span className="font-mono tabular-nums">
-              {row.original.accessPaths.length}{' '}
-              {row.original.accessPaths.length === 1 ? 'route' : 'routes'}
+              {count} {count === 1 ? 'route' : 'routes'}
             </span>
-          ),
+          )
+        },
       },
     ],
     [],

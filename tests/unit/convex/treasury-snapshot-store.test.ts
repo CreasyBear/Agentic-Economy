@@ -113,7 +113,7 @@ describe('registered treasury snapshot publication and control behavior', () => 
     await expect(admin.mutation(api.adminTreasuryCommands.setPaymentsPaused, await command(admin, 'disabled:resume', false)))
       .resolves.toMatchObject({ kind: 'refused', code: 'treasury_configuration_unavailable' })
     expect((await stored(backend)).launch).toEqual(paused)
-    expect(await backend.query(internal.moneyReadiness.readSourceChecks, { environment: 'sandbox', now: NOW }))
+    expect(await backend.query(internal.moneyReadiness.readSourceChecks, { environment: 'sandbox' }))
       .toMatchObject({ treasury: { kind: 'failed', code: 'treasury_configuration_unavailable' } })
   })
 
@@ -124,7 +124,7 @@ describe('registered treasury snapshot publication and control behavior', () => 
     if (base.chain.kind !== 'available') throw new Error('fixture_chain_missing')
     const snapshot = reseal(base, { chain: { ...base.chain, blockTimestamp: NOW - age } })
     await backend.mutation(internal.moneyTreasuryReconciliation.publishSnapshot, { snapshot })
-    const source = await backend.query(internal.moneyReadiness.readSourceChecks, { environment: 'sandbox', now: NOW })
+    const source = await backend.query(internal.moneyReadiness.readSourceChecks, { environment: 'sandbox' })
     expect(source.treasury).toEqual(age < 60 * 60_000
       ? { kind: 'passed', validUntil: Math.min(NOW + 10 * 60_000, NOW - age + 60 * 60_000) }
       : { kind: 'failed', code: 'treasury_reconciliation_required' })
@@ -140,7 +140,7 @@ describe('registered treasury snapshot publication and control behavior', () => 
     if (base.chain.kind !== 'available') throw new Error('fixture_chain_missing')
     const snapshot = reseal(base, { chain: { ...base.chain, observedAt: NOW - age } })
     await backend.mutation(internal.moneyTreasuryReconciliation.publishSnapshot, { snapshot })
-    expect(await backend.query(internal.moneyReadiness.readSourceChecks, { environment: 'sandbox', now: NOW }))
+    expect(await backend.query(internal.moneyReadiness.readSourceChecks, { environment: 'sandbox' }))
       .toMatchObject({ treasury: age < 20 * 60_000
         ? { kind: 'passed', validUntil: NOW + 1 }
         : { kind: 'failed', code: 'treasury_reconciliation_required' } })
@@ -168,13 +168,13 @@ describe('registered treasury snapshot publication and control behavior', () => 
     expect(await backend.mutation(internal.moneyTreasuryReconciliation.publishSnapshot, { snapshot: report(NOW - 1) }))
       .toEqual({ kind: 'unavailable', code: 'treasury_snapshot_superseded' })
     expect(await stored(backend)).toEqual(before)
-    expect(await backend.query(internal.moneyReadiness.readSourceChecks, { environment: 'sandbox', now: clock }))
+    expect(await backend.query(internal.moneyReadiness.readSourceChecks, { environment: 'sandbox' }))
       .toMatchObject({ treasury: { kind: 'failed', code: 'treasury_reconciliation_required' } })
     clock = NOW + 2
     await seedObservation(backend)
     await backend.mutation(internal.moneyTreasuryReconciliation.publishSnapshot, { snapshot: report(clock) })
     expect((await stored(backend)).alerts).toMatchObject([{ code: 'reconciliation_unavailable', state: 'resolved', resolvedAt: clock }])
-    expect(await backend.query(internal.moneyReadiness.readSourceChecks, { environment: 'sandbox', now: clock }))
+    expect(await backend.query(internal.moneyReadiness.readSourceChecks, { environment: 'sandbox' }))
       .toMatchObject({ treasury: { kind: 'passed', validUntil: clock + 10 * 60_000 } })
   })
 
@@ -185,15 +185,15 @@ describe('registered treasury snapshot publication and control behavior', () => 
     await backend.run(ctx => ctx.db.insert('moneyReferenceRates', {
       pair: 'USDC/AUD', rate: '1.2', fetchedAt: NOW - REFERENCE_RATE_MAX_AGE_MS + 1_000,
     }))
-    expect(await backend.query(internal.moneyReadiness.readSourceChecks, { environment: 'sandbox', now: NOW }))
+    expect(await backend.query(internal.moneyReadiness.readSourceChecks, { environment: 'sandbox' }))
       .toEqual({ reference_rate: { kind: 'passed', validUntil: NOW + 1_000 },
         treasury: { kind: 'passed', validUntil: NOW + 8 * 60_000 },
         commercial_policy: { kind: 'passed', validUntil: NOW + 10 * 60_000 } })
     clock = NOW + 1_000
-    expect(await backend.query(internal.moneyReadiness.readSourceChecks, { environment: 'sandbox', now: clock }))
+    expect(await backend.query(internal.moneyReadiness.readSourceChecks, { environment: 'sandbox' }))
       .toMatchObject({ reference_rate: { kind: 'failed', code: 'reference_rate_stale' } })
     clock = NOW + 8 * 60_000
-    expect(await backend.query(internal.moneyReadiness.readSourceChecks, { environment: 'sandbox', now: clock }))
+    expect(await backend.query(internal.moneyReadiness.readSourceChecks, { environment: 'sandbox' }))
       .toMatchObject({ treasury: { kind: 'failed', code: 'treasury_observation_stale' } })
   })
 
@@ -207,12 +207,12 @@ describe('registered treasury snapshot publication and control behavior', () => 
       if (policy === null) throw new Error('fixture_policy_missing')
       await ctx.db.patch(policy._id, { expiresAt: NOW + 1_000 })
     })
-    expect(await backend.query(internal.moneyReadiness.readSourceChecks, { environment: 'production', now: NOW }))
+    expect(await backend.query(internal.moneyReadiness.readSourceChecks, { environment: 'production' }))
       .toMatchObject({ commercial_policy: { kind: 'passed', validUntil: NOW + 1_000 } })
     clock = NOW + 1_000
-    expect(await backend.query(internal.moneyReadiness.readSourceChecks, { environment: 'production', now: clock }))
+    expect(await backend.query(internal.moneyReadiness.readSourceChecks, { environment: 'production' }))
       .toMatchObject({ commercial_policy: { kind: 'failed' } })
-    const crossed = await backend.query(internal.moneyReadiness.readSourceChecks, { environment: 'sandbox', now: clock })
+    const crossed = await backend.query(internal.moneyReadiness.readSourceChecks, { environment: 'sandbox' })
     expect(Object.values(crossed)).toEqual(Array(3).fill({ kind: 'failed', code: 'readiness_environment_mismatch' }))
   })
 

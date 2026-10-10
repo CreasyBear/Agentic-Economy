@@ -1,6 +1,7 @@
 import { financialEnvironmentMatches } from '../formance/contracts'
 import type { Doc } from '../../../_generated/dataModel'
 import { recordFundingTerminal } from '@/lib/observability/journey'
+import { emitFundingJourneyEvent } from '../../journey/events'
 import type { MutationCtx } from '../../../_generated/server'
 import {
   AUD_EXPONENT,
@@ -281,6 +282,7 @@ export async function finalizeFundingEventHandler(
     appliedRef: args.formanceTransactionRef,
     appliedAt: args.event.observedAt,
   })
+  await emitFundingJourneyEvent(ctx, command.accountRef, command.commandRef)
   return {
     kind: 'accepted',
     status: 'applied',

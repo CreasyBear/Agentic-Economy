@@ -25,9 +25,8 @@ export type AdminProviderRow = Readonly<{
 export type AdminProviderRowModel = Readonly<{
   slug: string
   href: string
-  publicStatusLabel: string
+  publicStatus: string
   trustTierLabel: string
-  updatedAtLabel: string
   updatedAtIso: string
 }>
 

@@ -11,6 +11,7 @@ import {
   AeRecordTable,
 } from '@/components/ae/operator/AeOperatorDataTable'
 
+import { AeSortableDataTable } from '@/components/ae/shared/sortable-data-table/AeSortableDataTable'
 import { AeTablePreferencesProvider } from '@/components/ae/operator/AeTablePreferencesContext'
 
 afterEach(() => { cleanup(); window.localStorage.clear() })
@@ -449,5 +450,24 @@ describe('AeRecordTable server and scoped layout ownership', () => {
     await waitFor(() => expect(JSON.parse(window.localStorage.getItem(key)!)).toEqual({
       version: 1, columnVisibility: {}, columnSizing: { __ae_action: 100 }, density: 'comfortable',
     }))
+  })
+})
+
+describe('AeRecordTable simple table rules', () => {
+  it('folds rows into cards on phones by default and keeps the full value of truncated cells on hover', () => {
+    const truncated: ColumnDef<AeRecordTableFeatures, Row, unknown>[] = [
+      { id: 'name', accessorFn: (row) => row.name, header: 'Name', meta: { truncate: true } },
+    ]
+    render(<AeRecordTable columns={truncated} data={rows} caption="Operations" hideFilter layoutControls={false} />)
+    const table = screen.getByRole('table', { name: 'Operations' })
+    expect(table.closest('[data-mobile-layout]')?.getAttribute('data-mobile-layout')).toBe('cards')
+    expect(screen.getByText('weather.lookup').getAttribute('title')).toBe('weather.lookup')
+  })
+
+  it('never uses an internal sort value as the hover title of a truncated cell', () => {
+    const at = new Date('2026-10-01T00:00:00Z')
+    render(<AeSortableDataTable rows={[{ id: 'row-1', at }]} rowKey="id" caption="Dated"
+      columns={[{ key: 'at', label: 'Updated', truncate: true, render: () => 'Oct 1' }]} />)
+    expect(screen.getByText('Oct 1').closest('[title]')?.getAttribute('title') ?? null).not.toBe(String(at.getTime()))
   })
 })

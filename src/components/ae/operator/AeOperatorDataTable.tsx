@@ -7,6 +7,7 @@
 import { formatCount } from '@/lib/ui/format-time'
 import {
   filterFn_includesString,
+  flexRender,
   useTable,
   Subscribe,
   type CellContext,
@@ -108,6 +109,8 @@ type AeRecordTableBaseProps<TData extends object> = {
   hideFilter?: boolean
   countLabel?: string
   action?: ReactNode
+  /** Below 620px rows fold into wrapped lines (default) or keep the desktop grid inside a horizontal scroller. */
+  mobileLayout?: 'cards' | 'scroll'
   /**
    * True while a load is in flight. Skeletons render only before the first
    * settled result; refreshing an already-populated table keeps its rows.
@@ -169,6 +172,7 @@ export function AeRecordTable<TData extends object>({
   hideFilter = false,
   countLabel = 'rows',
   action,
+  mobileLayout = 'cards',
   getRowId,
   rowAction,
   selection,
@@ -253,6 +257,14 @@ export function AeRecordTable<TData extends object>({
       ...(serverControlled && !hasServerSorting ? { enableSorting: false } : {}),
       id: column.id ?? ('accessorKey' in column ? String(column.accessorKey).replaceAll('.', '_') : typeof column.header === 'string' ? column.header : ''),
       // Keep the native sortable header behavior for ordinary string headers.
+      ...(column.meta?.truncate ? {
+        cell: (context: CellContext<AeRecordTableFeatures, TData, unknown>) => {
+          // Only text is a readable title; numbers here may be sort keys such as Date epochs.
+          const value = context.getValue()
+          const full = typeof value === 'string' ? value : undefined
+          return <span className="block truncate" title={full}>{column.cell === undefined ? (value == null ? null : String(value)) : flexRender(column.cell, context)}</span>
+        },
+      } : {}),
       ...(typeof column.header === 'string' ? {
         header: ({ column: instance }) => instance.getCanSort()
           ? <AeOperatorSortableHeader label={typeof column.header === 'string' ? column.header : instance.id} column={instance} />
@@ -386,6 +398,7 @@ export function AeRecordTable<TData extends object>({
       }}
       {...(showSkeleton ? { 'aria-busy': true } : {})}
       className="arc-market arc-record-root"
+      data-mobile-layout={mobileLayout}
     >
       <div className="min-w-0">
         <DataGrid className="grid gap-4" table={table} recordCount={rowCount} isLoading={showSkeleton} loadingMode="skeleton"

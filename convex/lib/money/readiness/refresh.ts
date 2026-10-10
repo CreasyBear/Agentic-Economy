@@ -21,7 +21,8 @@ type RefreshResult = { kind: 'published'; replayed: boolean } | { kind: 'refused
 /**
  * Requires admitted workload authority and this runtime's explicit environment.
  * Ensures one complete, credential-bound observation; each source retains its
- * own expiry. Probe clocks start before I/O, never at delayed completion.
+ * own expiry. Probe clocks start before I/O, never at delayed completion;
+ * Convex source checks use their query clock, and expiry stays capped at startedAt.
  * Invariant: all provider operations are read-only; no signing/funding effects.
  * On violation: named failed checks are published; invalid/late publication is
  * refused by the transaction. No retry loop or last-good readiness fallback.
@@ -42,7 +43,7 @@ export async function refreshPaymentReadiness(ctx: ActionCtx): Promise<RefreshRe
     custody === undefined ? undefined
       : readTreasuryChainObservation({ environment, address: custody.expectedEvmAddress, now: startedAt })
         .catch(cause => ({ kind: 'unavailable' as const, code: sourceFailure(cause, 'treasury_rpc_unavailable').code })),
-    ctx.runQuery(internal.moneyReadiness.readSourceChecks, { environment, now: startedAt })
+    ctx.runQuery(internal.moneyReadiness.readSourceChecks, { environment })
       .catch((cause: unknown): PaymentReadinessSourceChecks => {
         const check = sourceFailure(cause, 'readiness_source_unavailable')
         return { reference_rate: check, commercial_policy: check, treasury: check }

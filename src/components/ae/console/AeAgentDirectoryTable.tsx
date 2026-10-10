@@ -12,16 +12,14 @@ import { Badge } from '@/components/arc/badge/badge'
 import SegmentedControl from '@/components/arc/segmented-control/segmented-control'
 import { stagedListPhase, useFirstLoadPending } from '@/components/ui/data-state'
 import { InlineEditField } from '@/components/ui/inline-edit-field'
-import { formatRelativeTime, formatTimestamp, timestampIso } from '@/lib/ui/format-time'
+import { RecordTime } from '@/components/ae/operator/RecordTime'
 import { suggestNextAction } from '@/modules/market/suggested-next-action'
 import type { AgentDirectoryItem } from '@/modules/agent-access/agent-operator-view-model'
 import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
 import {
   agentStatusBadgeVariant,
   agentStatusLabel,
-  authorityCellText,
   authorityIsHistorical,
-  currentAuthorityLabel,
   environmentLabel,
   monthlySpendLabel,
   monthlyUtilization,
@@ -79,8 +77,8 @@ export function AeAgentDirectoryTable({
                   displayName,
                 ) ?? false}
               />
-              <Badge tone="neutral" className="arc-agent-directory-state">{environmentLabel(row.original.environment)}</Badge>
             </div>
+            <span className="arc-agent-directory-note">{environmentLabel(row.original.environment)}</span>
             <span className="arc-agent-directory-reference" title={row.original.principalRef}>
               {row.original.principalRef}
             </span>
@@ -102,17 +100,17 @@ export function AeAgentDirectoryTable({
         },
       },
       {
-        id: 'authority',
-        accessorFn: (item) => authorityCellText(item),
-        meta: { label: 'Authority' },
-        header: ({ column }) => <AeOperatorSortableHeader label="Authority" column={column} />,
+        id: 'status',
+        accessorFn: (item) => agentStatusLabel(item.status),
+        meta: { label: 'Status' },
+        header: ({ column }) => <AeOperatorSortableHeader label="Status" column={column} />,
         cell: ({ row }) => {
-          const current = currentAuthorityLabel(row.original.status, row.original.authorityMode)
-          if (!authorityIsHistorical(row.original.status)) return current
           return (
             <div className="arc-agent-directory-cell">
-              <span>{current}</span>
-              <span className="arc-agent-directory-note">Previous authority: {scopeLabel(row.original.authorityMode)}</span>
+              <Badge tone={agentStatusBadgeVariant(row.original.status)} className="arc-agent-directory-state">{agentStatusLabel(row.original.status)}</Badge>
+              <span className="arc-agent-directory-note">
+                {authorityIsHistorical(row.original.status) ? `Previous authority: ${scopeLabel(row.original.authorityMode)}` : scopeLabel(row.original.authorityMode)}
+              </span>
             </div>
           )
         },
@@ -120,9 +118,9 @@ export function AeAgentDirectoryTable({
       {
         id: 'monthlyCalls',
         accessorFn: (item) => item.usage?.callCount,
-        meta: { label: 'Calls this UTC month', numeric: true },
+        meta: { label: 'Calls this month', numeric: true },
         sortUndefined: 'last',
-        header: ({ column }) => <AeOperatorSortableHeader label="Calls this UTC month" column={column} />,
+        header: ({ column }) => <AeOperatorSortableHeader label="Calls this month" column={column} />,
         cell: ({ row }) => row.original.usage === undefined ? 'Usage unavailable' : (
           <div className="arc-agent-directory-cell">
             <span className="font-mono tabular-nums">{row.original.usage.callCount}</span>
@@ -133,14 +131,14 @@ export function AeAgentDirectoryTable({
       {
         id: 'monthlySpend',
         accessorFn: (item) => item.monthlySpendCoverage === 'complete' ? item.monthlySettledSpend?.units : undefined,
-        meta: { label: 'Charges / UTC month limit', numeric: true },
+        meta: { label: 'Charges this month', numeric: true },
         sortUndefined: 'last',
         sortFn: (left, right) => {
           const a = BigInt(left.getValue<string | undefined>('monthlySpend') ?? '0')
           const b = BigInt(right.getValue<string | undefined>('monthlySpend') ?? '0')
           return a < b ? -1 : a > b ? 1 : 0
         },
-        header: ({ column }) => <AeOperatorSortableHeader label="Charges / UTC month limit" column={column} />,
+        header: ({ column }) => <AeOperatorSortableHeader label="Charges this month" column={column} />,
         cell: ({ row }) => {
           const spendText = monthlySpendLabel(row.original)
           const utilization = monthlyUtilization(row.original)
@@ -174,27 +172,7 @@ export function AeAgentDirectoryTable({
         header: ({ column }) => <AeOperatorSortableHeader label="Last used" column={column} />,
         cell: ({ row }) => {
           const lastSeenAt = row.original.lastSeenAt
-          if (lastSeenAt === undefined) return 'No activity'
-          return (
-            <time
-              dateTime={timestampIso(lastSeenAt)}
-              title={formatTimestamp(lastSeenAt)}
-              className="arc-agent-directory-date"
-            >
-              {formatRelativeTime(lastSeenAt)}
-            </time>
-          )
-        },
-      },
-      {
-        id: 'status',
-        accessorFn: (item) => agentStatusLabel(item.status),
-        meta: { label: 'Status' },
-        header: ({ column }) => <AeOperatorSortableHeader label="Status" column={column} />,
-        cell: ({ row }) => {
-          const status = agentStatusLabel(row.original.status)
-          const variant = agentStatusBadgeVariant(row.original.status)
-          return <Badge tone={variant} className="arc-agent-directory-state">{status}</Badge>
+          return <RecordTime at={lastSeenAt} missing="No activity" />
         },
       },
     ],

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { Badge } from '@/components/arc/badge/badge'
 import { formatTimestamp, timestampIso } from '@/lib/ui/format-time'
-import { PAYMENT_READINESS_CHECK_KEYS, type PaymentReadinessCheck, type PaymentReadinessView } from '@/modules/money/payment-readiness'
+import { PAYMENT_READINESS_CHECK_KEYS, PAYMENT_READINESS_GATING_KEYS, referenceRateFresh, type PaymentReadinessCheck, type PaymentReadinessView } from '@/modules/money/payment-readiness'
 import { ALPHA_X402_PAYEE_SCREENING_POLICY } from '@/modules/money/x402-spend-admission'
 import './OverviewMetricsComposition.css'
 import { ADMIN_OVERVIEW_COPY } from '../overview.contracts'
@@ -71,12 +71,14 @@ export function ConfigurationBanner({ readiness, compact = false }: Configuratio
   const expired = now !== null && expiresAt !== null && now >= expiresAt
   const ready = now !== null && readiness?.kind === 'ready' && !expired && expiresAt !== null
     && readiness.checkedAt !== null && readiness.checkedAt <= now
-    && PAYMENT_READINESS_CHECK_KEYS.every(key => {
+    && PAYMENT_READINESS_GATING_KEYS.every(key => {
       const check = readiness.checks[key]
       return (check.kind === 'passed' || (key === 'sanctions' && check.kind === 'deferred'
         && check.policyRef === ALPHA_X402_PAYEE_SCREENING_POLICY))
         && check.validUntil > now
     })
+  const quotesDegraded = ready && !referenceRateFresh(readiness.checks.reference_rate, now)
+  const verdict = !ready ? 'Not ready' : quotesDegraded ? 'Ready, quotes degraded' : 'Ready'
   const summary = readiness === null ? 'The deployment money environment is missing or invalid.'
     : expired ? FAILURE_REASONS.readiness_expired
       : readiness.code === null ? null : FAILURE_REASONS[readiness.code] ?? 'One or more required checks have failed.'
@@ -84,9 +86,11 @@ export function ConfigurationBanner({ readiness, compact = false }: Configuratio
     <AeSection title={ADMIN_OVERVIEW_COPY.configurationTitle} description={ADMIN_OVERVIEW_COPY.configurationDescription} className="arc-market arc-overview-configuration">
       <div className="mb-related grid gap-intra">
         {/* A readiness flip is a new status, not a label morph: remount so the live region never holds both words. */}
-        <p role="status" aria-label="Payment readiness status"><Badge key={ready ? 'ready' : 'not-ready'} tone={ready ? 'neutral' : 'warning'}>{ready ? 'Ready' : 'Not ready'}</Badge></p>
+        <p role="status" aria-label="Payment readiness status"><Badge key={verdict} tone={verdict === 'Ready' ? 'neutral' : 'warning'}>{verdict}</Badge></p>
         {ready && readiness?.checks.sanctions.kind === 'deferred'
           ? <p className="text-sm">Payee screening deferred under the alpha policy; payees are not screened.</p> : null}
+        {quotesDegraded
+          ? <p className="text-sm">Quotes are refused until the USDC/AUD reference rate refreshes; payment readiness does not depend on it.</p> : null}
         <p className="text-sm">{readiness === null ? 'Environment: Not declared'
           : readiness.environment === 'production' ? 'Environment: Production · Base' : 'Environment: Sandbox · Base Sepolia'}</p>
         {summary === null ? null : <p className="text-sm text-muted-foreground">{summary}</p>}
@@ -117,6 +121,9 @@ function ReadinessCheckRow({ name, check, now, expired }: Readonly<{
   const passed = now !== null && check?.kind === 'passed' && !expired && check.validUntil > now
   const deferred = now !== null && name === 'sanctions' && check?.kind === 'deferred'
     && check.policyRef === ALPHA_X402_PAYEE_SCREENING_POLICY && !expired && check.validUntil > now
+  // The reference rate never gates payments; an observed stale rate only degrades quoting.
+  const degraded = name === 'reference_rate' && !expired && !passed
+    && (check?.kind === 'passed' || (check?.kind === 'failed' && check.code === 'reference_rate_stale'))
   let reason = FAILURE_REASONS.readiness_expired
   if (!expired) {
     if (check === undefined) reason = 'No readiness evidence is available.'
@@ -127,7 +134,7 @@ function ReadinessCheckRow({ name, check, now, expired }: Readonly<{
   }
   return <div className="arc-overview-readiness-row">
     <dt className="text-sm text-muted-foreground">{CHECK_LABELS[name]}</dt>
-    <dd className="mt-intra grid gap-intra"><span className="font-medium">{deferred ? 'Deferred' : passed ? 'Passed' : 'Failed'}</span>
+    <dd className="mt-intra grid gap-intra"><span className="font-medium">{deferred ? 'Deferred' : passed ? 'Passed' : degraded ? 'Degraded' : 'Failed'}</span>
       <span className="text-xs text-muted-foreground">{reason}</span></dd>
   </div>
 }

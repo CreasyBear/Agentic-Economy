@@ -9,16 +9,14 @@ import {
   AeRecordTable,
 } from '@/components/ae/operator/AeOperatorDataTable'
 import { Badge } from '@/components/arc/badge/badge'
+import { RecordTime } from '@/components/ae/operator/RecordTime'
 
 import type { ActivityBadgeView, ActivityCallQueueProps, ActivityCallRowView } from '../activity.contracts'
 import './ActivityQueueComposition.css'
 
 function ActivityBadge({ badge }: Readonly<{ badge: ActivityBadgeView }>) {
   return (
-    <Badge
-      tone={badge.variant}
-      className={`arc-activity-badge${badge.warning ? ' border-warning/50 text-warning' : ''}`}
-    >
+    <Badge tone={badge.warning ? 'warning' : badge.variant} className="arc-activity-badge">
       {badge.label}
     </Badge>
   )
@@ -50,25 +48,33 @@ export function ActivityCallQueue({
         ),
       },
       {
-        id: 'agent',
-        accessorFn: (item) => item.agentTitle,
-        meta: { label: 'Caller Agent' },
-        header: ({ column }) => <AeOperatorSortableHeader label="Caller Agent" column={column} />,
-        cell: ({ row }) => (
-          <span className="arc-activity-reference" title={row.original.agentTitle ?? 'Not available'}>
-            {row.original.agentTitle ?? 'Not available'}
-          </span>
-        ),
-      },
-      {
         id: 'tool',
         accessorFn: (item) => item.toolLabel,
         meta: { label: 'Tool' },
         header: ({ column }) => <AeOperatorSortableHeader label="Tool" column={column} />,
         cell: ({ row }) => (
-          <span className="arc-activity-tool font-medium text-foreground" title={row.original.toolLabel}>
-            {row.original.toolLabel}
-          </span>
+          <div className="arc-activity-stack">
+            <span className="arc-activity-tool font-medium text-foreground" title={row.original.toolLabel}>
+              {row.original.toolLabel}
+            </span>
+            <span className="arc-activity-reference" title={row.original.agentTitle ?? 'Agent not recorded'}>
+              {row.original.agentTitle ?? 'Agent not recorded'}
+            </span>
+          </div>
+        ),
+      },
+      {
+        id: 'status',
+        accessorFn: (item) => item.purchaseBadge.label,
+        meta: { label: 'Status' },
+        header: ({ column }) => <AeOperatorSortableHeader label="Status" column={column} />,
+        cell: ({ row }) => (
+          <div className="arc-activity-stack">
+            <ActivityBadge badge={row.original.purchaseBadge} />
+            <span className="arc-activity-detail">
+              Call {row.original.stateBadge.label.toLowerCase()}, payment {row.original.paymentStateLabel.toLowerCase()}
+            </span>
+          </div>
         ),
       },
       {
@@ -101,36 +107,11 @@ export function ActivityCallQueue({
         ),
       },
       {
-        id: 'status',
-        accessorFn: (item) => item.stateBadge.label,
-        meta: { label: 'Call status' },
-        header: ({ column }) => <AeOperatorSortableHeader label="Call status" column={column} />,
-        cell: ({ row }) => <ActivityBadge badge={row.original.stateBadge} />,
-      },
-      {
-        id: 'outcome',
-        accessorFn: (item) => item.purchaseLabel,
-        meta: { label: 'Purchase status' },
-        header: ({ column }) => <AeOperatorSortableHeader label="Purchase status" column={column} />,
-        cell: ({ row }) => (
-          <div className="arc-activity-purchase">
-            <ActivityBadge badge={row.original.purchaseBadge} />
-            <div className="arc-activity-detail">
-              Payment: {row.original.paymentStateLabel}
-            </div>
-          </div>
-        ),
-      },
-      {
         id: 'when',
         accessorKey: 'createdAt',
-        meta: { label: 'When', numeric: true },
-        header: ({ column }) => <AeOperatorSortableHeader label="When" column={column} />,
-        cell: ({ row }) => (
-          <time className="arc-activity-number" dateTime={new Date(row.original.createdAt).toISOString()}>
-            {row.original.whenLabel}
-          </time>
-        ),
+        meta: { label: 'Started' },
+        header: ({ column }) => <AeOperatorSortableHeader label="Started" column={column} />,
+        cell: ({ row }) => <RecordTime at={row.original.createdAt} />,
       },
     ],
     [],

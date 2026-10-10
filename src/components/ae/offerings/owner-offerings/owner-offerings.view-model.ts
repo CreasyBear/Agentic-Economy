@@ -5,11 +5,7 @@ import { getStatusPresentation } from '@/lib/ui/status-presentation'
 export function ownerOfferingAvailabilityPresentation(availability: OwnerToolAvailability | undefined) {
   if (availability === undefined) return undefined
   const presentation = getStatusPresentation(availability === 'unknown' ? 'stale' : availability)
-  return {
-    label: presentation.compactLabel,
-    variant: presentation.tone,
-    hasDot: availability !== 'unknown',
-  }
+  return { label: presentation.compactLabel }
 }
 
 export function formatOwnerOfferingCalls(item: OwnerOfferingSummary): string {

@@ -5,6 +5,8 @@ import { useOperatorShellChrome } from './OperatorChromeContext'
 import { AePageSkeleton } from '@/components/ae/layout/AePageState'
 import { Skeleton } from '@/components/arc/skeleton/skeleton'
 import { operatorRoleForPath } from '@/lib/operator/roles'
+import { appDestination, resolveAppDestination } from '@/lib/navigation/app-navigation'
+import { ADMIN_NAVIGATION } from './app-shell/app-shell.contracts'
 
 import type { OperatorRouteSkeletonPreset } from './route-states.contracts'
 import './RouteLoadingComposition.css'
@@ -142,6 +144,14 @@ function DefaultSkeleton() {
   )
 }
 
+function destinationTitle(pathname: string): string {
+  const admin = [...ADMIN_NAVIGATION].sort((left, right) => right.href.length - left.href.length)
+    .find(item => item.href === pathname || pathname.startsWith(`${item.href}/`))
+  if (admin !== undefined) return admin.label
+  const destination = resolveAppDestination(pathname)
+  return destination === null ? 'Workspace' : appDestination(destination).label
+}
+
 export function OperatorRoutePending({
   preset,
 }: { preset?: OperatorRouteSkeletonPreset } = {}) {
@@ -170,7 +180,7 @@ export function OperatorRoutePending({
   return (
     <AeOperatorPage
       operatorRole={operatorRoleForPath(pathname) ?? 'owner'}
-      title="Loading workspace"
+      title={destinationTitle(pathname)}
       description="Fetching the latest marketplace and account details."
       currentPath={pathname}
       pending

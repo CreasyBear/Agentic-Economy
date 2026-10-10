@@ -123,6 +123,32 @@ describe('live payment pause at Quote and new Call admission', () => {
     expect(await backend.mutation(internal.capabilityCalls.reserve, reservation)).toMatchObject({ kind: 'replayed', reservation: { callRef: reservation.callRef } })
     expect(await backend.run((ctx) => ctx.db.query('capabilityCalls').collect())).toHaveLength(1)
   })
+
+  it('records first_quote at issuance once per account, and no first_call at reservation', async () => {
+    const { backend, issueArgs } = await paidQuoteFixture('journey-first-quote-call')
+    const issue = async (request: string) => {
+      const issued = await backend.mutation(internal.capabilityQuotes.issueQuote, { ...issueArgs, input: { request }, correlationId: `journey:${request}` })
+      if (issued.kind !== 'committed') throw new Error(`quote_refused:${issued.code}`)
+      const row = await backend.run((ctx) => ctx.db.query('capabilityQuotes').withIndex('by_quoteRef', (q) => q.eq('quoteRef', issued.quoteRef)).unique())
+      if (row === null || row.normalizedInputJson === undefined) throw new Error('quote_input_missing')
+      return { ...row, normalizedInputJson: row.normalizedInputJson }
+    }
+    const eventKeys = async () => (await backend.run((ctx) => ctx.db.query('journeyEvents').collect()))
+      .filter(event => event.name === 'first_quote' || event.name === 'first_call').map(event => event.eventKey)
+    const first = await issue('Perth')
+    await issue('Sydney')
+    expect(await eventKeys()).toEqual([`${first.accountRef}:first_quote`])
+    expect(await backend.mutation(internal.capabilityCalls.reserve, {
+      quoteRef: first.quoteRef, callRef: 'call:journey-first', principalId: first.principalId, ownerId: first.accountRef,
+      credentialId: first.credentialId, applicationRef: first.applicationRef, grantRef: first.grantRef,
+      grantGeneration: first.grantGeneration, policyDigest: first.grantPolicyDigest, grantExpiresAt: first.grantExpiresAt,
+      environment: first.environment, toolRef: first.toolRef, idempotencyKey: 'journey-first-call',
+      inputDigest: first.inputDigest, requestDigest: canonicalDigest({ quoteRef: first.quoteRef }),
+      toolJson: first.toolJson, inputJson: first.normalizedInputJson, now: Date.now(), organizationMonthlySpend: { enabled: false },
+    })).toMatchObject({ kind: 'reserved' })
+    // first_call is a completed Call (journeyForFinalization), so a reservation that may still be refused emits nothing.
+    expect(await eventKeys()).toEqual([`${first.accountRef}:first_quote`])
+  })
 })
 
 describe('legal customer binding refusals', () => {
