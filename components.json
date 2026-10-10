@@ -32,6 +32,7 @@
       "headers": {
         "Authorization": "Bearer ${REUI_LICENSE_KEY}"
       }
-    }
+    },
+    "@emailcn": "https://www.emailcn.run/r/{name}.json"
   }
 }
