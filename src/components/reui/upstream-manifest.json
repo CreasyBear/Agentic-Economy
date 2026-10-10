@@ -66,7 +66,7 @@
     {
       "path": "src/components/reui/data-grid/data-grid-table.tsx",
       "upstreamSha256": "e67c0bacda8d33ae0b08bd4817af944bf64e3dc0c6cfce6a2e702adce858f8eb",
-      "sha256": "3fd3a863e003536f89df300e47a06a40a99f030f5aa5a9bc51810fd88963bbe5",
+      "sha256": "12f6adf44ba8967388f134457cdd804be3fdae962146fbdb96d7c38f64b9e36a",
       "allowLargeSource": true,
       "permittedTypePatterns": [
         "explicit-any",
@@ -95,7 +95,7 @@
     {
       "path": "src/components/ui/sidebar.tsx",
       "upstreamSha256": "146860c1f88e07170830573bdb62e202de87d12942c3fabb751ebe606ce56344",
-      "sha256": "69142727cd6cf290ab9d7ffeda742a03e9b5d5db8f23273c0941a1d7b26d2d9e",
+      "sha256": "4f5ec1e6587f2531e6278d3f0e1ba79c3569ccf6c2eceb9d36f091fa30ee36df",
       "allowLargeSource": false,
       "permittedTypePatterns": []
     }

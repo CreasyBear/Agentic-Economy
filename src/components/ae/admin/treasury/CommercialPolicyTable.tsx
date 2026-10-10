@@ -14,8 +14,9 @@ import { POLICY_LABELS } from './commercial-policy-form'
 
 type Summary = Extract<FunctionReturnType<typeof api.moneyCommercialPolicy.readSummary>, { kind: 'ready' }>
 type PolicyRow = Summary['rows'][number]
+type CommercialPolicyStatus = 'Conflicting active records' | 'Missing' | 'Suspended' | 'No active policy (superseded)' | 'Expired' | 'Scheduled' | 'Invalid recorded terms' | 'Custody cap unavailable or below recorded buffer' | 'Active'
 
-export function commercialPolicyStatus(row: PolicyRow, now: number): string {
+export function commercialPolicyStatus(row: PolicyRow, now: number): CommercialPolicyStatus {
   if (row.conflict) return 'Conflicting active records'
   const current = row.current
   if (current === null) return 'Missing'
@@ -28,10 +29,10 @@ export function commercialPolicyStatus(row: PolicyRow, now: number): string {
   return 'Active'
 }
 
-function commercialPolicyTone(status: string): 'success' | 'info' | 'warning' | 'danger' {
+function commercialPolicyTone(status: CommercialPolicyStatus): 'success' | 'info' | 'warning' | 'danger' {
   if (status === 'Active') return 'success'
   if (status === 'Scheduled') return 'info'
-  if (status === 'Missing' || status === 'Expired' || status === 'Suspended' || status.startsWith('No active policy')) return 'warning'
+  if (status === 'Missing' || status === 'Expired' || status === 'Suspended' || status === 'No active policy (superseded)') return 'warning'
   return 'danger'
 }
 
