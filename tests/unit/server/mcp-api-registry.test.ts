@@ -70,8 +70,9 @@ describe('MCP host adapter registry', () => {
     }))
     expect(response.status).toBe(200)
     const body = await readMcpBody(response)
-    expect((body.result?.content as { text: string }[])[0]?.text).toContain('Quote External Tool: ae_tool_quote({"toolRef":"registry:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}) with caller-owned input.')
-    expect((body.result?.content as { text: string }[])[0]?.text).toContain('  External Tool: No AE calls yet · 12 payers')
+    const text = (body.result?.content as { text: string }[] | undefined)?.[0]?.text
+    expect(text).toContain('Quote External Tool: ae_tool_quote({"toolRef":"registry:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}) with caller-owned input.')
+    expect(text).toContain('  External Tool: No AE calls yet · 12 payers')
     expect(JSON.stringify(body.result)).not.toContain('untrusted.example')
     if (canonical !== undefined) expect(JSON.stringify(body.result)).not.toContain('http://app.aecon.ai')
     expect(body.result?.structuredContent).toMatchObject({ result: { results: [{ id: 'registry:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' }] } })
