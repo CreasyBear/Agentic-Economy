@@ -12,6 +12,7 @@ import { HomeDirectoryPagination } from './components/HomeDirectoryPagination'
 import { HomeDirectoryRecoveryAlert } from './components/HomeDirectoryRecoveryAlert'
 import { HomeLifecycleIssueAlert } from './components/HomeLifecycleIssueAlert'
 import { HomeResumeToolSection } from './components/HomeResumeToolSection'
+import { HomeIntentQuestion } from './components/HomeIntentQuestion'
 import { HomeOnboardingRequestSection } from './components/HomeOnboardingRequestSection'
 import { useAeAgentAccessHome, type AgentConnectionStep } from './useAeAgentAccessHome'
 import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLinkClassName'
@@ -97,6 +98,7 @@ export function AeAgentAccessHome(props: AeAgentAccessHomeProps) {
             onCheck={vm.onDirectoryRetry} checking={vm.loading}
             {...(search.resumeTool === undefined ? {} : { resumeTool: search.resumeTool })} />
         ) : null}
+        <HomeIntentQuestion />
         {requestBlocked || directory.items.length === 0 && search.caller === undefined ? null : (
           <AeAgentOperatorConsole
             directory={directory}

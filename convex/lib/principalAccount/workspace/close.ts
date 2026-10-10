@@ -12,6 +12,7 @@ import { requireCurrentOwnership, type AccountActionContext } from './accountCon
 import { recordWorkspaceAuditEvent } from './audit'
 import { mfaReverificationRefusalValue } from './contracts'
 import { requireAccountInteractiveHumanPrincipal } from './identity'
+import { eraseAccountJourney } from '../../journey/events'
 
 const closeWorkspaceReceiptValue = v.union(
   mfaReverificationRefusalValue,
@@ -141,6 +142,8 @@ export const closeWorkspaceHandler = async (ctx: MutationCtx, args: Infer<typeof
     for (const membership of activeMemberships) {
       await ctx.db.patch(membership._id, { lifecycle: 'ended', endedAt: now })
     }
+
+    await eraseAccountJourney(ctx, canonicalAccountRef)
 
     const agentGrants = await ctx.db
       .query('agentAccessGrants')

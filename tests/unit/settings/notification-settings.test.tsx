@@ -25,6 +25,7 @@ const basePreferences: NotificationPreferencesView = {
   invoiceReady: true,
   teamMembershipChanged: true,
   agentApprovalRequested: true,
+  stalledStepEmails: false,
   revision: 0,
 }
 
@@ -63,6 +64,19 @@ describe('OwnerNotificationSettings', () => {
         agentApprovalRequested: false,
         expectedRevision: 0,
       })
+    })
+  })
+
+  it('U10: stalled step reminder is off by default and toggles on', async () => {
+    const onUpdate = vi.fn()
+    render(<OwnerNotificationSettings preferences={basePreferences} onUpdate={onUpdate} />)
+
+    const stalledSwitch = screen.getByRole('switch', { name: "Remind me when I'm stuck on a setup step" })
+    expect(stalledSwitch).not.toBeChecked()
+    fireEvent.click(stalledSwitch)
+
+    await waitFor(() => {
+      expect(onUpdate).toHaveBeenCalledWith({ stalledStepEmails: true, expectedRevision: 0 })
     })
   })
 

@@ -6,11 +6,12 @@ import { AUTHORITY_REQUEST_TTL_MS } from '../../capabilityExecution/callLifecycl
 import type { Id } from '../../../_generated/dataModel'
 import type { MutationCtx, QueryCtx } from '../../../_generated/server'
 import { resolveClerkUserIdForPrincipal } from '../workspace/directory'
+import { isStalledKind, readStalledDeliveryContext } from './stalled'
 
 export const readNotificationContextArgs = { deliveryId: v.id('notificationDeliveries') }
 
 export const readNotificationContextResult = v.union(
-  v.object({ kind: v.literal('ready'), deliveryRef: v.string(), clerkUserId: v.string(), subject: v.string(), text: v.string() }),
+  v.object({ kind: v.literal('ready'), deliveryRef: v.string(), clerkUserId: v.string(), subject: v.string(), text: v.string(), unsubscribeUrl: v.optional(v.string()) }),
   v.object({ kind: v.literal('skip'), code: v.string() }),
 )
 
@@ -34,6 +35,9 @@ export async function readNotificationContextHandler(
 ): Promise<NotificationContext> {
   const delivery = await ctx.db.get(args.deliveryId)
   if(delivery!==null&&delivery.state==='pending'&&delivery.usageEvidenceJson!==undefined)return await readUsageDeliveryContext(ctx,delivery)
+  if (delivery !== null && delivery.state === 'pending' && isStalledKind(delivery.eventKind)) {
+    return await readStalledDeliveryContext(ctx, { ...delivery, eventKind: delivery.eventKind })
+  }
   if (delivery === null || delivery.state !== 'pending' || delivery.eventKind !== 'agent_approval_requested') {
     return { kind: 'skip', code: 'approval_no_longer_pending' }
   }

@@ -7,6 +7,10 @@ import { degradeBackend } from '../src/lib/observability/degrade-backend'
 import { internal } from './_generated/api'
 import { internalAction } from './_generated/server'
 import { sendApprovalEmailResult } from './lib/principalAccount/notifications/delivery'
+import { postResendEmail } from './lib/principalAccount/notifications/resend'
+import { OPERATOR_DATE, buildDigest } from './operatorDigest'
+
+/** The operator reads the digest in Sydney, so the subject and idempotency key use that calendar day. */
 
 export const sendApprovalEmail = internalAction({
   args: { deliveryId: v.id('notificationDeliveries') },
@@ -35,48 +39,53 @@ export const sendApprovalEmail = internalAction({
 
     const fresh=await ctx.runQuery(internal.notifications.readNotificationContext,{deliveryId})
     if(fresh.kind==='skip')return {outcome:'suppressed',code:fresh.code}
-    if(fresh.deliveryRef!==context.deliveryRef||fresh.clerkUserId!==context.clerkUserId||fresh.subject!==context.subject||fresh.text!==context.text)return {outcome:'suppressed',code:'notification_context_changed'}
+    if(fresh.deliveryRef!==context.deliveryRef||fresh.clerkUserId!==context.clerkUserId||fresh.subject!==context.subject||fresh.text!==context.text||fresh.unsubscribeUrl!==context.unsubscribeUrl)return {outcome:'suppressed',code:'notification_context_changed'}
 
-    let response: Response
-    try {
-      response = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        signal: AbortSignal.timeout(10_000),
-        headers: {
-          Authorization: `Bearer ${resendApiKey}`,
-          'Content-Type': 'application/json',
-          'Idempotency-Key': context.deliveryRef,
-          'User-Agent': 'aecon-notifications/1',
-        },
-        body: JSON.stringify({
-          from: fromEmail,
-          to: [primaryEmail.emailAddress],
-          subject: context.subject,
-          text: context.text,
-        }),
+    return await postResendEmail({
+      apiKey: resendApiKey,
+      from: fromEmail,
+      to: primaryEmail.emailAddress,
+      subject: context.subject,
+      text: context.text,
+      idempotencyKey: context.deliveryRef,
+      ...(context.unsubscribeUrl === undefined ? {} : {
+        headers: { 'List-Unsubscribe': `<${context.unsubscribeUrl}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' },
+      }),
+    })
+  },
+})
+
+export const sendOperatorDigest = internalAction({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx): Promise<null> => {
+    const resendApiKey = process.env.RESEND_API_KEY?.trim()
+    const fromEmail = process.env.NOTIFICATION_FROM_EMAIL?.trim()
+    const operatorEmail = process.env.OPERATOR_EMAIL?.trim()
+    if (!resendApiKey || !fromEmail || !operatorEmail) {
+      degradeBackend(new Error('operator_digest_credentials_missing'), undefined, {
+        site: 'sendOperatorDigest',
+        reason: 'source_unavailable',
       })
-    } catch {
-      throw new Error('resend_network_error')
+      return null
     }
 
-    if (response.status === 429 || response.status === 409 || response.status >= 500) {
-      throw new Error(`resend_retryable_status_${response.status}`)
+    // A zero digest is still sent, so a missing email means the job is broken, not that nobody stalled.
+    const now = Date.now()
+    const digest = await buildDigest(ctx, now)
+    const date = OPERATOR_DATE.format(now)
+    const result = await postResendEmail({
+      apiKey: resendApiKey,
+      from: fromEmail,
+      to: operatorEmail,
+      subject: `AE stalled accounts, ${date}`,
+      text: digest.text,
+      idempotencyKey: `operator-digest:${date}`,
+    })
+    // 429/409/5xx throw inside postResendEmail and the workpool retries; a 4xx rejection will not change on retry.
+    if (result.outcome === 'failed') {
+      degradeBackend(new Error(result.code), undefined, { site: 'sendOperatorDigest', reason: 'invalid_response' })
     }
-    if (response.status < 200 || response.status >= 300) {
-      return { outcome: 'failed', code: `provider_rejected_${response.status}` }
-    }
-
-    let vendorMessageId: string | undefined
-    try {
-      const body: unknown = await response.json()
-      if (typeof body === 'object' && body !== null && 'id' in body
-        && typeof body.id === 'string' && body.id.length > 0) vendorMessageId = body.id
-    } catch {
-      // An accepted send remains successful when Resend omits its response body.
-    }
-    return {
-      outcome: 'sent',
-      ...(vendorMessageId === undefined ? {} : { vendorMessageId }),
-    }
+    return null
   },
 })

@@ -28,6 +28,7 @@ import {
 import { persistAuditEvent } from '../../security/audit/persistence'
 import { resolveBusinessActor } from '../../../authz'
 import { environment, authorityMode, lifecycle } from './verification'
+import { emitJourneyEvent } from '../../journey/events'
 
 export const agentPrincipalArgs = {
   principalId: v.string(),
@@ -123,7 +124,7 @@ export async function persistAgentAudit(
   await persistAuditEvent(ctx.db, audit.event)
 }
 
-export async function writeAgentPrincipal(ctx: Pick<MutationCtx, 'db'>, args: AgentPrincipalWrite): Promise<{ kind: 'recorded' } | { kind: 'conflict' }> {
+export async function writeAgentPrincipal(ctx: Pick<MutationCtx, 'db' | 'scheduler'>, args: AgentPrincipalWrite): Promise<{ kind: 'recorded' } | { kind: 'conflict' }> {
   if (args.environment === 'production' && args.authorityMode === 'unrestricted_test_only') return { kind: 'conflict' as const }
   const existing = await ctx.db.query('agentAccessPrincipals')
     .withIndex('by_principalId', (query) => query.eq('principalId', args.principalId)).unique()
@@ -165,6 +166,8 @@ export async function writeAgentPrincipal(ctx: Pick<MutationCtx, 'db'>, args: Ag
     recordedAt: args.seenAt,
     lastSeenAt: args.seenAt,
   })
+  // Every agent-connection path persists here, so agent_connected has one chokepoint.
+  await emitJourneyEvent(ctx, args.ownerId, 'agent_connected')
   return { kind: 'recorded' as const }
 }
 

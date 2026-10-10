@@ -135,6 +135,7 @@ const decideApprovalBoundary = (decideCallApproval as unknown as { _handler: Han
 const resolveAgentBoundary = (resolveCallAgentAuthority as unknown as { _handler: Handler })._handler
 const reconcileWorkloadBoundary = (reconcileCallWorkloadAuthority as unknown as { _handler: Handler })._handler
 const registerAgentBoundary = (registerAgentPrincipal as unknown as { _handler: Handler })._handler
+const scheduler = { runAfter: async () => 'scheduled' }
 const registerGrantBoundary = (registerGrantForServer as unknown as { _handler: Handler })._handler
 
 const callerPrincipal = {
@@ -442,6 +443,7 @@ function authorityRows(overrides: Readonly<{
       ownerPrincipalRef: PRINCIPAL_REF, lifecycle: 'active',
     }],
     memberships: [] as Row[],
+    journeyEvents: [] as Row[],
     capabilityCalls: [{
       _id: 'capabilityCalls:1', callRef: 'invocation:canonical',
       principalId: PRINCIPAL_REF, ownerId: ACCOUNT_REF, credentialId: callerPrincipal.credentialId,
@@ -713,6 +715,7 @@ describe('capability operation canonical authority boundary', () => {
 
       const result = await registerAgentBoundary({
         db,
+        scheduler,
         auth: {
           getUserIdentity: async () => tokenIdentifier === null ? null : { tokenIdentifier },
         },
@@ -723,7 +726,8 @@ describe('capability operation canonical authority boundary', () => {
       if (caseKind === 'workload') {
         expect(result).toEqual({ kind: 'recorded' })
         expect(rows.agentAccessPrincipals).toHaveLength(1)
-        expect(db.insertions).toHaveLength(1)
+        expect(db.insertions.map(insertion => insertion.table)).toEqual(['agentAccessPrincipals', 'journeyEvents'])
+        expect(rows.journeyEvents).toEqual([expect.objectContaining({ accountRef: ACCOUNT_REF, name: 'agent_connected' })])
       } else {
         expect(result).not.toEqual({ kind: 'recorded' })
         expect(rows.agentAccessPrincipals).toHaveLength(0)
@@ -1003,6 +1007,7 @@ describe('capability operation canonical authority boundary', () => {
     const db = new AuthorityMemoryDb(rows)
     await expect(registerAgentBoundary({
       db,
+      scheduler,
       auth: { getUserIdentity: async () => ({ tokenIdentifier: callerPrincipal.credentialId }) },
     }, registrationArgs({
       seenAt: 1,
