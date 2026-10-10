@@ -98,6 +98,7 @@ export { matchesPublishedBusinessPrice } from './internal/search-input'
 export { registrySearchTokens } from './internal/search-documents'
 export { isDeploymentToolChoice } from './tool-choice-evidence'
 export { SEARCH_ASSESSMENT_LIMIT, suitableRankedToolRefs } from './search-verdict'
+export { formatSearchSignals, rankSearchRowsByEvidence } from './search-signals'
 export type {
   PublicServicesApiPage,
   PublicServicesSearchPage,

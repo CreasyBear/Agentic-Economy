@@ -36,7 +36,7 @@ import { isRecord } from '@/modules/common/is-record'
 import { describeActionMcpMetadata, journeyProblemSchema, mcpActionNextSchema, isToolMarketReadAction, listMcpActions, mcpToolName, mcpToolsetAdmitted, projectMcpActionNext, projectMcpJourneyProblem, type AnyAction } from '@/modules/actions'
 import { MARKET_TOOLS_CALL_SCOPE } from '@/modules/agent-access/contract'
 import { searchSignalsSchema, toolCatalogSearchInputSchema, toolChoiceSearchOutputSchema, withAuthorizedSaveNeed } from '@/modules/registry/tool-choice-contracts'
-import { formatSearchSignals } from '@/modules/registry/search-signals'
+import { formatSearchSignals } from '@/modules/registry/public'
 import {
   agentAuthorityScopeForMode,
   type AgentAccessAuthorityMode,
