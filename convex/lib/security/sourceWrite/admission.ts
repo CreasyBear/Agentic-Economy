@@ -113,7 +113,7 @@ async function verifyAdmission(input: {
   maxAgeMs?: number
 }): Promise<{ kind: 'accepted'; admission: SourceWriteAdmission } | { kind: 'rejected'; reason: SourceWriteAdmissionFailureReason }> {
   try {
-    return await verifySourceWriteAdmission({ admission: input.admission, expected: input.expected, maxAgeMs: input.maxAgeMs })
+    return await verifySourceWriteAdmission({ admission: input.admission, expected: input.expected, ...(input.maxAgeMs === undefined ? {} : { maxAgeMs: input.maxAgeMs }) })
   } catch (error) {
     if (error instanceof SourceWriteAdmissionError) return { kind: 'rejected', reason: sourceWriteErrorReason(error) }
     throw error
