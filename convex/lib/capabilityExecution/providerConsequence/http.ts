@@ -60,10 +60,11 @@ function canonicalDigest(value: unknown): value is string {
 
 export async function beginProviderConsequenceJournalHandler(ctx: GenericActionCtx<GenericDataModel>, request: Request): Promise<Response> {
   const token = bearer(request)
+  if (token === undefined) return json({ kind: 'unavailable' }, 401)
   const body = await boundedJson(request)
-  if (token === undefined || body === undefined || !exactKeys(body, [
+  if (body === undefined || !exactKeys(body, [
     'ticketRef', 'effectRef', 'requestDigest', 'invocationDigest', 'ticketClaimsDigest', 'expiresAt',
-  ])) return json({ kind: 'unavailable' }, token === undefined ? 401 : 400)
+  ])) return json({ kind: 'unavailable' }, 400)
   if (!canonicalRef(body.ticketRef)
     || !canonicalRef(body.effectRef)
     || !canonicalDigest(body.requestDigest)
@@ -88,11 +89,12 @@ export async function beginProviderConsequenceJournalHandler(ctx: GenericActionC
 
 export async function attestProviderConsequenceTicketHandler(ctx: GenericActionCtx<GenericDataModel>, request: Request): Promise<Response> {
   const token = bearer(request)
+  if (token === undefined) return json({ kind: 'unavailable' }, 401)
   const body = await boundedJson(request)
-  if (token === undefined || body === undefined || !exactKeys(body, [
+  if (body === undefined || !exactKeys(body, [
     'ticketRef', 'ticketClaimsDigest', 'expiresAt',
     'signingSecretRef', 'signingSecretGeneration', 'signingSecretPointerRevision',
-  ])) return json({ kind: 'unavailable' }, token === undefined ? 401 : 400)
+  ])) return json({ kind: 'unavailable' }, 400)
   if (!canonicalRef(body.ticketRef)
     || !canonicalDigest(body.ticketClaimsDigest)
     || !Number.isSafeInteger(body.expiresAt)
@@ -123,9 +125,10 @@ export async function attestProviderConsequenceTicketHandler(ctx: GenericActionC
 
 export async function completeProviderConsequenceJournalHandler(ctx: GenericActionCtx<GenericDataModel>, request: Request): Promise<Response> {
   const token = bearer(request)
+  if (token === undefined) return json({ kind: 'unavailable' }, 401)
   const body = await boundedJson(request)
-  if (token === undefined || body === undefined || !exactKeys(body, ['ticketRef', 'claimRef', 'observation'])) {
-    return json({ kind: 'unavailable' }, token === undefined ? 401 : 400)
+  if (body === undefined || !exactKeys(body, ['ticketRef', 'claimRef', 'observation'])) {
+    return json({ kind: 'unavailable' }, 400)
   }
   if (!canonicalRef(body.ticketRef) || !canonicalRef(body.claimRef)) {
     return json({ kind: 'unavailable' }, 400)
@@ -151,9 +154,10 @@ export async function completeProviderConsequenceJournalHandler(ctx: GenericActi
 
 export async function abortProviderConsequenceJournalHandler(ctx: GenericActionCtx<GenericDataModel>, request: Request): Promise<Response> {
   const token = bearer(request)
+  if (token === undefined) return json({ kind: 'unavailable' }, 401)
   const body = await boundedJson(request)
-  if (token === undefined || body === undefined || !exactKeys(body, ['ticketRef', 'claimRef'])) {
-    return json({ kind: 'unavailable' }, token === undefined ? 401 : 400)
+  if (body === undefined || !exactKeys(body, ['ticketRef', 'claimRef'])) {
+    return json({ kind: 'unavailable' }, 400)
   }
   if (!canonicalRef(body.ticketRef) || !canonicalRef(body.claimRef)) {
     return json({ kind: 'unavailable' }, 400)

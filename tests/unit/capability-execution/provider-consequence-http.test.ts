@@ -440,4 +440,18 @@ describe('provider consequence Convex HTTP callbacks', () => {
       ticketRef: 'ticket:test', operation: 'observe_attempt', args: {},
     }))).resolves.toMatchObject({ status: 503 })
   })
+
+  it('returns 401 without reading the body when the bearer is missing', async () => {
+    const ctx = { runMutation: vi.fn(), runQuery: vi.fn() } as unknown as ActionCtx
+    for (const handler of [begin, attest, complete, abort, x402]) {
+      const req = rawRequest('{}')
+      req.headers.delete('authorization')
+      const spies = [
+        vi.spyOn(req, 'text'), vi.spyOn(req, 'json'), vi.spyOn(req, 'arrayBuffer'),
+        vi.spyOn(req.body as ReadableStream, 'getReader'),
+      ]
+      await expect(handler(ctx, req)).resolves.toMatchObject({ status: 401 })
+      for (const spy of spies) expect(spy).not.toHaveBeenCalled()
+    }
+  })
 })
