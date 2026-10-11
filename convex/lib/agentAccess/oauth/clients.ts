@@ -10,6 +10,8 @@ const client = v.object({
   tokenEndpointAuthMethod: v.literal('none'), createdAt: v.number(), lastUsedAt: v.optional(v.number()),
 })
 
+export const OAUTH_CLIENT_REGISTRY_CAP = 5000
+
 export const insertClientArgs = { client, operationKey: v.string(), correlationId: v.string(), ...sourceWriteArgs }
 export const insertClientResult = v.null()
 export async function insertClientHandler(
@@ -25,6 +27,8 @@ export async function insertClientHandler(
     throw new Error('agent_access_oauth_client_conflict')
   }
   if (existing === null) {
+    const rows = await ctx.db.query('agentAccessOAuthClients').take(OAUTH_CLIENT_REGISTRY_CAP + 1)
+    if (rows.length > OAUTH_CLIENT_REGISTRY_CAP - 1) throw new Error('agent_access_oauth_client_registry_full')
     await ctx.db.insert('agentAccessOAuthClients', args.client)
   }
   return null

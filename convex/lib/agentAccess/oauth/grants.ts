@@ -105,6 +105,15 @@ export async function cleanupExpiredOAuthGrantsHandler(
     }
   }
 
+  const staleClients = await ctx.db.query('agentAccessOAuthClients').take(batchSize * 5)
+  for (const row of staleClients) {
+    if (row.lastUsedAt !== undefined || row.createdAt >= effectiveNow - 30 * 24 * 60 * 60 * 1_000) continue
+    const grant = await ctx.db.query('agentAccessOAuthGrants')
+      .withIndex('by_clientId_and_status', (query) => query.eq('clientId', row.clientId))
+      .first()
+    if (grant === null) await ctx.db.delete(row._id)
+  }
+
   const rescheduled = deleted === batchSize
   if (rescheduled) {
     await ctx.scheduler.runAfter(0, internal.workloadCron.cleanupExpiredAgentAccessOAuthGrants, {

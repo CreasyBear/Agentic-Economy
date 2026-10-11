@@ -615,6 +615,21 @@ describe('Agent Access OAuth Convex persistence adapter', () => {
     })).rejects.toThrow('agent_access_oauth_client_conflict')
   })
 
+  it('rejects client registration at the registry cap', async () => {
+    process.env.AE_SOURCE_WRITE_SECRET = SOURCE_WRITE_SECRET
+    const backend = convexTest(schema, modules)
+    await backend.run(async (ctx) => {
+      for (let index = 0; index < 5000; index += 1) {
+        await ctx.db.insert('agentAccessOAuthClients', { ...client, clientId: `cap-${index}` })
+      }
+    })
+    const insertCommand = { client, operationKey: 'oauth:test:cap', correlationId: 'oauth:test:cap' }
+    await expect(backend.mutation(api.agentAccessOAuth.insertClient, {
+      ...insertCommand,
+      ...(await sourceArgs(insertCommand)),
+    })).rejects.toThrow('agent_access_oauth_client_registry_full')
+  })
+
   it('keeps OAuth client metadata public while grants remain source-admitted', async () => {
     process.env.AE_SOURCE_WRITE_SECRET = SOURCE_WRITE_SECRET
     const backend = convexTest(schema, modules)
@@ -1468,6 +1483,20 @@ describe('Agent Access OAuth grant cleanup', () => {
     const remaining = await backend.run((ctx) => ctx.db.query('agentAccessOAuthGrants').collect())
     expect(remaining).toHaveLength(1)
     expect(remaining[0]).toMatchObject({ grantRef: 'cleanup:grace', expiresAt: cutoff + 1 })
+  })
+
+  it('removes stale unused clients and keeps used or granted ones', async () => {
+    const backend = convexTest(schema, modules)
+    const workload = await admitOAuthCleanupWorkload(backend)
+    const now = 100 * 24 * 60 * 60 * 1_000
+    await backend.run(async (ctx) => {
+      await ctx.db.insert('agentAccessOAuthClients', { ...client, clientId: 'stale', createdAt: 1 })
+      await ctx.db.insert('agentAccessOAuthClients', { ...client, clientId: 'used', createdAt: 1, lastUsedAt: 2 })
+      await ctx.db.insert('agentAccessOAuthClients', { ...client, clientId: 'fresh', createdAt: now })
+    })
+    await backend.mutation(internal.agentAccessOAuth.cleanupExpiredOAuthGrants, { now, batchSize: 10, workload })
+    const ids = (await backend.run((ctx) => ctx.db.query('agentAccessOAuthClients').collect())).map((row) => row.clientId).sort()
+    expect(ids).toEqual(['fresh', 'used'])
   })
 
   it('caps cleanup batches at 200 rows', async () => {
