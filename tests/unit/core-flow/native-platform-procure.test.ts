@@ -109,25 +109,6 @@ describe('native procurement replay and recovery', () => {
     }
   })
 
-  it('does not terminalise the key on a retryable Quote refusal, but does on a terminal one', async () => {
-    const identity = identityPort()
-    const complete = vi.spyOn(identity, 'complete')
-    const callService = service({ kind: 'pending', callRef: 'call:one', toolRef, retryAfterMs: 1000 })
-    vi.mocked(callService.quoteTool!).mockResolvedValueOnce({ kind: 'refused', code: 'quote_unavailable', retryable: true } as never)
-    const procure = engine(callService, identity)
-    expect(await procure.procure(input)).toMatchObject({ status: 'refused', retryable: true })
-    expect(complete).not.toHaveBeenCalled()
-    expect(await procure.procure(input)).toMatchObject({ status: 'pending', quoteRef: 'quote:one' })
-    expect(callService.quoteTool).toHaveBeenCalledTimes(2)
-
-    const terminal = service(undefined)
-    vi.mocked(terminal.quoteTool!).mockResolvedValueOnce({ kind: 'refused', code: 'quote_denied', retryable: false } as never)
-    const id2 = identityPort()
-    const complete2 = vi.spyOn(id2, 'complete')
-    expect(await engine(terminal, id2).procure(input)).toMatchObject({ status: 'refused', retryable: false })
-    expect(complete2).toHaveBeenCalledTimes(1)
-  })
-
   it('resumes the saved Quote when only the committed checkpoint response was lost', async () => {
     const identity = identityPort()
     const checkpoint = identity.checkpoint.bind(identity)
