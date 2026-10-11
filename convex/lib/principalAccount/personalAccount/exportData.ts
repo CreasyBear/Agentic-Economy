@@ -119,6 +119,7 @@ export const exportUserDataHandler = async (ctx: QueryCtx) => {
         .take(50)
       for (const event of events) {
         if (event.sourceSystem === undefined || event.afterState === undefined) continue
+        if (event.actorRef !== principal.principalRef && event.targetRef !== principal.principalRef) continue
         securityHistory.push({
           eventRef: event.eventId,
           eventType: event.eventType,
