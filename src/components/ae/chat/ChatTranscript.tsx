@@ -1,5 +1,5 @@
 // Adapted from vercel/ai-chatbot, c2f8235e1f3ea903ad8b7f61447c4f74164b5c58, components/chat/messages.tsx and components/chat/message.tsx (Apache-2.0).
-import { ErrorBoundary } from '@sentry/react'
+import { AeObservabilityErrorBoundary } from '@/components/ae/feedback/AeObservabilityErrorBoundary'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import '@/components/ae/shared/arc-pro/chat/ChatComposition.css'
 import { ArcAiChatMessage } from '@/components/ae/shared/arc-pro/ai-chat/ai-chat-message'
@@ -370,7 +370,7 @@ export function ChatTranscript({
                                 {...(onNewChat === undefined ? {} : { onNewChat })} />
                             )}
                             {panelOption === undefined || panelId === undefined ? null : (
-                              <ErrorBoundary
+                              <AeObservabilityErrorBoundary
                                 key={`${panelScope}:${turn.id}:${panelOption.id}:${panelOpen}`}
                                 fallback={
                                   <section id={panelId} data-open={panelOpen} aria-hidden={!panelOpen}
@@ -394,7 +394,7 @@ export function ChatTranscript({
                                     : onRunTool(intent.toolRef, intent.input)}
                                   onAddCredit={intent => onAddCredit?.(undefined, intent)}
                                   onClose={() => closePanel(turn.id, panelOption.id, panelId)} />
-                              </ErrorBoundary>
+                              </AeObservabilityErrorBoundary>
                             )}
                             {turn.tools.map((card, cardIndex) => {
                               if (bundle?.root && bundle.consumed.has(cardIndex)) return null
@@ -433,10 +433,10 @@ export function ChatTranscript({
               )
             })}
             {ownerChatThreadId && ownerChatNow !== undefined && onFreshQuote ? (
-              <ErrorBoundary key={ownerChatThreadId} fallback={<></>}>
+              <AeObservabilityErrorBoundary key={ownerChatThreadId} fallback={<></>}>
                 <ChatOwnerApprovalsContainer threadId={ownerChatThreadId} now={ownerChatNow}
                   onFreshQuote={onFreshQuote} />
-              </ErrorBoundary>
+              </AeObservabilityErrorBoundary>
             ) : null}
             {readOnly || thinking || generating || onRetryQuestion === undefined || turns.at(-1)?.role !== 'user' ? null : (
               <UnansweredQuestion

@@ -9,7 +9,7 @@ import '../layout/RouteRecoveryComposition.css'
 
 type AeRenderErrorBoundaryProps = Readonly<{
   children: ReactNode
-  fallback: ReactNode
+  fallback: ReactNode | ((api: { resetError: () => void }) => ReactNode)
   onError?: (error: unknown) => void
 }>
 
@@ -32,8 +32,12 @@ export class AeRenderErrorBoundary extends Component<AeRenderErrorBoundaryProps,
     captureClientExceptionOnClient(error)
   }
 
+  resetError = (): void => this.setState({ hasError: false })
+
   override render() {
-    return this.state.hasError ? this.props.fallback : this.props.children
+    if (!this.state.hasError) return this.props.children
+    const { fallback } = this.props
+    return typeof fallback === 'function' ? fallback({ resetError: this.resetError }) : fallback
   }
 }
 
@@ -58,10 +62,13 @@ function AeObservabilityErrorFallback() {
   )
 }
 
-export function AeObservabilityErrorBoundary({ children }: { children: ReactNode }) {
+export function AeObservabilityErrorBoundary({ children, fallback }: Readonly<{
+  children: ReactNode
+  fallback?: AeRenderErrorBoundaryProps['fallback']
+}>) {
   return (
     <AeRenderErrorBoundary
-      fallback={<AeObservabilityErrorFallback />}
+      fallback={fallback ?? <AeObservabilityErrorFallback />}
       onError={(error) => {
         attemptViteStaleChunkReload(error)
       }}
