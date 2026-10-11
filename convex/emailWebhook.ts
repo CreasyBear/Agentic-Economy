@@ -7,12 +7,13 @@ import { degradeBackend } from '../src/lib/observability/degrade-backend'
 import { isProductAnalyticsDisabled, readObservabilityServerConfig } from '../src/lib/observability/config'
 import { internal } from './_generated/api'
 import { internalAction } from './_generated/server'
+import { journeyDistinctId } from './journeyEvents'
 import { emailAddressHash, emailDomain } from './lib/principalAccount/notifications/suppression'
 
 type ResendEvent = { type: string; emailId: string; address: string; permanentBounce: boolean }
 
 /** Best-effort PostHog batch post to the same host journeyEvents forwards to. Failures stay silent, since a network error can carry request data. */
-async function captureEmailEvent(event: string, properties: Record<string, string | number | boolean>): Promise<void> {
+async function captureEmailEvent(event: string, distinctId: string, properties: Record<string, string | number | boolean>): Promise<void> {
   const env = process.env as Record<string, string | undefined>
   if (isProductAnalyticsDisabled(env)) return
   const config = readObservabilityServerConfig(env)
@@ -25,7 +26,7 @@ async function captureEmailEvent(event: string, properties: Record<string, strin
         api_key: config.posthogKey,
         batch: [{
           event,
-          distinct_id: 'ae.email',
+          distinct_id: distinctId,
           timestamp: new Date().toISOString(),
           properties: { ...properties, $process_person_profile: false, $geoip_disable: true },
         }],
@@ -95,20 +96,19 @@ export const receiveResendWebhook = internalAction({
     })
     if (result.outcome === 'duplicate') return 'duplicate'
     if (event.type === 'email.bounced' || event.type === 'email.complained') {
-      await captureEmailEvent(event.type === 'email.bounced' ? 'ae.email.bounced' : 'ae.email.complained', {
+      await captureEmailEvent(event.type === 'email.bounced' ? 'ae.email.bounced' : 'ae.email.complained', 'ae.email', {
         stream: result.stream,
         event_kind: result.eventKind,
         env: process.env.AE_DEPLOYMENT_ENVIRONMENT?.trim() || 'unknown',
         ...(event.type === 'email.bounced' ? { permanent: event.permanentBounce } : {}),
       })
     }
-    // Funnel anchor (design doc section 7): email_sent(kind) to the product event, joined on the owner account.
-    if (event.type === 'email.sent') {
-      await captureEmailEvent('email_sent', {
+    // Funnel anchor (design doc section 7): email_sent(kind), only for a matched delivery. distinct_id is the same owner digest the journey events use, so the funnel joins.
+    if (event.type === 'email.sent' && result.accountRef !== undefined) {
+      await captureEmailEvent('email_sent', await journeyDistinctId(result.accountRef), {
         stream: result.stream,
         kind: result.eventKind,
         env: process.env.AE_DEPLOYMENT_ENVIRONMENT?.trim() || 'unknown',
-        ...(result.accountRef === undefined ? {} : { account_ref: result.accountRef }),
       })
     }
     return 'applied'
