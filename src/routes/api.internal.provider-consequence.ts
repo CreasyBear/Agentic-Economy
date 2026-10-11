@@ -4,6 +4,7 @@ import { Agent, fetch as guardedFetch } from 'undici'
 import { deploymentPaymentEnvironment, type PaymentEnvironment } from '@/lib/deployment/environment'
 import { captureRouteException } from '@/lib/observability/capture-route-exception'
 import { degrade } from '@/lib/observability/degrade'
+import { rpcChannelAuthenticated } from '@/lib/server/rpc-channel-auth'
 import { methodNotAllowed } from '@/lib/server/method-guard'
 import { response as noStore } from '@/lib/server/no-store-response'
 import { readTrimmedEnv, type StringEnvironment } from '@/lib/server/read-trimmed-env'
@@ -561,6 +562,9 @@ export async function handleProviderConsequenceRequest(
   rawRequest: Request,
   environment: StringEnvironment = process.env,
 ): Promise<Response> {
+  if (!await rpcChannelAuthenticated(rawRequest, environment, 'AE_SECRET_LIFECYCLE_RPC_TOKEN')) {
+    return noStore({ kind: 'unavailable' }, 401)
+  }
   const request = await readRequest(rawRequest)
   if (request === undefined) return noStore({ kind: 'unavailable' }, 400)
   const paymentEnvironment = deploymentPaymentEnvironment(environment)
