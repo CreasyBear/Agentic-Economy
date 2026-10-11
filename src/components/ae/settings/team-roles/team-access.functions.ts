@@ -64,8 +64,8 @@ export const changeTeamAccessServer = createServerFn({ method: 'POST' })
       if (directory.accountRef !== data.accountRef || directory.accountRevision !== data.accountRevision
         || directory.owner.revision !== data.ownershipRevision) return { kind: 'refused', code: 'stale' }
       const member = directory.members.find(row => row.membershipRef === data.membershipRef)
-      if (member === undefined || member.revision !== data.membershipRevision || member.clerkUserId === null
-        || member.clerkUserId === directory.owner.clerkUserId) return { kind: 'refused', code: 'stale' }
+      if (member !== undefined && member.clerkUserId !== null && member.clerkUserId === directory.owner.clerkUserId) return { kind: 'refused', code: 'last_owner' }
+      if (member === undefined || member.revision !== data.membershipRevision || member.clerkUserId === null) return { kind: 'refused', code: 'stale' }
       if (await readClerkMfaConsequenceProof() === undefined) return { kind: 'refused', code: 'mfa_reverification_required' }
       const organizations = clerkClient().organizations
       const current = await organizations.getOrganizationMembershipList({ organizationId, userId: [member.clerkUserId], limit: 2 })

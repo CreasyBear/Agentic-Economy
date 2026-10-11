@@ -12,5 +12,5 @@ export type TeamAccessView = Readonly<{
   invitationsComplete: boolean; nextInvitationOffset: number | null
 }>
 export type TeamAccessResult = Readonly<{ kind: 'accepted' }> | Readonly<{
-  kind: 'refused'; code: 'forbidden' | 'stale' | 'mfa_reverification_required' | 'last_admin' | 'source_unavailable'
+  kind: 'refused'; code: 'forbidden' | 'stale' | 'mfa_reverification_required' | 'last_admin' | 'last_owner' | 'source_unavailable'
 }>

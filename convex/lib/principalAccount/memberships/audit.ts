@@ -108,6 +108,7 @@ export async function recordOrganizationMembershipDeletedAudit(
     observedAt: number
     commandDigest: string
     beforeState: string
+    outcome?: 'ended' | 'ignored'
     createdAt: number
   }>,
 ): Promise<void> {
@@ -127,7 +128,7 @@ export async function recordOrganizationMembershipDeletedAudit(
     idempotencyKey: brandNonEmpty(toolRef, 'OperationKey'),
     correlationId: brandNonEmpty(toolRef, 'CorrelationId'),
     beforeState: input.beforeState,
-    outcome: 'ended',
+    outcome: input.outcome ?? 'ended',
     evidenceRefs: [`clerk-delivery:${digestValue}`],
     redactedPayload: {
       clerkOrgId: input.clerkOrgId,

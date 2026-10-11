@@ -53,6 +53,13 @@ it('never changes the owner via a membership action', async () => {
   expect(await changeTeamAccessServer({ data: { ...memberCommand, membershipRef: 'ownership:1', action: 'remove' } })).toEqual({ kind: 'refused', code: 'stale' })
   expect(boundary.remove).not.toHaveBeenCalled()
 })
+it('refuses removing the last owner with last_owner', async () => {
+  directory.members.push({ membershipRef: 'membership:owner', revision: 1, clerkUserId: 'user_owner', role: 'admin', displayName: 'Owner' })
+  try {
+    expect(await changeTeamAccessServer({ data: { ...memberCommand, membershipRef: 'membership:owner', membershipRevision: 1, action: 'remove' } })).toEqual({ kind: 'refused', code: 'last_owner' })
+  } finally { directory.members.pop() }
+  expect(boundary.remove).not.toHaveBeenCalled()
+})
 it('requires current MFA and preserves the final identity admin', async () => {
   boundary.proof.mockResolvedValueOnce(undefined)
   expect(await changeTeamAccessServer({ data: memberCommand })).toEqual({ kind: 'refused', code: 'mfa_reverification_required' })

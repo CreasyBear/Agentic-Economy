@@ -1420,6 +1420,25 @@ describe('workspaceMemberships recordOrganizationMembershipDeletedForServer (W-1
     ])
   })
 
+  it('D1a: removing the owner in Clerk keeps ownership, audits the ignore and notifies the owner', async () => {
+    const backend = createBackend()
+    const accountRef = await seedDeletedObservationFixture(backend)
+    const result = await recordOrganizationMembershipDeletedForServer(backend, deletedMembershipCommand({
+      deliveryRef: 'delivery-d1a',
+      providerIdentifier: OWNER_PROVIDER_IDENTIFIER,
+    }))
+    expect(result).toEqual({ kind: 'accepted', status: 'ignored' })
+    const ownerships = await backend.run((ctx) => ctx.db.query('accountOwnerships').collect())
+    expect(ownerships.filter((row) => row.accountRef === accountRef && row.lifecycle === 'active')).toHaveLength(1)
+    const audits = await listMembershipDeletedAuditEvents(backend)
+    expect(audits).toHaveLength(1)
+    expect(audits[0]?.beforeState).toBe('owner_removal_ignored')
+    const notices = await backend.run((ctx) => ctx.db.query('notificationDeliveries').collect())
+    expect(notices.filter((row) => row.eventKind === 'team_membership_changed')).toEqual([
+      expect.objectContaining({ accountRef }),
+    ])
+  })
+
   it('D1b: removed member loses their agent and credentials while another member agent stays active', async () => {
     const backend = createBackend()
     const accountRef = await seedDeletedObservationFixture(backend)
@@ -1626,7 +1645,7 @@ describe('workspaceMemberships recordOrganizationMembershipDeletedForServer (W-1
       providerIdentifier: OWNER_PROVIDER_IDENTIFIER,
     }))
     expect(result).toEqual({ kind: 'accepted', status: 'ignored' })
-    expect(await listMembershipDeletedAuditEvents(backend)).toHaveLength(0)
+    expect(await listMembershipDeletedAuditEvents(backend)).toHaveLength(1)
   })
 
   it('D9: no active membership or already ended membership is ignored without new audit', async () => {

@@ -19,6 +19,7 @@ const refusalCopy = {
   stale: 'Access changed since this page was read. Refresh the team before making another change.',
   mfa_reverification_required: 'Verify with two-factor authentication to change access.',
   last_admin: 'The identity organisation must retain an admin. Promote another member first.',
+  last_owner: 'The workspace owner cannot be removed. Transfer ownership first.',
   source_unavailable: 'The change could not be confirmed. Refresh the team and pending invitations before trying again.',
 } as const
 
