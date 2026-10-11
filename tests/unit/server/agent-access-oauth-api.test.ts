@@ -1059,10 +1059,14 @@ describe('Customer Request OAuth HTTP adapter', () => {
       .mockResolvedValueOnce({ kind: 'completed' })
       .mockResolvedValue({ kind: 'unknown' })
     const byAccess = vi.fn<AgentAccessOAuthRefreshStore['revokeRefreshFamilyByAccessToken']>()
-      .mockResolvedValue({ kind: 'completed' })
+      .mockResolvedValueOnce({ kind: 'completed', providerCredentialId: 'ak_device_access' })
+      .mockResolvedValue({ kind: 'unknown' })
     const refreshStore = refreshStoreFixture({ revokeRefreshFamily: byRefresh, revokeRefreshFamilyByAccessToken: byAccess })
+    const revokeProviderCredential = vi.fn(async () => {})
     const options: OAuthApiOptions = {
       store, refreshStore, now: () => 1_000,
+      getProviderCredential: async () => ({ revoked: false }),
+      revokeProviderCredential,
     }
 
     const refresh = await handleOAuthRevokePost(formRequest('http://localhost/oauth/revoke', {
@@ -1079,6 +1083,8 @@ describe('Customer Request OAuth HTTP adapter', () => {
     expect(access.status).toBe(200)
     expect(unknown.status).toBe(200)
     expect(refresh.headers.get('cache-control')).toBe('no-store')
+    expect(revokeProviderCredential).toHaveBeenCalledTimes(1)
+    expect(revokeProviderCredential).toHaveBeenCalledWith('ak_device_access', expect.any(String))
     expect(byAccess).toHaveBeenCalledWith(expect.objectContaining({
       tokenHash: await hashOAuthValue('known-access'), clientId: 'client-durable',
     }))

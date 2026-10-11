@@ -313,6 +313,34 @@ describe('Agent Access OAuth Convex persistence adapter', () => {
     })).rejects.toThrow('agent_access_oauth_source_write_rejected:missing_source_write_admission')
   })
 
+  it('revokes a device grant access token by its stored hash and returns the provider credential', async () => {
+    process.env.AE_SOURCE_WRITE_SECRET = SOURCE_WRITE_SECRET
+    const backend = convexTest(schema, modules)
+    const insertCommand = {
+      grant: { ...grant, keyId: 'ak_device_access', accessTokenHash: 'sha256:device-access' },
+      operationKey: 'oauth:test:device-access-insert',
+      correlationId: 'oauth:test:device-access-insert',
+    }
+    await backend.mutation(api.agentAccessOAuth.insertGrant, {
+      ...insertCommand, ...(await sourceArgs(insertCommand, 'nonce:oauth:test:device-access-insert')),
+    })
+    const revoke = (tokenHash: string, clientId: string, key: string) => ({
+      tokenHash, clientId, now: 2_000, reason: 'oauth_revocation', operationKey: key, correlationId: key,
+    })
+    const call = async (tokenHash: string, clientId: string, key: string) => {
+      const command = revoke(tokenHash, clientId, key)
+      return await backend.mutation(api.agentAccessOAuth.revokeRefreshFamilyByAccessToken, {
+        ...command, ...(await sourceArgs(command)),
+      })
+    }
+    await expect(call('sha256:device-access', grant.clientId, 'oauth:test:device-revoke-1'))
+      .resolves.toEqual({ kind: 'completed', providerCredentialId: 'ak_device_access' })
+    await expect(call('sha256:device-access', 'other-client', 'oauth:test:device-revoke-2'))
+      .resolves.toEqual({ kind: 'unknown' })
+    await expect(call('sha256:unknown', grant.clientId, 'oauth:test:device-revoke-3'))
+      .resolves.toEqual({ kind: 'unknown' })
+  })
+
   it('inserts and reads a grant by reference and each exact hash index', async () => {
     process.env.AE_SOURCE_WRITE_SECRET = SOURCE_WRITE_SECRET
     const backend = convexTest(schema, modules)

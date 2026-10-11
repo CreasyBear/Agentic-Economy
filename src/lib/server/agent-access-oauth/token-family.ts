@@ -62,7 +62,10 @@ export async function handleOAuthRevokePost(request: Request, options: OAuthApiO
     const tokenHash = await hashOAuthValue(token)
     const refresh = await store.revokeRefreshFamily({ tokenHash, clientId, now, reason: 'oauth_revocation' })
     if (refresh.kind !== 'unknown') return oauthRevokedResponse()
-    await store.revokeRefreshFamilyByAccessToken({ tokenHash, clientId, now, reason: 'oauth_revocation' })
+    const byAccess = await store.revokeRefreshFamilyByAccessToken({ tokenHash, clientId, now, reason: 'oauth_revocation' })
+    if (byAccess.providerCredentialId !== undefined) {
+      await revokeProviderCredentialIfCurrent(byAccess.providerCredentialId, 'Revoked by OAuth client.', options)
+    }
     return oauthRevokedResponse()
   } catch (cause) {
     return degrade(cause, oauthError('server_error', 503), { site: 'handleOAuthRevokePost', reason: 'source_unavailable' })
@@ -302,6 +305,7 @@ async function deliverClaimedGrant(
       grantRef: claimed.value.grant.grantRef,
       claimToken: claimed.value.claimToken,
       now: currentNow(options),
+      accessTokenHash: await hashOAuthValue(secret.secret),
     })
     if (consumed.kind !== 'ok') return oauthTransitionError(consumed)
     let refreshToken: string | undefined

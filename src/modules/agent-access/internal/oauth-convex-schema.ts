@@ -120,6 +120,7 @@ export const agentAccessOAuthTables = {
     nextPollAt: v.optional(v.number()),
     deliveryClaimToken: v.optional(v.string()),
     deliveryCredentialHash: v.optional(v.string()),
+    accessTokenHash: v.optional(v.string()),
     deliveryReplayUntil: v.optional(v.number()),
     displayName: v.string(),
     denialReason: v.optional(v.literal('access_denied')),
@@ -131,6 +132,7 @@ export const agentAccessOAuthTables = {
     .index('by_deviceCodeHash', ['deviceCodeHash'])
     .index('by_userCodeHash', ['userCodeHash'])
     .index('by_authorizationCodeHash', ['authorizationCodeHash'])
+    .index('by_accessTokenHash', ['accessTokenHash'])
     .index('by_clientId_and_status', ['clientId', 'status'])
     .index('by_status_and_expiresAt', ['status', 'expiresAt']),
 
