@@ -322,6 +322,8 @@ Ordered and atomic. Order is the sequence: no two tasks edit the same file unles
 
 **T17 handoff (Joel, dashboard only, no code).** Not done by an agent; no repo change can do it. Do it only after T11 and T16 pass on hosted and the aecon funding receipt send is live there, because with Stripe's receipt off and an auto-charged invoice the customer gets nothing else. Steps: Stripe Settings > Business > Customer emails > Payments > turn off Successful payments; Settings > Billing > Subscriptions and emails > turn off Send finalised invoices. Check: one live top-up produces exactly one email, from aecon, no Stripe receipt. Also still blocking go-live: DNS verified for `mail.aecon.ai`. Entity, ABN and support address are settled in `EMAIL_LEGAL_LINES` (no street address, by decision). Every new send path stays dark by default.
 
+**T18 handoff (Joel, Clerk dashboard only, no code).** Not done by an agent: it needs the dashboard and depends on open question 1 (is the branded-email plan on). If it is not, Clerk emails stay stock and this task closes with no change. If it is: Clerk Dashboard > Customization > Emails, edit the verification code, sign-in code and invitation templates. Set: page background `#E8E4DA`, card `#F2EFE7`, text `#141414`, muted `#595854`, button fill `#141414` with text `#E8E4DA`, radius 10px, font stack from 2.2, logo `aecon-symbol-forest-400.png` (public/brand/email/), reply-to `support@aecon.ai`, sender name `aecon`. Copy: sentence case, Australian English, no em dashes, one button. Clerk templates have no dark mode query, so light only. Check: send a Clerk test email per template and compare with 2.1 by eye.
+
 ---
 
 ## 9. Open questions for Joel
