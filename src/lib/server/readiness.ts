@@ -122,11 +122,12 @@ export function readNamesOnlyReadinessDiagnostics(
 
 /**
  * Discovery and configured funding signals used by the CLI doctor. `sellable`
- * also follows funding-constraints availability and the admin paid-calls
- * switch. These do not establish current paid-Call admission: production also requires the
- * backend payment-readiness evidence and purchase authority. Every field is
- * best-effort: a source outage or timeout degrades to the named unavailable
- * state, it never fails the request or flips the HTTP status.
+ * is true only when the catalogue, quoting and funding signals hold, funding
+ * constraints are available, and the admin paid-calls switch is open. It still
+ * does not establish paid-Call admission for a given buyer: production also
+ * requires the backend payment-readiness evidence and purchase authority.
+ * Every field is best-effort: a source outage or timeout degrades to the named
+ * unavailable state, it never fails the request or flips the HTTP status.
  */
 export type CommercialReadiness = Readonly<{
   /** x402 directory completion state (absent|failed|stale|fresh), from `readDirectoryFreshnessField`. */
