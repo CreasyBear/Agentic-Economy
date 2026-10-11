@@ -35,9 +35,14 @@ jobs:
       - run: npm run test:imports
       - run: npm run test:ts-standards
 
-  unit:
+  shard:
+    name: unit (${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v4
@@ -48,4 +53,13 @@ jobs:
         run: npm install --global npm@11.5.1 --ignore-scripts
       - name: Frozen dependency install
         run: npm ci
-      - run: npm run test:unit
+      - run: npm run test:unit -- --shard=${{ matrix.shard }}/4
+
+  unit:
+    needs: shard
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: All unit shards succeeded
+        run: test "${{ needs.shard.result }}" = success
