@@ -23,3 +23,14 @@ export function reconcileReadyItems(items: FacilitatorDiscoveryAdmittedItems) {
     }
   })
 }
+
+export const RECONCILE_CHUNK_SIZE = 100
+
+/** Applies items in bounded mutation calls (the reconcile mutation rejects more than 100 per call). */
+export async function reconcileInChunks<T, R>(items: readonly T[], apply: (chunk: T[]) => Promise<R>): Promise<R[]> {
+  const results: R[] = []
+  for (let index = 0; index < items.length; index += RECONCILE_CHUNK_SIZE) {
+    results.push(await apply(items.slice(index, index + RECONCILE_CHUNK_SIZE)))
+  }
+  return results
+}

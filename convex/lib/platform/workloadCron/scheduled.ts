@@ -15,6 +15,21 @@ async function runAdmittedAction(
   return null
 }
 
+/** Like runAdmittedAction, but a throwing target becomes a typed result instead of a redacted action error. */
+async function runAdmittedActionSettled(
+  ctx: WorkloadCronActionContext,
+  name: WorkloadCronName,
+  target: FunctionReference<'action', 'internal'>,
+  args: DefaultFunctionArgs,
+): Promise<null | { kind: 'failed' }> {
+  try {
+    return await runAdmittedAction(ctx, name, target, args)
+  } catch (cause) {
+    console.error('[workload-cron] action failed', { name, reason: cause instanceof Error ? cause.message.slice(0, 80) : 'unknown' })
+    return { kind: 'failed' }
+  }
+}
+
 async function runAdmittedMutation(
   ctx: WorkloadCronMutationContext,
   name: WorkloadCronName,
@@ -115,7 +130,8 @@ export async function observeX402TreasuryHandler(ctx: WorkloadCronActionContext)
 }
 
 export async function refreshMarketFlowHandler(ctx: WorkloadCronActionContext): Promise<null> {
-  return await runAdmittedAction(ctx, 'refresh market flow', internal.marketFlowRefresh.run, {})
+  await runAdmittedActionSettled(ctx, 'refresh market flow', internal.marketFlowRefresh.run, {})
+  return null
 }
 
 export async function sendOperatorDigestHandler(ctx: WorkloadCronActionContext): Promise<null> {

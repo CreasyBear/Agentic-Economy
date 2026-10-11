@@ -134,15 +134,26 @@ export const lookupVolumes = action({
   },
 })
 
+/** A failed refresh is recorded as market-flow state; it never surfaces as a thrown, redacted action error. */
+export async function refreshMarketFlow(ctx: ActionCtx, workload: unknown): Promise<null> {
+  try {
+    await ctx.runQuery(internal.workloadCron.reconcile, {
+      name: 'refresh market flow',
+      snapshot: parseWorkloadCronSnapshot(workload),
+    })
+    await ingest(ctx)
+  } catch (cause) {
+    try {
+      await ctx.runMutation(internal.marketFlow.fail, { message: failureMessage(cause) })
+    } catch (recordCause) {
+      console.error('[market] flow failure not recorded', { reason: failureMessage(recordCause) })
+    }
+  }
+  return null
+}
+
 export const run = internalAction({
   args: { workload: workloadCronSnapshotValue },
   returns: v.null(),
-  handler: async (ctx, args) => {
-    await ctx.runQuery(internal.workloadCron.reconcile, {
-      name: 'refresh market flow',
-      snapshot: parseWorkloadCronSnapshot(args.workload),
-    })
-    await ingest(ctx)
-    return null
-  },
+  handler: async (ctx, args) => await refreshMarketFlow(ctx, args.workload),
 })

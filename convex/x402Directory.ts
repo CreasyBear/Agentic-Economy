@@ -13,7 +13,7 @@ import { deploymentPaymentEnvironment, type PaymentEnvironment } from '@/lib/dep
 import { x402PaymentProfileForEnvironment } from '@/modules/capability-supply/convex'
 import { api, internal } from './_generated/api'
 import { env, internalAction } from './_generated/server'
-import { reconcileReadyItems } from './lib/capabilitySupply/facilitatorDiscovery/readyItems'
+import { reconcileInChunks, reconcileReadyItems } from './lib/capabilitySupply/facilitatorDiscovery/readyItems'
 import { bindWorkloadCronActionContext } from './lib/platform/workloadCron/consequence'
 
 
@@ -125,8 +125,8 @@ export const resolve = internalAction({
       if (admission.admitted.length === 0) return { kind: 'unavailable', reason: admission.skipped[0]?.reason ?? 'admission_unavailable' }
       const workload = await ctx.runQuery(internal.workloadCron.admit, { name: 'refresh facilitator discovery' })
       const authorized = bindWorkloadCronActionContext(ctx, { name: 'refresh facilitator discovery', snapshot: workload })
-      const result = await authorized.runMutation(internal.facilitatorDiscovery.reconcile, { items: [...structuredClone(reconcileReadyItems(admission.admitted))], complete: false, deadlineAt: Date.now() + 10_000, workload })
-      const toolRef = result.toolRefs[0]
+      const results = await reconcileInChunks(structuredClone(reconcileReadyItems(admission.admitted)), items => authorized.runMutation(internal.facilitatorDiscovery.reconcile, { items, complete: false, deadlineAt: Date.now() + 10_000, workload }))
+      const toolRef = results[0]?.toolRefs[0]
       if (toolRef === undefined) return { kind: 'unavailable', reason: 'admission_unavailable' }
       const detail = await ctx.runQuery(api.capabilitySupplyTools.detail, { toolRef })
       return detail.kind === 'found' ? { kind: 'ready', toolRef } : { kind: 'unavailable', reason: 'tool_unavailable' }
