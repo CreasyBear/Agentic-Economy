@@ -4,7 +4,9 @@ import { AeAgentDoorPage } from '@/components/ae/agents/AeAgentDoorPage'
 import { AePublicPage } from '@/components/ae/layout/AePublicPage'
 import { RouteError, RoutePending } from '@/components/ae/layout/AeRouteStates'
 import { AGENT_PAGE } from '@/content/brand-copy'
+import { availabilityStatement } from '@/content/availability-copy'
 import type { NativeMcpClientId } from '@/lib/cli-distribution'
+import { readAvailabilityServer } from '@/lib/server/availability.functions'
 import { readCanonicalBaseUrlServer } from '@/lib/server/canonical-url.functions'
 import { buildPublicPageHead } from '@/modules/seo/public'
 
@@ -21,20 +23,23 @@ function validateForAgentsSearch(search: unknown): ForAgentsSearch {
 
 export const Route = createFileRoute('/for-agents')({
   validateSearch: validateForAgentsSearch,
-  loader: () => readCanonicalBaseUrlServer(),
+  loader: async () => {
+    const [canonicalBaseUrl, paidCalls] = await Promise.all([readCanonicalBaseUrlServer(), readAvailabilityServer()])
+    return { canonicalBaseUrl, availability: availabilityStatement(paidCalls) }
+  },
   pendingComponent: RoutePending,
   errorComponent: RouteError,
   head: ({ loaderData }) => buildPublicPageHead({
     path: '/for-agents',
     title: AGENT_PAGE.metaTitle,
     description: AGENT_PAGE.metaDescription,
-    ...(loaderData === undefined ? {} : { canonicalBaseUrl: loaderData }),
+    ...(loaderData === undefined ? {} : { canonicalBaseUrl: loaderData.canonicalBaseUrl }),
   }),
   component: ForAgentsRoute,
 })
 
 function ForAgentsRoute() {
-  const canonicalBaseUrl = Route.useLoaderData()
+  const { canonicalBaseUrl, availability } = Route.useLoaderData()
   const { setupApp } = validateForAgentsSearch(Route.useSearch())
   const location = useLocation()
   const navigate = useNavigate({ from: '/for-agents' })
@@ -54,6 +59,7 @@ function ForAgentsRoute() {
     <AePublicPage>
       <AeAgentDoorPage
         canonicalBaseUrl={canonicalBaseUrl}
+        availability={availability}
         {...(setupApp === undefined ? {} : { setupApp })}
         onSetupAppChange={handleSetupAppChange}
       />

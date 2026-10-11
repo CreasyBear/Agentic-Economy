@@ -36,7 +36,7 @@ test('native setup choice and copy work by pointer and keyboard', async ({ conte
   expect(await page.evaluate(() => (window as unknown as { setupPageTransitions: number }).setupPageTransitions)).toBe(0)
   const manifestCopyButton = page.getByRole('region', { name: 'Codex MCP command', exact: true }).getByRole('button')
 
-  await expect(page.getByRole('link', { name: 'Start setup', exact: true })).toHaveAttribute('href', '#agent-setup')
+  await expect(page.getByRole('link', { name: 'Connect an Agent', exact: true })).toHaveAttribute('href', '#agent-setup')
   await manifestCopyButton.scrollIntoViewIfNeeded()
   await expectInitialHitTarget(page, manifestCopyButton)
 

@@ -52,7 +52,9 @@ export const AGENT_PAGE = {
   eyebrow: 'Connections',
   heading: 'Connect your Agent.',
   subhead: 'We’re building one AUD account for your Agent’s paid Tools, with a Spending policy and purchase records.',
-  primaryCta: 'Start setup',
+  primaryCta: 'Connect an Agent',
+  trialLead: 'Have a trial invitation?',
+  trialLabel: 'Activate it',
   faqHeading: 'Before you connect',
   faqQuestions: [
     {
@@ -68,9 +70,11 @@ export const AGENT_PAGE = {
     {
       question: 'When can I connect an Agent?',
       answer:
-        'Agentic Economy is pre-launch. Public access, funding and purchases are not open yet. The status page tracks availability.',
+        'The status page tracks availability.',
     },
   ],
+  /** The availability FAQ answer opens with the live availability statement. */
+  faqAvailabilityQuestion: 'When can I connect an Agent?',
   faqStatusLinkLead: 'For current availability, visit our',
   faqStatusLinkLabel: 'status page',
 } as const
