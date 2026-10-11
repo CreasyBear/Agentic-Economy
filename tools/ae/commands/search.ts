@@ -59,6 +59,7 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
     throw new CliFailure('The market returned an invalid tool search result.', {
       kind: 'UNAVAILABLE',
       code: 'tool-search-result-invalid',
+      detail: parsedResult.error.issues.slice(0, 3).map(issue => `${issue.path.join('.')}: ${issue.message}`).join('; '),
     })
   }
 
