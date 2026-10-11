@@ -1,4 +1,4 @@
-import { render } from '@react-email/render'
+import { plainTextSelectors, render } from '@react-email/render'
 import type { ReactElement } from 'react'
 
 import AccountNotice, { subject as noticeSubject, type NoticeKind, type NoticeProps } from './templates/account-notice'
@@ -76,9 +76,23 @@ function build(input: EmailInput): { element: ReactElement; subject: string } {
   }
 }
 
+/** html-to-text strips "mailto:" from anchors; keep the href so the text part mirrors every HTML link. */
+const PLAIN_TEXT_OPTIONS = {
+  selectors: [
+    ...plainTextSelectors,
+    { selector: 'a[href^="mailto:"]', format: 'mailtoLink' },
+  ],
+  formatters: {
+    mailtoLink: (elem: { children: unknown; attribs?: { href?: string } }, walk: (nodes: unknown, builder: unknown) => void, builder: { addInline: (text: string) => void }) => {
+      walk(elem.children, builder)
+      builder.addInline(` [${elem.attribs?.href ?? ''}]`)
+    },
+  },
+}
+
 /** One render for the HTML part and one for the plain-text part, so the two never drift from the same element. */
 export async function renderEmail(input: EmailInput): Promise<RenderedEmail> {
   const { element, subject } = build(input)
-  const [html, text] = await Promise.all([render(element), render(element, { plainText: true })])
+  const [html, text] = await Promise.all([render(element), render(element, { plainText: true, htmlToTextOptions: PLAIN_TEXT_OPTIONS })])
   return { subject, html, text }
 }
