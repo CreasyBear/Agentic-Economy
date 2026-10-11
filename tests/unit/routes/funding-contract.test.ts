@@ -53,6 +53,28 @@ describe('public funding preflight', () => {
     restorePublicSource = undefined
   })
 
+  it('refuses with typed payments_not_open (409, no-store) when payments are off', async () => {
+    restorePublicSource?.()
+    restorePublicSource = setPublicSourceTransportForTests({
+      query: vi.fn(async () => ({ kind: 'refused', code: 'payments_admins_only', retryable: false })),
+      mutation: vi.fn(), action: vi.fn(),
+    } as never)
+    const response = await handleFundingConstraintsRequest(new Request('https://ae.example/api/v1/funding/constraints'))
+    expect(response.status).toBe(409)
+    expect(response.headers.get('cache-control')).toBe('no-store')
+    await expect(response.json()).resolves.toEqual({ kind: 'refused', code: 'payments_not_open', retryable: false })
+  })
+
+  it('keeps 503 when the source throws', async () => {
+    restorePublicSource?.()
+    restorePublicSource = setPublicSourceTransportForTests({
+      query: vi.fn(async () => { throw new Error('down') }),
+      mutation: vi.fn(), action: vi.fn(),
+    } as never)
+    const response = await handleFundingConstraintsRequest(new Request('https://ae.example/api/v1/funding/constraints'))
+    expect(response.status).toBe(503)
+  })
+
   it('returns cacheable constraints and a caller correlation ref', async () => {
     const response = await handleFundingConstraintsRequest(new Request(
       'https://ae.example/api/v1/funding/constraints',
