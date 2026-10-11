@@ -27,10 +27,10 @@ describe('journeyForFinalization funding source', () => {
       const call = (promotionalCreditAllocation?: ReturnType<typeof allocation>) =>
         ({ callRef: 'c', ownerId: 'acct', environment: 'production', promotionalCreditAllocation }) as never
       await journeyForFinalization(ctx, call(allocation('0')), completed, 1)
-      expect((await events('first_call'))?.props).toEqual({ funding_source: 'trial' })
+      expect((await events('first_call'))?.props).toEqual({ funding_source: 'trial', isNewAccount: 'false' })
       expect(await events('activated')).toBeNull()
       await journeyForFinalization(ctx, call(), completed, 2)
-      expect((await events('activated'))?.props).toEqual({ funding_source: 'real' })
+      expect((await events('activated'))?.props).toEqual({ funding_source: 'real', isNewAccount: 'false' })
       expect(enqueueAccountNotice).toHaveBeenCalledTimes(1)
       expect(enqueueAccountNotice).toHaveBeenCalledWith(ctx, { eventKind: 'first_call_done', accountRef: 'acct', sourceEventRef: 'c' })
     })
