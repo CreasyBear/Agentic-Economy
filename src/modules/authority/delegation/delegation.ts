@@ -195,8 +195,11 @@ export class DelegationService {
       )
       if (existing !== undefined) {
         const replay = reconstructPinnedDelegationSnapshotForReplay(existing, activeContext)
-        if (matchesAdmission(replay, request, scopes, resourceRefs)) return replay
-        throw new DelegationError('delegation_idempotency_conflict')
+        if (!matchesAdmission(replay, request, scopes, resourceRefs)) {
+          throw new DelegationError('delegation_idempotency_conflict')
+        }
+        assertLiveAncestry(await loadAncestry(transaction, request.grantRef), currentTime(this.#now))
+        return replay
       }
       const ancestry = await loadAncestry(transaction, request.grantRef)
       const grant = ancestry[ancestry.length - 1] as DelegationGrant
