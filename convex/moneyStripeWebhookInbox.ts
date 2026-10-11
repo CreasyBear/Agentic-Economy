@@ -11,6 +11,7 @@ import {
 } from './moneyStripeWebhookValues'
 import { requireSourceWrite } from './lib/security/sourceWrite/admission'
 import { sourceWriteArgs } from './lib/security/sourceWrite/contracts'
+import { enqueueOperatorAlert } from './operatorDigest'
 import { stripeWebhookWorkpool } from './stripeWebhookWorkpool'
 
 const processStripeWebhookRef = makeFunctionReference<
@@ -83,6 +84,14 @@ export const ingest = mutation({
           return { kind: 'accepted', status: 'queued' }
         }
         return { kind: 'accepted', status: 'replayed' }
+      }
+      if (existing.state === 'applied' || existing.state === 'ignored') {
+        await ctx.db.patch(existing._id, {
+          conflictPayloadDigest: args.event.payloadDigest,
+          failureCode: 'stripe_event_identity_conflict',
+          updatedAt: now,
+        })
+        return { kind: 'accepted', status: 'reconciliation_required' }
       }
       await ctx.db.patch(existing._id, {
         state: 'reconciliation_required',
@@ -164,6 +173,28 @@ export const listStuckForOperator = internalQuery({
       ...(row.failureCode === undefined ? {} : { failureCode: row.failureCode }),
       ...(row.completedAt === undefined ? {} : { completedAt: row.completedAt }),
     }))
+  },
+})
+
+/** Hourly cron: alerts the operator when Stripe inbox rows are stuck in failed or reconciliation_required. */
+export const alertStuck = internalMutation({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    const stuck: Array<{ stripeEventId: string; completedAt?: number }> = []
+    for (const state of ['failed', 'reconciliation_required'] as const) {
+      stuck.push(...await ctx.db.query('moneyStripeWebhookInbox')
+        .withIndex('by_state_and_receivedAt', (index) => index.eq('state', state))
+        .take(100))
+    }
+    if (stuck.length === 0) return null
+    const oldest = stuck.reduce((a, b) => ((b.completedAt ?? Infinity) < (a.completedAt ?? Infinity) ? b : a))
+    await enqueueOperatorAlert(ctx, {
+      alertRef: `stripe-inbox-stuck-${Math.floor(Date.now() / 3_600_000)}`,
+      subject: `Stripe inbox: ${stuck.length} stuck event${stuck.length === 1 ? '' : 's'}`,
+      text: `${stuck.length} Stripe webhook inbox rows are failed or reconciliation_required. Oldest: ${oldest.stripeEventId}.`,
+    })
+    return null
   },
 })
 

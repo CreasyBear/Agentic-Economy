@@ -184,4 +184,28 @@ describe('Stripe webhook durable inbox', () => {
     ])
   })
 
+  it('keeps an applied row applied when a conflicting digest arrives', async () => {
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    const base = command()
+    await backend.mutation(ingest, await withSourceWrite('billing', base))
+    const row = await backend.run(async (ctx) => ctx.db.query('moneyStripeWebhookInbox').unique())
+    if (row === null) throw new Error('row_missing')
+    await backend.run(async (ctx) => ctx.db.patch(row._id, { state: 'applied', completedAt: 5 }))
+    const conflict = { ...base, event: checkoutEvent(`sha256:${'e'.repeat(64)}`) }
+
+    await expect(backend.mutation(ingest, await withSourceWrite('billing', conflict)))
+      .resolves.toEqual({ kind: 'accepted', status: 'reconciliation_required' })
+    const after = await backend.run(async (ctx) => ctx.db.get(row._id))
+    expect(after).toMatchObject({ state: 'applied', completedAt: 5, conflictPayloadDigest: conflict.event.payloadDigest })
+  })
+
+  it('alertStuck queues an operator alert only when rows are stuck', async () => {
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    await backend.mutation(internal.moneyStripeWebhookInbox.alertStuck, {})
+    await backend.mutation(ingest, await withSourceWrite('billing', command()))
+    const row = await backend.run(async (ctx) => ctx.db.query('moneyStripeWebhookInbox').unique())
+    if (row === null) throw new Error('row_missing')
+    await backend.run(async (ctx) => ctx.db.patch(row._id, { state: 'failed' }))
+    await expect(backend.mutation(internal.moneyStripeWebhookInbox.alertStuck, {})).resolves.toBeNull()
+  })
 })

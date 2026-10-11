@@ -38,5 +38,6 @@ for (const workload of SCHEDULED_WORKLOADS) {
   if (!('interval' in workload) || workload.interval === undefined) continue
   crons.interval(workload.name, workload.interval, HANDLERS[workload.name], {})
 }
+crons.interval('alert stuck stripe inbox', { hours: 1 }, internal.moneyStripeWebhookInbox.alertStuck, {})
 
 export default crons
