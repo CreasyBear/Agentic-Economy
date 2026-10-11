@@ -13,6 +13,7 @@ import { requireCurrentOwnership, type AccountActionContext } from './accountCon
 import { recordWorkspaceAuditEvent } from './audit'
 import { mfaReverificationRefusalValue } from './contracts'
 import { requireAccountInteractiveHumanPrincipal } from './identity'
+import { deleteChatThreadShares } from '../../../../src/modules/chat-sharing/convex'
 import { eraseAccountJourney } from '../../journey/events'
 
 const closeWorkspaceReceiptValue = v.union(
@@ -43,6 +44,12 @@ export async function endAccountDependents(ctx: MutationCtx, targetRef: string, 
   }
 
   await eraseAccountJourney(ctx, targetRef)
+
+  const threads = await ctx.db
+    .query('chatThreads')
+    .withIndex('by_ownerId_and_updatedAt', (query) => query.eq('ownerId', targetRef))
+    .collect()
+  for (const thread of threads) await deleteChatThreadShares(ctx, thread.threadId)
 
   const agentGrants = await ctx.db
     .query('agentAccessGrants')
