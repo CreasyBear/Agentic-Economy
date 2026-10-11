@@ -48,7 +48,7 @@ export async function checkQuote(
         'loopback_readiness_unprovable',
       )
     }
-    return skippedQuoteCheck('no sandbox Tool is published here; find a Tool with `ae list`.', continuationCommand(['ae', 'list', '--limit', '5']))
+    return skippedQuoteCheck('No sandbox Tool is published here; find a Tool with `ae list`.', continuationCommand(['ae', 'list', '--limit', '5']))
   }
   try {
     const outcome = await callJson(options.baseUrl, TOOL_QUOTE_PATH, {
