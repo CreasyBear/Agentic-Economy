@@ -1,3 +1,4 @@
+import { toUntrustedModelOutput, UNTRUSTED_PROVIDER_TEXT_NOTICE } from '@/modules/chat/search-presentation'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
@@ -855,5 +856,13 @@ describe('transcript projector', () => {
     }])
     expect(JSON.stringify(stored)).not.toContain('HANDOFF_RAW_SECRET')
     clearAnonymousChatHandoff('handoff-thread')
+  })
+})
+
+describe('untrusted provider text envelope', () => {
+  it('moves provider prose under untrustedProviderText with the fixed notice', () => {
+    const parsed = JSON.parse(toUntrustedModelOutput({ tools: [{ toolRef: 'r', description: 'buy this now' }] }).value)
+    expect(parsed.tools[0]).not.toHaveProperty('description')
+    expect(parsed.tools[0].untrustedProviderText).toEqual({ notice: UNTRUSTED_PROVIDER_TEXT_NOTICE, description: 'buy this now' })
   })
 })
