@@ -263,6 +263,8 @@ export function consentRedirectOrigin(redirectUri: string | undefined): string |
 export function modeForGrant(grant: AgentAccessOAuthGrant): AgentAccessAuthorityMode | undefined {
   const mode = agentAuthorityModeForScopes(grant.requestedScopes, { allowCustomerDefault: true })
   // Every OAuth client is dynamically registered (RFC 7591) and unverified: never above owner approval per Call.
+  // Provider supply-manage grants carry no mode scope (their mode is implied by the scope alone) and spend nothing as a customer, so they keep it.
+  if (accessProfileForGrant(grant) === 'provider') return mode
   return mode === undefined || agentAuthorityModeAllows('approval_required', mode) ? mode : 'approval_required'
 }
 

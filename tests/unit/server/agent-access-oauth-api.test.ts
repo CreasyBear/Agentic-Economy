@@ -1277,7 +1277,7 @@ describe('Customer Request OAuth HTTP adapter', () => {
     const controlledHtml = await controlledGate.text()
     expect(controlledHtml).toContain('data-environment="production"')
     expect(controlledHtml).toContain('data-expires-in-seconds="7200"')
-    expect(controlledHtml).toContain('Authority mode: spending_policy')
+    expect(controlledHtml).toContain('Authority mode: approval_required')
     expect(controlledHtml).toContain('Maximum spend per Call: USD 1.00.')
     expect(controlledHtml).toContain('Maximum daily spend: USD 5.00.')
     expect(controlledHtml).toContain('Maximum monthly spend: USD 20.00.')
@@ -1349,13 +1349,13 @@ describe('Customer Request OAuth HTTP adapter', () => {
     for (const [grantRef, authorityMode] of [
       ['device:sandbox-issuance', 'read_only'],
       ['device:production-zero', 'approval_required'],
-      ['device:production-bounded', 'spending_policy'],
+      ['device:production-bounded', 'approval_required'],
     ] as const) {
       vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', grantRef === 'device:sandbox-issuance' ? 'development' : 'production')
       const response = await handleOAuthConsentPost(formRequest('http://localhost/oauth/authorize', { grant_ref: grantRef, expected_grant_revision: '1', expected_target_revision: '1', decision: 'approve', authority_mode: authorityMode, connection_target: 'new_agent' }), options)
       expect(response.status).toBe(200)
     }
-    const retry = await handleOAuthConsentPost(formRequest('http://localhost/oauth/authorize', { grant_ref: 'device:production-bounded', expected_grant_revision: '1', expected_target_revision: '1', decision: 'approve', authority_mode: 'spending_policy', connection_target: 'new_agent' }), options)
+    const retry = await handleOAuthConsentPost(formRequest('http://localhost/oauth/authorize', { grant_ref: 'device:production-bounded', expected_grant_revision: '1', expected_target_revision: '1', decision: 'approve', authority_mode: 'approval_required', connection_target: 'new_agent' }), options)
     expect(retry.status).toBe(200)
     expect(await retry.json()).toMatchObject({
       kind: 'approved',
@@ -1373,7 +1373,8 @@ describe('Customer Request OAuth HTTP adapter', () => {
       maximumDailySpend: productionRequestedAccess.maximumDailySpend,
       maximumMonthlySpend: productionRequestedAccess.maximumMonthlySpend,
     })
-    expect(issued[2]?.authorityMode).toBe('spending_policy')
+    expect(issued[2]?.authorityMode).toBe('approval_required')
+    expect(issued[2]?.scopes).toEqual(['market_tools:call', 'customer_requests:approval_required'])
     expect(issued[2]?.approvedAccess).toEqual(productionRequestedAccess)
     expect(issued[2]?.spendingPolicy).toEqual({
       ...spendingPolicyBase,
