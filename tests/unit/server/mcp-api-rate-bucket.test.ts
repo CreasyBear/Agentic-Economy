@@ -42,4 +42,14 @@ describe('MCP admission runs per-IP first, then verifies', () => {
     expect(await bucketsFor(ping({ authorization: 'Bearer valid' }), { authenticate }, 'public-read'))
       .toEqual(['mcp-anonymous', 'public-read'])
   })
+
+  it('verifies an invalid key with Clerk exactly once', async () => {
+    const request = new Request('https://ae.example/mcp', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: 'Bearer junk' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
+    })
+    await bucketsFor(request, {}, 'none')
+    expect(verify).toHaveBeenCalledTimes(1)
+  })
 })

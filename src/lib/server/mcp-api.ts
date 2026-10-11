@@ -28,6 +28,7 @@ import {
   authenticateAgentAccess,
   verifyApiKeyCandidate,
   resolveAgentAccessPrincipal,
+  type AgentAccessApiKeyAuth,
   type AgentAccessPrincipalResolver,
 } from '@/lib/server/agent-access-auth'
 import { runWithRequestCorrelation, withRequestCorrelationHeader } from '@/lib/server/request-correlation'
@@ -750,7 +751,7 @@ export async function handleMcpRouteRequest(
 ): Promise<Response> {
   return await runWithRequestCorrelation(request, async ({ correlationId }) => {
     let admission
-    let verifiedCandidate: Awaited<ReturnType<typeof verifyApiKeyCandidate>> = null
+    let verifiedCandidate: Awaited<ReturnType<typeof verifyApiKeyCandidate>> | undefined
     try {
       // Per-IP anonymous admission always runs first, so junk credentials never
       // reach Clerk unthrottled. A verified key is then also charged to public-read.
@@ -778,7 +779,7 @@ export async function handleMcpRouteRequest(
       recordGatewayTelemetry(options.timing,{correlationId,transport:'mcp',operation:'admission',stage:'pre_admission',durationMs:0,outcome:'refused',refusalCode:'rate_limited',rateLimited:true})
       return withRequestCorrelationHeader(rateLimitedResponse(admission.retryAfter), correlationId)
     }
-    return withRequestCorrelationHeader(await handleMcpRequest(request, verifiedCandidate === null ? options : { ...options, verifiedCandidate }), correlationId)
+    return withRequestCorrelationHeader(await handleMcpRequest(request, verifiedCandidate === undefined ? options : { ...options, verifiedCandidate }), correlationId)
   })
 }
 
@@ -830,7 +831,7 @@ export async function handleMcpRequest(request: Request, options: McpRequestOpti
           ? resolveAgentAccessPrincipal(boundedRequest, bounded.bodyText, correlationId)
           : undefined)
       const verifiedCandidate = options.verifiedCandidate
-      const authenticate = options.authenticate ?? (verifiedCandidate == null ? undefined : async () => verifiedCandidate)
+      const authenticate = options.authenticate ?? (verifiedCandidate === undefined ? undefined : async () => verifiedCandidate ?? ({ isAuthenticated: false } as AgentAccessApiKeyAuth))
       const admitted = await authenticateAgentAccess({
         request: boundedRequest,
         ...(authenticate === undefined ? {} : { authenticate }),
