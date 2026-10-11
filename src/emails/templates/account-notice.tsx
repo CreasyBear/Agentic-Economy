@@ -110,7 +110,7 @@ const NOTICES: Record<NoticeKind, Notice> = {
     subject: () => 'Welcome to aecon. Add credit to start',
     preheader: () => 'You only pay per call.',
     body: () => 'Your account is ready. Add credit to make your first call. You only pay per call.',
-    label: 'Add credit', path: '/for-agents', campaign: 'welcome',
+    label: 'Set up your account', path: '/for-agents', campaign: 'welcome',
   },
   provider_live: {
     subject: () => 'Your service is live on aecon',
