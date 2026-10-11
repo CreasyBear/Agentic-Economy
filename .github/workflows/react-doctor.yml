@@ -26,7 +26,7 @@ jobs:
     timeout-minutes: 15
     steps:
       # Keep full history available for React Doctor's change comparison.
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
