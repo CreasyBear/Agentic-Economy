@@ -31,6 +31,7 @@ const publicHttpRateLimitName = v.union(
   v.literal('dispute-open'),
   v.literal('mcp-anonymous'),
   v.literal('funding-checkout'),
+  v.literal('funding-checkout-ip'),
 )
 
 export const admit = internalMutation({

@@ -7,6 +7,9 @@ import { SOURCE_READ_TIMEOUT_MS } from '@/lib/bounded-read'
 import { HOUR_MS, RATE_LIMIT_NAMES, RATE_LIMIT_POLICY } from '@/modules/security/rate-limit-policy'
 import { anonymousChatAdmissionKey, rateLimitedResponse, requestAdmissionKey, setHttpRateLimitAdmissionForTests, withHttpRateLimit } from '@/lib/server/rate-limit'
 describe('funding-checkout policy', () => {
+  it('keeps the per-IP guard looser than the per-account limit', () => {
+    expect(RATE_LIMIT_POLICY['funding-checkout-ip']).toEqual({ kind: 'fixed window', rate: 30, period: HOUR_MS })
+  })
   it('allows 5 checkout creations per hour per key', () => {
     expect(RATE_LIMIT_NAMES).toContain('funding-checkout')
     expect(RATE_LIMIT_POLICY['funding-checkout']).toEqual({ kind: 'fixed window', rate: 5, period: HOUR_MS })

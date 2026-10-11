@@ -22,6 +22,7 @@ export const RATE_LIMIT_NAMES = [
   'paid-call-report',
   'mcp-anonymous',
   'funding-checkout',
+  'funding-checkout-ip',
 ] as const
 
 export type RateLimitName = (typeof RATE_LIMIT_NAMES)[number]
@@ -49,4 +50,6 @@ export const RATE_LIMIT_POLICY: Record<RateLimitName, RateLimitPolicyConfig> = {
   'mcp-anonymous': { kind: 'token bucket', rate: 30, period: MINUTE_MS, capacity: 30 },
   // Stripe card-testing guidance: rate limit Checkout Session creation.
   'funding-checkout': { kind: 'fixed window', rate: 5, period: HOUR_MS },
+  // Looser per-IP guard: retries replay without consuming the per-Account quota, and many owners can share one IP.
+  'funding-checkout-ip': { kind: 'fixed window', rate: 30, period: HOUR_MS },
 }

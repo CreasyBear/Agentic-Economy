@@ -287,7 +287,7 @@ export const beginAccountFundingServer = createServerFn({ method: 'POST' })
   .handler(async ({ data, context }): Promise<AccountFundingStartResult> => {
     setResponseHeader('cache-control', 'no-store')
     // Per-IP card-testing guard; the per-Account limit runs in the reserve mutation. Fails closed.
-    const admission = await assertHttpAdmission(getRequest(), 'funding-checkout').catch(() => undefined)
+    const admission = await assertHttpAdmission(getRequest(), 'funding-checkout-ip').catch(() => undefined)
     if (admission === undefined || !admission.ok) return refusal('rate_limited', true)
     return await beginAccountFundingThroughSource(data, context)
   })

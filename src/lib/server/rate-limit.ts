@@ -18,6 +18,7 @@ export type RateLimitName =
   | 'chat-anonymous-edge'
   | 'mcp-anonymous'
   | 'funding-checkout'
+  | 'funding-checkout-ip'
 
 type HttpRateLimitName = Exclude<RateLimitName, 'chat-submit' | 'chat-anonymous'>
 type GenericHttpRateLimitName = Exclude<HttpRateLimitName, 'chat-anonymous-edge'>
