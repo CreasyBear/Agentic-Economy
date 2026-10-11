@@ -22,7 +22,6 @@ const stripeWebhookEvent = v.union(
       v.literal('checkout.session.async_payment_succeeded'),
       v.literal('checkout.session.async_payment_failed'),
       v.literal('checkout.session.expired'),
-      v.literal('payment_intent.payment_failed'),
     ),
     externalRef: identifier,
     sessionId: identifier,

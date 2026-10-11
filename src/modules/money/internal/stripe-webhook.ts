@@ -18,7 +18,6 @@ export type StripeCheckoutWebhookEvent = Readonly<{
     | 'checkout.session.async_payment_succeeded'
     | 'checkout.session.async_payment_failed'
     | 'checkout.session.expired'
-    | 'payment_intent.payment_failed'
   externalRef: string
   sessionId: string
   commandRef: string

@@ -24,8 +24,7 @@ type CheckoutWebhookEventType =
   | "checkout.session.completed"
   | "checkout.session.async_payment_succeeded"
   | "checkout.session.async_payment_failed"
-  | "checkout.session.expired"
-  | "payment_intent.payment_failed";
+  | "checkout.session.expired";
 
 type StripeV2AccountEventType = StripeAccountUpdatedWebhookEvent["eventType"];
 type StripeV2AccountEventNotification = Extract<
@@ -140,16 +139,6 @@ export async function verifyStripeMoneyWebhook(
       input.signature,
       context.config.webhookSecret,
     );
-    if (event.type === "payment_intent.payment_failed") {
-      // The pipeline binds by checkout session, so resolve the session this intent paid for.
-      const sessions = await context.client.checkout.sessions.list({
-        payment_intent: event.data.object.id,
-        limit: 1,
-      });
-      const session = sessions.data[0];
-      if (session === undefined) return refusal("payment_binding_invalid", false);
-      return mapCheckoutSessionWebhookEvent(event, context.config, session);
-    }
     return mapStripeMoneyWebhookEvent({
       event,
       config: context.config,
@@ -219,7 +208,6 @@ function checkoutWebhookStatus(
   switch (eventType) {
     case "checkout.session.async_payment_failed":
     case "checkout.session.expired":
-    case "payment_intent.payment_failed":
       return "failed";
     case "checkout.session.completed":
       return session.payment_status !== "paid" ? "processing" : "paid";
