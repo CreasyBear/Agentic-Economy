@@ -4,7 +4,7 @@ import type { ReactNode } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 vi.mock('@tanstack/react-start', async (importOriginal) => ({ ...(await importOriginal<typeof import('@tanstack/react-start')>()), useServerFn: (fn: unknown) => fn }))
 vi.mock('@clerk/tanstack-react-start', () => ({ useReverification: (fn: unknown) => fn }))
-vi.mock('@/components/ae/layout/AeOperatorPage', () => ({ AeOperatorPage: ({ children, breadcrumbs }: { children: ReactNode; breadcrumbs?: readonly { label: string; href?: string }[] }) => <div>{breadcrumbs?.map(item => item.href ? <a key={item.label} href={item.href}>{item.label}</a> : null)}{children}</div> }))
+vi.mock('@/components/ae/layout/AeOperatorPage', () => ({ AeOperatorPage: ({ children }: { children: ReactNode }) => <div>{children}</div> }))
 vi.mock('@/components/ae/layout/AeNavigationSafetyBoundary', () => ({ AeNavigationSafetyBoundary: ({ children }: { children: ReactNode }) => <div>{children}</div> }))
 vi.mock('@/modules/capability-supply/supply-funnel.functions', () => ({ filterOwnerSupplyAuthorityOptions: (_business: string, connections: unknown[]) => connections, assessOwnerSupplySourceServer: vi.fn(), previewOwnerSupplySourceServer: vi.fn(), publishOwnerSupplySourceServer: vi.fn(), saveOwnerSupplySourceDraftServer: vi.fn().mockResolvedValue({ kind: 'saved' }), readOwnerProviderConnectionsServer: vi.fn(), resumeOwnerSupplySourceDraftServer: vi.fn(), startOwnerSupplySourceConnectionServer: vi.fn() }))
 import { AeOwnerSupplySourceStartPage, type AeOwnerSupplySourceStartPageProps } from '@/components/ae/supply/AeOwnerSupplySourceStartPage'

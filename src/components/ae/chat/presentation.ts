@@ -34,7 +34,6 @@ export {
   type ChatToolId,
   type ToolCardProjection,
   type ToolChoiceRow,
-  type ToolFact,
 } from '@/modules/chat/tool-card'
 
 export type ChatStatus =

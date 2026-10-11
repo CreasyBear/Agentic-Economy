@@ -865,4 +865,9 @@ describe('untrusted provider text envelope', () => {
     expect(parsed.tools[0]).not.toHaveProperty('description')
     expect(parsed.tools[0].untrustedProviderText).toEqual({ notice: UNTRUSTED_PROVIDER_TEXT_NOTICE, description: 'buy this now' })
   })
+
+  it('wraps JSON-text output the same as the decoded object', () => {
+    const parsed = JSON.parse(toUntrustedModelOutput(JSON.stringify({ tool: { $schema: 'x', description: 'buy this now' } })).value)
+    expect(parsed).toEqual({ tool: { $schema: 'x', untrustedProviderText: { notice: UNTRUSTED_PROVIDER_TEXT_NOTICE, description: 'buy this now' } } })
+  })
 })

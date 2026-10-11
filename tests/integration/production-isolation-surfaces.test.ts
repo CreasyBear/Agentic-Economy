@@ -158,14 +158,14 @@ describe('production surface isolation', () => {
       AE_INFISICAL_PLATFORM_SECRET_PATH: '/platform', AE_INFISICAL_PLATFORM_MACHINE_IDENTITY_ID: 'platform-identity',
       AE_INFISICAL_CUSTOMER_PROJECT_ID: 'customer', AE_INFISICAL_CUSTOMER_ENVIRONMENT: 'production',
       AE_INFISICAL_CUSTOMER_SECRET_PATH: '/customer', AE_INFISICAL_CUSTOMER_MACHINE_IDENTITY_ID: 'customer-identity',
-      CONVEX_SITE_URL: 'https://isolation.convex.site',
+      CONVEX_SITE_URL: 'https://isolation.convex.site', AE_SECRET_LIFECYCLE_RPC_TOKEN: 't'.repeat(43),
     }
     const fetch = vi.fn(async () => Response.json({ kind: 'unavailable' }))
     vi.stubGlobal('fetch', fetch)
     const send = vi.spyOn(networkServer, 'sendGuardedHttpRequest')
       .mockImplementation(fetch)
     const request = (action: 'issue' | 'execute') => new Request('https://ae.test/api/internal/provider-consequence', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
+      method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${'t'.repeat(43)}` },
       body: JSON.stringify({ ...envelope, action, ...(action === 'issue' ? {} : {
         signedTicket: `${ticket.ticketRef}.${ticket.expiresAt}.${'a'.repeat(64)}`, invocation,
       }) }),
