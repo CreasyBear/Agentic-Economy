@@ -66,9 +66,9 @@ async function probeSite(): Promise<ProbeAssessment> {
 
 async function probeMarket(): Promise<ProbeAssessment> {
   const readiness = await readServerReadiness()
-  return readiness.status === 'ready'
+  return readiness.status === 'ready' && readiness.commercial.quoting === 'ready'
     ? { state: 'operational', detail: 'Tool search and new Calls are ready.' }
-    : { state: 'degraded', detail: 'New Calls may fail. Check existing Calls before retrying.' }
+    : { state: 'degraded', detail: 'Tool search is unavailable. New Calls may fail. Check existing Calls before retrying.' }
 }
 
 async function probeDiscovery(request: Request): Promise<ProbeAssessment> {
