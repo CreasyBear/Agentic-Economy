@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync, chmodSy
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 
+import * as lockfile from 'proper-lockfile'
 import { z } from 'zod'
 import { MARKET_TOOLS_CALL_SCOPE, MARKET_SUPPLY_MANAGE_SCOPE } from '@/modules/agent-access/contract'
 import { CliFailure } from './output'
@@ -144,6 +145,26 @@ function safeConfigIssueField(path: readonly PropertyKey[]): string {
   return segments.join('.') || '<root>'
 }
 
+/**
+ * Serialise a read-modify-write cycle across ae processes (CWE-362). Callers
+ * stay synchronous, so acquire with lockSync and wait out ELOCKED ourselves.
+ */
+function withConfigLock<T>(mutate: () => T): T {
+  const directory = configDirectory()
+  mkdirSync(directory, { recursive: true, mode: 0o700 })
+  chmodSync(directory, 0o700)
+  const deadline = Date.now() + 10_000
+  for (let wait = 10; ; wait = Math.min(wait * 2, 200)) {
+    try {
+      const release = lockfile.lockSync(directory, { stale: 30_000, realpath: false })
+      try { return mutate() } finally { release() }
+    } catch (error) {
+      if ((error as { code?: string }).code !== 'ELOCKED' || Date.now() > deadline) throw error
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, wait)
+    }
+  }
+}
+
 function writeConfig(next: z.infer<typeof configSchema>): string {
   const path = configPath()
   const directory = dirname(path)
@@ -179,10 +200,12 @@ export function lastChatThread(baseUrl: string): string | undefined {
 }
 
 export function rememberChatThread(baseUrl: string, threadId: string): void {
-  const current = readConfig()
-  writeConfig({
-    ...current,
-    lastThreadIds: { ...current.lastThreadIds, [new URL(baseUrl).origin]: threadId },
+  withConfigLock(() => {
+    const current = readConfig()
+    writeConfig({
+      ...current,
+      lastThreadIds: { ...current.lastThreadIds, [new URL(baseUrl).origin]: threadId },
+    })
   })
 }
 
@@ -243,6 +266,7 @@ export function removeStoredConnection(baseUrl: string, profile?: StoredConnecti
   configPath: string
 }> {
   const origin = new URL(baseUrl).origin
+  return withConfigLock(() => {
   const current = readConfig()
   const keys = profile === undefined
     ? [connectionKey(origin, 'market'), connectionKey(origin, 'provider')]
@@ -254,6 +278,7 @@ export function removeStoredConnection(baseUrl: string, profile?: StoredConnecti
   for (const key of keys) delete connections[key]
   const writtenAt = writeConfig({ ...current, connections })
   return { origin, removed: true, configPath: writtenAt }
+  })
 }
 
 export function storeConnection(input: Readonly<{
@@ -263,8 +288,9 @@ export function storeConnection(input: Readonly<{
   scope?: string
   profile?: StoredConnectionProfile
 }>): string {
-  const current = readConfig()
   const origin = new URL(input.baseUrl).origin
+  return withConfigLock(() => {
+  const current = readConfig()
   const profile = input.profile ?? profileForScope(input.scope)
   const next = {
     version: 1 as const,
@@ -281,6 +307,7 @@ export function storeConnection(input: Readonly<{
     },
   }
   return writeConfig(next)
+  })
 }
 
 export function storeMcpConnection(input: Readonly<{ baseUrl: string; accessToken: string }>): string {

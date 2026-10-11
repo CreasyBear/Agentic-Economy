@@ -161,6 +161,10 @@ export function useConnectionHandoff({ loaded }: AeConnectionHandoffProps) {
         idempotencyKey: mcpIdempotencyKeyRef.current,
       } })
       if (result.kind === 'redirect') {
+        if (!/^https:\/\//i.test(result.authorizationUrl) && !/^http:\/\/(localhost|127\.0\.0\.1|\[::1\])[:/]/i.test(result.authorizationUrl)) {
+          setMcpError('Agentic Economy could not start sign in. The provider returned an unsafe sign-in address.')
+          return
+        }
         window.location.assign(result.authorizationUrl)
         return
       }

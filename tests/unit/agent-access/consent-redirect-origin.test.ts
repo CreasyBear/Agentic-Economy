@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import '../../setup/jsdom-platform'
 
-import { consentHtml, consentRedirectOrigin } from '@/lib/server/agent-access-oauth/protocol'
+import { consentHtml, consentRedirectOrigin, modeForGrant, validRedirectUri } from '@/lib/server/agent-access-oauth/protocol'
 import { readAgentConsentDetails } from '@/modules/agent-access/consent-read-model'
 
 const requestedAccess = {
@@ -66,5 +66,25 @@ describe('consent redirect origin', () => {
     })
     expect(html).toContain('The return site for this request is unavailable. Decline it.')
     expect(readAgentConsentDetails(html).redirectDisposition).toBe('unavailable')
+  })
+
+  it('accepts only https or loopback http redirect URIs', () => {
+    expect(validRedirectUri('http://attacker.example/cb')).toBe(false)
+    expect(validRedirectUri('https://*.example/cb')).toBe(false)
+    expect(validRedirectUri('http://localhost:3000/cb')).toBe(true)
+    expect(validRedirectUri('https://app.example/cb')).toBe(true)
+  })
+
+  it('marks dynamic clients unverified and caps authority at approval_required', () => {
+    const html = consentHtml({
+      grantRef: 'g', grantRevision: 1, flow: 'authorization_code', clientName: 'Dyn',
+      mode: 'approval_required', requestedScopes: ['market_tools:call'], state: '', requestedAccess,
+      redirectUri: 'https://app.example/cb',
+    })
+    expect(readAgentConsentDetails(html).unverifiedClient).toBe(true)
+    const grant = (scope: string) => ({ requestedScopes: ['market_tools:call', scope] }) as unknown as Parameters<typeof modeForGrant>[0]
+    expect(modeForGrant(grant('customer_requests:spending_policy'))).toBe('approval_required')
+    expect(modeForGrant(grant('customer_requests:unrestricted_test_only'))).toBe('approval_required')
+    expect(modeForGrant(grant('customer_requests:read_only'))).toBe('read_only')
   })
 })

@@ -7,7 +7,7 @@ Goal: every sign-up, first receipt and top-up can be traced to the campaign, lin
 ## Today
 - **App:** reads only `utm_source`, `utm_campaign` and `ref` (`src/lib/observability/funnel-client.ts:62-70`) and persists nothing.
 - **PostHog:**
-  - It uses `sessionStorage` (`posthog.client.ts:85-93`), so identity dies with the tab.
+  - It uses `sessionStorage` (`posthog-browser.ts:85-93`), so identity dies with the tab.
   - It only identifies the anonymous `sess_` id and never identifies the account on sign-in.
   - Anonymous events get no person profile.
 - **Sign-up:** the Clerk round trip drops UTMs (`useSignUpPage.ts:14-17`). The account stores no source (`provisioning.ts:289-337`), and journey events carry none.
@@ -36,7 +36,8 @@ Goal: every sign-up, first receipt and top-up can be traced to the campaign, lin
    | Operator digest | aecon | email | operator_digest | the link |
    | Catalogue broadcast (later) | aecon | email | broadcast_YYYYMM | the link |
    | Share links `/s/` | aecon | share | chat_share | none |
-   | SKILL.md, llms.txt, MCP install docs | the agent client name | agent | install | none |
+   | Copy public URL button | aecon | share | public_url | none |
+   | SKILL.md, llms.txt, MCP install docs | aecon (deviation: a static file cannot know the agent client) | agent | install | skill_md or llms_txt; page links only, never /mcp or API paths |
    | Social posts, ads | the platform | social, cpc | the campaign name | the creative id |
 
 7. **Naming:** lowercase, words joined by underscores, never spaces. Campaigns are named `<objective>_<audience>_<yyyymm>`. Keep a register in this file.

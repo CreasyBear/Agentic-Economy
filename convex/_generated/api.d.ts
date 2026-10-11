@@ -27,6 +27,7 @@ import type * as agentDirectory from "../agentDirectory.js";
 import type * as agentMoneyReads from "../agentMoneyReads.js";
 import type * as agentSpendingPeriods from "../agentSpendingPeriods.js";
 import type * as agentSpendingPolicy from "../agentSpendingPolicy.js";
+import type * as attribution from "../attribution.js";
 import type * as authorityBoundary from "../authorityBoundary.js";
 import type * as authz from "../authz.js";
 import type * as businesses from "../businesses.js";
@@ -853,6 +854,7 @@ declare const fullApi: ApiFromModules<{
   agentMoneyReads: typeof agentMoneyReads;
   agentSpendingPeriods: typeof agentSpendingPeriods;
   agentSpendingPolicy: typeof agentSpendingPolicy;
+  attribution: typeof attribution;
   authorityBoundary: typeof authorityBoundary;
   authz: typeof authz;
   businesses: typeof businesses;

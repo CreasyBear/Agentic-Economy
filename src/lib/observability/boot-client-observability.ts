@@ -32,7 +32,7 @@ export const bootClientObservability = createClientOnlyFn((router: AnyRouter) =>
 
   void Promise.all([
     config.sentryDsn === undefined ? undefined : import('@/lib/observability/sentry.client').then(({ initSentryClient }) => initSentryClient(router)),
-    config.posthogKey === undefined ? undefined : import('@/lib/observability/posthog.client').then(({ initPostHogClient }) => initPostHogClient(router)),
+    config.posthogKey === undefined ? undefined : import('@/lib/observability/posthog-browser').then(({ initPostHogClient }) => initPostHogClient(router)),
   ]).catch((cause: unknown) => {
     degradeBackend(boundaryCauseKind(cause), undefined, { site: 'bootClientObservability.init', reason: 'source_unavailable' })
   })

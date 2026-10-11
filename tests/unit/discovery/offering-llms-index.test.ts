@@ -33,7 +33,8 @@ describe('Tool-first llms.txt index', () => {
 
     expect(result.body).toContain(`POST ${canonicalBaseUrl}/api/v1/market-tools/search`)
     expect(result.body).toContain(`POST ${canonicalBaseUrl}/api/v1/market-tools/describe`)
-    expect(result.body).toContain(`${canonicalBaseUrl}/market`)
+    expect(result.body).toContain(`${canonicalBaseUrl}/market?utm_source=aecon&utm_medium=agent&utm_campaign=install&utm_content=llms_txt`)
+    expect(result.body).toContain(`- MCP: ${canonicalBaseUrl}/mcp\n`)
     expect(result.body).not.toMatch(/Published businesses|\/api\/businesses|registry\.search|registry\.detail/u)
     expect(new TextEncoder().encode(result.body).length).toBeLessThan(4096)
   })

@@ -247,6 +247,7 @@ function ConsentFlowView({ vm, details, stage, steps, completedSteps, previousSt
           flow={details.flow}
           {...(details.redirectDisposition === undefined ? {} : { redirectDisposition: details.redirectDisposition })}
           {...(details.redirectOrigin === undefined ? {} : { redirectOrigin: details.redirectOrigin })}
+          {...(details.unverifiedClient === true ? { unverifiedClient: true } : {})}
         />
         <MultiStepForm
           progressLabel="Access decision steps"

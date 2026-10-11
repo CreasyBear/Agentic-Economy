@@ -29,6 +29,7 @@ export type CliOptions = {
   filters?: string | Record<string, unknown>
   input?: string
   prefer?: string
+  maxSpend?: string
   environment?: string
   provider?: boolean
 }
@@ -157,6 +158,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       filters: { type: 'string' },
       input: { type: 'string' },
       prefer: { type: 'string' },
+      'max-spend': { type: 'string' },
       environment: { type: 'string' },
       provider: { type: 'boolean' },
     },
@@ -201,6 +203,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     ...(parsed.values.filters === undefined ? {} : { filters: parsed.values.filters }),
     ...(parsed.values.input === undefined ? {} : { input: parsed.values.input }),
     ...(parsed.values.prefer === undefined ? {} : { prefer: parsed.values.prefer }),
+    ...(parsed.values['max-spend'] === undefined ? {} : { maxSpend: parsed.values['max-spend'] }),
     ...(parsed.values.environment === undefined ? {} : { environment: parsed.values.environment }),
     provider: parsed.values.provider ?? false,
   }

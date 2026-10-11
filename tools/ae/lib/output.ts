@@ -256,16 +256,23 @@ export function printJson(value: unknown): void {
 }
 
 export function heading(text: string): void {
-  process.stdout.write(`\n${text}\n${'-'.repeat(text.length)}\n`)
+  const clean = sanitizeText(text)
+  process.stdout.write(`\n${clean}\n${'-'.repeat(clean.length)}\n`)
+}
+
+/** Strip C0/C1 control characters (ESC, CSI, etc.) except newline and tab, and bidi controls, from remote-sourced text. CWE-150. */
+export function sanitizeText(text: string): string {
+  // eslint-disable-next-line no-control-regex
+  return text.replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/gu, '')
 }
 
 export function line(text = ''): void {
-  process.stdout.write(`${text}\n`)
+  process.stdout.write(`${sanitizeText(text)}\n`)
 }
 
 export function table(rows: readonly (readonly [string, string])[]): void {
   const width = rows.reduce((widest, [label]) => Math.max(widest, label.length), 0)
   for (const [label, value] of rows) {
-    process.stdout.write(`  ${label.padEnd(width)}  ${value}\n`)
+    process.stdout.write(`  ${sanitizeText(label).padEnd(width)}  ${sanitizeText(value)}\n`)
   }
 }

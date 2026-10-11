@@ -1,6 +1,7 @@
 import { v } from 'convex/values'
 import { internal } from './_generated/api'
-import { internalAction, internalMutation, internalQuery } from './_generated/server'
+import { internalAction, internalMutation, internalQuery, query } from './_generated/server'
+import { resolveBusinessActor } from './authz'
 import { isProductAnalyticsDisabled, readObservabilityServerConfig } from '../src/lib/observability/config'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { eraseAccountJourney } from './lib/journey/events'
@@ -18,6 +19,16 @@ const forwardingConfigured = () => !isProductAnalyticsDisabled(analyticsEnv())
 
 /** PostHog sees a one-way digest of the account, never the raw ref (same scheme as refusal events). */
 export const journeyDistinctId = (accountRef: string) => canonicalDigest({ format: 'ae.journey:v1', value: accountRef })
+
+/** The browser identifies with the same digest the server forwards under, so pre-signup and journey events join. */
+export const viewerDistinctId = query({
+  args: {},
+  returns: v.union(v.null(), v.string()),
+  handler: async (ctx) => {
+    const actor = await resolveBusinessActor(ctx)
+    return actor.kind === 'authenticated_owner' ? await journeyDistinctId(actor.canonicalAccountRef) : null
+  },
+})
 
 /** PostHog rejects non-UUID `uuid`s; derive a stable v5-shaped UUID from the row id so a re-send dedupes. */
 async function eventUuid(eventId: string): Promise<string> {

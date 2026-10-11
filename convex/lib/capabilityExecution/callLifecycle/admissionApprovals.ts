@@ -1,5 +1,5 @@
 import { v, type Infer } from 'convex/values'
-import { degradeBackend } from '../../../../src/lib/observability/degrade-backend'
+import { boundaryCauseKind, degradeBackend } from '../../../../src/lib/observability/degrade-backend'
 import { recordCallTerminal } from '@/lib/observability/journey'
 import { internal } from '../../../_generated/api'
 import type { MutationCtx, QueryCtx } from '../../../_generated/server'
@@ -44,7 +44,7 @@ function parseJsonObject(value: string): Record<string, unknown> | undefined {
     const parsed: unknown = JSON.parse(value)
     return isRecord(parsed) && isBoundedJsonValue(parsed) ? parsed : undefined
   } catch (cause) {
-    return degradeBackend(cause, undefined, { site: 'parseJsonObject', reason: 'invalid_response' })
+    return degradeBackend(boundaryCauseKind(cause), undefined, { site: 'parseJsonObject', reason: 'invalid_response' })
   }
 }
 

@@ -159,15 +159,6 @@ export async function exchangeRefreshToken(form: URLSearchParams, request: Reque
     await refreshStore.revokeRefreshFamily({ tokenHash, clientId, now, reason: 'scope_expansion_attempt' }).catch(() => {})
     return oauthError('invalid_scope', 400)
   }
-  if (claimed.kind === 'recovered') {
-    try {
-      const secret = await (options.getSecret ?? defaultOAuthKeySecret)(family.currentProviderCredentialId)
-      return refreshTokenResponse(secret.secret, rawSuccessorToken, family, now)
-    } catch (cause) {
-      return degrade(cause, oauthError('server_error', 503), { site: 'exchangeRefreshToken', reason: 'source_unavailable' })
-    }
-  }
-
   const accessExpiresAt = Math.min(
     family.expiresAt,
     now + AGENT_ACCESS_KEY_TTL_SECONDS * 1_000,

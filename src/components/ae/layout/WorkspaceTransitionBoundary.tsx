@@ -4,7 +4,10 @@ import { useAuth } from '@clerk/tanstack-react-start'
 import { useRouter } from '@tanstack/react-router'
 import { WorkspacePresentationVisibility } from '@/lib/client/workspace-presentation'
 import { rememberOperatorContext } from '@/lib/operator/operator-context-memory'
-import { type ReactNode, useEffect, useState } from 'react'
+import { type ReactNode, useEffect, useRef, useState } from 'react'
+import { useConvexAuth, useMutation, useQuery } from 'convex/react'
+import { api } from '../../../../convex/_generated/api'
+import { identifyPostHogAccount, readPostHogAttribution, resetPostHogAccount } from '@/lib/observability/posthog-browser'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import './AppFrameComposition.css'
@@ -21,6 +24,19 @@ function workspaceLanding(path: string): string | undefined {
 export function WorkspaceTransitionBoundary({ children, renderHeader }: { children: ReactNode; renderHeader?: (ready: boolean) => ReactNode }) {
   const auth = useAuth()
   const router = useRouter()
+  const { isAuthenticated } = useConvexAuth()
+  const distinctId = useQuery(api.journeyEvents.viewerDistinctId, isAuthenticated ? {} : 'skip')
+  const wasSignedIn = useRef(false)
+  const recordAttribution = useMutation(api.attribution.recordAttribution)
+  useEffect(() => {
+    if (!distinctId) return
+    identifyPostHogAccount(distinctId)
+    void readPostHogAttribution().then((touches) => touches && recordAttribution(touches)).catch(() => {})
+  }, [distinctId, recordAttribution])
+  useEffect(() => {
+    if (auth.isSignedIn) wasSignedIn.current = true
+    else if (auth.isSignedIn === false && wasSignedIn.current) { wasSignedIn.current = false; resetPostHogAccount() }
+  }, [auth.isSignedIn])
   const identity = JSON.stringify([auth.userId ?? null, auth.sessionId ?? null, auth.orgId ?? null])
   const scope = auth.isLoaded ? JSON.stringify([identity, auth.orgRole ?? null]) : null
   const [context, setContext] = useState({ scope, identity, identityChanged: false, generation: 0, mountedGeneration: 0, userId: auth.userId ?? null })

@@ -17,6 +17,7 @@ import type { ChatNeedActions } from '@/modules/chat/tool-card'
 import { formatRunRequest, parseDetailRequest, parseRunRequest, type RunIntent } from '@/modules/chat/run-request'
 import type { RegistryNextAction } from '@/modules/registry/tool-choice-contracts'
 
+import { withUtm } from '@/lib/attribution/with-utm'
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 
 import type { ChatProps, ChatRunResult, ChatSessionModel } from './chat-session.contracts'
@@ -567,7 +568,7 @@ export function useChatSession({
       onIssueShare: () => void mutateWithError(async () => {
         if (threadId === null) return
         const result = await issueShare({ threadId })
-        setSharePath(new URL(`/s/${result.shareToken}`, window.location.origin).toString())
+        setSharePath(withUtm(new URL(`/s/${result.shareToken}`, window.location.origin).toString(), { source: 'aecon', medium: 'share', campaign: 'chat_share' }))
       }, 'Read-only share link ready.'),
       onRevokeShare: () => void mutateWithError(async () => {
         if (threadId === null) return

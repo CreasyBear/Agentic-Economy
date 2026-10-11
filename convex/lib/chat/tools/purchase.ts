@@ -7,6 +7,8 @@ import type { ActionCtx } from '../../../_generated/server'
 import { makeFunctionReference } from 'convex/server'
 import type { Value } from 'convex/values'
 import { z } from 'zod'
+import type { ModelMessage } from 'ai'
+import { latestUserRequest } from '@/modules/chat/search-presentation'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { toolQuoteInputSchema, type ToolQuoteInput } from '@/modules/capability-execution/quote'
@@ -24,7 +26,7 @@ const quoteRef = makeFunctionReference<'action', {
 }, QuoteResult>('chatQuote:quote')
 const callRef = makeFunctionReference<'action', {
   authority: TrustedChatAuthority; operationKey: string; correlationId: string;
-  quoteRef: string; idempotencyKey: string
+  quoteRef: string; idempotencyKey: string; requireApproval?: boolean; userRequestText?: string
 }, CallResult>('chatCall:call')
 const payableAdmissionRef = makeFunctionReference<'query', {
   authority: TrustedChatAuthority; toolRef: string
@@ -37,6 +39,13 @@ const chatToolQuoteInputSchema = z.strictObject({
 
 const CALL_ANSWER_WAIT_MS = 25_000
 const CALL_POLL_MS = 750
+
+const MAX_USER_REQUEST_CHARS = 4_000
+
+/** The latest user message in full (not the 500-char search excerpt); empty when there is none. */
+function userRequestText(messages: readonly ModelMessage[] | undefined): string {
+  return latestUserRequest(messages, MAX_USER_REQUEST_CHARS) ?? ''
+}
 
 function pause(ms: number): Promise<void> {
   const { promise, resolve } = Promise.withResolvers<void>()
@@ -76,9 +85,12 @@ export function createPurchaseTools(authority: TrustedChatAuthority & { kind: 'a
       }),
       [CHAT_TOOL_NAME_MAP.canonicalToProvider['tool.plan.quote']]: createTool({
         description: descriptionFor(planQuoteContract), inputSchema: planQuoteInputSchema,
-        execute: async (ctx: ToolCtx, input: z.infer<typeof planQuoteInputSchema>) => {
+        execute: async (ctx: ToolCtx, input: z.infer<typeof planQuoteInputSchema>, options?: { messages?: readonly ModelMessage[] }) => {
           const denied = reserve('tool.plan.quote')
           if (denied !== null) return denied
+          // Plans run inside the caps without a per-Call owner gate, so every Tool must be named by the person.
+          const requested = userRequestText(options?.messages)
+          if (!input.plan.nodes.every((node) => requested.includes(node.toolRef))) return failure('tool.plan.quote', 'selected_tool_mismatch')
           const result = await ctx.runAction(internal.chatPlans.quote, { authority: { ...authority, scopes: [...authority.scopes] }, planJson: JSON.stringify(input.plan) })
           return projectedModelFacingOutput('tool.plan.quote', planQuoteContract.outputSchema, () => result)
         },
@@ -138,7 +150,7 @@ export function createPurchaseTools(authority: TrustedChatAuthority & { kind: 'a
         inputSchema: z.strictObject({
           quoteRef: z.string().regex(/^operation-commitment:v1:[0-9a-f]{64}$/u),
         }),
-        execute: async (ctx: ToolCtx, input: { quoteRef: string }) => {
+        execute: async (ctx: ToolCtx, input: { quoteRef: string }, options?: { messages?: readonly ModelMessage[] }) => {
           const denied = reserve('tool.call')
           if (denied !== null) return denied
           const commandDigest = canonicalDigest({
@@ -153,6 +165,8 @@ export function createPurchaseTools(authority: TrustedChatAuthority & { kind: 'a
             correlationId: `chat-invoke-corr:${commandDigest}`,
             quoteRef: input.quoteRef,
             idempotencyKey,
+            // chatCall.call decides approval from the stored quote's Tool and this text, not from per-turn memory.
+            userRequestText: userRequestText(options?.messages),
           }
           // Calls run on the worker. Replaying the same idempotent Call returns its stored
           // result, so wait briefly for the answer and let the model reply from it.

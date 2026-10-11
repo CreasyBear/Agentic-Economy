@@ -3,6 +3,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { captureRouteException } from '@/lib/observability/capture-route-exception'
 import { methodNotAllowed } from '@/lib/server/method-guard'
 import { response as noStore } from '@/lib/server/no-store-response'
+import { rpcChannelAuthenticated } from '@/lib/server/rpc-channel-auth'
 import { readTrimmedEnv, type StringEnvironment } from '@/lib/server/read-trimmed-env'
 import { isRecord } from '@/modules/common/is-record'
 import {
@@ -27,7 +28,6 @@ import { delegationGrantRef, delegationSnapshotRef } from '@/modules/authority/d
 import { accountRef, principalRef } from '@/modules/principal-account/public'
 
 const MAX_BODY_BYTES = 256 * 1024
-const TOKEN_PATTERN = /^[A-Za-z0-9_-]{43,128}$/u
 const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u
 const OPAQUE_REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$/u
 
@@ -138,18 +138,6 @@ function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
     mismatch |= left[index]! ^ (right[index] ?? 0)
   }
   return mismatch === 0
-}
-
-async function channelAuthenticated(request: Request, environment: StringEnvironment): Promise<boolean> {
-  const authorization = request.headers.get('authorization')
-  const supplied = authorization?.startsWith('Bearer ')
-    ? authorization.slice('Bearer '.length)
-    : undefined
-  const configured = readTrimmedEnv(environment, 'AE_SECRET_LIFECYCLE_RPC_TOKEN')
-  if (supplied === undefined || configured === undefined
-    || !TOKEN_PATTERN.test(supplied) || !TOKEN_PATTERN.test(configured)) return false
-  const encoder = new TextEncoder()
-  return bytesEqual(await sha256(encoder.encode(supplied)), await sha256(encoder.encode(configured)))
 }
 
 async function readRequest(request: Request): Promise<LifecycleRequest | undefined> {
@@ -361,7 +349,7 @@ export async function handleSecretLifecycleRequest(
   request: Request,
   environment: StringEnvironment = process.env,
 ): Promise<Response> {
-  if (!await channelAuthenticated(request, environment)) return noStore({ kind: 'unavailable' }, 401)
+  if (!await rpcChannelAuthenticated(request, environment, 'AE_SECRET_LIFECYCLE_RPC_TOKEN')) return noStore({ kind: 'unavailable' }, 401)
   const input = await readRequest(request)
   if (input === undefined) return noStore({ kind: 'unavailable' }, 400)
   try {

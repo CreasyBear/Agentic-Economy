@@ -17,6 +17,13 @@ const HTTPS_ORIGIN = /^https:\/\/[A-Za-z0-9.-]+(?::[0-9]{1,5})?$/u
 const MAXIMUM_BRIDGE_RESPONSE_BYTES = 512 * 1024
 const BRIDGE_REQUEST_DEADLINE_MS = 10_000
 
+function bridgeHeaders(): Record<string, string> {
+  return {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${env.AE_SECRET_LIFECYCLE_RPC_TOKEN?.trim() ?? ''}`,
+  }
+}
+
 type ProviderInvocation = Extract<
   RouteTransportInvocation,
   Readonly<{ binding: Readonly<{ authority: Readonly<{ kind: 'provider_connection' }> }> }>
@@ -213,7 +220,7 @@ export async function invokeProviderConsequenceViaVercel(
   try {
     const signingResponse = await sendGuardedHttpRequest(new Request(endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: bridgeHeaders(),
       body: JSON.stringify({ action: 'issue', ...envelope }),
       signal: AbortSignal.timeout(BRIDGE_REQUEST_DEADLINE_MS),
     }), MAXIMUM_BRIDGE_RESPONSE_BYTES)
@@ -234,7 +241,7 @@ export async function invokeProviderConsequenceViaVercel(
   try {
     response = await sendGuardedHttpRequest(new Request(endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: bridgeHeaders(),
       body: JSON.stringify({ action: 'execute', ...envelope, signedTicket, invocation }),
       signal: AbortSignal.timeout(BRIDGE_REQUEST_DEADLINE_MS),
     }), MAXIMUM_BRIDGE_RESPONSE_BYTES)

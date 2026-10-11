@@ -457,6 +457,12 @@
   },
   {
     "visibility": "public",
+    "module": "attribution",
+    "method": "recordAttribution",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
     "module": "authorityBoundary",
     "method": "resolveAgentBinding",
     "kind": "mutation"
@@ -2136,6 +2142,12 @@
     "kind": "action"
   },
   {
+    "visibility": "internal",
+    "module": "chatCall",
+    "method": "quoteToolRef",
+    "kind": "query"
+  },
+  {
     "visibility": "public",
     "module": "chatCall",
     "method": "readOwnerChatCards",
@@ -2488,6 +2500,12 @@
     "module": "journeyEvents",
     "method": "retryUnforwarded",
     "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "journeyEvents",
+    "method": "viewerDistinctId",
+    "kind": "query"
   },
   {
     "visibility": "public",
@@ -3664,6 +3682,12 @@
     "module": "moneyStripeWebhookInbox",
     "method": "ingest",
     "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyStripeWebhookInbox",
+    "method": "listStuckForOperator",
+    "kind": "query"
   },
   {
     "visibility": "internal",

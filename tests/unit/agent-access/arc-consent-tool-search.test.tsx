@@ -94,3 +94,27 @@ it('preserves both empty-selection and search-error descriptions on the query', 
   expect(document.getElementById('tool-selection-empty')).toBeInTheDocument()
   expect(document.getElementById('tool-search-error')).toHaveTextContent('Search is unavailable.')
 })
+
+it('shows the return host first and an unverified badge for dynamic clients', async () => {
+  const { ConsentRequestFacts } = await import('@/components/ae/agent-access/authorize-form/components/ConsentRequestFacts')
+  render(
+    <ConsentRequestFacts
+      clientName="Dyn"
+      environment="sandbox"
+      toolSelectionSummary="All"
+      accessSummary="x"
+      expiresInSeconds={3600}
+      grantRevision={1}
+      grantRef="g"
+      toolRefs={[]}
+      flow="authorization_code"
+      redirectDisposition="origin"
+      redirectOrigin="https://app.example"
+      unverifiedClient
+    />,
+  )
+  expect(screen.getByText('Unverified application')).toBeInTheDocument()
+  const host = screen.getByText('https://app.example')
+  const app = screen.getByText(/Dyn/)
+  expect(host.compareDocumentPosition(app) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+})

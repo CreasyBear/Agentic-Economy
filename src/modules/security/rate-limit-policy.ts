@@ -18,6 +18,7 @@ export const RATE_LIMIT_NAMES = [
   'chat-stream',
   'chat-anonymous',
   'chat-anonymous-edge',
+  'chat-anonymous-global',
   'dispute-open',
   'paid-call-report',
   'mcp-anonymous',
@@ -46,6 +47,8 @@ export const RATE_LIMIT_POLICY: Record<RateLimitName, RateLimitPolicyConfig> = {
   'chat-anonymous': { kind: 'token bucket', rate: 30, period: HOUR_MS, capacity: 30 },
   'chat-anonymous-edge': { kind: 'token bucket', rate: 30, period: HOUR_MS, capacity: 30 },
   'paid-call-report': { kind: 'token bucket', rate: 5, period: MINUTE_MS, capacity: 5 },
+  // Global daily budget across all IPs (OWASP API4 / LLM10); bot challenge is a separate product decision, no vendor added.
+  'chat-anonymous-global': { kind: 'fixed window', rate: 5_000, period: 24 * HOUR_MS },
   'dispute-open': { kind: 'token bucket', rate: 3, period: MINUTE_MS, capacity: 3 },
   'mcp-anonymous': { kind: 'token bucket', rate: 30, period: MINUTE_MS, capacity: 30 },
   // Stripe card-testing guidance: rate limit Checkout Session creation.

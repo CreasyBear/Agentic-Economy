@@ -21,6 +21,7 @@ import '../setup/jsdom-platform'
 vi.mock('convex/react', async (importOriginal) => ({
   ...(await importOriginal<typeof ConvexReactModule>()),
   useConvexAuth: () => ({ isAuthenticated: shellMocks.useUser().isSignedIn }),
+  useMutation: () => async () => null,
   useQuery: (query: Parameters<typeof getFunctionName>[0], args: unknown) => args === 'skip' || getFunctionName(query) !== 'operatorContext:readCurrent' ? undefined : {
     kind: 'authorized', userId: 'user_private_ada', accountRef: 'account-current',
     authScope: { organizationId: null, sessionId: 'session_private_ada' },

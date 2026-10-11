@@ -121,4 +121,67 @@ describe('Stripe webhook durable inbox', () => {
     })
   })
 
+  const command = () => ({
+    destination: 'snapshot' as const,
+    event: checkoutEvent(),
+    operationKey: 'moneyStripeWebhookInbox:ingest',
+    correlationId: 'evt_inbox_one',
+  })
+
+  it('re-queues a replayed failed row with fresh work', async () => {
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    await backend.mutation(ingest, await withSourceWrite('billing', command()))
+    const row = await backend.run(async (ctx) => ctx.db.query('moneyStripeWebhookInbox').unique())
+    if (row?.workId === undefined) throw new Error('work_not_queued')
+    await backend.mutation(internal.moneyStripeWebhookInbox.complete, {
+      workId: row.workId as WorkId,
+      context: { stripeEventId: 'evt_inbox_one' },
+      result: { kind: 'failed', error: 'retry attempts exhausted' },
+    })
+
+    await expect(backend.mutation(ingest, await withSourceWrite('billing', command())))
+      .resolves.toEqual({ kind: 'accepted', status: 'queued' })
+    const rows = await backend.run(async (ctx) => ctx.db.query('moneyStripeWebhookInbox').collect())
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ state: 'queued' })
+    expect(rows[0]?.failureCode).toBeUndefined()
+    expect(rows[0]?.completedAt).toBeUndefined()
+    expect(rows[0]?.workId).toBeTruthy()
+    expect(rows[0]?.workId).not.toBe(row.workId)
+  })
+
+  it('keeps a replayed applied row replayed', async () => {
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    await backend.mutation(ingest, await withSourceWrite('billing', command()))
+    const row = await backend.run(async (ctx) => ctx.db.query('moneyStripeWebhookInbox').unique())
+    if (row === null) throw new Error('row_missing')
+    await backend.run(async (ctx) => ctx.db.patch(row._id, { state: 'applied' }))
+
+    await expect(backend.mutation(ingest, await withSourceWrite('billing', command())))
+      .resolves.toEqual({ kind: 'accepted', status: 'replayed' })
+    const after = await backend.run(async (ctx) => ctx.db.get(row._id))
+    expect(after).toMatchObject({ state: 'applied', workId: row.workId })
+  })
+
+  it('lists only failed and reconciliation_required rows for the operator', async () => {
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    await backend.mutation(ingest, await withSourceWrite('billing', command()))
+    const row = await backend.run(async (ctx) => ctx.db.query('moneyStripeWebhookInbox').unique())
+    if (row === null) throw new Error('row_missing')
+    const { _id, _creationTime, ...rest } = row
+    void _creationTime
+    await backend.run(async (ctx) => {
+      await ctx.db.patch(_id, { state: 'failed', failureCode: 'stripe_webhook_work_failed' })
+      await ctx.db.insert('moneyStripeWebhookInbox', { ...rest, stripeEventId: 'evt_r', state: 'reconciliation_required' })
+      await ctx.db.insert('moneyStripeWebhookInbox', { ...rest, stripeEventId: 'evt_a', state: 'applied' })
+      await ctx.db.insert('moneyStripeWebhookInbox', { ...rest, stripeEventId: 'evt_q', state: 'queued' })
+    })
+
+    const stuck = await backend.query(internal.moneyStripeWebhookInbox.listStuckForOperator, {})
+    expect(stuck.map((r) => [r.stripeEventId, r.state]).sort()).toEqual([
+      ['evt_inbox_one', 'failed'],
+      ['evt_r', 'reconciliation_required'],
+    ])
+  })
+
 })

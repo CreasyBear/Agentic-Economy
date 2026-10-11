@@ -41,8 +41,10 @@ const entitlement = vi.hoisted<{
 
 vi.mock('convex/react', () => ({
   useConvexAuth: () => ({ isAuthenticated: entitlement.isAuthenticated }),
+  useMutation: () => async () => null,
   useQuery: (query: FunctionReference<'query'>, args: unknown) => {
     if (args === 'skip') return undefined
+    if (getFunctionName(query) === 'journeyEvents:viewerDistinctId') return undefined
     if (getFunctionName(query) !== 'operatorContext:readCurrent') throw new Error('Unexpected query')
     if (entitlement.throwOnRead) throw new Error('operator entitlement unavailable')
     return entitlement.result

@@ -12,6 +12,10 @@ export type UnsubscribePayload = Readonly<{
   stream: UnsubscribeStream
 }>
 
+/** Key version carried in every token; bump when EMAIL_UNSUBSCRIBE_SECRET rotates so old links stop verifying. */
+export const UNSUBSCRIBE_KID = 'v1'
+export const UNSUBSCRIBE_TTL_MS = 90 * 24 * 60 * 60 * 1000
+
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
 
@@ -38,18 +42,24 @@ const hmacKey = (secret: string) => crypto.subtle.importKey(
 )
 
 /** Token is `base64url(json payload).base64url(HMAC-SHA256 of the payload segment)`. The address never appears in it. */
-export async function signUnsubscribeToken(secret: string, payload: UnsubscribePayload): Promise<string> {
+export async function signUnsubscribeToken(secret: string, payload: UnsubscribePayload, now: number = Date.now()): Promise<string> {
   const body = toBase64Url(encoder.encode(JSON.stringify({
     principalRef: payload.principalRef,
     accountRef: payload.accountRef,
     stream: payload.stream,
+    kid: UNSUBSCRIBE_KID,
+    iat: now,
+    exp: now + UNSUBSCRIBE_TTL_MS,
   })))
   const signature = await crypto.subtle.sign('HMAC', await hmacKey(secret), encoder.encode(body))
   return `${body}.${toBase64Url(new Uint8Array(signature))}`
 }
 
+/** Links in emails sent before kid and exp existed still unsubscribe until this cutoff (Spam Act 2003, CAN-SPAM). Delete this branch after it. */
+const LEGACY_UNSUBSCRIBE_CUTOFF_MS = Date.UTC(2026, 11, 15)
+
 /** `crypto.subtle.verify` compares in constant time. Any malformed input returns null rather than throwing. */
-export async function verifyUnsubscribeToken(secret: string, token: string): Promise<UnsubscribePayload | null> {
+export async function verifyUnsubscribeToken(secret: string, token: string, now: number = Date.now()): Promise<UnsubscribePayload | null> {
   const [body, signature, extra] = token.split('.')
   if (body === undefined || body.length === 0 || signature === undefined || extra !== undefined) return null
   try {
@@ -57,7 +67,9 @@ export async function verifyUnsubscribeToken(secret: string, token: string): Pro
     if (!valid) return null
     const parsed: unknown = JSON.parse(decoder.decode(fromBase64Url(body)))
     if (typeof parsed !== 'object' || parsed === null) return null
-    const { principalRef, accountRef, stream } = parsed as Record<string, unknown>
+    const { principalRef, accountRef, stream, kid, exp } = parsed as Record<string, unknown>
+    const legacy = kid === undefined && exp === undefined && now < LEGACY_UNSUBSCRIBE_CUTOFF_MS
+    if (!legacy && (kid !== UNSUBSCRIBE_KID || typeof exp !== 'number' || exp <= now)) return null
     if (typeof principalRef !== 'string' || typeof accountRef !== 'string') return null
     if (!UNSUBSCRIBABLE_STREAMS.some((allowed) => allowed === stream)) return null
     return { principalRef, accountRef, stream: stream as UnsubscribeStream }

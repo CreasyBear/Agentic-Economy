@@ -928,7 +928,7 @@ describe('Customer Request OAuth HTTP adapter', () => {
     expect(revoked).toEqual(['ak_access_1'])
   })
 
-  it.each(['claimed', 'recovered'] as const)('does not deliver or rotate a %s refresh family from the opposite environment', async (kind) => {
+  it.each(['claimed'] as const)('does not deliver or rotate a %s refresh family from the opposite environment', async (kind) => {
     vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const store = storeFixture()
     await store.insertClient(defaultOAuthClientFixture('client-local', { grantTypes: ['authorization_code', 'refresh_token'] }))
@@ -1029,36 +1029,6 @@ describe('Customer Request OAuth HTTP adapter', () => {
     expect(await response.json()).toMatchObject({ access_token: 'ak_access_2-secret' })
     expect(commit).toHaveBeenCalledTimes(2)
     expect(revokeProviderCredential).not.toHaveBeenCalled()
-  })
-
-  it('recovers an immediately retried refresh delivery without another browser ceremony or access-key rotation', async () => {
-    const now = 20_000
-    const family = refreshFamilyFixture({
-      currentProviderCredentialId: 'ak_current',
-      currentAccessExpiresAt: now + 300_000,
-      updatedAt: now,
-    })
-    const store = storeFixture()
-    await store.insertClient({
-      clientId: 'client-durable', clientName: 'Durable client', redirectUris: ['http://localhost/callback'],
-      grantTypes: ['authorization_code', 'refresh_token'], tokenEndpointAuthMethod: 'none', createdAt: now,
-    })
-    const issueRefreshKey = vi.fn<NonNullable<OAuthApiOptions['issueRefreshKey']>>()
-    const response = await handleOAuthTokenPost(formRequest('http://localhost/oauth/token', {
-      grant_type: 'refresh_token', refresh_token: 'immediate-parent-token', client_id: 'client-durable',
-    }), {
-      store,
-      refreshStore: refreshStoreFixture({ claimRefreshFamily: async () => ({ kind: 'recovered', family }) }),
-      issueRefreshKey,
-      getSecret: async () => ({ secret: 'current-access-secret' }),
-      now: () => now,
-    })
-
-    expect(response.status).toBe(200)
-    expect(await response.json()).toMatchObject({
-      access_token: 'current-access-secret', expires_in: 300, refresh_token: expect.any(String),
-    })
-    expect(issueRefreshKey).not.toHaveBeenCalled()
   })
 
   it('revokes refresh or access credentials idempotently and returns 200 for an unknown token', async () => {
@@ -1307,7 +1277,7 @@ describe('Customer Request OAuth HTTP adapter', () => {
     const controlledHtml = await controlledGate.text()
     expect(controlledHtml).toContain('data-environment="production"')
     expect(controlledHtml).toContain('data-expires-in-seconds="7200"')
-    expect(controlledHtml).toContain('Authority mode: spending_policy')
+    expect(controlledHtml).toContain('Authority mode: approval_required')
     expect(controlledHtml).toContain('Maximum spend per Call: USD 1.00.')
     expect(controlledHtml).toContain('Maximum daily spend: USD 5.00.')
     expect(controlledHtml).toContain('Maximum monthly spend: USD 20.00.')
@@ -1379,13 +1349,13 @@ describe('Customer Request OAuth HTTP adapter', () => {
     for (const [grantRef, authorityMode] of [
       ['device:sandbox-issuance', 'read_only'],
       ['device:production-zero', 'approval_required'],
-      ['device:production-bounded', 'spending_policy'],
+      ['device:production-bounded', 'approval_required'],
     ] as const) {
       vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', grantRef === 'device:sandbox-issuance' ? 'development' : 'production')
       const response = await handleOAuthConsentPost(formRequest('http://localhost/oauth/authorize', { grant_ref: grantRef, expected_grant_revision: '1', expected_target_revision: '1', decision: 'approve', authority_mode: authorityMode, connection_target: 'new_agent' }), options)
       expect(response.status).toBe(200)
     }
-    const retry = await handleOAuthConsentPost(formRequest('http://localhost/oauth/authorize', { grant_ref: 'device:production-bounded', expected_grant_revision: '1', expected_target_revision: '1', decision: 'approve', authority_mode: 'spending_policy', connection_target: 'new_agent' }), options)
+    const retry = await handleOAuthConsentPost(formRequest('http://localhost/oauth/authorize', { grant_ref: 'device:production-bounded', expected_grant_revision: '1', expected_target_revision: '1', decision: 'approve', authority_mode: 'approval_required', connection_target: 'new_agent' }), options)
     expect(retry.status).toBe(200)
     expect(await retry.json()).toMatchObject({
       kind: 'approved',
@@ -1403,7 +1373,8 @@ describe('Customer Request OAuth HTTP adapter', () => {
       maximumDailySpend: productionRequestedAccess.maximumDailySpend,
       maximumMonthlySpend: productionRequestedAccess.maximumMonthlySpend,
     })
-    expect(issued[2]?.authorityMode).toBe('spending_policy')
+    expect(issued[2]?.authorityMode).toBe('approval_required')
+    expect(issued[2]?.scopes).toEqual(['market_tools:call', 'customer_requests:approval_required'])
     expect(issued[2]?.approvedAccess).toEqual(productionRequestedAccess)
     expect(issued[2]?.spendingPolicy).toEqual({
       ...spendingPolicyBase,
