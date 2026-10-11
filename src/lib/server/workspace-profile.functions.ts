@@ -3,11 +3,11 @@ import { auth, clerkClient } from '@clerk/tanstack-react-start/server'
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 
-import { callSourceMutation, callSourceQuery, sourceMutation, sourceQuery, type ConvexSourceTransport } from '@/lib/server/convex-source'
+import { callSourceAction, callSourceMutation, callSourceQuery, sourceAction, sourceMutation, sourceQuery, type ConvexSourceTransport } from '@/lib/server/convex-source'
 import { readClerkMfaConsequenceProof, type ClerkMfaConsequenceProofInput } from '@/lib/server/clerk-consequence-proof'
 import { sourceWriteAdmissionFromContext, sourceWriteRequestFromAdmission } from '@/lib/server/source-write-admission'
 import type { SourceWriteAdmission, SourceWriteAdmissionRequest } from '@/modules/security/source-write-admission'
-import type { WorkspaceCloseCommand, WorkspaceCloseResult, WorkspaceTransferCommand, WorkspaceTransferResult } from '@/modules/principal-account/workspace-decommission.view-model'
+import type { WorkspaceCloseBlockedRefusal, WorkspaceCloseCommand, WorkspaceCloseResult, WorkspaceTransferCommand, WorkspaceTransferResult } from '@/modules/principal-account/workspace-decommission.view-model'
 import { captureRouteException } from '@/lib/observability/capture-route-exception'
 import { unboundWorkspaceDefaultName } from '@/lib/workspace-label'
 
@@ -106,6 +106,19 @@ type WorkspaceActionWire = Readonly<{
   sourceWrite: SourceWriteAdmission; sourceWriteRequest: SourceWriteAdmissionRequest
 }>
 const closeWorkspaceMutation = sourceMutation<WorkspaceCloseCommand & WorkspaceActionWire, WorkspaceCloseResult>('workspaceAccounts:closeWorkspace')
+const readCreditAccountAction = sourceAction<{ principalId: string; currency: string }, { kind: 'ok'; purchasedBalance: { units: string } } | { kind: 'refused'; code: string }>('moneyLedger:readCreditAccount')
+
+/** Credit lives in the ledger, which a mutation cannot read, so close is refused here while purchased credit remains. Promotional credit is not withdrawable and does not block. */
+async function creditCloseRefusal(accountRef: string): Promise<WorkspaceCloseBlockedRefusal | null> {
+  try {
+    const account = await callSourceAction(readCreditAccountAction, { principalId: accountRef, currency: 'AUD' })
+    if (account.kind !== 'ok') return { kind: 'refused', code: 'source_unavailable' }
+    return BigInt(account.purchasedBalance.units) > 0n ? { kind: 'refused', code: 'positive_credit_balance' } : null
+  } catch (cause) {
+    captureRouteException(cause, { site: 'closeWorkspaceServer.creditBalance' })
+    return { kind: 'refused', code: 'source_unavailable' }
+  }
+}
 const transferWorkspaceMutation = sourceMutation<WorkspaceTransferCommand & WorkspaceActionWire, WorkspaceTransferResult>('workspaceAccounts:transferWorkspaceOwnership')
 const workspaceActionFields = {
   expectedAccountRef: z.string().min(1).max(200),
@@ -129,6 +142,8 @@ export const closeWorkspaceServer = createServerFn({ method: 'POST' })
   .handler(async ({ data, context }): Promise<WorkspaceCloseResult> => {
     const receipt = await readWorkspaceTerminalReceipt({ action: 'close', ...data })
     if (receipt?.action === 'close') return { kind: receipt.kind, accountRef: receipt.accountRef, accountRevision: receipt.accountRevision }
+    const refusal = await creditCloseRefusal(data.expectedAccountRef)
+    if (refusal !== null) return refusal
     return await callSourceMutation(closeWorkspaceMutation, await workspaceActionWire(data, context))
   })
 

@@ -69,14 +69,14 @@ export const sendDeliveryEmail = internalAction({
     if (rendered === null) return { outcome: 'suppressed', code: 'email_prop_missing' }
     // Only alert and lifecycle props carry an unsubscribe target; required mail has none.
     const unsubscribeUrl = (context.email.props as { unsubscribeUrl?: string }).unsubscribeUrl
-    return await postResendEmail({
+    const post = (to: string, idempotencyKey: string) => postResendEmail({
       apiKey: resendApiKey,
       from: fromEmail,
-      to: primaryEmail.emailAddress,
+      to,
       subject: rendered.subject,
       text: rendered.text,
       html: rendered.html,
-      idempotencyKey: context.deliveryRef,
+      idempotencyKey,
       tags: [
         { name: 'stream', value: context.stream },
         { name: 'event_kind', value: context.email.eventKind },
@@ -86,6 +86,13 @@ export const sendDeliveryEmail = internalAction({
         headers: { 'List-Unsubscribe': `<${unsubscribeUrl}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' },
       }),
     })
+    const result = await post(primaryEmail.emailAddress, context.deliveryRef)
+    // Email change: the replaced inbox hears of it too. A retry reuses both keys, so neither mail doubles.
+    if (result.outcome === 'sent' && context.previousAddress !== undefined && context.previousAddress !== primaryEmail.emailAddress.toLowerCase()) {
+      const old = await post(context.previousAddress, `${context.deliveryRef}:old`)
+      if (old.outcome !== 'sent') return old
+    }
+    return result
   },
 })
 

@@ -13,6 +13,7 @@ export type ApiKeyRecord = Readonly<{
   active: boolean; current: boolean; issuedLabel: string; expiresLabel: string
   generation: number; credentialReference: string
   onRequestRevoke: (trigger: HTMLButtonElement) => void
+  onRequestReplace: (trigger: HTMLButtonElement) => void
   renderAgentLink: (props: { className: string | undefined; children: ReactNode }) => ReactNode
 }>
 
@@ -67,6 +68,7 @@ export function ApiKeys({ rows, issueDisabled, revokeDisabled, onIssue, loadMore
                   : <>This key is {item.statusLabel.toLowerCase()}. The Agent and its activity history remain.</>}</p>
                 <div className={styles.actions}>
                   {item.renderAgentLink({ className: styles.link, children: 'View Agent' })}
+                  {item.active && item.current ? <Button type="button" variant="secondary" disabled={revokeDisabled} aria-label={`Replace key created ${item.issuedLabel} for ${item.name}`} onClick={event => item.onRequestReplace(event.currentTarget)}>Replace key</Button> : null}
                   {item.active ? <Button type="button" variant="danger" disabled={revokeDisabled} aria-label={`Revoke key created ${item.issuedLabel} for ${item.name}`} onClick={event => item.onRequestRevoke(event.currentTarget)}>Revoke key</Button> : null}
                 </div>
               </div>

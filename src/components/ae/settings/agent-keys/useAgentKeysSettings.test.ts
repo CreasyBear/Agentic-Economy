@@ -7,6 +7,7 @@ const calls = vi.hoisted(() => ({
   readDirectory: vi.fn(),
   readPage: vi.fn(),
   revoke: vi.fn(),
+  replace: vi.fn(),
   connect: vi.fn(),
   issue: vi.fn(),
   setup: vi.fn(),
@@ -15,7 +16,7 @@ const clerkMocks = vi.hoisted(() => ({ prompts: 0, reverificationLevels: [] as s
 
 vi.mock('@tanstack/react-start', async (importOriginal) => ({
   ...await importOriginal(),
-  useServerFn: (reference: string) => reference === 'issue' ? calls.issue : reference === 'revoke' ? calls.revoke : reference === 'page' ? calls.readPage : calls.readDirectory,
+  useServerFn: (reference: string) => reference === 'issue' ? calls.issue : reference === 'revoke' ? calls.revoke : reference === 'replace' ? calls.replace : reference === 'page' ? calls.readPage : calls.readDirectory,
 }))
 vi.mock('@clerk/tanstack-react-start', () => ({
   useReverification: <T>(fetcher: (...args: never[]) => Promise<T>) => async (...args: never[]): Promise<T> => {
@@ -41,6 +42,7 @@ vi.mock('@/modules/agent-access/agent-access.functions', () => ({
   revokeAgentCredentialServer: 'revoke',
   issueAgentAccessKeyServer: 'issue',
 }))
+vi.mock('@/modules/agent-access/replace-agent-key.functions', () => ({ replaceAgentAccessKeyServer: 'replace' }))
 vi.mock('@/lib/observability/capture-client-exception', () => ({ captureClientExceptionOnClient: vi.fn() }))
 vi.mock('@tanstack/react-router', async (importOriginal) => ({
   ...await importOriginal(),
@@ -144,6 +146,23 @@ describe('Agent keys settings revocation', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(calls.revoke).toHaveBeenCalledOnce()
     cancelledView.unmount()
+  })
+
+  it('replaces the current key after confirmation and reveals the new secret once', async () => {
+    calls.replace.mockResolvedValue({ kind: 'created', keyId: 'key:new', secret: 'secret-new' })
+    calls.readDirectory.mockResolvedValue(twoKeysDirectory)
+    const view = render(createElement(AeAgentKeysSettings, {
+      deploymentEnvironment: 'production', initialDirectory: twoKeysDirectory, canonicalBaseUrl: 'https://example.test',
+    }))
+    expect(screen.getAllByRole('button', { name: /^Replace key/ })).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name: /^Replace key created/ }))
+    expect(calls.replace).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Replace key' }))
+    await waitFor(() => expect(calls.replace).toHaveBeenCalledOnce())
+    expect(calls.replace.mock.calls[0]?.[0].data).toMatchObject({ principalRef: 'agent:one', idempotencyKey: expect.stringMatching(/^replace-/u) })
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Save your secret key' })).toBeTruthy())
+    expect(calls.revoke).not.toHaveBeenCalled()
+    view.unmount()
   })
 
   it('distinguishes active keys by creation time through revoke confirmation', () => {

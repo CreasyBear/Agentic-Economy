@@ -4,14 +4,18 @@ import type { Doc } from '../../../_generated/dataModel'
 import type { MutationCtx } from '../../../_generated/server'
 import { persistAgentAudit } from '../../agentAccess/principals/records'
 
+// Sign-in cascades are capped; a scoped removal revokes every agent the member created.
 const MACHINE_AGENT_CASCADE_CAP = 64
+
+type CascadeObservation = Pick<ClerkSecurityObservation, 'providerIdentifier' | 'deliveryRefHash' | 'observedAt'>
 
 export async function revokeMachineAgentsForCreatorObservation(
   ctx: Pick<MutationCtx, 'db'>,
-  observation: ClerkSecurityObservation,
+  observation: CascadeObservation,
   authority: Readonly<{ principalRef: string }>,
   createdAt: number,
   correlationRef: string,
+  onlyAccountRef?: string,
 ): Promise<void> {
   const accountRefs = new Set<string>()
   const ownershipRows = await ctx.db.query('accountOwnerships')
@@ -27,17 +31,23 @@ export async function revokeMachineAgentsForCreatorObservation(
       .eq('lifecycle', 'active'))
     .collect()
   for (const membership of membershipRows) accountRefs.add(membership.accountRef)
+  // A removed member's membership is already ended, so a scoped call names its account directly.
+  if (onlyAccountRef !== undefined) {
+    accountRefs.clear()
+    accountRefs.add(onlyAccountRef)
+  }
 
+  const cap = onlyAccountRef === undefined ? MACHINE_AGENT_CASCADE_CAP : Number.POSITIVE_INFINITY
   const matchedAgents: Doc<'agentAccessPrincipals'>[] = []
   for (const accountRef of accountRefs) {
-    if (matchedAgents.length >= MACHINE_AGENT_CASCADE_CAP) break
+    if (matchedAgents.length >= cap) break
     const agents = await ctx.db.query('agentAccessPrincipals')
       .withIndex('by_ownerId_and_lifecycle', (index) => index
         .eq('ownerId', accountRef)
         .eq('lifecycle', 'active'))
       .collect()
     for (const agent of agents) {
-      if (matchedAgents.length >= MACHINE_AGENT_CASCADE_CAP) break
+      if (matchedAgents.length >= cap) break
       if (!await machineAgentCreatedByHuman(ctx, agent, accountRef, authority.principalRef, observation.providerIdentifier)) {
         continue
       }
@@ -71,7 +81,7 @@ async function machineAgentCreatedByHuman(
 async function revokeMachineAgentAdmissionAndDependents(
   ctx: Pick<MutationCtx, 'db'>,
   agent: Doc<'agentAccessPrincipals'>,
-  observation: ClerkSecurityObservation,
+  observation: CascadeObservation,
   authority: Readonly<{ principalRef: string }>,
   createdAt: number,
   correlationRef: string,

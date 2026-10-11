@@ -213,6 +213,9 @@ export const notificationDeliveryValue = v.object({
   sourceEventRef: v.string(),
   /** Spam Act 2003 (Cth) s18 basis for lifecycle mail: express (the owner opted in) or inferred (the account relationship). */
   consentBasis: v.optional(v.union(v.literal('express'), v.literal('inferred'))),
+  /** email_changed only: the prior primary address, from the Clerk webhook, so the notice also reaches the old inbox. Unknown means new address only. */
+  previousAddress: v.optional(v.string()),
+  previousAddressUnknown: v.optional(v.boolean()),
   usageEvidenceJson:v.optional(v.string()),
   preferenceRevision:v.optional(v.number()),
   authorityRevisionAccount:v.optional(v.number()),

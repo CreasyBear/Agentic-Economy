@@ -6,6 +6,7 @@ export type WorkspaceDecommissionFence =
   | 'unreleased_call_holds'
   | 'in_flight_funding'
   | 'open_reconciliation'
+  | 'positive_credit_balance'
 
 export type WorkspaceTransferCandidate = Readonly<{
   principalRef: string
@@ -48,8 +49,14 @@ export type WorkspaceMfaReverificationRefusal = Readonly<{
   code: 'mfa_reverification_required'
 }>
 
+export type WorkspaceCloseBlockedRefusal = Readonly<{
+  kind: 'refused'
+  code: 'positive_credit_balance' | 'source_unavailable'
+}>
+
 export type WorkspaceCloseResult =
   | WorkspaceMfaReverificationRefusal
+  | WorkspaceCloseBlockedRefusal
   | Readonly<{
     kind: 'closed' | 'replayed'
     accountRef: string
@@ -75,7 +82,7 @@ export type WorkspaceTransferResult =
 export function isWorkspaceMfaReverificationRefusal(
   value: WorkspaceCloseResult | WorkspaceTransferResult,
 ): value is WorkspaceMfaReverificationRefusal {
-  return value.kind === 'refused'
+  return value.kind === 'refused' && value.code === 'mfa_reverification_required'
 }
 
 export type WorkspaceDangerDiagnostic = Rule4Diagnostic
@@ -86,6 +93,7 @@ export const FENCE_MESSAGES: Record<WorkspaceDecommissionFence, string> = {
   unreleased_call_holds: 'Call credit is still reserved. Review the affected Calls; only their recorded completion or recovery can release a hold.',
   in_flight_funding: 'A funding command is still in flight. Wait until it finishes before close.',
   open_reconciliation: 'A reconciliation case is still open. Resolve it before close.',
+  positive_credit_balance: 'You still have credit. Spend it, or contact Support to withdraw it, before closing.',
 }
 
 export const CLOSE_FAILURE_DIAGNOSTIC: WorkspaceDangerDiagnostic = {
@@ -114,6 +122,7 @@ export function fenceDestinationsFor(fences: readonly WorkspaceDecommissionFence
     in_flight_funding: { href: '/owner/credit', actionLabel: 'Check the original funding attempt' },
     open_reconciliation: { href: '/activity', actionLabel: 'Review Calls needing reconciliation' },
     unsettled_provider_obligations: { href: '/support', actionLabel: 'Get help with unsettled Provider obligations' },
+    positive_credit_balance: { href: '/support', actionLabel: 'Contact Support to withdraw credit' },
   }
   return fences.map(fence => ({ fence, label: fence === 'unsettled_provider_obligations' ? `${FENCE_MESSAGES[fence]} Workspace reference: ${accountRef}.` : FENCE_MESSAGES[fence], ...destinations[fence] }))
 }

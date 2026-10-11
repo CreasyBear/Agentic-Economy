@@ -25,6 +25,8 @@ export const observationArgs = {
   ),
   profileDisplayName: v.optional(v.string()),
   primaryEmailDigest: v.optional(v.string()),
+  /** Other addresses on the Clerk user; the one matching the stored primary digest is the prior primary. */
+  otherEmailAddresses: v.optional(v.array(v.string())),
 }
 
 export const observationResult = v.union(

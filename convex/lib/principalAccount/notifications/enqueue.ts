@@ -119,6 +119,7 @@ export async function enqueueEmail(ctx: MutationCtx, input: {
   consentBasis?: 'express' | 'inferred'
   /** Hold the send until this time (ms epoch), for quiet hours. */
   notBefore?: number
+  previousAddress?: string
   evidence?: Pick<Doc<'notificationDeliveries'>, 'usageEvidenceJson' | 'preferenceRevision' | 'authorityRevisionAccount'>
 }): Promise<'enqueued' | 'exists' | 'suppressed'> {
   const existing = await ctx.db.query('notificationDeliveries')
@@ -149,6 +150,7 @@ export async function enqueueEmail(ctx: MutationCtx, input: {
     sourceEventRef: input.sourceEventRef,
     ...(input.consentBasis === undefined ? {} : { consentBasis: input.consentBasis }),
     ...input.evidence,
+    ...(input.eventKind !== 'email_changed' ? {} : input.previousAddress === undefined ? { previousAddressUnknown: true } : { previousAddress: input.previousAddress }),
     state: admitted ? 'pending' : 'suppressed',
     ...(admitted ? {} : { suppressCode: !consented ? 'consent_basis_missing' : !enabled ? 'stream_disabled' : (capCode ?? 'notification_rate_limited') }),
     createdAt: now,
@@ -225,6 +227,7 @@ export async function enqueueAccountNotice(ctx: MutationCtx, input: {
   accountRef: string
   sourceEventRef: string
   recipientPrincipalRef?: string
+  previousAddress?: string
 }): Promise<'enqueued' | 'exists' | 'suppressed' | 'skipped'> {
   const recipientPrincipalRef = input.recipientPrincipalRef ?? await accountOwnerPrincipalRef(ctx.db, input.accountRef)
   if (recipientPrincipalRef === null) return 'skipped'
@@ -234,6 +237,7 @@ export async function enqueueAccountNotice(ctx: MutationCtx, input: {
     recipientPrincipalRef,
     accountRef: input.accountRef,
     sourceEventRef: input.sourceEventRef,
+    ...(input.previousAddress === undefined ? {} : { previousAddress: input.previousAddress }),
   })
 }
 

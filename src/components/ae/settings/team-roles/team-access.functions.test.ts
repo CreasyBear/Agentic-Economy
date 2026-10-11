@@ -53,6 +53,13 @@ it('never changes the owner via a membership action', async () => {
   expect(await changeTeamAccessServer({ data: { ...memberCommand, membershipRef: 'ownership:1', action: 'remove' } })).toEqual({ kind: 'refused', code: 'stale' })
   expect(boundary.remove).not.toHaveBeenCalled()
 })
+it('refuses removing the last owner with last_owner', async () => {
+  directory.members.push({ membershipRef: 'membership:owner', revision: 1, clerkUserId: 'user_owner', role: 'admin', displayName: 'Owner' })
+  try {
+    expect(await changeTeamAccessServer({ data: { ...memberCommand, membershipRef: 'membership:owner', membershipRevision: 1, action: 'remove' } })).toEqual({ kind: 'refused', code: 'last_owner' })
+  } finally { directory.members.pop() }
+  expect(boundary.remove).not.toHaveBeenCalled()
+})
 it('requires current MFA and preserves the final identity admin', async () => {
   boundary.proof.mockResolvedValueOnce(undefined)
   expect(await changeTeamAccessServer({ data: memberCommand })).toEqual({ kind: 'refused', code: 'mfa_reverification_required' })
@@ -72,10 +79,19 @@ it('replaces a pending invitation only after revoking the original', async () =>
 })
 it('does not resend accepted or stale invitations, or create a second invitation after an uncertain revoke', async () => {
   boundary.getInvitation.mockResolvedValueOnce({ status: 'accepted', updatedAt: 10 })
-  expect(await manageTeamInvitationServer({ data: invitationCommand })).toEqual({ kind: 'refused', code: 'stale' })
+  expect(await manageTeamInvitationServer({ data: invitationCommand })).toEqual({ kind: 'refused', code: 'invitation_closed' })
   boundary.revoke.mockRejectedValueOnce(new Error('unavailable'))
   expect(await manageTeamInvitationServer({ data: invitationCommand })).toEqual({ kind: 'refused', code: 'source_unavailable' })
   expect(boundary.invite).not.toHaveBeenCalled()
+})
+it('resends an expired invitation without revoking and names closed or expired refusals', async () => {
+  boundary.getInvitation.mockResolvedValueOnce({ id: 'orginv_1', emailAddress: 'invitee@example.test', role: 'org:member', status: 'expired', updatedAt: 10 })
+  expect(await manageTeamInvitationServer({ data: invitationCommand })).toEqual({ kind: 'accepted' })
+  expect(boundary.revoke).not.toHaveBeenCalled(); expect(boundary.invite).toHaveBeenCalledTimes(1)
+  boundary.getInvitation.mockResolvedValueOnce({ status: 'expired', updatedAt: 10 })
+  expect(await manageTeamInvitationServer({ data: { ...invitationCommand, action: 'cancel' } })).toEqual({ kind: 'refused', code: 'invitation_expired' })
+  boundary.getInvitation.mockResolvedValueOnce({ status: 'accepted', updatedAt: 10 })
+  expect(await manageTeamInvitationServer({ data: invitationCommand })).toEqual({ kind: 'refused', code: 'invitation_closed' })
 })
 it('keeps recorded role drift out of actionable membership controls', async () => {
   boundary.list.mockResolvedValue({ totalCount: 1, data: [{ role: 'org:member', updatedAt: 11, publicUserData: { userId: 'user_member' } }] })

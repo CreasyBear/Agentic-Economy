@@ -2,6 +2,7 @@ import type { MutationCtx } from '../../../_generated/server'
 import { CLERK_USER_PROVIDER_NAMESPACE } from '../interactiveAuthority/constants'
 import { RECORD_DELETED_OPERATION, RECORD_DELETED_SCOPE, auditEventIdFromDeliveryRefHash, recordCommandDigest, resolveOrgBindings, validateRecordCommand, verifyRecordServiceAuth } from './auth'
 import { recordOrganizationMembershipDeletedAudit } from './audit'
+import { revokeMachineAgentsForCreatorObservation } from '../../security/accountHistory/machineCascade'
 import { enqueueAccountNotice } from '../notifications/enqueue'
 import { CLERK_ORG_MEMBERSHIP_ACTOR_REF, WorkspaceMembershipError, type RecordArgs, type RecordResult } from './contracts'
 
@@ -64,10 +65,6 @@ export const recordOrganizationMembershipDeletedForServerHandler = async (ctx: M
         .eq('ownerPrincipalRef', principal.principalRef)
         .eq('lifecycle', 'active'))
       .unique()
-    if (ownerOwnership !== null) {
-      return { kind: 'accepted', status: 'ignored' }
-    }
-
     const commandDigest = recordCommandDigest(command)
     const eventId = auditEventIdFromDeliveryRefHash(command.deliveryRefHash)
     const existingAudit = await ctx.db
@@ -82,6 +79,28 @@ export const recordOrganizationMembershipDeletedForServerHandler = async (ctx: M
         throw new WorkspaceMembershipError('authority_conflict')
       }
       return { kind: 'accepted', status: 'replayed' }
+    }
+
+    if (ownerOwnership !== null) {
+      // The single current owner was removed in Clerk. Keep ownership, leave a trace, and tell the owner to transfer first.
+      await recordOrganizationMembershipDeletedAudit(ctx.db, {
+        accountRef: account.accountRef,
+        clerkOrgId: command.clerkOrgId,
+        membershipRefHash: command.membershipRefHash,
+        role: command.role,
+        memberPrincipalRef: principal.principalRef,
+        deliveryRefHash: command.deliveryRefHash,
+        observedAt: command.observedAt,
+        commandDigest,
+        beforeState: 'owner_removal_ignored',
+        outcome: 'ignored',
+        createdAt: Date.now(),
+      })
+      await enqueueAccountNotice(ctx, {
+        eventKind: 'team_membership_changed', accountRef: account.accountRef,
+        sourceEventRef: command.deliveryRefHash,
+      })
+      return { kind: 'accepted', status: 'ignored' }
     }
 
     const membership = await ctx.db
@@ -109,6 +128,8 @@ export const recordOrganizationMembershipDeletedForServerHandler = async (ctx: M
       },
       revision: membership.revision + 1,
     })
+
+    await revokeMachineAgentsForCreatorObservation(ctx, command, { principalRef: principal.principalRef }, command.observedAt, toolRef, account.accountRef)
 
     const now = Date.now()
     await recordOrganizationMembershipDeletedAudit(ctx.db, {

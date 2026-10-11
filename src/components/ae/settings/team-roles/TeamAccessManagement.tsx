@@ -15,12 +15,16 @@ import type { useInviteTeamMember } from './useInviteTeamMember'
 type Decision = Readonly<{ kind: 'member'; member: TeamAccessMember; action: 'admin' | 'member' | 'remove' }>
   | Readonly<{ kind: 'invitation'; invitation: PendingTeamInvitation; action: 'cancel' | 'resend' }>
 const refusalCopy = {
-  forbidden: 'Your current account role cannot make this change.',
   stale: 'Access changed since this page was read. Refresh the team before making another change.',
   mfa_reverification_required: 'Verify with two-factor authentication to change access.',
+  invitation_expired: 'This invitation has expired. Resend it to the same address, or invite the right person.',
+  invitation_closed: 'This invitation was already accepted or cancelled. Refresh the team to see its current state.',
   last_admin: 'The identity organisation must retain an admin. Promote another member first.',
+  last_owner: 'The workspace owner cannot be removed. Transfer ownership first.',
   source_unavailable: 'The change could not be confirmed. Refresh the team and pending invitations before trying again.',
 } as const
+const refusalMessage = (code: keyof typeof refusalCopy | 'forbidden', view?: TeamAccessView) =>
+  code === 'forbidden' ? `Only ${view?.ownerName ?? 'the workspace owner'} (workspace owner) can change roles. Ask them.` : refusalCopy[code]
 
 export function TeamAccessManagement({ onRecordedRead, accountRef, members = [], invitation, inviteReason, inviteActionRef }: Readonly<{
   onRecordedRead?: (view: TeamAccessView) => Promise<void>; accountRef?: string; members?: readonly TeamMemberView[]
@@ -104,7 +108,7 @@ export function TeamAccessManagement({ onRecordedRead, accountRef, members = [],
         : await manageTeamInvitationServer({ data: { ...expected, invitationId: decision.invitation.invitationId,
           expectedUpdatedAt: decision.invitation.updatedAt, action: decision.action } })
       if (request !== requestGeneration.current) return
-      if (result.kind === 'refused') { setProblem(refusalCopy[result.code]); setReadFailed(true); setDecision(undefined); return }
+      if (result.kind === 'refused') { setProblem(refusalMessage(result.code, view)); setReadFailed(true); setDecision(undefined); return }
       setDecision(undefined)
       setMessage(decision.kind === 'member'
         ? 'The identity provider accepted this access change. The roster changes after Agentic Economy records it. Refresh to confirm; do not repeat the change while it is being recorded.'
@@ -152,8 +156,11 @@ export function TeamAccessManagement({ onRecordedRead, accountRef, members = [],
       <p role="status">{readFailed ? 'Team management is unavailable.' : 'Reading current team access…'}</p>
     </div> : view.canManageInvitations ? <TeamInvitationsTable invitations={view.invitations} complete={view.invitationsComplete}
       renderActions={item => <div className="flex flex-wrap gap-2">
-        <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={event => choose({ kind: 'invitation', invitation: item, action: 'resend' }, event)}>Resend invitation</Button>
-        <Button type="button" variant="ghost" size="sm" className="text-destructive" disabled={disabled} onClick={event => choose({ kind: 'invitation', invitation: item, action: 'cancel' }, event)}>Cancel invitation</Button>
+        <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={event => choose({ kind: 'invitation', invitation: item, action: 'resend' }, event)}>{item.expired ? 'Expired, resend to the same address' : 'Resend invitation'}</Button>
+        {item.expired ? null : <>
+          <Button type="button" variant="ghost" size="sm" className="text-destructive" disabled={disabled} onClick={event => choose({ kind: 'invitation', invitation: item, action: 'cancel' }, event)}>Cancel invitation</Button>
+          <Button type="button" variant="ghost" size="sm" disabled={disabled} onClick={event => choose({ kind: 'invitation', invitation: item, action: 'cancel' }, event)}>Wrong address? Cancel and invite the right one</Button>
+        </>}
       </div>}
       footer={view.nextInvitationOffset !== null ? <Button type="button" variant="outline" disabled={disabled} onClick={() => void loadMore('invitations')}>Load more invitations</Button> : undefined} />
       : <div className="grid gap-3"><h2 className="text-lg font-medium">Invitations unavailable</h2><p className="text-sm text-muted-foreground">{inviteReason ?? 'Pending invitations are available to account owners and admins after the Business identity organisation is set up.'}</p></div>}

@@ -157,7 +157,7 @@ function issueScopes(input: IssueInput): readonly string[] | undefined {
   return agentAuthorityModeForScopes(scopes) === input.authorityMode ? scopes : undefined
 }
 
-const owner = async (): Promise<{ userId: string } | undefined> => {
+export const owner = async (): Promise<{ userId: string } | undefined> => {
   const identity = await auth()
   return identity.isAuthenticated && identity.userId !== null ? { userId: identity.userId } : undefined
 }
@@ -278,7 +278,7 @@ const revokeOwnerConnectionMutation = sourceMutation<Readonly<{
   'agentAccessOAuth:revokeOwnerConnection',
 )
 
-async function requireCanonicalOwnerAuthorityServer(): Promise<void> {
+export async function requireCanonicalOwnerAuthorityServer(): Promise<void> {
   await callSourceQuery(listOwnerGrantReadbacksQuery, { requireAuthority: true })
 }
 
@@ -573,7 +573,7 @@ export async function recordAgentProviderRevocation(command: ProviderRevocationC
   return await callSourceMutation(recordProviderRevocationMutation, { ...command, serviceAuth })
 }
 
-async function completeAgentLifecycle(
+export async function completeAgentLifecycle(
   canonical: AgentLifecycleCanonicalResult,
 ): Promise<AgentLifecycleResult> {
   if (canonical.kind === 'conflict' || canonical.kind === 'refused') return canonical

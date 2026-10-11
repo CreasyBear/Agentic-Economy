@@ -8,10 +8,10 @@ import { useInviteTeamMember } from './useInviteTeamMember'
 export { TeamRolesPending } from './TeamRolesPending'
 
 const inviteReasons = {
-  role_restricted: 'Only workspace owners and admins can invite members. Ask an owner or admin to send the invitation.',
   organization_unset: 'Invitations become available once your Business is set up. If you just created it, refresh in a few seconds.',
   binding_unavailable: 'This workspace has an unavailable organization binding. Ask the workspace owner to resolve its active bindings before inviting members.',
 } as const
+const ownerNameOf = (members: TeamRolesPageProps['members']) => members.find(member => member.role === 'Owner')?.name ?? 'the workspace owner'
 
 export function TeamRolesPage(props: TeamRolesPageProps) {
   return <TeamRolesWorkspace key={props.accountRef} {...props} />
@@ -31,7 +31,7 @@ function TeamRolesWorkspace({ accountRef, members, inviteAvailability, transferR
     <div ref={headingRef} tabIndex={-1}><SettingsPage title="Team & roles" description="People who can act for this workspace and their Agentic Economy roles.">
     {transferRequested ? <p>Invite the next owner and wait for their accepted membership to be recorded. <a href="/owner/settings/workspace" className="underline underline-offset-4">Return to ownership transfer</a>.</p> : null}
     <TeamAccessManagement members={roster} {...(accountRef === undefined ? {} : { accountRef })} inviteActionRef={saveActionRef}
-      {...(inviteAvailability === 'available' ? { invitation: invite } : { inviteReason: inviteReasons[inviteAvailability] })}
+      {...(inviteAvailability === 'available' ? { invitation: invite } : { inviteReason: inviteAvailability === 'role_restricted' ? `Only ${ownerNameOf(roster)} or an admin can invite members.` : inviteReasons[inviteAvailability] })}
       onRecordedRead={async view => { const recorded = await readTeamRolesServer(); if (recorded.accountRef !== view.accountRef) throw new Error('workspace_changed'); setRoster(recorded.members); invite.observeInvitations(view) }} />
   </SettingsPage></div></AeNavigationSafetyBoundary>
 }
