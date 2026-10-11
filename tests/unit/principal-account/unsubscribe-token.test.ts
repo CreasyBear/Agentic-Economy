@@ -19,11 +19,10 @@ describe('unsubscribe token expiry and key version', () => {
     const sig = b64(new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(body))))
     await expect(verifyUnsubscribeToken('s', `${body}.${sig}`)).resolves.toBeNull()
   })
-  it('accepts a legacy token with no kid or exp until the cutoff', async () => {
+  it('rejects a validly signed token with no kid or exp', async () => {
     const body = b64(new TextEncoder().encode(JSON.stringify(payload)))
     const key = await crypto.subtle.importKey('raw', new TextEncoder().encode('s'), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
     const sig = b64(new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(body))))
-    await expect(verifyUnsubscribeToken('s', `${body}.${sig}`, Date.UTC(2026, 10, 20))).resolves.toEqual(payload)
-    await expect(verifyUnsubscribeToken('s', `${body}.${sig}`, Date.UTC(2027, 0, 1))).resolves.toBeNull()
+    await expect(verifyUnsubscribeToken('s', `${body}.${sig}`, Date.UTC(2026, 10, 20))).resolves.toBeNull()
   })
 })
