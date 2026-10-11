@@ -3,7 +3,7 @@ import { convexTest } from 'convex-test'
 import { api } from '../../convex/_generated/api'
 import schema from '../../convex/schema'
 import { capabilityToolId, createPublicToolRef } from '@/modules/capability-supply/public'
-import { convexModules } from '../helpers/convex-fixtures'
+import { convexModules, convexTestWithMarketComponents } from '../helpers/convex-fixtures'
 import { admitDiscoveredToolFixture } from '../helpers/discovered-tool-fixture'
 
 const sdk = vi.hoisted(() => ({ list: vi.fn(), search: vi.fn() }))
@@ -46,16 +46,17 @@ describe('native admitted Tool catalogue', () => {
   })
 
   it('honours AE network and normalized location filters across catalogue sources', async () => {
-    const backend = convexTest(schema, convexModules)
+    const backend = convexTestWithMarketComponents()
     const fixture = await admitDiscoveredToolFixture(backend)
     const detail = await backend.query(api.capabilitySupplyTools.detail, { toolRef: fixture.toolRef })
     if (detail.kind !== 'found') throw new Error('fixture_missing')
     sdk.list.mockResolvedValue({ items: [fixture.paymentRequired], pagination: { offset: 0, total: 1 } })
+    const caller = backend.withIdentity({ subject: 'catalog-filter-caller' })
     for (const source of ['current', 'coinbase'] as const) {
-      const excluded = await backend.action(api.capabilityToolCatalog.search, { source, query: '', filters: { networkId: 'missing-network' } })
+      const excluded = await caller.action(api.capabilityToolCatalog.search, { source, query: '', filters: { networkId: 'missing-network' } })
       expect(excluded.kind === 'no_candidates' || (excluded.kind === 'ok' && excluded.items.length === 0)).toBe(true)
       for (const location of [detail.tool.business.name.toLowerCase(), ` ${detail.tool.business.name.toUpperCase()} `]) {
-        const result = await backend.action(api.capabilityToolCatalog.search, { source, query: '', filters: { location, networkId: 'ae:public' } })
+        const result = await caller.action(api.capabilityToolCatalog.search, { source, query: '', filters: { location, networkId: 'ae:public' } })
         expect(result.kind).toBe('ok')
         if (result.kind !== 'ok') throw new Error('expected_filtered_tools')
         expect(result.items.map((tool) => tool.toolRef)).toEqual([fixture.toolRef])
