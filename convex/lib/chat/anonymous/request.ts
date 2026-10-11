@@ -1,8 +1,10 @@
 import { degradeBackend } from '@/lib/observability/degrade-backend'
+import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { constantTimeStringEqual } from '@/lib/server/constant-time'
 import { validateAnonymousChatBody, type AnonymousChatHandlerDependencies } from './contracts'
 
 const PROXY_SECRET_MIN_LENGTH = 32
+const MAX_ANONYMOUS_CHAT_REQUEST_BYTES = 64 * 1024
 const ADMISSION_KEY_PATTERN = /^(?:principal|session|ip):sha256:[0-9a-f]{64}:sha256:[0-9a-f]{64}$/u
 
 export function jsonError(
@@ -38,9 +40,11 @@ export async function handleAnonymousChatRequest(
     return jsonError(415, 'invalid_content_type')
   }
 
+  const bounded = await readBoundedRequestText(request, MAX_ANONYMOUS_CHAT_REQUEST_BYTES)
+  if (!bounded.ok) return jsonError(413, bounded.code)
   let value: unknown
   try {
-    value = await request.json() as unknown
+    value = JSON.parse(bounded.text) as unknown
   } catch (cause) {
     return degradeBackend(cause, jsonError(400, 'invalid_json'), { site: 'handleAnonymousChatRequest', reason: 'invalid_response' })
   }
