@@ -2,6 +2,7 @@ import type { MutationCtx } from '../../../_generated/server'
 import { CLERK_USER_PROVIDER_NAMESPACE } from '../interactiveAuthority/constants'
 import { RECORD_UPDATED_OPERATION, RECORD_UPDATED_SCOPE, auditEventIdFromDeliveryRefHash, recordCommandDigest, resolveOrgBindings, validateRecordCommand, verifyRecordServiceAuth } from './auth'
 import { recordOrganizationMembershipUpdatedAudit } from './audit'
+import { enqueueAccountNotice } from '../notifications/enqueue'
 import { WorkspaceMembershipError, type RecordArgs, type RecordResult } from './contracts'
 
 export const recordOrganizationMembershipUpdatedForServerHandler = async (ctx: MutationCtx, args: RecordArgs): Promise<RecordResult> => {
@@ -116,6 +117,10 @@ export const recordOrganizationMembershipUpdatedForServerHandler = async (ctx: M
       commandDigest,
       beforeState,
       createdAt: now,
+    })
+    await enqueueAccountNotice(ctx, {
+      eventKind: 'role_changed', accountRef: account.accountRef,
+      recipientPrincipalRef: principal.principalRef, sourceEventRef: command.deliveryRefHash,
     })
     return { kind: 'accepted', status: 'applied' }
 }

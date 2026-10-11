@@ -15,7 +15,7 @@ import {
 
 export const JourneyEventNameValues = [
   'signed_up', 'intent_answered', 'funded', 'agent_connected', 'first_quote',
-  'first_call', 'activated', 'topped_up', 'retained_w1',
+  'first_call', 'activated', 'topped_up', 'retained_w1', 'lifecycle_unsubscribed',
 ] as const
 
 export const observabilityTables = {

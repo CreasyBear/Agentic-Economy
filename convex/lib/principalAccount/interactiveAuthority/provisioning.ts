@@ -336,6 +336,8 @@ async function provisionOwnerIdentity(
     },
   })
   await emitJourneyEvent(ctx, accountRef, 'signed_up')
+  // Welcome is transactional and required (email-system.md row 4, item 14): sent at once, no unsubscribe link and no lifecycle opt-out.
+  // The Phase 3 gate in enqueueEmail keeps it dark.
   await enqueueEmail(ctx, {
     eventKind: 'welcome', stream: 'transactional', recipientPrincipalRef: principalRef,
     accountRef, sourceEventRef: accountRef,

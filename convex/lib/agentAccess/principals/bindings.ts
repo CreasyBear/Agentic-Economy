@@ -1,4 +1,5 @@
 import { v } from 'convex/values'
+import { enqueueAccountNotice, keyBatchSourceRef } from '../../principalAccount/notifications/enqueue'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
 import { env, type MutationCtx } from '../../../_generated/server'
@@ -307,6 +308,10 @@ export async function registerIssuedAgentBindingForServerHandler(
     beforeState: 'missing',
     outcome: 'created',
     occurredAt: now,
+  })
+  if (!replaying) await enqueueAccountNotice(ctx, {
+    eventKind: 'key_issued', accountRef: owner.accountRef,
+    sourceEventRef: keyBatchSourceRef(owner.accountRef, now),
   })
   return {
     kind: replaying || storedGrant.kind === 'replayed' ? 'replayed' as const : 'recorded' as const,

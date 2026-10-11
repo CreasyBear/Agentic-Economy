@@ -1,4 +1,5 @@
 import { v, type ObjectType } from 'convex/values'
+import { enqueueAccountNotice, keyBatchSourceRef } from '../../principalAccount/notifications/enqueue'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import type { MutationCtx } from '../../../_generated/server'
 import type { Doc } from '../../../_generated/dataModel'
@@ -253,6 +254,10 @@ export async function revokeCredentialForServerHandler(
     await promoteRemainingCredential(ctx, admission, credential.credentialRef, now)
   }
   await invalidateOAuthRefreshFamilies(ctx, { credentialRef: credential.credentialRef }, 'owner_credential_revoked', now)
+  if (revoked.changed) await enqueueAccountNotice(ctx, {
+    eventKind: 'key_revoked', accountRef: owner.accountRef,
+    sourceEventRef: keyBatchSourceRef(owner.accountRef, now),
+  })
   if (revoked.changed) await persistAgentAudit(ctx, {
     eventType: 'agent.credential.revoked',
     actorPrincipalRef: owner.principalRef,

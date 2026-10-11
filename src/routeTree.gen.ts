@@ -42,6 +42,7 @@ import { Route as ApiSplatRouteImport } from './routes/api.$'
 import { Route as ApiBusinessesRouteImport } from './routes/api.businesses'
 import { Route as ApiHealthRouteImport } from './routes/api.health'
 import { Route as ApiReadyRouteImport } from './routes/api.ready'
+import { Route as ApiUnsubscribeRouteImport } from './routes/api.unsubscribe'
 import { Route as DevelopersApiRouteImport } from './routes/developers.api'
 import { Route as DevelopersDiscoveryRouteImport } from './routes/developers.discovery'
 import { Route as FundFundingSessionIdRouteImport } from './routes/fund.$fundingSessionId'
@@ -85,6 +86,7 @@ import { Route as ApiInternalProviderConsequenceRouteImport } from './routes/api
 import { Route as ApiInternalSecretLifecycleRouteImport } from './routes/api.internal.secret-lifecycle'
 import { Route as ApiObservabilityClientErrorRouteImport } from './routes/api.observability.client-error'
 import { Route as ApiOwnerDataExportRouteImport } from './routes/api.owner.data-export'
+import { Route as ApiResendWebhookRouteImport } from './routes/api.resend.webhook'
 import { Route as ApiStripeWebhookRouteImport } from './routes/api.stripe.webhook'
 import { Route as ApiV1AccountRouteImport } from './routes/api.v1.account'
 import { Route as ApiV1AvailabilityRouteImport } from './routes/api.v1.availability'
@@ -97,6 +99,7 @@ import { Route as ApiV1MarketRequestsRouteImport } from './routes/api.v1.market-
 import { Route as ApiV1RegistryRouteImport } from './routes/api.v1.registry'
 import { Route as ApiV1ReleaseRouteImport } from './routes/api.v1.release'
 import { Route as ApiV1SandboxReferenceRouteImport } from './routes/api.v1.sandbox-reference'
+import { Route as OwnerReceiptsIdRouteImport } from './routes/owner.receipts.$id'
 import { Route as ToolsProviderHostSlugRouteImport } from './routes/tools.$providerHost.$slug'
 import { Route as OperatorAdminAgentsPrincipalRefRouteImport } from './routes/_operator/admin.agents.$principalRef'
 import { Route as OperatorAdminCallsCallRefRouteImport } from './routes/_operator/admin.calls.$callRef'
@@ -337,6 +340,11 @@ const ApiReadyRoute = ApiReadyRouteImport.update({
   path: '/api/ready',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiUnsubscribeRoute = ApiUnsubscribeRouteImport.update({
+  id: '/api/unsubscribe',
+  path: '/api/unsubscribe',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DevelopersApiRoute = DevelopersApiRouteImport.update({
   id: '/developers/api',
   path: '/developers/api',
@@ -559,6 +567,11 @@ const ApiOwnerDataExportRoute = ApiOwnerDataExportRouteImport.update({
   path: '/api/owner/data-export',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiResendWebhookRoute = ApiResendWebhookRouteImport.update({
+  id: '/api/resend/webhook',
+  path: '/api/resend/webhook',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiStripeWebhookRoute = ApiStripeWebhookRouteImport.update({
   id: '/api/stripe/webhook',
   path: '/api/stripe/webhook',
@@ -617,6 +630,11 @@ const ApiV1ReleaseRoute = ApiV1ReleaseRouteImport.update({
 const ApiV1SandboxReferenceRoute = ApiV1SandboxReferenceRouteImport.update({
   id: '/api/v1/sandbox-reference',
   path: '/api/v1/sandbox-reference',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OwnerReceiptsIdRoute = OwnerReceiptsIdRouteImport.update({
+  id: '/owner/receipts/$id',
+  path: '/owner/receipts/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ToolsProviderHostSlugRoute = ToolsProviderHostSlugRouteImport.update({
@@ -1051,6 +1069,7 @@ export interface FileRoutesByFullPath {
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
   '/api/health': typeof ApiHealthRoute
   '/api/ready': typeof ApiReadyRoute
+  '/api/unsubscribe': typeof ApiUnsubscribeRoute
   '/developers/api': typeof DevelopersApiRoute
   '/developers/discovery': typeof DevelopersDiscoveryRoute
   '/fund/$fundingSessionId': typeof FundFundingSessionIdRoute
@@ -1093,6 +1112,7 @@ export interface FileRoutesByFullPath {
   '/api/internal/secret-lifecycle': typeof ApiInternalSecretLifecycleRoute
   '/api/observability/client-error': typeof ApiObservabilityClientErrorRoute
   '/api/owner/data-export': typeof ApiOwnerDataExportRoute
+  '/api/resend/webhook': typeof ApiResendWebhookRoute
   '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/api/v1/account': typeof ApiV1AccountRouteWithChildren
   '/api/v1/availability': typeof ApiV1AvailabilityRoute
@@ -1105,6 +1125,7 @@ export interface FileRoutesByFullPath {
   '/api/v1/registry': typeof ApiV1RegistryRouteWithChildren
   '/api/v1/release': typeof ApiV1ReleaseRoute
   '/api/v1/sandbox-reference': typeof ApiV1SandboxReferenceRoute
+  '/owner/receipts/$id': typeof OwnerReceiptsIdRoute
   '/tools/$providerHost/$slug': typeof ToolsProviderHostSlugRoute
   '/admin/': typeof OperatorAdminIndexRoute
   '/admin/agents/$principalRef': typeof OperatorAdminAgentsPrincipalRefRoute
@@ -1212,6 +1233,7 @@ export interface FileRoutesByTo {
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
   '/api/health': typeof ApiHealthRoute
   '/api/ready': typeof ApiReadyRoute
+  '/api/unsubscribe': typeof ApiUnsubscribeRoute
   '/developers/api': typeof DevelopersApiRoute
   '/developers/discovery': typeof DevelopersDiscoveryRoute
   '/fund/$fundingSessionId': typeof FundFundingSessionIdRoute
@@ -1254,6 +1276,7 @@ export interface FileRoutesByTo {
   '/api/internal/secret-lifecycle': typeof ApiInternalSecretLifecycleRoute
   '/api/observability/client-error': typeof ApiObservabilityClientErrorRoute
   '/api/owner/data-export': typeof ApiOwnerDataExportRoute
+  '/api/resend/webhook': typeof ApiResendWebhookRoute
   '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/api/v1/account': typeof ApiV1AccountRouteWithChildren
   '/api/v1/availability': typeof ApiV1AvailabilityRoute
@@ -1266,6 +1289,7 @@ export interface FileRoutesByTo {
   '/api/v1/registry': typeof ApiV1RegistryRouteWithChildren
   '/api/v1/release': typeof ApiV1ReleaseRoute
   '/api/v1/sandbox-reference': typeof ApiV1SandboxReferenceRoute
+  '/owner/receipts/$id': typeof OwnerReceiptsIdRoute
   '/tools/$providerHost/$slug': typeof ToolsProviderHostSlugRoute
   '/admin': typeof OperatorAdminIndexRoute
   '/admin/agents/$principalRef': typeof OperatorAdminAgentsPrincipalRefRoute
@@ -1375,6 +1399,7 @@ export interface FileRoutesById {
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
   '/api/health': typeof ApiHealthRoute
   '/api/ready': typeof ApiReadyRoute
+  '/api/unsubscribe': typeof ApiUnsubscribeRoute
   '/developers/api': typeof DevelopersApiRoute
   '/developers/discovery': typeof DevelopersDiscoveryRoute
   '/fund/$fundingSessionId': typeof FundFundingSessionIdRoute
@@ -1417,6 +1442,7 @@ export interface FileRoutesById {
   '/api/internal/secret-lifecycle': typeof ApiInternalSecretLifecycleRoute
   '/api/observability/client-error': typeof ApiObservabilityClientErrorRoute
   '/api/owner/data-export': typeof ApiOwnerDataExportRoute
+  '/api/resend/webhook': typeof ApiResendWebhookRoute
   '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/api/v1/account': typeof ApiV1AccountRouteWithChildren
   '/api/v1/availability': typeof ApiV1AvailabilityRoute
@@ -1429,6 +1455,7 @@ export interface FileRoutesById {
   '/api/v1/registry': typeof ApiV1RegistryRouteWithChildren
   '/api/v1/release': typeof ApiV1ReleaseRoute
   '/api/v1/sandbox-reference': typeof ApiV1SandboxReferenceRoute
+  '/owner/receipts/$id': typeof OwnerReceiptsIdRoute
   '/tools/$providerHost/$slug': typeof ToolsProviderHostSlugRoute
   '/_operator/admin/': typeof OperatorAdminIndexRoute
   '/_operator/admin/agents/$principalRef': typeof OperatorAdminAgentsPrincipalRefRoute
@@ -1538,6 +1565,7 @@ export interface FileRouteTypes {
     | '/api/businesses'
     | '/api/health'
     | '/api/ready'
+    | '/api/unsubscribe'
     | '/developers/api'
     | '/developers/discovery'
     | '/fund/$fundingSessionId'
@@ -1580,6 +1608,7 @@ export interface FileRouteTypes {
     | '/api/internal/secret-lifecycle'
     | '/api/observability/client-error'
     | '/api/owner/data-export'
+    | '/api/resend/webhook'
     | '/api/stripe/webhook'
     | '/api/v1/account'
     | '/api/v1/availability'
@@ -1592,6 +1621,7 @@ export interface FileRouteTypes {
     | '/api/v1/registry'
     | '/api/v1/release'
     | '/api/v1/sandbox-reference'
+    | '/owner/receipts/$id'
     | '/tools/$providerHost/$slug'
     | '/admin/'
     | '/admin/agents/$principalRef'
@@ -1699,6 +1729,7 @@ export interface FileRouteTypes {
     | '/api/businesses'
     | '/api/health'
     | '/api/ready'
+    | '/api/unsubscribe'
     | '/developers/api'
     | '/developers/discovery'
     | '/fund/$fundingSessionId'
@@ -1741,6 +1772,7 @@ export interface FileRouteTypes {
     | '/api/internal/secret-lifecycle'
     | '/api/observability/client-error'
     | '/api/owner/data-export'
+    | '/api/resend/webhook'
     | '/api/stripe/webhook'
     | '/api/v1/account'
     | '/api/v1/availability'
@@ -1753,6 +1785,7 @@ export interface FileRouteTypes {
     | '/api/v1/registry'
     | '/api/v1/release'
     | '/api/v1/sandbox-reference'
+    | '/owner/receipts/$id'
     | '/tools/$providerHost/$slug'
     | '/admin'
     | '/admin/agents/$principalRef'
@@ -1861,6 +1894,7 @@ export interface FileRouteTypes {
     | '/api/businesses'
     | '/api/health'
     | '/api/ready'
+    | '/api/unsubscribe'
     | '/developers/api'
     | '/developers/discovery'
     | '/fund/$fundingSessionId'
@@ -1903,6 +1937,7 @@ export interface FileRouteTypes {
     | '/api/internal/secret-lifecycle'
     | '/api/observability/client-error'
     | '/api/owner/data-export'
+    | '/api/resend/webhook'
     | '/api/stripe/webhook'
     | '/api/v1/account'
     | '/api/v1/availability'
@@ -1915,6 +1950,7 @@ export interface FileRouteTypes {
     | '/api/v1/registry'
     | '/api/v1/release'
     | '/api/v1/sandbox-reference'
+    | '/owner/receipts/$id'
     | '/tools/$providerHost/$slug'
     | '/_operator/admin/'
     | '/_operator/admin/agents/$principalRef'
@@ -2021,6 +2057,7 @@ export interface RootRouteChildren {
   ApiBusinessesRoute: typeof ApiBusinessesRouteWithChildren
   ApiHealthRoute: typeof ApiHealthRoute
   ApiReadyRoute: typeof ApiReadyRoute
+  ApiUnsubscribeRoute: typeof ApiUnsubscribeRoute
   DevelopersApiRoute: typeof DevelopersApiRoute
   DevelopersDiscoveryRoute: typeof DevelopersDiscoveryRoute
   FundFundingSessionIdRoute: typeof FundFundingSessionIdRoute
@@ -2047,6 +2084,7 @@ export interface RootRouteChildren {
   ApiInternalSecretLifecycleRoute: typeof ApiInternalSecretLifecycleRoute
   ApiObservabilityClientErrorRoute: typeof ApiObservabilityClientErrorRoute
   ApiOwnerDataExportRoute: typeof ApiOwnerDataExportRoute
+  ApiResendWebhookRoute: typeof ApiResendWebhookRoute
   ApiStripeWebhookRoute: typeof ApiStripeWebhookRoute
   ApiV1AccountRoute: typeof ApiV1AccountRouteWithChildren
   ApiV1AvailabilityRoute: typeof ApiV1AvailabilityRoute
@@ -2059,6 +2097,7 @@ export interface RootRouteChildren {
   ApiV1RegistryRoute: typeof ApiV1RegistryRouteWithChildren
   ApiV1ReleaseRoute: typeof ApiV1ReleaseRoute
   ApiV1SandboxReferenceRoute: typeof ApiV1SandboxReferenceRoute
+  OwnerReceiptsIdRoute: typeof OwnerReceiptsIdRoute
   ToolsProviderHostSlugRoute: typeof ToolsProviderHostSlugRoute
   ApiV1ChatTurnsRoute: typeof ApiV1ChatTurnsRouteWithChildren
   ApiV1FundingConstraintsRoute: typeof ApiV1FundingConstraintsRoute
@@ -2326,6 +2365,13 @@ declare module '@tanstack/react-router' {
       path: '/api/ready'
       fullPath: '/api/ready'
       preLoaderRoute: typeof ApiReadyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/unsubscribe': {
+      id: '/api/unsubscribe'
+      path: '/api/unsubscribe'
+      fullPath: '/api/unsubscribe'
+      preLoaderRoute: typeof ApiUnsubscribeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/developers/api': {
@@ -2629,6 +2675,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiOwnerDataExportRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/resend/webhook': {
+      id: '/api/resend/webhook'
+      path: '/api/resend/webhook'
+      fullPath: '/api/resend/webhook'
+      preLoaderRoute: typeof ApiResendWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/stripe/webhook': {
       id: '/api/stripe/webhook'
       path: '/api/stripe/webhook'
@@ -2711,6 +2764,13 @@ declare module '@tanstack/react-router' {
       path: '/api/v1/sandbox-reference'
       fullPath: '/api/v1/sandbox-reference'
       preLoaderRoute: typeof ApiV1SandboxReferenceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/owner/receipts/$id': {
+      id: '/owner/receipts/$id'
+      path: '/owner/receipts/$id'
+      fullPath: '/owner/receipts/$id'
+      preLoaderRoute: typeof OwnerReceiptsIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/tools/$providerHost/$slug': {
@@ -3529,6 +3589,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiBusinessesRoute: ApiBusinessesRouteWithChildren,
   ApiHealthRoute: ApiHealthRoute,
   ApiReadyRoute: ApiReadyRoute,
+  ApiUnsubscribeRoute: ApiUnsubscribeRoute,
   DevelopersApiRoute: DevelopersApiRoute,
   DevelopersDiscoveryRoute: DevelopersDiscoveryRoute,
   FundFundingSessionIdRoute: FundFundingSessionIdRoute,
@@ -3556,6 +3617,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiInternalSecretLifecycleRoute: ApiInternalSecretLifecycleRoute,
   ApiObservabilityClientErrorRoute: ApiObservabilityClientErrorRoute,
   ApiOwnerDataExportRoute: ApiOwnerDataExportRoute,
+  ApiResendWebhookRoute: ApiResendWebhookRoute,
   ApiStripeWebhookRoute: ApiStripeWebhookRoute,
   ApiV1AccountRoute: ApiV1AccountRouteWithChildren,
   ApiV1AvailabilityRoute: ApiV1AvailabilityRoute,
@@ -3568,6 +3630,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1RegistryRoute: ApiV1RegistryRouteWithChildren,
   ApiV1ReleaseRoute: ApiV1ReleaseRoute,
   ApiV1SandboxReferenceRoute: ApiV1SandboxReferenceRoute,
+  OwnerReceiptsIdRoute: OwnerReceiptsIdRoute,
   ToolsProviderHostSlugRoute: ToolsProviderHostSlugRoute,
   ApiV1ChatTurnsRoute: ApiV1ChatTurnsRouteWithChildren,
   ApiV1FundingConstraintsRoute: ApiV1FundingConstraintsRoute,
@@ -3606,6 +3669,7 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
 
 import type { getRouter } from './router.tsx'
 import type { startInstance } from './start.ts'

@@ -1,3 +1,7 @@
+import type { Doc } from '../../../_generated/dataModel'
+import type { QueryCtx } from '../../../_generated/server'
+import { hasJourneyEvent } from '../../journey/stalled'
+import type { JourneyEventName } from '../../journey/events'
 /** Only controllable streams can be unsubscribed. Required (transactional) and operator mail never carries a token. */
 export const UNSUBSCRIBABLE_STREAMS = ['alert', 'lifecycle'] as const
 export type UnsubscribeStream = (typeof UNSUBSCRIBABLE_STREAMS)[number]
@@ -65,7 +69,29 @@ export async function verifyUnsubscribeToken(secret: string, token: string): Pro
 /** One-click unsubscribe URL for a controllable stream. Null when this deployment cannot sign one, so the caller skips the send. */
 export async function unsubscribeUrlFor(payload: UnsubscribePayload): Promise<string | null> {
   const secret = process.env.EMAIL_UNSUBSCRIBE_SECRET?.trim()
-  const convexSiteUrl = process.env.CONVEX_SITE_URL?.trim().replace(/\/+$/u, '')
-  if (!secret || !convexSiteUrl) return null
-  return `${convexSiteUrl}/notifications/unsubscribe?t=${encodeURIComponent(await signUnsubscribeToken(secret, payload))}`
+  const siteUrl = process.env.AE_SITE_URL?.trim().replace(/\/+$/u, '')
+  if (!secret || !siteUrl) return null
+  return `${siteUrl}/api/unsubscribe?t=${encodeURIComponent(await signUnsubscribeToken(secret, payload))}`
+}
+
+/** Lifecycle kinds that run (welcome is transactional and required, so it is not here) through the account notice reader, with the journey events that end each one (design doc section 5). Stalled nudges end on their own step completion, checked in stalled.ts. */
+export const LIFECYCLE_EXIT_EVENTS: Partial<Record<Doc<'notificationDeliveries'>['eventKind'], JourneyEventName[]>> = {
+  first_call_done: [],
+  week_one_wrap: [],
+  first_call_failed: ['first_call'],
+  stalled_not_funded: [],
+  stalled_no_agent: [],
+  stalled_never_called: [],
+}
+
+/** Send-time lifecycle checks shared by every lifecycle kind: exit conditions, owner opt-out, then the signed unsubscribe link (set on props). Returns a skip code or null. */
+export async function lifecycleSkipCode(ctx: QueryCtx, delivery: Doc<'notificationDeliveries'>, props: Record<string, string>): Promise<string | null> {
+  for (const event of LIFECYCLE_EXIT_EVENTS[delivery.eventKind] ?? []) {
+    if (await hasJourneyEvent(ctx, delivery.accountRef, event)) return `${delivery.eventKind}_exited`
+  }
+  if (await hasJourneyEvent(ctx, delivery.accountRef, 'lifecycle_unsubscribed')) return 'opted_out'
+  const unsubscribeUrl = await unsubscribeUrlFor({ principalRef: delivery.recipientPrincipalRef, accountRef: delivery.accountRef, stream: 'lifecycle' })
+  if (unsubscribeUrl === null) return 'unsubscribe_url_missing'
+  props.unsubscribeUrl = unsubscribeUrl
+  return null
 }

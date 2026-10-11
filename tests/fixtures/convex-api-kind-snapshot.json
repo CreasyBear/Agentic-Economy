@@ -3944,13 +3944,13 @@
   {
     "visibility": "internal",
     "module": "notifications",
-    "method": "enqueueFundingReceipt",
+    "method": "enqueueMoneyUsageAlerts",
     "kind": "mutation"
   },
   {
     "visibility": "internal",
     "module": "notifications",
-    "method": "enqueueMoneyUsageAlerts",
+    "method": "enqueuePaymentStuck",
     "kind": "mutation"
   },
   {
@@ -3994,6 +3994,12 @@
     "module": "notifications",
     "method": "readUsageAlertHistory",
     "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "notifications",
+    "method": "recordDataExportRequested",
+    "kind": "mutation"
   },
   {
     "visibility": "internal",

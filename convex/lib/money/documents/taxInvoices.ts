@@ -12,6 +12,7 @@ import {
   validCommercialPolicyControl, validProductionCommercialPolicyControl, type TaxDocumentSnapshot, type TaxInvoiceSnapshot,
 } from '../../../../src/modules/money/public'
 import { requireStripeAccountContext } from '../customer/authority'
+import { enqueueFundingReceiptHandler } from '../../principalAccount/notifications/enqueue'
 import { createAndQueueDocument } from './insert'
 import { enqueueDocumentRender } from './workpool'
 
@@ -286,6 +287,16 @@ export async function readFundingTaxDocuments(ctx: ReadCtx, command: FundingComm
     : adjustment.row === null ? { kind: 'ready' } : documentStatus(adjustment.row, adjustment.snapshot) }
 }
 
+/** The funding receipt carries the tax invoice, so it is enqueued only once the invoice is issued (files attached), never when the Stripe event applies.
+ * enqueueEmail dedupes on the command ref, so a replayed attachment is a no-op. */
+export async function enqueueIssuedFundingReceipt(ctx: MutationCtx, row: Doc<'moneyDocuments'>): Promise<void> {
+  const [transactionRef] = row.sourceTransactionRefs
+  if (transactionRef === undefined) return
+  const command = await ctx.db.query('moneyFundingCommands')
+    .withIndex('by_appliedTransactionRef', q => q.eq('appliedTransactionRef', transactionRef)).unique()
+  if (command !== null) await enqueueFundingReceiptHandler(ctx, { commandRef: command.commandRef })
+}
+
 async function queueSnapshot(ctx: MutationCtx, snapshot: TaxDocumentSnapshot): Promise<void> {
   await createAndQueueDocument(ctx, snapshot.documentRef, () => ({
     renderInput: snapshot, accountRef: snapshot.accountRef, kind: snapshot.kind,
@@ -306,7 +317,7 @@ async function retryUnattached(ctx: MutationCtx, row: Doc<'moneyDocuments'>, sna
  * original parties, tax, issue date and file pair. Existing snapshots do not
  * depend on today's customer profile or current tax rate. On violation return
  * a specific withheld result without changing financial or approval records. */
-async function issueDocuments(ctx: MutationCtx, command: FundingCommand): Promise<IssuanceResult> {
+async function issueInvoiceDocuments(ctx: MutationCtx, command: FundingCommand): Promise<IssuanceResult> {
   const now = Date.now()
   if (command.environment !== deploymentPaymentEnvironment(env)) return { taxInvoice: withheld('environment_mismatch') }
   let row = await readInvoice(ctx, command)
@@ -334,6 +345,15 @@ async function issueDocuments(ctx: MutationCtx, command: FundingCommand): Promis
     }
   }
   return await readFundingTaxDocuments(ctx, command, now)
+}
+
+/** A funded load always gets one email: a withheld invoice sends the plain receipt under the same command-keyed dedupe as the tax invoice email. */
+async function issueDocuments(ctx: MutationCtx, command: FundingCommand): Promise<IssuanceResult> {
+  const result = await issueInvoiceDocuments(ctx, command)
+  if (result.taxInvoice.kind === 'withheld' && command.state !== 'reversed' && command.appliedTransactionRef !== undefined) {
+    await enqueueFundingReceiptHandler(ctx, { commandRef: command.commandRef })
+  }
+  return result
 }
 
 export async function issueOwnerFundingTaxInvoiceHandler(

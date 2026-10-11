@@ -5,6 +5,7 @@ import type { ActionCtx } from '../../../convex/_generated/server'
 import type { Id } from '../../../convex/_generated/dataModel'
 import { renderQueuedDocument } from '../../../convex/moneyDocumentRender'
 import { recordFundingDocuments } from '../../../convex/lib/money/funding/stripeEventDocuments'
+import { enqueueFundingReceiptHandler } from '../../../convex/lib/principalAccount/notifications/enqueue'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   AUSTRALIAN_INVOICE_SELLER, COMMERCIAL_POLICY_FAMILIES, evaluateCommercialPolicyGate,
@@ -146,6 +147,36 @@ describe('funding tax invoice issuance', () => {
     expect(html).toContain('@media print')
     expect(await owner.query(api.moneyDocuments.readOwnerDocumentUrl, { documentRef })).toMatch(/^https?:/u)
     expect(await owner.query(api.moneyDocuments.readOwnerDocumentUrl, { documentRef, format: 'csv' })).toMatch(/^https?:/u)
+  })
+
+  it('enqueues the funding receipt only once the tax invoice is issued, keyed on the command', async () => {
+    const { backend, owner } = await fixture()
+    const receipts = () => backend.run(async ctx => (await ctx.db.query('notificationDeliveries').collect()).filter(row => row.eventKind === 'funding_receipt'))
+    await owner.mutation(api.moneyDocuments.issueOwnerFundingTaxInvoice, { commandRef })
+    expect(await receipts()).toHaveLength(0)
+    await renderDocument(transport(backend).ctx, { documentRef })
+    await renderDocument(transport(backend).ctx, { documentRef })
+    expect(await receipts()).toEqual([expect.objectContaining({ sourceEventRef: commandRef, stream: 'transactional' })])
+  })
+
+  it('sends a funding receipt when the tax invoice is withheld, and never twice with the issued path', async () => {
+    const { backend, owner } = await fixture()
+    const receipts = () => backend.run(async ctx => (await ctx.db.query('notificationDeliveries').collect()).filter(row => row.eventKind === 'funding_receipt'))
+    await backend.run(async ctx => {
+      const old = await ctx.db.query('moneyCommercialPolicies').withIndex('by_policyRef', q => q.eq('policyRef', 'policy:tax:original')).unique()
+      if (old === null || old.control.family !== 'tax') throw new Error('tax missing')
+      await ctx.db.patch(old._id, { lifecycle: 'suspended', suspendedAt: now + 1 })
+    })
+    const withheld = await owner.mutation(api.moneyDocuments.issueOwnerFundingTaxInvoice, { commandRef })
+    expect(withheld.taxInvoice.kind).toBe('withheld')
+    await owner.mutation(api.moneyDocuments.issueOwnerFundingTaxInvoice, { commandRef })
+    expect(await receipts()).toEqual([expect.objectContaining({ sourceEventRef: commandRef, stream: 'transactional' })])
+    // The issued path uses the same command-keyed dedupe, so both firing yields one delivery.
+    await backend.run(async ctx => {
+      const command = await ctx.db.query('moneyFundingCommands').withIndex('by_commandRef', q => q.eq('commandRef', commandRef)).unique()
+      await enqueueFundingReceiptHandler(ctx, { commandRef: command!.commandRef })
+    })
+    expect(await receipts()).toHaveLength(1)
   })
 
   it('retains one immutable invoice and canonical pair across duplicate issuance, rendering and profile/policy changes', async () => {

@@ -1,0 +1,70 @@
+{
+  "registry": "@emailcn",
+  "retrieved": "2026-10-11",
+  "licence": "MIT, ./LICENSE",
+  "ownership": "Upstream source with recorded local import rewrites; src/emails wrappers stay strictly checked.",
+  "files": [
+    {
+      "path": "src/emails/vendor/emailcn/header-with-logo.tsx",
+      "source": "https://www.emailcn.run/r/react-email/header-with-logo.json",
+      "upstreamPath": "registry/bases/react-email/components/marketing/headers/header-with-logo.tsx",
+      "slug": "@emailcn/react-email/header-with-logo",
+      "upstreamSha256": "21e94fe14063bc0dab39015a3910213a0b288d10708ed419903dbe7a55c111c8",
+      "sha256": "3bf1f88b9b0b3743204ca97f399c3990138c9981cd335bad9dc02107d6b3395a",
+      "localRewrite": "imports \"react-email\" to \"@react-email/components\" (1.0.12) and \"@/components/email/*\" to \"./*\"",
+      "propsUsed": "HeaderWithLogoSection: logoSrc, logoAlt, logoHref, text, variant=\"with-text\", alignment=\"left\", backgroundColor, pageBackgroundColor, textColor (src/emails/layout.tsx). Unused: HeaderWithLogo document wrapper, theme.",
+      "tsNocheck": null,
+      "permittedTypePatterns": []
+    },
+    {
+      "path": "src/emails/vendor/emailcn/email-assets.ts",
+      "source": "https://www.emailcn.run/r/react-email/header-with-logo.json",
+      "upstreamPath": "registry/email-assets.ts",
+      "slug": "@emailcn/react-email/header-with-logo",
+      "upstreamSha256": "8d6066c863d1d5480b9ca2627af9c98136b0506f54579180775d0385f9051907",
+      "sha256": "cef00fc6543086ceee71c3793ab07011fdc48dbac4bec2e62d67aaffb46baac2",
+      "localRewrite": "none",
+      "propsUsed": "emailAsset(\"maizzle-insignia.png\") only, evaluated as the header default logoSrc; layout always overrides it.",
+      "tsNocheck": "Upstream getIndexedAsset returns string | undefined (lines 354, 374) under noUncheckedIndexedAccess; fixing means editing vendored source, and our code never reaches those branches. Re-checked 2026-10-11: removing it still fails npm run typecheck with TS2345 at lines 354 and 374.",
+      "permittedTypePatterns": []
+    },
+    {
+      "path": "src/emails/vendor/emailcn/font-default.tsx",
+      "source": "https://www.emailcn.run/r/react-email/default-fonts.json",
+      "upstreamPath": "registry/bases/react-email/fonts/font-default.tsx",
+      "slug": "@emailcn/react-email/default-fonts",
+      "upstreamSha256": "7c61644d858761808c003f26e1691d4d128d6f4b930b946cc18b9ba4dd699cb8",
+      "sha256": "d4153cd3efc12abb297094ba293708165eb5de40b104b909d2debf2c0a431a92",
+      "localRewrite": "import \"react-email\" to \"@react-email/components\" (1.0.12)",
+      "propsUsed": "DefaultFonts takes no props; only referenced by the header document wrapper, which we do not render.",
+      "tsNocheck": null,
+      "permittedTypePatterns": []
+    },
+    {
+      "path": "src/emails/vendor/emailcn/theme-default.ts",
+      "source": "https://www.emailcn.run/r/react-email/theme-default.json",
+      "upstreamPath": "registry/themes/default.ts",
+      "slug": "@emailcn/react-email/theme-default",
+      "upstreamSha256": "4327faf7a8f7dc75a995bec5835d10b193a66b412ac5ef94d16fd8c4183952a6",
+      "sha256": "3ec55baaf7b6a7b209fc01b5066df01b584deb79f6ce8e3d0e460a0acbe0a0c8",
+      "localRewrite": "none",
+      "propsUsed": "defaultTheme, used as the header wrapper default; our theme is aeconTheme in src/emails/theme.ts.",
+      "tsNocheck": null,
+      "permittedTypePatterns": []
+    },
+    {
+      "path": "src/emails/vendor/emailcn/email-theme.ts",
+      "source": "https://www.emailcn.run/r/react-email/theme-default.json",
+      "upstreamPath": "registry/bases/react-email/themes/email-theme.ts",
+      "slug": "@emailcn/react-email/theme-default",
+      "upstreamSha256": "0537dca18c34c226cfeed39385ab39ff304e7385561e9d6eee50c5120230fd31",
+      "sha256": "8f0f0ebf3a64779218c8d505cc5d520b300ca9eee5cfa9007155fe1684a64ada",
+      "localRewrite": "imports \"react-email\" to \"@react-email/components\" (1.0.12)",
+      "propsUsed": "EmailTheme type and createEmailTailwindConfig(aeconTheme) (src/emails/theme.ts).",
+      "tsNocheck": null,
+      "permittedTypePatterns": []
+    }
+  ],
+  "notInstalled": "button, utility-footer, notification-default, onboarding-default, receipt-default, order-summary-table: each exports a full-document Html wrapper that cannot nest in our layout and takes emailcn's own theme. layout.tsx and the templates copy the structure and restyle it to aeconTheme, naming the slug in a comment (design doc 2.5, P15). split-hero, navigation-footer, product-list: unused.",
+  "permittedTypePatterns": []
+}

@@ -1,5 +1,6 @@
 import { usageAlertPolicyInputValue,usageAlertPolicyValue } from '@/modules/principal-account/account/public'
 import type { UsageAlertPolicy } from '@/modules/principal-account/notification-preferences.view-model'
+import { emitJourneyEvent } from '../../journey/events'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { readUsagePolicyReplay,recordUsagePolicyAudit } from './usagePolicyAudit'
 import type { UnsubscribePayload, UnsubscribeStream } from './unsubscribe'
@@ -266,9 +267,9 @@ export async function unsubscribeEmailStreamHandler(
     .unique()
   const base = existing === null ? VIRTUAL_DEFAULT_PREFERENCE_FIELDS : preferenceFieldsFromRow(existing)
   const off = STREAM_OFF_FIELDS[args.stream]
-  if (existing !== null && Object.entries(off).every(([key, value]) => base[key as keyof PreferenceFields] === value)) {
-    return true
-  }
+  const alreadyOff = existing !== null && Object.entries(off).every(([key, value]) => base[key as keyof PreferenceFields] === value)
+  if (args.stream === 'lifecycle') await emitJourneyEvent(ctx, args.accountRef, 'lifecycle_unsubscribed')
+  if (alreadyOff) return true
 
   const merged = { ...base, ...off }
   const now = Date.now()

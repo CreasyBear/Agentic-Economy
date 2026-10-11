@@ -149,6 +149,15 @@ export const notificationEventKindValue = v.union(
   v.literal('provider_payout_failed'),
   v.literal('provider_weekly'),
   v.literal('provider_offboarded'),
+  v.literal('deletion_requested'),
+  v.literal('deletion_completed'),
+  v.literal('first_call_done'),
+  v.literal('week_one_wrap'),
+  v.literal('auto_topup_failed'),
+  v.literal('card_changed'),
+  v.literal('first_call_failed'),
+  v.literal('deletion_cancelled'),
+  v.literal('deletion_final_reminder'),
   v.literal('operator_exception'),
 )
 
@@ -188,6 +197,8 @@ export const notificationDeliveryValue = v.object({
   stream: v.optional(notificationStreamValue),
   required: v.optional(v.boolean()),
   sourceEventRef: v.string(),
+  /** Spam Act 2003 (Cth) s18 basis for lifecycle mail: express (the owner opted in) or inferred (the account relationship). */
+  consentBasis: v.optional(v.union(v.literal('express'), v.literal('inferred'))),
   usageEvidenceJson:v.optional(v.string()),
   preferenceRevision:v.optional(v.number()),
   authorityRevisionAccount:v.optional(v.number()),
@@ -197,6 +208,9 @@ export const notificationDeliveryValue = v.object({
   vendorCode: v.optional(v.string()),
   lastFailureCode: v.optional(v.string()),
   lastEventAt: v.optional(v.number()),
+  /** First Resend open and click. Directional only: Apple Mail Privacy Protection inflates opens, so no state moves on them. */
+  openedAt: v.optional(v.number()),
+  clickedAt: v.optional(v.number()),
   workId: v.optional(v.string()),
   createdAt: v.number(),
   updatedAt: v.number(),
