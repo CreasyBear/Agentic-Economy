@@ -629,8 +629,8 @@ describe('/tools/$toolRef', () => {
 
   it('rejects malformed references before reading the catalog', async () => {
     const loader = Route.options.loader as (input: { params: { toolRef: string } }) => Promise<unknown>
-    await expect(loader({ params: { toolRef: 'not-an-tool' } })).resolves.toEqual({
-      result: { kind: 'invalid_ref', toolRef: 'not-an-tool' }, evidence: undefined, baseUrl: undefined,
+    await expect(loader({ params: { toolRef: 'not-an-tool' } })).rejects.toMatchObject({
+      isNotFound: true, data: { kind: 'invalid_ref', toolRef: 'not-an-tool' },
     })
     expect(readDetailMock).not.toHaveBeenCalled()
   })
