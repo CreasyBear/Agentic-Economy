@@ -19,7 +19,7 @@ const INPUTS: Array<[string, EmailInput]> = [
   ['spend cap warning', { eventKind: 'spend_cap_warning', props: { siteUrl: SITE, body: 'Spend has reached 80% of your cap.', observedAt: '2026-10-10T00:00:00.000Z', unsubscribeUrl: UNSUBSCRIBE } }],
   ['spend cap exceeded', { eventKind: 'spend_cap_exceeded', props: { siteUrl: SITE, body: 'Spend has passed your cap.', observedAt: '2026-10-10T00:00:00.000Z', unsubscribeUrl: UNSUBSCRIBE } }],
   ['call failure spike', { eventKind: 'call_failure_spike', props: { siteUrl: SITE, body: 'Tool calls are failing more often than usual.', observedAt: '2026-10-10T00:00:00.000Z', unsubscribeUrl: UNSUBSCRIBE } }],
-  ['statement', { eventKind: 'invoice_ready', props: { siteUrl: SITE, periodLabel: 'October 2026' } }],
+  ['statement', { eventKind: 'invoice_ready', props: { siteUrl: SITE, periodLabel: 'October 2026', rows: [{ id: 'c1' }] } }],
   ['operator digest', { eventKind: 'operator_digest', props: { siteUrl: SITE, date: '2026-10-11', lines: ['2 stalled accounts', 'No exceptions'] } }],
   ['funding receipt', { eventKind: 'funding_receipt', props: { siteUrl: SITE, amount: 'A$20.00' } }],
   ['funding failed', { eventKind: 'funding_failed', props: { siteUrl: SITE } }],
