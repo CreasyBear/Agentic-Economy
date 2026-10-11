@@ -14,24 +14,32 @@ function ping(headers: HeadersInit) {
   })
 }
 
-async function bucketFor(request: Request, options = {}) {
-  let name: string | undefined
-  setHttpRateLimitAdmissionForTests(async (input) => { name = input.name; return { ok: false, retryAfter: 1 } })
+async function bucketsFor(request: Request, options = {}, refuseAt = 'mcp-anonymous') {
+  const names: string[] = []
+  setHttpRateLimitAdmissionForTests(async (input) => {
+    names.push(input.name)
+    return input.name === refuseAt ? { ok: false, retryAfter: 1 } : { ok: true }
+  })
   await handleMcpRouteRequest(request, options)
-  return name
+  return names
 }
 
-afterEach(() => setHttpRateLimitAdmissionForTests(undefined))
+afterEach(() => { setHttpRateLimitAdmissionForTests(undefined); verify.mockClear() })
 
-describe('MCP admission bucket follows verified identity', () => {
-  it('puts no-credential and junk-credential requests in the anonymous bucket', async () => {
-    expect(await bucketFor(ping({}))).toBe('mcp-anonymous')
-    expect(await bucketFor(ping({ authorization: 'Bearer junk' }))).toBe('mcp-anonymous')
-    expect(await bucketFor(ping({ 'x-api-key': 'junk' }))).toBe('mcp-anonymous')
+describe('MCP admission runs per-IP first, then verifies', () => {
+  it('admits every credentialed request anonymously before calling Clerk', async () => {
+    expect(await bucketsFor(ping({ authorization: 'Bearer junk' }))).toEqual(['mcp-anonymous'])
+    expect(verify).not.toHaveBeenCalled()
   })
 
-  it('puts a verified key in the authenticated bucket', async () => {
+  it('charges junk credentials to the anonymous bucket only', async () => {
+    expect(await bucketsFor(ping({ 'x-api-key': 'junk' }), {}, 'none')).toContain('mcp-anonymous')
+    expect(await bucketsFor(ping({ 'x-api-key': 'junk' }), {}, 'none')).not.toContain('public-read')
+  })
+
+  it('also charges a verified key to public-read', async () => {
     const authenticate = authenticateWithScopes([])
-    expect(await bucketFor(ping({ authorization: 'Bearer valid' }), { authenticate })).toBe('public-read')
+    expect(await bucketsFor(ping({ authorization: 'Bearer valid' }), { authenticate }, 'public-read'))
+      .toEqual(['mcp-anonymous', 'public-read'])
   })
 })

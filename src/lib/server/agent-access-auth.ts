@@ -160,25 +160,36 @@ export type AgentAccessAuthenticationOptions = Readonly<{
 }>
 
 /**
- * True only when the request carries a credential Clerk accepts. Missing,
- * malformed, rejected or unverifiable credentials are all false, so callers
- * can pick a rate bucket by verified identity rather than header presence.
+ * The Clerk-verified API key candidate for the request, or null when the
+ * credential is missing, malformed, rejected or unverifiable. Callers pick a
+ * rate bucket by verified identity and reuse the candidate instead of verifying
+ * the same secret twice.
  */
-export async function hasVerifiedApiKey(
+export async function verifyApiKeyCandidate(
   request: Request,
   authenticate?: () => Promise<AgentAccessApiKeyAuth>,
-): Promise<boolean> {
+): Promise<AgentAccessApiKeyAuth | null> {
   try {
-    if (authenticate !== undefined) return (await authenticate()).isAuthenticated
+    if (authenticate !== undefined) {
+      const candidate = await authenticate()
+      return candidate.isAuthenticated ? candidate : null
+    }
     const authorization = request.headers.get('authorization')
     const secret = authorization === null
       ? request.headers.get('x-api-key')
       : /^Bearer ([^\s]+)$/i.exec(authorization)?.[1]
-    if (secret === null || secret === undefined || secret.length === 0) return false
-    await clerkClient().apiKeys.verify(secret)
-    return true
+    if (secret === null || secret === undefined || secret.length === 0) return null
+    const verified = await clerkClient().apiKeys.verify(secret)
+    return {
+      isAuthenticated: true,
+      tokenType: 'api_key',
+      id: verified.id,
+      subject: verified.subject,
+      scopes: verified.scopes,
+      claims: verified.claims,
+    }
   } catch {
-    return false
+    return null
   }
 }
 
