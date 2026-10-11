@@ -101,7 +101,7 @@ Only from journey events aecon already emits (`signed_up`, `funded`, `agent_conn
 |---------|------------|-------|-----------------------------------|
 | S1 | Signed up, not funded | `signed_up`, no `funded`, 24 h | Add credit (row 26) |
 | S2 | Funded, no agent | `funded`, no `agent_connected`, 48 h | Connect an agent (row 27) |
-| S3 | Agent connected, never called | `agent_connected`, no `first_call`, 72 h | Make a first call (row 28), or row 34 on failure |
+| S3 | Agent connected, never called | `agent_connected`, no `first_call`, 24 h | Make a first call (row 28), or row 34 on failure |
 | S4 | Activated, single top-up | `first_call` and `activated`, one `topped_up` | View call (row 29) |
 | S5 | Habit | two or more `topped_up`, or `retained_w1` | View statement (row 30) |
 | S6 | Lapsed with balance | no call for 7 days after activation, balance above zero | Make a call (R2, NEW) |

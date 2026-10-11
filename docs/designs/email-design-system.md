@@ -186,9 +186,9 @@ Common suppress-if for every non-security row: stream switch off for the owner (
 | 25 | Provider offboarded | T | E (`verifyPages.ts:127`) | no | Provider removed or failed verification | none | State why and what next | View details | `Your service was removed from aecon` | `Here is what to fix to list it again.` | notification | Re-publish rate |
 | 26 | Stalled: not funded | L | E (`stalled.ts`, `AE_STALLED_EMAILS_ENABLED` plus opt-in) | no | `signed_up` with no `funded` after 24 h | `funded`, owner opt-out | Get first top-up | Add credit | `Add credit to start using aecon` | `It takes about a minute.` | onboarding | `funded` within 48 h |
 | 27 | Stalled: no agent | L | E (`stalled.ts`) | no | `funded` with no `agent_connected` after 48 h | `agent_connected` | Connect first agent | Connect an agent | `Connect your first agent to aecon` | `Your {balance} is ready to spend.` | onboarding | `agent_connected` within 72 h |
-| 28 | Stalled: never called | L | E (`stalled.ts`) | no | `agent_connected` with no `first_call` after 72 h | `first_call`, or row 34 already sent | Get first call | Make a first call | `Your agent is connected. Make a first call` | `Your agent is ready to make its first call.` | onboarding | `first_call` within 72 h |
+| 28 | Stalled: never called | L | E (`stalled.ts`) | no | `agent_connected` with no `first_call` after 24 h | `first_call`, or row 34 already sent | Get first call | Make a first call | `Your agent is connected. Make a first call` | `Your agent is ready to make its first call.` | onboarding | `first_call` within 72 h |
 | 29 | First call done | L | N | no | `first_call` then `activated` | none | Reinforce, show the receipt trail | View call | `Your first aecon call: charged {amount}` | `See exactly what was charged and why.` | order summary | Click, `topped_up` later |
-| 30 | Week one wrap | L | N | no | `retained_w1` computed at day 7 (scheduled exception, P1) | Zero calls in week (P8) | Habit, cost clarity | View statement | `Your first week on aecon: {n} calls` | `{spent} spent. Balance {balance}.` | order summary | Week-two call count |
+| 30 | Week one wrap | L | N | no | `retained_w1` computed on days 7 to 14 (scheduled exception, P1) | Zero calls in week (P8) | Habit, cost clarity | View statement | `Your first week on aecon: {n} calls` | `{spent} spent. Balance {balance}.` | order summary | Week-two call count |
 | 31 | Operator digest | O | E (`operator-digest.tsx`, `operator_digest` not found in the kind union, verify) | no | Daily cron (scheduled exception, P1) | Nothing changed since last digest (P8) | Operator awareness | Open console | `aecon operator digest: 3 items need you` | `2 refunds, 1 stuck payment.` | notification with list | Console visit |
 | 32 | Auto top-up failed | T | N | no | `auto_topup_failed` (card declined on the automatic charge) | A later successful top-up | Keep service running | Update card | `Your automatic top-up didn't go through` | `Add a working card before your credit runs out.` | notification | `topped_up` within 24 h |
 | 33 | Card added or removed | T | N | no | Stripe payment method attached or detached | none | Security awareness | Review payment methods | `A payment card was changed on your aecon account` | `Changed 2 Jul 2026, 1:14 pm.` | notification | Support reply rate |
@@ -212,7 +212,7 @@ funded
   +0 min   Funding receipt (5)              always
   +48 h    Stalled: no agent (27)           exit: agent_connected
 agent_connected
-  +72 h    Stalled: never called (28)       exit: first_call
+  +24 h    Stalled: never called (28)       exit: first_call
   first call fails: First call failed (34)  exit: first_call
 first_call / activated
   +0 min   First call done (29)             once

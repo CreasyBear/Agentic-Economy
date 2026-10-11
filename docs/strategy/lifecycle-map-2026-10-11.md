@@ -193,7 +193,7 @@ Month boundary. `evaluateUsageMoneyAlertsHandler` (`usageAlerts.ts`) builds the 
 | 39 | Payment method or spend cap changed | Owner | Change | missing | not in kinds | Notify |
 | 40 | Data request, deletion requested, cancelled, final reminder, deleted | Owner | Request | missing | only Clerk `user.deleted`; `eraseAccountJourney` in `events.ts` | 3-day reminder; grace length open (D4) |
 
-Vocabulary check. The journey schema has nine event names (`src/modules/observability/internal/schema.ts:16-19`, verified) and the roast counts 43 email triggers (5 emitted, 17 partial, 21 missing). These are different objects, so the sizes are not compared. The task is to map each email kind to the journey event that should trigger it and count only the kinds with no producer. That mapping lives in the roast doc and is finished per wave, not as a single registry document.
+Vocabulary check. The journey schema has ten event names (`src/modules/observability/internal/schema.ts:16-19`, verified) and the roast counts 43 email triggers (5 emitted, 17 partial, 21 missing). These are different objects, so the sizes are not compared. The task is to map each email kind to the journey event that should trigger it and count only the kinds with no producer. That mapping lives in the roast doc and is finished per wave, not as a single registry document.
 
 ## 3. Paths per persona
 
@@ -288,7 +288,7 @@ Mapped to roast themes (Theme 1 launch state, Theme 2 dead ends and install, The
 | --- | --- | --- |
 | Launch state is stated in many places that disagree: `/launch` says accounts closed; `/for-agents` says "Start setup"; `/status` Calls row; llms.txt, SKILL.md, `brand-copy.ts:71`; Credit nav shows funding while the gate (`platformLaunch.ts:11`, refusal at `:30`) can return `payments_admins_only` | Duplicated state across at least six surfaces | Theme 1 |
 | The payments gate is located (`convex/platformLaunch.ts:11-30`) and depends on a runtime audience value (`none`, admins, `everyone`) plus trial access. Copy cannot be checked until the audience value per environment is read | `readOwnerPaymentAccess` | Theme 1 |
-| Journey events and email kinds are not mapped: nine journey names, 43 email kinds, plus console and Sentry-only outcome signals. Count only the kinds with no producing event | `schema.ts:16-19`; `journey.ts:24-35` | n/a |
+| Journey events and email kinds are not mapped: ten journey names, 43 email kinds, plus console and Sentry-only outcome signals. Count only the kinds with no producing event | `schema.ts:16-19`; `journey.ts:24-35` | n/a |
 | x402 never emits `funded`, so funders look unfunded and can be emailed as stalled | `stripeEventPipeline.ts:285` is the only caller | n/a |
 | Money states live in separate tables (funding, x402 reservation, managed call, receipt). Fix with a read-side view, not a table rewrite | `convex-schema.ts:449-500`, `spendResolution.ts:117`, `transitions.ts:184-320` | n/a |
 | Readiness and availability copied per surface: catalogue status, `partialResults`, status row | Duplicated freshness | Theme 1 |
