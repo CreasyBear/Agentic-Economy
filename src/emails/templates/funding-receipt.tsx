@@ -1,4 +1,4 @@
-import { Column, Link, Row, Section, Text } from '@react-email/components'
+import { Column, Row, Section, Text } from '@react-email/components'
 import type { CSSProperties, ReactNode } from 'react'
 
 import { amountFromParts } from '@/modules/money/public'
@@ -87,9 +87,6 @@ export default function FundingReceiptEmail({
         <Line label="GST">{money(taxUnits)}</Line>
         <Line label="Total paid" strong>{total}</Line>
       </Section>
-      <Text className="ae-muted" style={{ ...bodyText, ...muted, fontSize: 13, lineHeight: '20px' }}>
-        Questions about this invoice? Email <Link href="mailto:support@aecon.ai" className="ae-link" style={{ color: EMAIL_COLORS.light.text }}>support@aecon.ai</Link>. Read our <Link href={emailUrl(siteUrl, '/privacy', { campaign, content: 'privacy' })} className="ae-link" style={{ color: EMAIL_COLORS.light.text }}>privacy policy</Link>.
-      </Text>
       <CtaButton href={emailUrl(siteUrl, '/owner/credit', { campaign, content: 'cta' })}>View credit</CtaButton>
     </Layout>
   )

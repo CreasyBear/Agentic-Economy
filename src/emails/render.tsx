@@ -17,7 +17,7 @@ export type EmailInput =
   | { eventKind: 'invoice_ready'; props: StatementReadyProps }
   | { eventKind: 'funding_receipt'; props: FundingReceiptProps }
   | { eventKind: 'operator_digest'; props: OperatorDigestProps }
-  | { eventKind: Exclude<NoticeKind, 'funding_receipt'>; props: NoticeProps }
+  | { eventKind: NoticeKind; props: NoticeProps }
 
 export type RenderedEmail = { subject: string; html: string; text: string }
 

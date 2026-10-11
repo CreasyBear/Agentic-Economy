@@ -5,6 +5,7 @@ import { v, type Infer } from 'convex/values'
 
 import { degradeBackend } from '../src/lib/observability/degrade-backend'
 import { subject as operatorDigestSubject } from '../src/emails/templates/operator-digest'
+import { EmailPropMissingError } from '../src/emails/templates/account-notice'
 import { renderEmail, type EmailInput } from '../src/emails/render'
 import { internal } from './_generated/api'
 import { internalAction } from './_generated/server'
@@ -60,7 +61,12 @@ export const sendDeliveryEmail = internalAction({
     const email = props !== undefined && needsBuyer
       ? { ...context.email, props: { ...props, buyerEmail: primaryEmail.emailAddress, ...(props.buyerName === undefined && accountName !== '' ? { buyerName: accountName } : {}) } }
       : context.email
-    const rendered = await renderEmail(email as EmailInput)
+    // A missing required prop means the email must not exist: skip with a reason instead of retrying or printing a placeholder.
+    const rendered = await renderEmail(email as EmailInput).catch((error: unknown) => {
+      if (error instanceof EmailPropMissingError) return null
+      throw error
+    })
+    if (rendered === null) return { outcome: 'suppressed', code: 'email_prop_missing' }
     // Only alert and lifecycle props carry an unsubscribe target; required mail has none.
     const unsubscribeUrl = (context.email.props as { unsubscribeUrl?: string }).unsubscribeUrl
     return await postResendEmail({

@@ -7,7 +7,7 @@ import { TextOnlySeparator } from '../text-only'
 
 /** Phase 2 and 3 notices. All are required transactional mail: no unsubscribe, the footer links to settings. */
 export type NoticeKind =
-  | 'funding_receipt' | 'funding_failed' | 'task_refunded' | 'task_stuck' | 'credit_exhausted'
+  | 'funding_failed' | 'task_refunded' | 'task_stuck' | 'credit_exhausted'
   | 'key_issued' | 'key_revoked' | 'account_paused' | 'account_restored'
   | 'role_changed' | 'team_membership_changed' | 'email_changed' | 'data_request_received'
   | 'welcome' | 'provider_live' | 'provider_offboarded'
@@ -30,26 +30,18 @@ type Notice = {
   rows?: (props: NoticeProps) => Array<[string, string]>
 }
 
-const money = (amount: string | undefined) => amount ?? '--'
-/** Lifecycle and billing kinds that state amounts refuse to render without them, so a missing ledger value never prints '--'. */
+/** Thrown when a required prop is absent. Delivery treats it as a skip with this code, so a missing value never prints as '--'. */
+export class EmailPropMissingError extends Error {
+  constructor() { super('email_prop_missing') }
+}
 const need = (value: string | undefined) => {
-  if (value === undefined) throw new Error('email_prop_missing')
+  if (value === undefined) throw new EmailPropMissingError()
   return value
 }
 
-/** Rows 22, 23, 35 and 36 wait on the deletion grace decision (design doc Q2). Rendering throws until Q2 is answered, so no deletion mail can send. */
-const pendingQ2 = (campaign: string): Notice => {
-  const wait = (): never => { throw new Error('deletion_copy_pending_q2') }
-  return { subject: wait, preheader: wait, body: wait, label: 'Pending', path: '/owner/settings/privacy', campaign }
-}
+/** Deletion grace period decided by Joel: 14 days, with a reminder 3 days before the account is deleted. */
 
 const NOTICES: Record<NoticeKind, Notice> = {
-  funding_receipt: {
-    subject: ({ amount }) => `Receipt for your ${money(amount)} aecon top-up`,
-    preheader: ({ amount }) => `${money(amount)} credit added.`,
-    body: ({ amount }) => `${money(amount)} was added to your aecon credit. Fees and tax are not part of this amount.`,
-    label: 'View receipt', path: '/owner/credit', campaign: 'funding_receipt',
-  },
   funding_failed: {
     subject: ({ amount }) => (amount === undefined ? "Your top-up didn't go through" : `Your ${amount} top-up didn't go through`),
     preheader: () => 'Try again or use another card.',
@@ -57,16 +49,16 @@ const NOTICES: Record<NoticeKind, Notice> = {
     label: 'Try again', path: '/owner/credit', campaign: 'funding_failed',
   },
   task_refunded: {
-    subject: ({ amount }) => `Refunded ${money(amount)} for a failed call`,
-    preheader: ({ taskRef }) => `Call ${taskRef ?? '--'}.`,
-    body: ({ amount, taskRef }) => `Call ${taskRef ?? '--'} did not complete, so ${money(amount)} went back to your aecon credit, not your card.`,
+    subject: ({ amount }) => `Refunded ${need(amount)} for a failed call`,
+    preheader: ({ taskRef }) => `Call ${need(taskRef)}.`,
+    body: ({ amount, taskRef }) => `Call ${need(taskRef)} did not complete, so ${need(amount)} went back to your aecon credit, not your card.`,
     label: 'View receipt', path: '/owner/operations', campaign: 'task_refunded',
   },
   task_stuck: {
     subject: ({ amount }) => (amount === undefined ? "We're still confirming your payment" : `We're still confirming your ${amount} payment`),
     preheader: () => 'No credit has been added yet.',
-    body: () => "Check the receipt before paying again. Your payment hasn't been confirmed yet, so no credit was added. We'll email you once it is confirmed or fails.",
-    label: 'View receipt', path: '/owner/credit', campaign: 'payment_stuck',
+    body: () => "Your payment hasn't been confirmed yet, so no credit was added. Check your receipts before paying again. We'll email you once it is confirmed or fails.",
+    label: 'View receipts', path: '/owner/settings/receipts', campaign: 'payment_stuck',
   },
   credit_exhausted: {
     subject: () => 'Your aecon credit has run out',
@@ -99,9 +91,9 @@ const NOTICES: Record<NoticeKind, Notice> = {
     label: 'View account', path: '/owner', campaign: 'account_restored',
   },
   role_changed: {
-    subject: ({ role }) => `Your role is now ${role ?? '--'}`,
+    subject: ({ role }) => `Your role is now ${need(role)}`,
     preheader: () => 'See what that lets you do.',
-    body: ({ role }) => `Your role on this aecon account is now ${role ?? '--'}. Open the workspace to see what that lets you do.`,
+    body: ({ role }) => `Your role on this aecon account is now ${need(role)}. Open the workspace to see what that lets you do.`,
     label: 'Open workspace', path: '/owner/workspace', campaign: 'role_changed',
   },
   team_membership_changed: {
@@ -140,8 +132,18 @@ const NOTICES: Record<NoticeKind, Notice> = {
     body: ({ when }) => `Your account data was downloaded${when === undefined ? '' : ` on ${when}`}. If this wasn't you, contact support@aecon.ai.`,
     label: 'Review settings', path: '/owner/settings/privacy', campaign: 'data_export',
   },
-  deletion_requested: pendingQ2('deletion_requested'),
-  deletion_completed: pendingQ2('deletion_completed'),
+  deletion_requested: {
+    subject: () => 'Your aecon account will be deleted in 14 days',
+    preheader: () => 'Cancel any time before then.',
+    body: () => "We got your request to delete your aecon account. It will be deleted in 14 days, and we'll remind you 3 days before. You can cancel in settings until then. If this wasn't you, contact support@aecon.ai.",
+    label: 'Review settings', path: '/owner/settings/privacy', campaign: 'deletion_requested',
+  },
+  deletion_completed: {
+    subject: () => 'Your aecon account was deleted',
+    preheader: () => 'Your data is gone.',
+    body: () => 'Your aecon account and its data were deleted, as you asked. Records we must keep by law, such as tax invoices, are held separately. Contact support@aecon.ai with any questions.',
+    label: '', path: '/', campaign: 'deletion_completed',
+  },
   first_call_done: {
     subject: ({ amount }) => `Your first aecon call: charged ${need(amount)}`,
     preheader: () => 'See exactly what was charged and why.',
@@ -151,9 +153,9 @@ const NOTICES: Record<NoticeKind, Notice> = {
   },
   week_one_wrap: {
     subject: ({ calls }) => `Your first week on aecon: ${need(calls)} calls`,
-    preheader: ({ spent, balance }) => `${need(spent)} spent. Balance ${need(balance)}.`,
+    preheader: ({ spent, balance }) => `${need(spent)} spent. Credit ${need(balance)}.`,
     body: () => 'Here is what your agent did in its first seven days.',
-    rows: ({ calls, spent, balance }) => [['Calls', need(calls)], ['Spent', need(spent)], ['Balance', need(balance)]],
+    rows: ({ calls, spent, balance }) => [['Calls', need(calls)], ['Spent', need(spent)], ['Credit', need(balance)]],
     label: 'View statement', path: '/owner/settings/receipts', campaign: 'week_one_wrap',
   },
   auto_topup_failed: {
@@ -164,18 +166,28 @@ const NOTICES: Record<NoticeKind, Notice> = {
   },
   card_changed: {
     subject: () => 'A payment card was changed on your aecon account',
-    preheader: ({ when }) => `Changed ${when ?? '--'}.`,
+    preheader: ({ when }) => (when === undefined ? 'Check it was you.' : `Changed ${when}.`),
     body: () => "A payment card was added or removed on your account. If this wasn't you, contact support@aecon.ai.",
     label: 'Review payment methods', path: '/owner/credit', campaign: 'card_changed',
   },
   first_call_failed: {
     subject: () => "Your agent's first call didn't complete",
     preheader: () => "Check the call details and your agent's key.",
-    body: ({ taskRef }) => `Call ${taskRef ?? '--'} did not complete. Check the call details and your agent's key, then try again.`,
+    body: ({ taskRef }) => `Call ${need(taskRef)} did not complete. Check the call details and your agent's key, then try again.`,
     label: 'View call', path: '/owner/operations', campaign: 'first_call_failed',
   },
-  deletion_cancelled: pendingQ2('deletion_cancelled'),
-  deletion_final_reminder: pendingQ2('deletion_final_reminder'),
+  deletion_cancelled: {
+    subject: () => 'Your aecon account deletion was cancelled',
+    preheader: () => 'Your account stays as it is.',
+    body: () => 'You cancelled the deletion, so your aecon account and its data stay as they are. If this wasn\'t you, contact support@aecon.ai.',
+    label: 'View account', path: '/owner', campaign: 'deletion_cancelled',
+  },
+  deletion_final_reminder: {
+    subject: () => 'Your aecon account is deleted in 3 days',
+    preheader: () => 'Cancel now to keep it.',
+    body: () => 'Your aecon account and its data will be deleted in 3 days. Cancel the deletion in settings to keep them.',
+    label: 'Cancel deletion', path: '/owner/settings/privacy', campaign: 'deletion_final_reminder',
+  },
 }
 
 export const subject = (kind: NoticeKind, props: NoticeProps) => NOTICES[kind].subject(props)

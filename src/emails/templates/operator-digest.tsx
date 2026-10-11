@@ -2,13 +2,19 @@ import { Column, Row, Section, Text } from '@react-email/components'
 
 import { EMAIL_COLORS } from '../brand'
 import { bodyText, CtaButton, Layout } from '../layout'
+import { formatDate } from '../../lib/ui/format-time'
 import { emailUrl } from '../links'
 
 export type OperatorDigestProps = { siteUrl: string; date: string; lines: string[] }
 
-export const subject = ({ date }: OperatorDigestProps) => `aecon stalled accounts, ${date}`
+const SYDNEY = 'Australia/Sydney'
+/** Internal reason codes such as not_funded read as plain words. */
+const plain = (line: string) => line.replace(/\b[a-z]+(?:_[a-z]+)+\b/gu, (code) => code.replaceAll('_', ' '))
 
-export default function OperatorDigestEmail({ siteUrl, date, lines }: OperatorDigestProps) {
+export const subject = ({ date }: OperatorDigestProps) => `aecon stalled accounts, ${formatDate(date, SYDNEY)}`
+
+export default function OperatorDigestEmail({ siteUrl, date: isoDate, lines }: OperatorDigestProps) {
+  const date = formatDate(isoDate, SYDNEY)
   const campaign = 'operator_digest'
   return (
     <Layout
@@ -23,7 +29,7 @@ export default function OperatorDigestEmail({ siteUrl, date, lines }: OperatorDi
       <Section style={{ margin: '0 0 8px' }}>
         {lines.map((line) => (
           <Row key={line}>
-            <Column className="ae-text" style={{ ...bodyText, margin: 0, padding: '8px 0', borderBottom: `1px solid ${EMAIL_COLORS.light.border}` }}>{line}</Column>
+            <Column className="ae-text" style={{ ...bodyText, margin: 0, padding: '8px 0', borderBottom: `1px solid ${EMAIL_COLORS.light.border}` }}>{plain(line)}</Column>
           </Row>
         ))}
       </Section>
