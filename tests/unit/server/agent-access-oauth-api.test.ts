@@ -928,7 +928,7 @@ describe('Customer Request OAuth HTTP adapter', () => {
     expect(revoked).toEqual(['ak_access_1'])
   })
 
-  it.each(['claimed', 'recovered'] as const)('does not deliver or rotate a %s refresh family from the opposite environment', async (kind) => {
+  it.each(['claimed'] as const)('does not deliver or rotate a %s refresh family from the opposite environment', async (kind) => {
     vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
     const store = storeFixture()
     await store.insertClient(defaultOAuthClientFixture('client-local', { grantTypes: ['authorization_code', 'refresh_token'] }))
@@ -1029,36 +1029,6 @@ describe('Customer Request OAuth HTTP adapter', () => {
     expect(await response.json()).toMatchObject({ access_token: 'ak_access_2-secret' })
     expect(commit).toHaveBeenCalledTimes(2)
     expect(revokeProviderCredential).not.toHaveBeenCalled()
-  })
-
-  it('recovers an immediately retried refresh delivery without another browser ceremony or access-key rotation', async () => {
-    const now = 20_000
-    const family = refreshFamilyFixture({
-      currentProviderCredentialId: 'ak_current',
-      currentAccessExpiresAt: now + 300_000,
-      updatedAt: now,
-    })
-    const store = storeFixture()
-    await store.insertClient({
-      clientId: 'client-durable', clientName: 'Durable client', redirectUris: ['http://localhost/callback'],
-      grantTypes: ['authorization_code', 'refresh_token'], tokenEndpointAuthMethod: 'none', createdAt: now,
-    })
-    const issueRefreshKey = vi.fn<NonNullable<OAuthApiOptions['issueRefreshKey']>>()
-    const response = await handleOAuthTokenPost(formRequest('http://localhost/oauth/token', {
-      grant_type: 'refresh_token', refresh_token: 'immediate-parent-token', client_id: 'client-durable',
-    }), {
-      store,
-      refreshStore: refreshStoreFixture({ claimRefreshFamily: async () => ({ kind: 'recovered', family }) }),
-      issueRefreshKey,
-      getSecret: async () => ({ secret: 'current-access-secret' }),
-      now: () => now,
-    })
-
-    expect(response.status).toBe(200)
-    expect(await response.json()).toMatchObject({
-      access_token: 'current-access-secret', expires_in: 300, refresh_token: expect.any(String),
-    })
-    expect(issueRefreshKey).not.toHaveBeenCalled()
   })
 
   it('revokes refresh or access credentials idempotently and returns 200 for an unknown token', async () => {

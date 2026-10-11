@@ -28,11 +28,6 @@ const refreshClaimResult = v.union(
     family: refreshFamily,
     claimRef: v.string(),
   }),
-  v.object({
-    kind: v.literal('recovered'),
-    family: refreshFamily,
-    invalidatedProviderCredentialId: v.optional(v.string()),
-  }),
   v.object({ kind: v.union(v.literal('invalid_grant'), v.literal('busy'), v.literal('revoked')) }),
 )
 const refreshCommitResult = v.union(
@@ -147,48 +142,6 @@ export async function claimRefreshFamilyHandler(
   if (family.expiresAt <= args.now) {
     await revokeRefreshFamilyCore(ctx, family, 'expired', args.now, args.correlationId)
     return { kind: 'revoked' as const }
-  }
-  if (token.lifecycle === 'consumed' && token.replayUntil !== undefined && token.replayUntil >= args.now) {
-    if (token.recoveredAt !== undefined) {
-      return token.replacedByTokenHash === args.successorTokenHash
-        ? { kind: 'recovered' as const, family: refreshFamilyFromDocument(family) }
-        : await revokeRefreshReuse(ctx, family, args.now, args.correlationId)
-    }
-    if (family.environment !== deploymentPaymentEnvironment(env)) return { kind: 'invalid_grant' as const }
-    const conflict = await ctx.db.query('agentAccessOAuthRefreshTokens')
-      .withIndex('by_tokenHash', (query) => query.eq('tokenHash', args.successorTokenHash)).unique()
-    if (conflict !== null) return { kind: 'invalid_grant' as const }
-    const currentToken = await ctx.db.query('agentAccessOAuthRefreshTokens')
-      .withIndex('by_tokenHash', (query) => query.eq('tokenHash', family.currentTokenHash)).unique()
-    if (currentToken === null || currentToken.lifecycle !== 'active') {
-      return await revokeRefreshReuse(ctx, family, args.now, args.correlationId)
-    }
-    await ctx.db.patch(currentToken._id, { lifecycle: 'invalidated', invalidatedAt: args.now })
-    await ctx.db.insert('agentAccessOAuthRefreshTokens', {
-      tokenHash: args.successorTokenHash, accessTokenHash: currentToken.accessTokenHash,
-      familyRef: family.familyRef,
-      generation: currentToken.generation + 1, lifecycle: 'active', createdAt: args.now,
-    })
-    await ctx.db.patch(token._id, {
-      recoveredAt: args.now,
-      replacedByTokenHash: args.successorTokenHash,
-    })
-    await ctx.db.patch(family._id, {
-      currentTokenHash: args.successorTokenHash,
-      revision: family.revision + 1,
-      updatedAt: args.now,
-    })
-    const recovered = await ctx.db.get(family._id)
-    if (recovered === null) throw new Error('refresh_family_recovery_missing')
-    await persistRefreshAudit(
-      ctx,
-      refreshFamilyFromDocument(recovered),
-      'connection.reauthorized',
-      'refresh_delivery_recovered',
-      args.correlationId,
-      args.now,
-    )
-    return { kind: 'recovered' as const, family: refreshFamilyFromDocument(recovered) }
   }
   if (token.lifecycle === 'consumed' || token.lifecycle === 'invalidated') {
     return await revokeRefreshReuse(ctx, family, args.now, args.correlationId)
