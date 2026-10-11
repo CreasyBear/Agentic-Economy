@@ -7,6 +7,8 @@ import type { ActionCtx } from '../../../_generated/server'
 import { makeFunctionReference } from 'convex/server'
 import type { Value } from 'convex/values'
 import { z } from 'zod'
+import type { ModelMessage } from 'ai'
+import { latestUserRequest } from '@/modules/chat/search-presentation'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { toolQuoteInputSchema, type ToolQuoteInput } from '@/modules/capability-execution/quote'
@@ -24,7 +26,7 @@ const quoteRef = makeFunctionReference<'action', {
 }, QuoteResult>('chatQuote:quote')
 const callRef = makeFunctionReference<'action', {
   authority: TrustedChatAuthority; operationKey: string; correlationId: string;
-  quoteRef: string; idempotencyKey: string
+  quoteRef: string; idempotencyKey: string; requireApproval?: boolean
 }, CallResult>('chatCall:call')
 const payableAdmissionRef = makeFunctionReference<'query', {
   authority: TrustedChatAuthority; toolRef: string
@@ -37,6 +39,11 @@ const chatToolQuoteInputSchema = z.strictObject({
 
 const CALL_ANSWER_WAIT_MS = 25_000
 const CALL_POLL_MS = 750
+
+/** User-intent evidence: the latest user message names the Tool being bought. */
+function userNamedTool(messages: readonly ModelMessage[] | undefined, toolRef: string): boolean {
+  return latestUserRequest(messages)?.includes(toolRef) === true
+}
 
 function pause(ms: number): Promise<void> {
   const { promise, resolve } = Promise.withResolvers<void>()
@@ -55,6 +62,8 @@ export function createPurchaseTools(authority: TrustedChatAuthority & { kind: 'a
   const planQuoteContract = contractFor('tool.plan.quote')
   const planRunContract = contractFor('tool.plan.run')
   const planGetContract = contractFor('tool.plan.get')
+  // Quotes whose Tool the person never named: their Call waits for owner approval.
+  const unrequestedQuotes = new Set<string>()
   return {
       [CHAT_TOOL_NAME_MAP.canonicalToProvider['tool.plan.suggest']]: createTool({
         description: descriptionFor(contractFor('tool.plan.suggest')), inputSchema: planSuggestInputSchema,
@@ -105,7 +114,7 @@ export function createPurchaseTools(authority: TrustedChatAuthority & { kind: 'a
       [CHAT_TOOL_NAME_MAP.canonicalToProvider['tool.quote']]: createTool({
         description: descriptionFor(toolQuoteContract),
         inputSchema: chatToolQuoteInputSchema as z.ZodType<ToolQuoteInput>,
-        execute: async (ctx: ToolCtx, input: ToolQuoteInput) => {
+        execute: async (ctx: ToolCtx, input: ToolQuoteInput, options?: { messages?: readonly ModelMessage[] }) => {
           const denied = reserve('tool.quote')
           if (denied !== null) return denied
           const toolRef = await callableToolRef(ctx, input.toolRef)
@@ -126,6 +135,7 @@ export function createPurchaseTools(authority: TrustedChatAuthority & { kind: 'a
             toolRef,
             input: structuredClone(input.input) as Record<string, Value>,
           })
+          if (result.kind === 'committed' && !userNamedTool(options?.messages, toolRef)) unrequestedQuotes.add(result.quoteRef)
           return projectedModelFacingOutput(
             'tool.quote',
             toolQuoteContract.outputSchema,
@@ -153,6 +163,7 @@ export function createPurchaseTools(authority: TrustedChatAuthority & { kind: 'a
             correlationId: `chat-invoke-corr:${commandDigest}`,
             quoteRef: input.quoteRef,
             idempotencyKey,
+            ...(unrequestedQuotes.has(input.quoteRef) ? { requireApproval: true } : {}),
           }
           // Calls run on the worker. Replaying the same idempotent Call returns its stored
           // result, so wait briefly for the answer and let the model reply from it.

@@ -176,6 +176,7 @@ export const call = internalAction({
     idempotencyKey: v.string(),
     operationKey: v.string(),
     correlationId: v.string(),
+    requireApproval: v.optional(v.boolean()),
   },
   returns: callResultValue,
   handler: async (ctx, args) => {
@@ -186,7 +187,7 @@ export const call = internalAction({
     const result = await canonicalAgentCallCore(ctx, {
       principal, quoteRef: args.quoteRef, idempotencyKey: args.idempotencyKey,
       operationKey: args.operationKey, correlationId: args.correlationId,
-    }, args.authority)
+    }, args.authority, args.requireApproval === true)
     if (args.authority.applicationRef === 'ae-owner-chat' && result.kind !== 'refused') {
       const recorded = await ctx.runMutation(internal.chatTurns.recordOwnerChatCall, {
         authority: args.authority, quoteRef: args.quoteRef, callRef: result.callRef,

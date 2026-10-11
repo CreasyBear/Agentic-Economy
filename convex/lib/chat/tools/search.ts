@@ -5,7 +5,7 @@ import { z } from 'zod'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
 import { deserializeToolSearchResult, serializeToolSearchResult, PublicToolRegistrySchemaVersion, x402PaymentProfileForEnvironment, type PublicToolDescriptor, type ToolSearchResult } from '@/modules/capability-supply/public'
-import { latestUserRequest } from '@/modules/chat/search-presentation'
+import { latestUserRequest, toUntrustedModelOutput } from '@/modules/chat/search-presentation'
 import { CHAT_TOOL_NAME_MAP } from '@/modules/chat/tool-card'
 import { projectToolListChoices, projectToolSearchChoices, type SearchResult, type ToolChoiceSearchOutput } from '@/modules/registry/tool-choice-contracts'
 import { lexicalToolMatch } from '@/modules/registry/tool-reranker'
@@ -330,10 +330,7 @@ export function createSearchTools(
       description: descriptionFor(searchContract),
       inputSchema: continuation === undefined ? searchContract.schema : z.strictObject({}),
       // The card keeps its signed cursor; the model never receives a cursor it could echo as prose.
-      toModelOutput: (_ctx, { output }) => ({
-        type: 'text',
-        value: JSON.stringify(output, (key, value) => key === 'cursor' || key === 'nextCursor' ? undefined : value),
-      }),
+      toModelOutput: (_ctx, { output }) => toUntrustedModelOutput(output),
       execute: async (ctx: ToolCtx, input: unknown, options: { messages?: ModelMessage[]; toolCallId: string }) =>
         executeChatSearch(ctx, input, options, { reserve, reserveSearch, continuation, searchTurn, onSearchOutput }),
     }),
