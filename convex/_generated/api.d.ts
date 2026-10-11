@@ -494,6 +494,7 @@ import type * as lib_dev_seed_sandboxSpending from "../lib/dev/seed/sandboxSpend
 import type * as lib_dev_seed_sandboxTestnet from "../lib/dev/seed/sandboxTestnet.js";
 import type * as lib_dev_seed_sandboxTransport from "../lib/dev/seed/sandboxTransport.js";
 import type * as lib_journey_events from "../lib/journey/events.js";
+import type * as lib_journey_posthogBatch from "../lib/journey/posthogBatch.js";
 import type * as lib_journey_stalled from "../lib/journey/stalled.js";
 import type * as lib_market_demandSignals_contracts from "../lib/market/demandSignals/contracts.js";
 import type * as lib_market_demandSignals_credential from "../lib/market/demandSignals/credential.js";
@@ -1320,6 +1321,7 @@ declare const fullApi: ApiFromModules<{
   "lib/dev/seed/sandboxTestnet": typeof lib_dev_seed_sandboxTestnet;
   "lib/dev/seed/sandboxTransport": typeof lib_dev_seed_sandboxTransport;
   "lib/journey/events": typeof lib_journey_events;
+  "lib/journey/posthogBatch": typeof lib_journey_posthogBatch;
   "lib/journey/stalled": typeof lib_journey_stalled;
   "lib/market/demandSignals/contracts": typeof lib_market_demandSignals_contracts;
   "lib/market/demandSignals/credential": typeof lib_market_demandSignals_credential;

@@ -8,6 +8,7 @@ import { isProductAnalyticsDisabled, readObservabilityServerConfig } from '../sr
 import { internal } from './_generated/api'
 import { internalAction } from './_generated/server'
 import { journeyDistinctId } from './journeyEvents'
+import { postPosthogBatch } from './lib/journey/posthogBatch'
 import { emailAddressHash, emailDomain } from './lib/principalAccount/notifications/suppression'
 
 type ResendEvent = { type: string; emailId: string; address: string; permanentBounce: boolean }
@@ -19,22 +20,7 @@ async function captureEmailEvent(event: string, distinctId: string, properties: 
   const config = readObservabilityServerConfig(env)
   if (config.posthogKey === undefined) return
   try {
-    const response = await fetch(`${config.posthogHost.replace(/\/+$/u, '')}/batch/`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        api_key: config.posthogKey,
-        batch: [{
-          event,
-          distinct_id: distinctId,
-          timestamp: new Date().toISOString(),
-          properties: { ...properties, $process_person_profile: false, $geoip_disable: true },
-        }],
-      }),
-      redirect: 'error',
-      signal: AbortSignal.timeout(5_000),
-    })
-    void response.body?.cancel().catch(() => {})
+    await postPosthogBatch(config.posthogKey, config.posthogHost, { event, distinctId, timestamp: new Date().toISOString(), properties })
   } catch {
     // Diagnostics never change the webhook answer.
   }

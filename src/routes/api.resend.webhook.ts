@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 
 import { methodNotAllowed } from '@/lib/server/method-guard'
 import { problem } from '@/lib/server/problem'
+import { sendGuardedHttpRequest } from '@/modules/network-guard/server'
 
 export const Route = createFileRoute('/api/resend/webhook')({
   server: {
@@ -34,6 +35,6 @@ async function forwardResendWebhook(request: Request): Promise<Response> {
   }
   const headers = new Headers({ 'Content-Type': 'application/json' })
   for (const name of ['svix-id', 'svix-timestamp', 'svix-signature']) headers.set(name, request.headers.get(name) ?? '')
-  const upstream = await fetch(`${origin}/resend/webhook`, { method: 'POST', headers, body, redirect: 'manual' })
+  const upstream = await sendGuardedHttpRequest(new Request(`${origin}/resend/webhook`, { method: 'POST', headers, body }))
   return new Response(null, { status: upstream.status, headers: { 'Cache-Control': 'no-store' } })
 }

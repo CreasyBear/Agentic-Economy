@@ -5,6 +5,7 @@ import { resolveBusinessActor } from './authz'
 import { isProductAnalyticsDisabled, readObservabilityServerConfig } from '../src/lib/observability/config'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { eraseAccountJourney } from './lib/journey/events'
+import { postPosthogBatch } from './lib/journey/posthogBatch'
 
 const RETRY_AFTER_MS = 10 * 60_000
 const RETRY_WINDOW_MS = 7 * 24 * 3_600_000
@@ -111,33 +112,16 @@ export const forward = internalAction({
     if (!forwardingConfigured()) return null
     const config = readObservabilityServerConfig(analyticsEnv())
     if (config.posthogKey === undefined) return null
-    let destination: URL
+    const uuid = await eventUuid(eventId)
     try {
-      destination = new URL(`${config.posthogHost.replace(/\/+$/u, '')}/batch/`)
-    } catch {
-      return null
-    }
-    if (destination.protocol !== 'https:' || destination.username !== '' || destination.password !== ''
-      || destination.search !== '' || destination.hash !== '') return null
-    const body = JSON.stringify({
-      api_key: config.posthogKey,
-      batch: [{
-        uuid: await eventUuid(eventId),
+      const response = await postPosthogBatch(config.posthogKey, config.posthogHost, {
+        uuid,
         event: row.name,
-        distinct_id: journeyDistinctId(row.accountRef),
+        distinctId: journeyDistinctId(row.accountRef),
         timestamp: new Date(row.createdAt).toISOString(),
-        properties: { ...row.props, $process_person_profile: false, $geoip_disable: true },
-      }],
-    })
-    try {
-      const response = await fetch(destination, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body,
-        redirect: 'error',
-        signal: AbortSignal.timeout(5_000),
+        properties: row.props ?? {},
       })
-      void response.body?.cancel().catch(() => {})
+      if (response === null) return null
       if (!response.ok) console.warn('[ae.journey.forward]', response.status)
       if (response.ok || isTerminalRejection(response.status)) await ctx.runMutation(internal.journeyEvents.markForwarded, { eventId })
     } catch {

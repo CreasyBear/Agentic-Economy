@@ -18,9 +18,10 @@ const KNOWN_PROVIDER_CLIENT_FILES: Record<string, true> = {
   // CDP Data Query uses the in-module Coinbase HOST/PATH constants and
   // locally built SQL; neither request URL component comes from a caller.
   'convex/marketFlowRefresh.ts': true,
-  // PostHog batch endpoint from the deployment's POSTHOG_HOST env, never caller input; the
-  // forward refuses non-https, credentials, query or fragment and does not follow redirects.
-  'convex/journeyEvents.ts': true,
+  // PostHog batch endpoint from the deployment's POSTHOG_HOST env, never caller input; the one
+  // client for journey and email events refuses non-https, credentials, query or fragment and
+  // does not follow redirects.
+  'convex/lib/journey/posthogBatch.ts': true,
 }
 
 // A "non-literal" fetch(...) call is one whose first argument is not a single plain
