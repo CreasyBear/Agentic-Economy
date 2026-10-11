@@ -10,7 +10,7 @@ import { ABOUT } from '@/content/brand-copy'
 
 const SUPPORT_EMAIL_LABEL = SUPPORT_EMAIL.replace(/^mailto:/, '')
 
-export function AeAboutPage() {
+export function AeAboutPage({ availability }: { availability: string }) {
   return (
     <>
       <AeSiteAboutHero
@@ -55,7 +55,7 @@ export function AeAboutPage() {
         title={ABOUT.ctaHeading}
         description={(
           <>
-            {ABOUT.ctaDescription}
+            {availability}
             <span className="mt-4 block text-sm">
               {ABOUT.operatorLine.prefix}
               {ABOUT.operatorLine.separator}
