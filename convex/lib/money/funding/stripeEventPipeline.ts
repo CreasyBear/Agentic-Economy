@@ -5,6 +5,7 @@ import { emitFundingJourneyEvent } from '../../journey/events'
 import type { MutationCtx } from '../../../_generated/server'
 import { internal } from '../../../_generated/api'
 import { enqueueAccountNotice } from '../../principalAccount/notifications/enqueue'
+import { enqueueMoneyAlertEvaluation } from '../../principalAccount/notifications/usageAlerts'
 import {
   AUD_EXPONENT,
   compareExactAmounts,
@@ -297,6 +298,8 @@ export async function finalizeFundingEventHandler(
     appliedAt: args.event.observedAt,
   })
   await emitFundingJourneyEvent(ctx, command.accountRef, command.commandRef, 'stripe')
+  // Re-evaluate balance after top-up; consent gate and sourceEventRef dedupe live in usageAlerts.
+  await enqueueMoneyAlertEvaluation(ctx, command.accountRef)
   return {
     kind: 'accepted',
     status: 'applied',
