@@ -46,6 +46,9 @@ export const paymentReadinessViewValue = v.object({
   checkedAt: v.union(v.null(), v.number()), expiresAt: v.union(v.null(), v.number()),
   code: v.union(v.null(), v.string()), checks: paymentReadinessChecksValue,
 })
+/** Server read: the view plus whether the admin payments-audience switch is deliberately closed (not 'everyone'). */
+export const paymentReadinessServerViewValue = v.object({ ...paymentReadinessViewValue.fields, paymentsDisabled: v.boolean() })
+export type PaymentReadinessServerView = Infer<typeof paymentReadinessServerViewValue>
 export type PaymentReadinessCheck = Infer<typeof paymentReadinessCheckValue>
 export type PaymentReadinessChecks = Infer<typeof paymentReadinessChecksValue>
 export type PaymentReadinessSnapshot = Infer<typeof paymentReadinessSnapshotValue>
