@@ -2726,6 +2726,18 @@
   {
     "visibility": "internal",
     "module": "moneyAccountFunding",
+    "method": "finalizeVerifiedDispute",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyAccountFunding",
+    "method": "finalizeVerifiedDisputeFromInbox",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyAccountFunding",
     "method": "finalizeVerifiedEvent",
     "kind": "mutation"
   },
@@ -3920,6 +3932,12 @@
   {
     "visibility": "internal",
     "module": "notificationDelivery",
+    "method": "sendOperatorAlert",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "notificationDelivery",
     "method": "sendOperatorDigest",
     "kind": "action"
   },
@@ -4264,6 +4282,18 @@
     "module": "sourceWriteAdmission",
     "method": "cleanupExpiredSourceWriteNonces",
     "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "termsAcceptance",
+    "method": "accept",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "termsAcceptance",
+    "method": "read",
+    "kind": "query"
   },
   {
     "visibility": "internal",

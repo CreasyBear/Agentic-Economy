@@ -33,4 +33,7 @@ export const principalTables = {
     .index('by_principalRef', ['principalRef'])
     .index('by_kind_and_lifecycle', ['kind', 'lifecycle'])
     .index('by_lifecycle_and_updatedAt', ['lifecycle', 'updatedAt']),
+  /** Clickwrap record: one row per principal and accepted terms version. */
+  termsAcceptances: defineTable({ principalRef: v.string(), termsVersion: v.string(), acceptedAt: v.number() })
+    .index('by_principalRef', ['principalRef']),
 } as const

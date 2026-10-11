@@ -24,3 +24,4 @@ export {
   principalTables,
   principalValue,
 } from './convex-schema'
+export { TERMS_VERSION } from './terms-version'

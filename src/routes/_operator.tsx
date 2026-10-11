@@ -1,5 +1,6 @@
 import { Outlet, createFileRoute } from '@tanstack/react-router'
 
+import { TermsAcceptanceGate } from '@/components/ae/layout/TermsAcceptanceGate'
 import { OperatorRouteForbidden } from '@/components/ae/layout/AeRouteError'
 import { operatorLayoutRouteOptions } from '@/lib/operator/route-options'
 
@@ -16,6 +17,8 @@ function OperatorLayoutRoute() {
   }
 
   return (
-    <Outlet />
+    <TermsAcceptanceGate>
+      <Outlet />
+    </TermsAcceptanceGate>
   )
 }
