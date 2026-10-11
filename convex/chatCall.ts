@@ -12,7 +12,7 @@ import { principalValue } from './lib/capabilityExecution/callLifecycle/contract
 import { approvalDecisionContextValue } from './lib/capabilityExecution/callLifecycle/admissionApproval'
 import { readCallApprovalDecisionContext } from './lib/capabilityExecution/callLifecycle/admissionApprovals'
 import { requireChatOwner } from './chatThreads'
-import { resolveOwnerChatActor } from './lib/chat/threads/listing'
+import { isChatSignedOut, resolveOwnerChatActor } from './lib/chat/threads/listing'
 import { chatThreadBelongsToPrincipal } from './lib/chat/threads/ownership'
 import { canonicalAgentCallCore } from './lib/capabilityExecution/callLifecycle/agentCallExecution'
 import { resolveTrustedChatAuthority } from './lib/capabilityExecution/callLifecycle/chatCallAuthority'
@@ -72,6 +72,7 @@ export const readOwnerChatCards = query({
   args: { threadId: v.string() },
   returns: v.array(v.union(pendingCardValue, outcomeCardValue)),
   handler: async (ctx, { threadId }) => {
+    if (await isChatSignedOut(ctx)) return []
     const owner = await requireChatOwner(ctx)
     const actor = await resolveOwnerChatActor(ctx)
     if (actor === null) return []

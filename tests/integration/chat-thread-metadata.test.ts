@@ -138,6 +138,7 @@ describe('durable chat thread metadata', () => {
     expect(await backend.query(api.chatMessages.listMessages, { threadId: 't', paginationOpts: opts }))
       .toMatchObject({ page: [], streams: { kind: 'list', messages: [] } })
     expect(await backend.query(api.chatTurns.ownerChatGrantStatus, {})).toEqual({ enabled: false })
+    expect(await backend.query(api.chatCall.readOwnerChatCards, { threadId: 't' })).toEqual([])
     expect(await backend.query(api.moneyAccountFunding.listOwnerInvoiceHistory, { paginationOpts: opts }))
       .toMatchObject({ page: [], isDone: true })
   })
