@@ -24,6 +24,7 @@ export async function fulfillReturnHandler(
     return { kind: 'refused', code: 'payment_binding_invalid', retryable: false }
   }
   if (command.state === 'succeeded') return { kind: 'accepted', status: 'replayed' }
+  if (command.state === 'reversed') return { kind: 'refused', code: 'funding_reversed', retryable: false }
   const config = readStripeMoneyReadbackProviderConfig(globalThis.process.env)
   if (isMoneyRefusal(config)) return config
   const providerContext = resolveStripeMoneyProviderContext({ config })
