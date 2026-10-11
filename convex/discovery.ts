@@ -23,6 +23,7 @@ export const readLlmsTxt = queryGeneric({
     routingBaseUrl: v.optional(v.string()),
     now: v.optional(v.number()),
     totalBusinesses: v.optional(v.number()),
+    availabilityStatement: v.optional(v.string()),
   },
   returns: discoveryFileResult,
   handler: async (ctx, args): Promise<Infer<typeof discoveryFileResult>> => {
@@ -34,6 +35,7 @@ export const readLlmsTxt = queryGeneric({
       canonicalBaseUrl: args.canonicalBaseUrl ?? '',
       ...(args.routingBaseUrl === undefined ? {} : { routingBaseUrl: args.routingBaseUrl }),
       ...(args.now === undefined ? {} : { now: args.now }),
+      ...(args.availabilityStatement === undefined ? {} : { availabilityStatement: args.availabilityStatement }),
       totalBusinesses: args.totalBusinesses ?? sample.items.length,
     })
     return { body: result.body, urls: [...result.urls] }

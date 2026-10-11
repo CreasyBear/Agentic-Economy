@@ -1,10 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router'
 
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
+import { availabilityStatement } from '@/content/availability-copy'
 import { discoveryTextResponse } from '@/lib/http/discovery-response'
 import { degrade } from '@/lib/observability/degrade'
 import { methodNotAllowed } from '@/lib/server/method-guard'
 import { toolReadUnavailableResponse } from '@/lib/server/tool-read-problem'
+import { readPublicAvailabilityThroughSource } from '@/modules/money/server'
 import { readPublicLlmsTxt } from '@/modules/discovery/discovery.functions'
 
 export const Route = createFileRoute('/llms.txt')({
@@ -33,7 +35,9 @@ export async function handleDurableLlmsTxtRequest(request: Request, head = false
   const canonicalBaseUrl = resolveCanonicalBaseUrl(request).baseUrl
   let result
   try {
+    const paidCalls = await readPublicAvailabilityThroughSource().then((a) => a.paidCalls, () => 'soon' as const)
     result = await readPublicLlmsTxt({
+      availabilityStatement: availabilityStatement(paidCalls),
       canonicalBaseUrl,
       routingBaseUrl: process.env.AE_ROUTING_PUBLIC_BASE_URL?.trim() || canonicalBaseUrl,
     })

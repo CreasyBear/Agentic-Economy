@@ -96,6 +96,7 @@ export function buildOfferingLlmsTxt(
   const body = [
     '# Agentic Economy',
     '',
+    ...(options.availabilityStatement ? [`> Availability: ${options.availabilityStatement}`, ''] : []),
     ...toolMarketLines(canonicalBaseUrl),
     '',
     'Public instructions:',
@@ -107,6 +108,7 @@ export function buildOfferingLlmsTxt(
     `- Release: ${canonicalBaseUrl}/api/v1/release`,
     `- Catalogue status: ${canonicalBaseUrl}/api/v1/catalogue-status`,
     `- MCP: ${canonicalBaseUrl}/mcp`,
+    `- MCP read-only: ${canonicalBaseUrl}/mcp?readonly=1 (discover and read, no buying)`,
     '',
     'Canonical catalogue:',
     `- Human: ${canonicalBaseUrl}/market`,
