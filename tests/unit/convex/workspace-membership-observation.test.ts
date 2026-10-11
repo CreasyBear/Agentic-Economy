@@ -551,6 +551,11 @@ describe('workspaceMemberships recordOrganizationMembershipCreatedForServer (W-1
     expect(audits).toHaveLength(1)
     expect(audits[0]?.activeAccountRef).toBe(accountRef)
     expect(audits[0]?.eventType).toBe('account.workspace_membership.created')
+
+    const notices = await backend.run((ctx) => ctx.db.query('notificationDeliveries').collect())
+    expect(notices.filter((row) => row.eventKind === 'team_membership_changed')).toEqual([
+      expect.objectContaining({ state: 'suppressed', accountRef }),
+    ])
   })
 
   it('C2: replay with same deliveryRefHash returns replayed with one membership and audit', async () => {
@@ -1406,6 +1411,11 @@ describe('workspaceMemberships recordOrganizationMembershipDeletedForServer (W-1
     expect(audits).toHaveLength(1)
     expect(audits[0]?.activeAccountRef).toBe(accountRef)
     expect(audits[0]?.eventType).toBe('account.workspace_membership.deleted')
+
+    const notices = await backend.run((ctx) => ctx.db.query('notificationDeliveries').collect())
+    expect(notices.filter((row) => row.eventKind === 'team_membership_changed')).toEqual([
+      expect.objectContaining({ state: 'suppressed', accountRef }),
+    ])
   })
 
   it('D2: same deliveryRefHash replay returns replayed with one ended row and one audit', async () => {
