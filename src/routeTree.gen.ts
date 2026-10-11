@@ -100,6 +100,7 @@ import { Route as ApiV1MarketRequestsRouteImport } from './routes/api.v1.market-
 import { Route as ApiV1RegistryRouteImport } from './routes/api.v1.registry'
 import { Route as ApiV1ReleaseRouteImport } from './routes/api.v1.release'
 import { Route as ApiV1SandboxReferenceRouteImport } from './routes/api.v1.sandbox-reference'
+import { Route as OwnerReceiptsIdRouteImport } from './routes/owner.receipts.$id'
 import { Route as ToolsProviderHostSlugRouteImport } from './routes/tools.$providerHost.$slug'
 import { Route as OperatorAdminAgentsPrincipalRefRouteImport } from './routes/_operator/admin.agents.$principalRef'
 import { Route as OperatorAdminCallsCallRefRouteImport } from './routes/_operator/admin.calls.$callRef'
@@ -637,6 +638,11 @@ const ApiV1SandboxReferenceRoute = ApiV1SandboxReferenceRouteImport.update({
   path: '/api/v1/sandbox-reference',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OwnerReceiptsIdRoute = OwnerReceiptsIdRouteImport.update({
+  id: '/owner/receipts/$id',
+  path: '/owner/receipts/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ToolsProviderHostSlugRoute = ToolsProviderHostSlugRouteImport.update({
   id: '/tools/$providerHost/$slug',
   path: '/tools/$providerHost/$slug',
@@ -1125,6 +1131,7 @@ export interface FileRoutesByFullPath {
   '/api/v1/registry': typeof ApiV1RegistryRouteWithChildren
   '/api/v1/release': typeof ApiV1ReleaseRoute
   '/api/v1/sandbox-reference': typeof ApiV1SandboxReferenceRoute
+  '/owner/receipts/$id': typeof OwnerReceiptsIdRoute
   '/tools/$providerHost/$slug': typeof ToolsProviderHostSlugRoute
   '/admin/': typeof OperatorAdminIndexRoute
   '/owner/': typeof OperatorOwnerIndexRoute
@@ -1289,6 +1296,7 @@ export interface FileRoutesByTo {
   '/api/v1/registry': typeof ApiV1RegistryRouteWithChildren
   '/api/v1/release': typeof ApiV1ReleaseRoute
   '/api/v1/sandbox-reference': typeof ApiV1SandboxReferenceRoute
+  '/owner/receipts/$id': typeof OwnerReceiptsIdRoute
   '/tools/$providerHost/$slug': typeof ToolsProviderHostSlugRoute
   '/admin': typeof OperatorAdminIndexRoute
   '/owner': typeof OperatorOwnerIndexRoute
@@ -1455,6 +1463,7 @@ export interface FileRoutesById {
   '/api/v1/registry': typeof ApiV1RegistryRouteWithChildren
   '/api/v1/release': typeof ApiV1ReleaseRoute
   '/api/v1/sandbox-reference': typeof ApiV1SandboxReferenceRoute
+  '/owner/receipts/$id': typeof OwnerReceiptsIdRoute
   '/tools/$providerHost/$slug': typeof ToolsProviderHostSlugRoute
   '/_operator/admin/': typeof OperatorAdminIndexRoute
   '/_operator/owner/': typeof OperatorOwnerIndexRoute
@@ -1621,6 +1630,7 @@ export interface FileRouteTypes {
     | '/api/v1/registry'
     | '/api/v1/release'
     | '/api/v1/sandbox-reference'
+    | '/owner/receipts/$id'
     | '/tools/$providerHost/$slug'
     | '/admin/'
     | '/owner/'
@@ -1785,6 +1795,7 @@ export interface FileRouteTypes {
     | '/api/v1/registry'
     | '/api/v1/release'
     | '/api/v1/sandbox-reference'
+    | '/owner/receipts/$id'
     | '/tools/$providerHost/$slug'
     | '/admin'
     | '/owner'
@@ -1950,6 +1961,7 @@ export interface FileRouteTypes {
     | '/api/v1/registry'
     | '/api/v1/release'
     | '/api/v1/sandbox-reference'
+    | '/owner/receipts/$id'
     | '/tools/$providerHost/$slug'
     | '/_operator/admin/'
     | '/_operator/owner/'
@@ -2094,6 +2106,7 @@ export interface RootRouteChildren {
   ApiV1RegistryRoute: typeof ApiV1RegistryRouteWithChildren
   ApiV1ReleaseRoute: typeof ApiV1ReleaseRoute
   ApiV1SandboxReferenceRoute: typeof ApiV1SandboxReferenceRoute
+  OwnerReceiptsIdRoute: typeof OwnerReceiptsIdRoute
   ToolsProviderHostSlugRoute: typeof ToolsProviderHostSlugRoute
   ApiV1ChatTurnsRoute: typeof ApiV1ChatTurnsRouteWithChildren
   ApiV1FundingConstraintsRoute: typeof ApiV1FundingConstraintsRoute
@@ -2767,6 +2780,13 @@ declare module '@tanstack/react-router' {
       path: '/api/v1/sandbox-reference'
       fullPath: '/api/v1/sandbox-reference'
       preLoaderRoute: typeof ApiV1SandboxReferenceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/owner/receipts/$id': {
+      id: '/owner/receipts/$id'
+      path: '/owner/receipts/$id'
+      fullPath: '/owner/receipts/$id'
+      preLoaderRoute: typeof OwnerReceiptsIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/tools/$providerHost/$slug': {
@@ -3631,6 +3651,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1RegistryRoute: ApiV1RegistryRouteWithChildren,
   ApiV1ReleaseRoute: ApiV1ReleaseRoute,
   ApiV1SandboxReferenceRoute: ApiV1SandboxReferenceRoute,
+  OwnerReceiptsIdRoute: OwnerReceiptsIdRoute,
   ToolsProviderHostSlugRoute: ToolsProviderHostSlugRoute,
   ApiV1ChatTurnsRoute: ApiV1ChatTurnsRouteWithChildren,
   ApiV1FundingConstraintsRoute: ApiV1FundingConstraintsRoute,
@@ -3669,6 +3690,7 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
 
 import type { getRouter } from './router.tsx'
 import type { startInstance } from './start.ts'
