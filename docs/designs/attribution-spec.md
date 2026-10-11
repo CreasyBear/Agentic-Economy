@@ -7,7 +7,7 @@ Goal: every sign-up, first receipt and top-up can be traced to the campaign, lin
 ## Today
 - **App:** reads only `utm_source`, `utm_campaign` and `ref` (`src/lib/observability/funnel-client.ts:62-70`) and persists nothing.
 - **PostHog:**
-  - It uses `sessionStorage` (`posthog.client.ts:85-93`), so identity dies with the tab.
+  - It uses `sessionStorage` (`posthog-browser.ts:85-93`), so identity dies with the tab.
   - It only identifies the anonymous `sess_` id and never identifies the account on sign-in.
   - Anonymous events get no person profile.
 - **Sign-up:** the Clerk round trip drops UTMs (`useSignUpPage.ts:14-17`). The account stores no source (`provisioning.ts:289-337`), and journey events carry none.

@@ -17,7 +17,7 @@ beforeEach(() => {
 describe('browser telemetry initialization boundaries', () => {
   it('honors disabled observability even when a project key is configured', async () => {
     fixture.config.mockReturnValue({ enabled: false, posthogKey: 'fixture-key', environment: 'development' })
-    const { captureClientProductEvent } = await import('@/lib/observability/posthog.client')
+    const { captureClientProductEvent } = await import('@/lib/observability/posthog-browser')
     captureClientProductEvent('ae_product_journey', { action: 'market_viewed' })
     await vi.waitFor(() => expect(fixture.config).toHaveBeenCalledOnce())
     expect(fixture.sdk.init).not.toHaveBeenCalled()
@@ -26,7 +26,7 @@ describe('browser telemetry initialization boundaries', () => {
 
   it('disables DOM capture and session replay and sanitizes the SDK event envelope', async () => {
     fixture.config.mockReturnValue({ enabled: true, posthogKey: 'fixture-key', environment: 'development' })
-    const { captureClientProductEvent } = await import('@/lib/observability/posthog.client')
+    const { captureClientProductEvent } = await import('@/lib/observability/posthog-browser')
     captureClientProductEvent('ae_product_journey', { action: 'market_viewed' })
     await vi.waitFor(() => expect(fixture.sdk.init).toHaveBeenCalledOnce())
     const options = fixture.sdk.init.mock.calls[0]?.[1]
@@ -46,7 +46,7 @@ describe('browser telemetry initialization boundaries', () => {
     fixture.sdk.capture.mockImplementation((event: string) => {
       if (event === 'ae_product_journey') throw Error('fixture transport offline')
     })
-    const { captureClientProductEvent } = await import('@/lib/observability/posthog.client')
+    const { captureClientProductEvent } = await import('@/lib/observability/posthog-browser')
     captureClientProductEvent('ae_product_journey', { action: 'market_viewed' })
     await vi.waitFor(() => expect(fixture.sdk.capture).toHaveBeenCalledWith('ae_product_journey', { action: 'market_viewed' }))
     await new Promise(resolve => window.setTimeout(resolve, 0))
@@ -55,7 +55,7 @@ describe('browser telemetry initialization boundaries', () => {
 
   it('identifies once per account digest and resets on sign-out', async () => {
     fixture.config.mockReturnValue({ enabled: true, posthogKey: 'fixture-key', environment: 'development' })
-    const { identifyPostHogAccount, resetPostHogAccount } = await import('@/lib/observability/posthog.client')
+    const { identifyPostHogAccount, resetPostHogAccount } = await import('@/lib/observability/posthog-browser')
     identifyPostHogAccount('digest-1')
     await vi.waitFor(() => expect(fixture.sdk.identify).toHaveBeenCalledWith('digest-1'))
     fixture.sdk.get_distinct_id.mockReturnValue('digest-1')

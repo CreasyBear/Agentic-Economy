@@ -1,8 +1,10 @@
+/// <reference lib="dom" />
+/// <reference lib="dom.iterable" />
 /// <reference types="vite/client" />
 import { convexTest } from 'convex-test'
 import { describe, expect, it } from 'vitest'
 
-import { buildAttributionTouch } from '../src/lib/observability/posthog.client'
+import { buildAttributionTouch } from '../src/lib/observability/posthog-browser'
 import { api } from './_generated/api'
 import schema from './schema'
 

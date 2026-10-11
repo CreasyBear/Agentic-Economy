@@ -14,7 +14,7 @@ describe('telemetry configuration boundaries', () => {
   })
   it('uses explicit events with replay and automatic DOM capture disabled', async () => {
     vi.stubEnv('VITE_POSTHOG_KEY', 'test-project-key')
-    const client = await import('@/lib/observability/posthog.client')
+    const client = await import('@/lib/observability/posthog-browser')
     client.initPostHogClient()
     await vi.waitFor(() => expect(mocks.init).toHaveBeenCalled())
     expect(mocks.init).toHaveBeenCalledWith('test-project-key', expect.objectContaining({
@@ -32,7 +32,7 @@ describe('telemetry configuration boundaries', () => {
   it('does not initialize product analytics on an admin record or capture its activity', async () => {
     vi.stubEnv('VITE_POSTHOG_KEY', 'test-project-key')
     window.history.replaceState(null, '', '/admin/accounts?q=private-account-name')
-    const client = await import('@/lib/observability/posthog.client')
+    const client = await import('@/lib/observability/posthog-browser')
     client.initPostHogClient()
     client.captureClientProductEvent('account_opened')
     await vi.dynamicImportSettled()
@@ -41,7 +41,7 @@ describe('telemetry configuration boundaries', () => {
   })
   it('stops an initialized product client after admin navigation without treating later work as acquisition', async () => {
     vi.stubEnv('VITE_POSTHOG_KEY', 'test-project-key')
-    const client = await import('@/lib/observability/posthog.client')
+    const client = await import('@/lib/observability/posthog-browser')
     client.captureClientProductEvent('market_opened')
     await vi.waitFor(() => expect(mocks.capture).toHaveBeenCalledWith('market_opened', {}))
     mocks.capture.mockClear()
@@ -56,7 +56,7 @@ describe('telemetry configuration boundaries', () => {
     vi.stubEnv('VITE_POSTHOG_KEY', 'test-project-key')
     vi.stubEnv('VITE_SENTRY_DSN', 'https://public@example.ingest.sentry.io/1')
     vi.stubEnv('VITE_AE_DISABLE_OBSERVABILITY', 'true')
-    const posthog = await import('@/lib/observability/posthog.client')
+    const posthog = await import('@/lib/observability/posthog-browser')
     const sentry = await import('@/lib/observability/sentry.client')
     posthog.initPostHogClient()
     await vi.dynamicImportSettled()
