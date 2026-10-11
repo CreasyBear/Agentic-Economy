@@ -41,6 +41,8 @@ export type ClerkSecurityObservation = Readonly<{
   profileDisplayName?: string
   /** Digest of the primary email, so convex can notice a change without storing the address. */
   primaryEmailDigest?: string
+  /** Non-primary addresses on the Clerk user, used once to find the prior primary for the email_changed notice. */
+  otherEmailAddresses?: string[]
 }>
 
 export type ClerkSecurityObservationResult =

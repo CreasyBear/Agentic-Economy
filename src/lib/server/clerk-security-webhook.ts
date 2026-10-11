@@ -131,10 +131,14 @@ function redactedObservationFromVerifiedEvent(input: Readonly<{
   }
 
   let primaryEmailDigest: string | undefined
+  let otherEmailAddresses: string[] | undefined
   if (input.event.type === 'user.updated' && Array.isArray(data.email_addresses)) {
     const primary = data.email_addresses.find((row: unknown) => isRecord(row) && row.id === data.primary_email_address_id)
     if (isRecord(primary) && typeof primary.email_address === 'string' && primary.email_address.length > 0) {
       primaryEmailDigest = canonicalDigest({ contract: 'ae.clerk-primary-email:v1', email: primary.email_address.trim().toLowerCase() })
+      otherEmailAddresses = data.email_addresses
+        .filter((row: unknown): row is Record<string, unknown> => isRecord(row) && row.id !== data.primary_email_address_id && typeof row.email_address === 'string' && row.email_address.length > 0)
+        .map((row) => (row.email_address as string).trim().toLowerCase()).slice(0, 10)
     }
   }
 
@@ -154,6 +158,7 @@ function redactedObservationFromVerifiedEvent(input: Readonly<{
       securityAction,
       ...(profileDisplayName === undefined ? {} : { profileDisplayName }),
       ...(primaryEmailDigest === undefined ? {} : { primaryEmailDigest }),
+      ...(otherEmailAddresses === undefined || otherEmailAddresses.length === 0 ? {} : { otherEmailAddresses }),
     },
   }
 }

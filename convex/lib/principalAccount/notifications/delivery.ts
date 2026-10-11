@@ -93,6 +93,7 @@ export const readNotificationContextResult = v.union(
     deliveryRef: v.string(),
     clerkUserId: v.string(),
     stream: v.string(),
+    previousAddress: v.optional(v.string()),
     // Every template prop is a flat string or number, so the validator stays exact.
     email: v.object({ eventKind: v.string(), props: v.record(v.string(), v.union(v.string(), v.number())) }),
   }),
@@ -237,6 +238,7 @@ async function readAccountNoticeContext(ctx: QueryCtx, delivery: Doc<'notificati
     deliveryRef: delivery.deliveryRef,
     clerkUserId,
     stream: delivery.stream ?? 'transactional',
+    ...(delivery.previousAddress === undefined ? {} : { previousAddress: delivery.previousAddress }),
     email: { eventKind: delivery.eventKind, props: { siteUrl, ...props } },
   }
 }

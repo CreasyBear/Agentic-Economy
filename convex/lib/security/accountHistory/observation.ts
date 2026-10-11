@@ -196,7 +196,11 @@ async function persistObservation(
       await ctx.db.patch(principal._id, { primaryEmailDigest: observation.primaryEmailDigest })
       // The first sighting only records the address; a later difference is a change.
       if (principal.primaryEmailDigest !== undefined) {
+        // Clerk lists the replaced address among the user's others; the stored digest picks it out.
+        const previousAddress = (observation.otherEmailAddresses ?? []).find((email) =>
+          canonicalDigest({ contract: 'ae.clerk-primary-email:v1', email }) === principal.primaryEmailDigest)
         await enqueueAccountNotice(ctx, {
+          ...(previousAddress === undefined ? {} : { previousAddress }),
           eventKind: 'email_changed', accountRef: authority.accountRef,
           recipientPrincipalRef: authority.principalRef, sourceEventRef: observation.deliveryRefHash,
         })

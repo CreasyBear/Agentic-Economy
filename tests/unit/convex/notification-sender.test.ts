@@ -144,6 +144,40 @@ describe('sendDeliveryEmail', () => {
     expect(JSON.parse(request.body)).not.toHaveProperty('headers')
   })
 
+  it('sends the email-changed notice to the previous address too, with a second idempotency key', async () => {
+    const { backend, deliveryId, deliveryRef } = await pendingApprovalDelivery()
+    await backend.run(async (ctx) => {
+      await ctx.db.patch(deliveryId, { eventKind: 'email_changed', stream: 'transactional', previousAddress: 'old@example.test' })
+    })
+    const sendEmail = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify({ id: 'resend-message-123' }), { status: 200 }))
+    vi.stubGlobal('fetch', sendEmail)
+
+    await backend.action(internal.notificationDelivery.sendDeliveryEmail, { deliveryId })
+    expect(sendEmail).toHaveBeenCalledTimes(2)
+    const sent = sendEmail.mock.calls.map(([, init]) => ({
+      to: JSON.parse(String(init?.body)).to,
+      key: (init?.headers as Record<string, string>)['Idempotency-Key'],
+    }))
+    expect(sent).toEqual([
+      { to: ['owner@example.test'], key: deliveryRef },
+      { to: ['old@example.test'], key: `${deliveryRef}:old` },
+    ])
+  })
+
+  it('sends the email-changed notice to the new address only when the previous one is unknown', async () => {
+    const { backend, deliveryId } = await pendingApprovalDelivery()
+    await backend.run(async (ctx) => {
+      await ctx.db.patch(deliveryId, { eventKind: 'email_changed', stream: 'transactional', previousAddressUnknown: true })
+    })
+    const sendEmail = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify({ id: 'resend-message-123' }), { status: 200 }))
+    vi.stubGlobal('fetch', sendEmail)
+
+    await backend.action(internal.notificationDelivery.sendDeliveryEmail, { deliveryId })
+    expect(sendEmail).toHaveBeenCalledOnce()
+  })
+
   it('suppresses a send to an address that hard-bounced before contacting Resend', async () => {
     const { backend, deliveryId } = await pendingApprovalDelivery()
     const addressHash = await emailAddressHash('owner@example.test')
