@@ -90,7 +90,6 @@ function show(search: Props['search'] = { offset: 20 }, items = entries, extra: 
   const router = createRouter({ defaultViewTransition: true, routeTree: root.addChildren([
     marketRoute,
     createRoute({ getParentRoute: () => root, path: '/t/new' }),
-    createRoute({ getParentRoute: () => root, path: '/owner/market', validateSearch: validateMarketSearch }),
     createRoute({ getParentRoute: () => root, path: '/tools/$providerHost/$slug' }),
   ]), history: createMemoryHistory({ initialEntries: [`${extra.marketPath ?? '/market'}?${new URLSearchParams(Object.entries(search).filter(([, value]) => value !== undefined).map(([key, value]) => [key, Array.isArray(value) ? JSON.stringify(value) : String(value)]))}`] }) })
   void router.load()

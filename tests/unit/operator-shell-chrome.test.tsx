@@ -509,12 +509,12 @@ function renderAt(ui: ReactElement, pathname: string) {
     }),
     createRoute({
       getParentRoute: () => rootRoute,
-      path: '/owner/workspace',
+      path: '/owner/settings/workspace',
       staticData: { nav: { label: 'Workspace', operator: { roles: ['owner'], group: 'Workspace', groupOrder: 0, order: 1, icon: NavIcon, tier: 'core' } } },
     }),
     createRoute({
       getParentRoute: () => rootRoute,
-      path: '/owner/team',
+      path: '/owner/settings/team',
       staticData: { nav: { label: 'Team', operator: { roles: ['owner'], group: 'Workspace', groupOrder: 0, order: 2, icon: NavIcon, tier: 'core' } } },
     }),
     createRoute({

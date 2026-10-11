@@ -3,20 +3,20 @@ import { describe, expect, it } from 'vitest'
 import { ownerWorkspaceOwnerForPath } from '@/lib/operator/roles'
 
 describe('ownerWorkspaceOwnerForPath (W-12)', () => {
-  it('R1: /owner/workspace resolves to workspace', () => {
-    expect(ownerWorkspaceOwnerForPath('/owner/workspace')).toBe('workspace')
+  it('R1: /owner/settings/workspace resolves to workspace', () => {
+    expect(ownerWorkspaceOwnerForPath('/owner/settings/workspace')).toBe('workspace')
   })
 
-  it('R2: /owner/workspace/general resolves to workspace', () => {
-    expect(ownerWorkspaceOwnerForPath('/owner/workspace/general')).toBe('workspace')
+  it('R2: /owner/settings/workspace/general resolves to workspace', () => {
+    expect(ownerWorkspaceOwnerForPath('/owner/settings/workspace/general')).toBe('workspace')
   })
 
-  it('R2b: /owner/team resolves to team', () => {
-    expect(ownerWorkspaceOwnerForPath('/owner/team')).toBe('team')
+  it('R2b: /owner/settings/team resolves to team', () => {
+    expect(ownerWorkspaceOwnerForPath('/owner/settings/team')).toBe('team')
   })
 
-  it('R2c: /owner/team/ resolves to team', () => {
-    expect(ownerWorkspaceOwnerForPath('/owner/team/')).toBe('team')
+  it('R2c: /owner/settings/team/ resolves to team', () => {
+    expect(ownerWorkspaceOwnerForPath('/owner/settings/team/')).toBe('team')
   })
 
   it('R3: /owner/settings resolves to account', () => {

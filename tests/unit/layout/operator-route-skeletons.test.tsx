@@ -72,7 +72,7 @@ function renderAt(ui: ReactElement, pathname: string) {
   const rootRoute = createRootRoute()
   const routeTree = rootRoute.addChildren([
     createRoute({ getParentRoute: () => rootRoute, path: '/owner' }),
-    createRoute({ getParentRoute: () => rootRoute, path: '/owner/workspace' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/owner/settings/workspace' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/owner/operations' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/owner/operations/new' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/owner/settings' }),
@@ -81,7 +81,7 @@ function renderAt(ui: ReactElement, pathname: string) {
     createRoute({ getParentRoute: () => rootRoute, path: '/activity' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/owner/console' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/owner/t/tool_slug' }),
-    createRoute({ getParentRoute: () => rootRoute, path: '/owner/team' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/owner/settings/team' }),
   ])
   const router = createRouter({
     routeTree,
@@ -97,7 +97,7 @@ function skeletonRoot() {
 describe('inferOperatorSkeletonPreset', () => {
   it('maps the workspace landing path to overview-cards', () => {
     expect(inferOperatorSkeletonPreset('/owner')).toBe('default')
-    expect(inferOperatorSkeletonPreset('/owner/workspace')).toBe('overview-cards')
+    expect(inferOperatorSkeletonPreset('/owner/settings/workspace')).toBe('overview-cards')
   })
 
   it('maps list and activity paths to table', () => {
@@ -122,7 +122,7 @@ describe('inferOperatorSkeletonPreset', () => {
   })
 
   it('falls back to default for unmatched paths', () => {
-    expect(inferOperatorSkeletonPreset('/owner/team')).toBe('default')
+    expect(inferOperatorSkeletonPreset('/owner/unknown')).toBe('default')
   })
 })
 
