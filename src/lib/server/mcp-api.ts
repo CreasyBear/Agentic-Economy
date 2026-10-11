@@ -606,13 +606,6 @@ export function createAeMcpServer(
       kind: 'INVALID_ARGUMENT', code: 'mcp_tool_not_found', retryable: false,
       detail: 'Unknown MCP tool. Call tools/list and select a listed tool.',
     }), origin)
-    if (!admittedIds.has(action.id)) return mcpToolError(buildProblem({
-      kind: 'PERMISSION_DENIED',
-      code: 'mcp_toolset_required',
-      retryable: false,
-      detail: `This action is not available in the current MCP toolset.${selectedAccess.readOnly ? ` ${MCP_READ_ONLY_FIX}` : ''}`,
-      extras: { next: [], ...(access.correlationId === undefined ? {} : { correlationId: access.correlationId }) },
-    }), origin)
     const input = await action.schema.safeParseAsync(callRequest.params.arguments ?? {})
     if (!input.success) return mcpToolError(buildProblem({
       kind: 'INVALID_ARGUMENT', code: 'input_invalid', retryable: false,
@@ -621,6 +614,13 @@ export function createAeMcpServer(
     context.mcpReq.signal.throwIfAborted()
     const data: unknown = input.data
     const startedAt = Date.now()
+    if (!admittedIds.has(action.id)) return mcpToolError(buildProblem({
+      kind: 'PERMISSION_DENIED',
+      code: 'mcp_toolset_required',
+      retryable: false,
+      detail: `This action is not available in the current MCP toolset.${selectedAccess.readOnly ? ` ${MCP_READ_ONLY_FIX}` : ''}`,
+      extras: { next: [], ...(access.correlationId === undefined ? {} : { correlationId: access.correlationId }) },
+    }), origin)
     try {
       const rollout = package5SupplyActionRolloutDecision(action.id, data, access.rolloutEnvironment)
       if (!rollout.enabled) {
@@ -804,10 +804,7 @@ export async function handleMcpRequest(request: Request, options: McpRequestOpti
     const legacyFailure = await legacyMcpParameterFailure(boundedRequest)
     if (legacyFailure !== undefined) return withRequestCorrelationHeader(legacyFailure, correlationId)
     const protectedTarget = await actionRequiringAuthenticationForRequest(boundedRequest, actions)
-    // A read-only connection never buys: skip sign-in so the call reaches the toolset refusal that names the fix.
-    const readOnlyBuy = protectedTarget !== undefined && !protectedTarget.generic && !protectedTarget.action.readOnly
-      && new URL(request.url).searchParams.get('readonly') === '1'
-    if (protectedTarget !== undefined && !readOnlyBuy) {
+    if (protectedTarget !== undefined) {
       const protectedAction = protectedTarget.action
       const requiredMode = requiredModeForAction(protectedAction)
       const genericAdmission = protectedTarget.generic || !isAnonymousMcpRequest(boundedRequest)
@@ -841,6 +838,9 @@ export async function handleMcpRequest(request: Request, options: McpRequestOpti
           requiredScope === null ? undefined : requiredScope,
           requiredScope == null ? requiredMode : undefined,
           correlationId,
+          !protectedTarget.generic && !protectedAction.readOnly && new URL(request.url).searchParams.get('readonly') === '1'
+            ? MCP_READ_ONLY_FIX
+            : undefined,
         ), correlationId)
       }
       const server = createAeMcpServer(boundedRequest, actions, {
