@@ -59,6 +59,16 @@ async function readWaitStatus(
     return result
   } catch (error) {
     if (Date.now() >= deadline) throw waitTimeoutFailure(callRef, options)
+    if (error instanceof CliFailure && error.kind === 'NOT_FOUND') {
+      throw new CliFailure(error.message, {
+        kind: error.kind,
+        ...(error.code !== undefined && { code: error.code }),
+        ...(error.status !== undefined && { status: error.status }),
+        ...(error.requestId !== undefined && { requestId: error.requestId }),
+        suggestion: 'List your recent calls with ae history.',
+        nextCommand: cliContinuation(options, ['ae', 'history']),
+      })
+    }
     if (error instanceof CliFailure && error.kind !== 'UNAVAILABLE') throw error
     throw waitTransportFailure(callRef, options)
   }
