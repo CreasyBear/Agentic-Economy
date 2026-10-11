@@ -126,7 +126,3 @@ export function captureClientError(input: ClientErrorCapture): boolean {
 }
 
 export { Sentry }
-
-export function countDegraded(site: string): void {
-  Sentry.metrics.count('ae.degraded', 1, { attributes: { site } })
-}
