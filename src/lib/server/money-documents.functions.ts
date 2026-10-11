@@ -1,4 +1,5 @@
 import { createServerFn } from '@tanstack/react-start'
+import { setResponseHeader } from '@tanstack/react-start/server'
 import { z } from 'zod'
 
 import {
@@ -165,23 +166,34 @@ const reverseProviderSettlementInput = z.strictObject({
   expectedUpdatedAt: z.number().int().nonnegative(),
 })
 
+const noStore = () => setResponseHeader('Cache-Control', 'private, no-store')
+
 export const readOwnerMoneyDocumentsServer = createServerFn({ method: 'GET' })
   .validator((data) => cursorInput.parse(data ?? {}))
-  .handler(async ({ data }) => await callSourceQuery(listDocumentsQuery, {
-    paginationOpts: { numItems: 50, cursor: data.cursor ?? null },
-  }))
+  .handler(async ({ data }) => {
+    noStore()
+    return await callSourceQuery(listDocumentsQuery, {
+      paginationOpts: { numItems: 50, cursor: data.cursor ?? null },
+    })
+  })
 
 export const readOwnerMoneyReconciliationServer = createServerFn({ method: 'GET' })
   .validator((data) => cursorInput.parse(data ?? {}))
-  .handler(async ({ data }) => await callSourceQuery(listCasesQuery, {
-    paginationOpts: { numItems: 50, cursor: data.cursor ?? null },
-  }))
+  .handler(async ({ data }) => {
+    noStore()
+    return await callSourceQuery(listCasesQuery, {
+      paginationOpts: { numItems: 50, cursor: data.cursor ?? null },
+    })
+  })
 
 export const readOwnerProviderObligationsServer = createServerFn({ method: 'GET' })
   .validator((data) => cursorInput.parse(data ?? {}))
-  .handler(async ({ data }) => await callSourceQuery(listObligationsQuery, {
-    paginationOpts: { numItems: 50, cursor: data.cursor ?? null },
-  }))
+  .handler(async ({ data }) => {
+    noStore()
+    return await callSourceQuery(listObligationsQuery, {
+      paginationOpts: { numItems: 50, cursor: data.cursor ?? null },
+    })
+  })
 
 export const createOwnerStatementServer = createServerFn({ method: 'POST' })
   .validator((data) => statementInput.parse(data))
@@ -281,4 +293,7 @@ export const readOwnerMoneyDocumentUrlServer = createServerFn({ method: 'GET' })
   .validator((data) => z.strictObject({
     documentRef: z.string().min(1).max(500), format: z.enum(['html', 'csv']).default('html'),
   }).parse(data))
-  .handler(async ({ data }) => await callSourceQuery(readDocumentUrlQuery, data))
+  .handler(async ({ data }) => {
+    noStore()
+    return await callSourceQuery(readDocumentUrlQuery, data)
+  })
