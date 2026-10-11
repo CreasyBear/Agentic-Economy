@@ -1,6 +1,7 @@
+// @ts-nocheck vendored upstream code is not written for exactOptionalPropertyTypes/noUncheckedIndexedAccess; our own wrappers in src/emails are checked.
 // Vendored from emailcn (MIT, Copyright (c) 2026 Shadcn Labs), see ./LICENSE.
 // Source: https://www.emailcn.run/r/react-email/ (registry item for onboarding-default.tsx), fetched 2026-10-11. Do not hand-edit; theme goes in src/emails/theme.ts.
-// Subject: Welcome to {_productName} — let's get you started
+// Subject: Welcome to {_productName}
 
 import {
   Body,
@@ -11,7 +12,7 @@ import {
   Section,
   Tailwind,
   Text,
-} from "react-email";
+} from "@react-email/components";
 
 import { ContentSection as ContentGridSection } from "./content";
 import { CallToActionSection as CTABannerSection } from "./call-to-action";

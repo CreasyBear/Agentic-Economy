@@ -1,3 +1,4 @@
+// @ts-nocheck vendored upstream code is not written for exactOptionalPropertyTypes/noUncheckedIndexedAccess; our own wrappers in src/emails are checked.
 // Vendored from emailcn (MIT, Copyright (c) 2026 Shadcn Labs), see ./LICENSE.
 // Source: https://www.emailcn.run/r/react-email/ (registry item for notification-default.tsx), fetched 2026-10-11. Do not hand-edit; theme goes in src/emails/theme.ts.
 // Subject: {_action} — {_targetName}
@@ -15,7 +16,7 @@ import {
   Section,
   Tailwind,
   Text,
-} from "react-email";
+} from "@react-email/components";
 
 import { createEmailTailwindConfig } from "./email-theme";
 import { emailAsset } from "./email-assets";
