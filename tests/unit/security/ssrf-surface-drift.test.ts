@@ -21,6 +21,12 @@ const KNOWN_PROVIDER_CLIENT_FILES: Record<string, true> = {
   // PostHog batch endpoint from the deployment's POSTHOG_HOST env, never caller input; the
   // forward refuses non-https, credentials, query or fragment and does not follow redirects.
   'convex/journeyEvents.ts': true,
+  // Same deployment-env PostHog host as journeyEvents, never caller input.
+  'convex/emailWebhook.ts': true,
+  // Same-origin proxies to the Convex HTTP action; the target origin comes from deployment env
+  // and is refused unless it matches https://<deployment>.convex.site, redirects are not followed.
+  'src/routes/api.resend.webhook.ts': true,
+  'src/routes/api.unsubscribe.ts': true,
 }
 
 // A "non-literal" fetch(...) call is one whose first argument is not a single plain

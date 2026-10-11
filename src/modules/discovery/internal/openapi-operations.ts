@@ -13,6 +13,7 @@ import { agentApiOperations } from './openapi-agent-routes'
 import type { NormalizedOperation, NormalizedParam } from './openapi-document-types'
 export { agentApiOperations } from './openapi-agent-routes'
 export const HEAD_ROUTE_PATHS: Readonly<Record<string, true>> = {
+  '/api/v1/availability': true,
   '/api/v1/catalogue-status': true,
   '/api/v1/funding/constraints': true,
   '/api/v1/market-metrics': true,

@@ -32,7 +32,7 @@ it('keeps Business and Host identities scoped, with exact native source disclosu
   view.rerender(<HostGrouping hostname={business} listings={[]} />)
   expect(screen.queryByRole('heading')).toBeNull()
   view.rerender(<HostGrouping hostname={host} listings={[]} verifiedProvider={{ name: business.value, href: '/weather-co' }} />)
-  expect(screen.getByText('Grouped by provider host, not an accountable Provider identity.')).toBeTruthy()
+  expect(screen.getByText('Grouped by host name, not by a verified Provider.')).toBeTruthy()
   expect(screen.getByText('No sourced listings are available.')).toBeTruthy()
   expect(screen.getByText(host.sourceRef)).toBeTruthy()
   expect(screen.getByRole('link', { name: 'Verified Provider: Weather Co' }).getAttribute('href')).toBe('/weather-co')
