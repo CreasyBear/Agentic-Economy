@@ -15,11 +15,6 @@ test.describe('market product accessibility', () => {
     await expect(search).toBeFocused()
     await page.keyboard.press('Tab')
     await expect(page.getByRole('button', { name: 'Search', exact: true })).toBeFocused()
-    await page.keyboard.press('Tab')
-    const agent = page.getByRole('link', { name: 'Ask an Agent', exact: true })
-    await expect(agent).toBeFocused()
-    await expect(agent).toHaveAttribute('aria-describedby', 'market-agent-recipient')
-    await expect(page.locator('#market-agent-recipient')).toBeVisible()
     const compact = (page.viewportSize()?.width ?? 1280) < 768
     const primary = compact
       ? page.getByRole('dialog', { name: 'Public navigation' }).getByRole('navigation', { name: 'Primary' })
@@ -29,16 +24,23 @@ test.describe('market product accessibility', () => {
       await menu.focus()
       await expect(menu).toBeFocused()
       await menu.press('Enter')
-      await expect(primary.getByRole('link', { name: 'Market' })).toBeVisible()
+      await expect(primary.getByRole('link', { name: 'Tools', exact: true })).toBeVisible()
     }
-    await expect(primary.getByRole('link', { name: 'Market' })).toBeVisible()
-    await expect(primary.getByRole('link', { name: 'For agents' })).toBeVisible()
+    await expect(primary.getByRole('link', { name: 'Tools', exact: true })).toBeVisible()
+    await expect(primary.getByRole('link', { name: 'Docs', exact: true })).toBeVisible()
     await expect(primary.getByRole('link', { name: 'For providers' })).toBeVisible()
   })
 
-  test('the root resolves to the catalogue', async ({ page }) => {
+  test('the root landing searches into the catalogue by keyboard', async ({ page }) => {
     await gotoSettled(page, '/')
-    await page.waitForURL((url) => url.pathname === '/market', { timeout: 15_000 })
+    expect(new URL(page.url()).pathname).toBe('/')
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+    const search = page.getByRole('main').getByRole('searchbox', { name: 'Search tools' })
+    await search.focus()
+    await expect(search).toBeFocused()
+    await page.keyboard.type('weather')
+    await page.keyboard.press('Enter')
+    await page.waitForURL((url) => url.pathname === '/market' && url.searchParams.get('query') === 'weather', { timeout: 15_000 })
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
   })
 
@@ -50,12 +52,9 @@ test.describe('market product accessibility', () => {
     expect(documentWidth).toBeLessThanOrEqual(viewportWidth)
   })
 
-  test('about keeps public nav while the footer points at the marketing site', async ({ page }) => {
+  test('about keeps public nav and the site footer', async ({ page }) => {
     await gotoSettled(page, '/about')
     const footer = page.getByRole('contentinfo')
-    const brand = footer.getByRole('link', { name: 'AECON', exact: true })
-    await expect(brand).toBeVisible()
-    await expect(brand).toHaveAttribute('href', 'https://aecon.ai')
     const status = footer.getByRole('link', { name: 'Status', exact: true })
     await expect(status).toBeVisible()
     await expect(status).toHaveAttribute('href', '/status')
@@ -70,7 +69,7 @@ test.describe('market product accessibility', () => {
       return
     }
     const primary = page.getByRole('navigation', { name: 'Primary' })
-    await expect(primary.getByRole('link', { name: 'Market' })).toBeVisible()
+    await expect(primary.getByRole('link', { name: 'Tools', exact: true })).toBeVisible()
   })
 })
 
