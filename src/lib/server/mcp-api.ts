@@ -26,6 +26,7 @@ import { TOOL_READ_UNAVAILABLE_PROBLEM } from '@/modules/registry/public'
 import {
   authRefusalProblem,
   authenticateAgentAccess,
+  hasVerifiedApiKey,
   resolveAgentAccessPrincipal,
   type AgentAccessPrincipalResolver,
 } from '@/lib/server/agent-access-auth'
@@ -734,7 +735,8 @@ type McpRequestOptions = Readonly<{
 /**
  * Anonymous MCP callers (no bearer token, no API key) get their own,
  * tighter bucket so an unauthenticated flood cannot exhaust the
- * `public-read` capacity shared with authenticated agents.
+ * `public-read` capacity shared with authenticated agents. Header presence
+ * only routes the request; the admission bucket is chosen by verification.
  */
 function isAnonymousMcpRequest(request: Request): boolean {
   return !request.headers.has('x-api-key') && !request.headers.has('authorization')
@@ -747,7 +749,8 @@ export async function handleMcpRouteRequest(
   return await runWithRequestCorrelation(request, async ({ correlationId }) => {
     let admission
     try {
-      admission = await assertHttpAdmission(request, isAnonymousMcpRequest(request) ? 'mcp-anonymous' : 'public-read')
+      const verified = !isAnonymousMcpRequest(request) && await hasVerifiedApiKey(request, options.authenticate)
+      admission = await assertHttpAdmission(request, verified ? 'public-read' : 'mcp-anonymous')
     } catch (cause) {
       recordGatewayTelemetry(options.timing,{correlationId,transport:'mcp',operation:'admission',stage:'pre_admission',durationMs:0,outcome:'failed',refusalCode:'mcp_admission_unavailable',retryable:true})
       return degrade(

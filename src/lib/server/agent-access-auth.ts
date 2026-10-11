@@ -159,6 +159,29 @@ export type AgentAccessAuthenticationOptions = Readonly<{
   consequenceResource?: string
 }>
 
+/**
+ * True only when the request carries a credential Clerk accepts. Missing,
+ * malformed, rejected or unverifiable credentials are all false, so callers
+ * can pick a rate bucket by verified identity rather than header presence.
+ */
+export async function hasVerifiedApiKey(
+  request: Request,
+  authenticate?: () => Promise<AgentAccessApiKeyAuth>,
+): Promise<boolean> {
+  try {
+    if (authenticate !== undefined) return (await authenticate()).isAuthenticated
+    const authorization = request.headers.get('authorization')
+    const secret = authorization === null
+      ? request.headers.get('x-api-key')
+      : /^Bearer ([^\s]+)$/i.exec(authorization)?.[1]
+    if (secret === null || secret === undefined || secret.length === 0) return false
+    await clerkClient().apiKeys.verify(secret)
+    return true
+  } catch {
+    return false
+  }
+}
+
 export async function authenticateAgentAccess(
   options: AgentAccessAuthenticationOptions = {},
 ): Promise<Readonly<{ kind: 'authenticated'; principal: AgentAccessPrincipal }> | AgentAccessRefusal> {
