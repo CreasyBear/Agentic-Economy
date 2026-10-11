@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 
 import { methodNotAllowed } from '@/lib/server/method-guard'
+import { problem } from '@/lib/server/problem'
 
 export const Route = createFileRoute('/api/unsubscribe')({
   server: {
@@ -27,8 +28,9 @@ function convexSiteOrigin(): string | null {
 
 async function forwardUnsubscribe(request: Request, method: 'GET' | 'POST'): Promise<Response> {
   const token = new URL(request.url).searchParams.get('t')?.slice(0, 1000) ?? ''
+  if (token === '') return problem({ kind: 'NOT_FOUND', code: 'unsubscribe_link_invalid', detail: 'This unsubscribe link is not valid.' })
   const origin = convexSiteOrigin()
-  if (origin === null || token === '') return new Response('This unsubscribe link is not valid.', { status: 404, headers: { 'Cache-Control': 'no-store' } })
+  if (origin === null) return problem({ kind: 'UNAVAILABLE', code: 'unsubscribe_unavailable', detail: 'The Convex site origin for unsubscribe links is not configured.' })
   const target = `${origin}/notifications/unsubscribe?t=${encodeURIComponent(token)}`
   if (method === 'GET') return new Response(null, { status: 302, headers: { Location: target, 'Cache-Control': 'no-store' } })
   const upstream = await fetch(target, { method: 'POST', redirect: 'manual' })
