@@ -61,6 +61,13 @@ function identityPort(): ProcureIdentityPort {
       }
       return { kind: 'replay', quoteRef: row.quoteRef, resultJson: JSON.stringify(result) }
     },
+    async release(request, actor) {
+      const key = `${actor.principalId}:${request.idempotencyKey}`
+      const row = rows.get(key)
+      if (row === undefined || row.quoteRef !== null || row.resultJson !== null) return { kind: 'replay', quoteRef: row?.quoteRef ?? null, resultJson: row?.resultJson ?? null }
+      rows.delete(key)
+      return { kind: 'reserved' }
+    },
   }
 }
 
@@ -107,6 +114,40 @@ describe('native procurement replay and recovery', () => {
       expect(callService.quoteTool).toHaveBeenCalledTimes(1)
       expect(callService.callTool).not.toHaveBeenCalled()
     }
+  })
+
+  it('releases the key on a retryable Quote refusal so the retry can Quote and proceed', async () => {
+    const identity = identityPort()
+    const complete = vi.spyOn(identity, 'complete')
+    const callService = service({ kind: 'pending', callRef: 'call:one', toolRef, retryAfterMs: 1000 })
+    vi.mocked(callService.quoteTool!).mockResolvedValueOnce({ kind: 'refused', code: 'inspection_unavailable', retryable: true } as never)
+    const procure = engine(callService, identity)
+    expect(await procure.procure(input)).toMatchObject({ status: 'refused', retryable: true })
+    expect(complete).not.toHaveBeenCalled()
+    expect(await procure.procure(input)).toMatchObject({ status: 'pending', quoteRef: 'quote:one' })
+    expect(callService.quoteTool).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps a terminal Quote refusal terminal on replay', async () => {
+    const identity = identityPort()
+    const callService = service(undefined)
+    vi.mocked(callService.quoteTool!).mockResolvedValueOnce({ kind: 'refused', code: 'tool_not_found', retryable: false } as never)
+    const procure = engine(callService, identity)
+    expect(await procure.procure(input)).toMatchObject({ status: 'refused', retryable: false })
+    expect(await procure.procure(input)).toMatchObject({ status: 'refused', code: 'tool_not_found' })
+    expect(callService.quoteTool).toHaveBeenCalledTimes(1)
+  })
+
+  it('lets only one of two concurrent retries Quote after a release', async () => {
+    const identity = identityPort()
+    const callService = service({ kind: 'pending', callRef: 'call:one', toolRef, retryAfterMs: 1000 })
+    vi.mocked(callService.quoteTool!).mockResolvedValueOnce({ kind: 'refused', code: 'inspection_unavailable', retryable: true } as never)
+    const procure = engine(callService, identity)
+    await procure.procure(input)
+    const settled = await Promise.allSettled([procure.procure(input), procure.procure(input)])
+    expect(settled.filter((r) => r.status === 'fulfilled')).toHaveLength(1)
+    expect(settled.filter((r) => r.status === 'rejected')).toHaveLength(1)
+    expect(callService.quoteTool).toHaveBeenCalledTimes(2)
   })
 
   it('resumes the saved Quote when only the committed checkpoint response was lost', async () => {

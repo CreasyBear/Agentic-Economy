@@ -18,6 +18,7 @@ const fields = {
 
 export const reserveProcureArgs = fields
 export const checkpointProcureArgs = { ...fields, quoteRef: v.string(), quoteJson: v.string() }
+export const releaseProcureArgs = fields
 export const completeProcureArgs = { ...fields, resultJson: v.string() }
 export const procureIdentityResult = v.union(
   v.object({ kind: v.literal('reserved') }),
@@ -136,4 +137,21 @@ export async function completeProcureHandler(ctx: MutationCtx, args: Command & {
     updatedAt: Date.now(),
   })
   return { kind: 'replay' as const, resultJson, quoteRef: row.effectRefs[0] ?? null }
+}
+
+/**
+ * Frees a key whose Quote was refused retryably. Only an untouched reservation
+ * (in progress, no Quote checkpoint) is released; a Quote, a completed purchase
+ * or a terminal refusal stays bound and replays as before.
+ */
+export async function releaseProcureHandler(ctx: MutationCtx, args: Command) {
+  if (!await admitted(ctx, args, true)) return { kind: 'unauthorized' as const }
+  const row = await rowFor(ctx, args)
+  if (row === null) return { kind: 'reserved' as const }
+  if (row.requestHash !== material(args) || row.scope !== 'capability_execution') return { kind: 'conflict' as const }
+  if (row.status !== 'in_progress' || row.effectRefs.length > 0) {
+    return { kind: 'replay' as const, resultJson: row.resultJson ?? null, quoteRef: row.effectRefs[0] ?? null }
+  }
+  await ctx.db.delete(row._id)
+  return { kind: 'reserved' as const }
 }

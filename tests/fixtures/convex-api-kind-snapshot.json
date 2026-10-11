@@ -1184,6 +1184,12 @@
   {
     "visibility": "public",
     "module": "capabilityProcure",
+    "method": "release",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityProcure",
     "method": "reserve",
     "kind": "mutation"
   },

@@ -51,6 +51,7 @@ function testEngine(catalogSearcher: ToolCatalogSearcher = vi.fn(async () => [])
       row.resultJson = JSON.stringify(result)
       return { kind: 'replay', quoteRef: row.quoteRef, resultJson: row.resultJson }
     },
+    async release() { return { kind: 'reserved' } },
   }
   const service: CallService = {
     quoteTool: vi.fn(async () => ({
