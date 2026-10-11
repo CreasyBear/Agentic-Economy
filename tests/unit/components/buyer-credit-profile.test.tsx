@@ -8,6 +8,7 @@ import type { AccountFundingBalance } from '@/modules/money/server'
 
 vi.mock('@tanstack/react-router', () => ({ Link: ({ children, to }: { children: ReactNode; to: string }) => <a href={to}>{children}</a> }))
 vi.mock('@clerk/tanstack-react-start', () => ({ useAuth: () => ({ userId: 'owner:credit-profile' }) }))
+vi.mock('convex/react', () => ({ useQuery: () => ({ paidCalls: 'open' }) }))
 afterEach(cleanup)
 const balance: AccountFundingBalance = { kind: 'available', accountRef: 'account:credit-profile',
   balance: { currency: 'AUD', exponent: 6, units: '10000000' },

@@ -111,7 +111,7 @@ export function CreditFundPanel({
       </CreditProfileSection>
       <CreditProfileSection title="Add funds" description="Review the exact credit, fee, and total before continuing to secure payment.">
         {availability === undefined ? null : availability.paidCalls === 'soon' ? (
-          <AeAlert tone="info" title="Trial credit only"><span>{availabilityStatement('soon')}</span></AeAlert>
+          <AeAlert role="alert" tone="info" title="Trial credit only"><span>{availabilityStatement('soon')}</span></AeAlert>
         ) : (
         <Card className="min-w-0 py-5"><CardContent className="px-5 sm:px-6">
           <AeAccountFundingPanel
