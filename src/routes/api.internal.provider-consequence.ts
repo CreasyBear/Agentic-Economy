@@ -608,6 +608,30 @@ export async function handleProviderConsequenceRequest(
       }), 503)
     }
   }
+  try {
+    const live = await postConvex(
+      origin,
+      '/internal/provider-consequence/journal/attest',
+      request.journalToken,
+      {
+        ticketRef: request.ticket.ticketRef,
+        ticketClaimsDigest: request.ticketClaimsDigest,
+        expiresAt: request.ticket.expiresAt,
+        signingSecretRef: request.signingSecret.secretRef,
+        signingSecretGeneration: request.signingSecret.activeGeneration,
+        signingSecretPointerRevision: request.signingSecret.pointerRevision,
+        customerSecretRef: request.ticket.secret.secretRef,
+        customerSecretGeneration: request.ticket.secret.activeGeneration,
+        customerSecretPointerRevision: request.ticket.secret.pointerRevision,
+      },
+    )
+    if (!isRecord(live) || live.kind !== 'attested') return noStore({ kind: 'unavailable' }, 409)
+  } catch (cause) {
+    return noStore(degrade(cause, { kind: 'unavailable' }, {
+      site: 'providerConsequenceExecuteAttest',
+      reason: 'source_unavailable',
+    }), 503)
+  }
   const { createGuardedLookup, defaultDnsResolver, isPublicHttpTarget } =
     await import('@/modules/network-guard/public')
   const dispatcher = new Agent({ connect: { lookup: createGuardedLookup(defaultDnsResolver) } })

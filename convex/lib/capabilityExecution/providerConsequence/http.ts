@@ -91,10 +91,21 @@ export async function attestProviderConsequenceTicketHandler(ctx: GenericActionC
   const token = bearer(request)
   if (token === undefined) return json({ kind: 'unavailable' }, 401)
   const body = await boundedJson(request)
-  if (body === undefined || !exactKeys(body, [
+  const base = [
     'ticketRef', 'ticketClaimsDigest', 'expiresAt',
     'signingSecretRef', 'signingSecretGeneration', 'signingSecretPointerRevision',
-  ])) return json({ kind: 'unavailable' }, 400)
+  ]
+  const withCustomer = body !== undefined && Object.hasOwn(body, 'customerSecretRef')
+  if (body === undefined || !exactKeys(body, withCustomer
+    ? [...base, 'customerSecretRef', 'customerSecretGeneration', 'customerSecretPointerRevision']
+    : base)) return json({ kind: 'unavailable' }, 400)
+  if (withCustomer
+    && (typeof body.customerSecretRef !== 'string'
+      || !SECRET_REF.test(body.customerSecretRef)
+      || typeof body.customerSecretGeneration !== 'string'
+      || !SECRET_GENERATION.test(body.customerSecretGeneration)
+      || !Number.isSafeInteger(body.customerSecretPointerRevision)
+      || Number(body.customerSecretPointerRevision) < 1)) return json({ kind: 'unavailable' }, 400)
   if (!canonicalRef(body.ticketRef)
     || !canonicalDigest(body.ticketClaimsDigest)
     || !Number.isSafeInteger(body.expiresAt)
@@ -115,6 +126,11 @@ export async function attestProviderConsequenceTicketHandler(ctx: GenericActionC
         signingSecretRef: body.signingSecretRef,
         signingSecretGeneration: body.signingSecretGeneration,
         signingSecretPointerRevision: Number(body.signingSecretPointerRevision),
+        ...(withCustomer ? {
+          customerSecretRef: body.customerSecretRef as string,
+          customerSecretGeneration: body.customerSecretGeneration as string,
+          customerSecretPointerRevision: Number(body.customerSecretPointerRevision),
+        } : {}),
       },
     )
     return json(result, result.kind === 'attested' ? 200 : 409)

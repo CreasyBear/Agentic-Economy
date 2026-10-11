@@ -9,6 +9,9 @@ export const attestProviderConsequenceTicketArgs = {
   signingSecretRef: v.string(),
   signingSecretGeneration: v.string(),
   signingSecretPointerRevision: v.number(),
+  customerSecretRef: v.optional(v.string()),
+  customerSecretGeneration: v.optional(v.string()),
+  customerSecretPointerRevision: v.optional(v.number()),
 } as const
 
 export async function attestProviderConsequenceTicketHandler(
@@ -21,6 +24,9 @@ export async function attestProviderConsequenceTicketHandler(
     signingSecretRef: string
     signingSecretGeneration: string
     signingSecretPointerRevision: number
+    customerSecretRef?: string
+    customerSecretGeneration?: string
+    customerSecretPointerRevision?: number
   }>,
 ) {
   const row = await ctx.db.query('providerConsequenceJournal')
@@ -38,10 +44,17 @@ export async function attestProviderConsequenceTicketHandler(
   }
   const pointer = await ctx.db.query('secretPointers')
     .withIndex('by_secretRef', (query) => query.eq('secretRef', row.signingSecretRef)).unique()
-  return pointer !== null
-    && pointer.owningAccountRef === row.signingAccountRef
-    && pointer.activeGeneration === row.signingSecretGeneration
-    && pointer.revision === row.signingSecretPointerRevision
+  if (pointer === null
+    || pointer.owningAccountRef !== row.signingAccountRef
+    || pointer.activeGeneration !== row.signingSecretGeneration
+    || pointer.revision !== row.signingSecretPointerRevision) return { kind: 'unavailable' as const }
+  if (args.customerSecretRef === undefined) return { kind: 'attested' as const }
+  const customerRef = args.customerSecretRef
+  const customer = await ctx.db.query('secretPointers')
+    .withIndex('by_secretRef', (query) => query.eq('secretRef', customerRef)).unique()
+  return customer !== null
+    && customer.activeGeneration === args.customerSecretGeneration
+    && customer.revision === args.customerSecretPointerRevision
     ? { kind: 'attested' as const }
     : { kind: 'unavailable' as const }
 }

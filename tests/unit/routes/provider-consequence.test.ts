@@ -381,12 +381,26 @@ describe('internal provider consequence route', () => {
     expect(mocks.guardedFetch.mock.calls[0]?.[1]?.headers).toMatchObject({
       Authorization: `Bearer ${CUSTOMER_SECRET}`,
     })
-    expect(convexBodies).toHaveLength(2)
+    expect(convexBodies).toHaveLength(3)
     expect(convexBodies.join('\n')).not.toContain(CUSTOMER_SECRET)
     expect(convexBodies.join('\n')).not.toContain(SIGNING_KEY)
     expect(responseBody).not.toContain(CUSTOMER_SECRET)
     expect(responseBody).not.toContain(SIGNING_KEY)
     expect(responseBody).not.toContain(JOURNAL_TOKEN)
+  })
+
+  it('refuses execute when the live customer pointer rotated after ticket issue', async () => {
+    const base = vaultAndJournalFetch([])
+    vi.stubGlobal('fetch', vi.fn<typeof globalThis.fetch>(async (input, init) => {
+      const url = new URL(String(input))
+      if (!url.pathname.endsWith('/journal/attest')) return await base(input, init)
+      const body = JSON.parse(String(init?.body)) as { customerSecretGeneration?: string }
+      return Response.json({ kind: body.customerSecretGeneration === CUSTOMER_GENERATION ? 'unavailable' : 'attested' })
+    }))
+    const response = await handleProviderConsequenceRequest(consequenceRequest(), environment())
+    expect(response.status).toBe(409)
+    await expect(response.json()).resolves.toEqual({ kind: 'unavailable' })
+    expect(mocks.guardedFetch).not.toHaveBeenCalled()
   })
 
   it('runs provider-direct x402 through managed prepare/sign/mark/observe ports without custody or secret leakage', async () => {
@@ -425,6 +439,7 @@ describe('internal provider consequence route', () => {
         const rawBody = String(init?.body)
         convexBodies.push(rawBody)
         const body = JSON.parse(rawBody) as Record<string, unknown>
+        if (url.pathname.endsWith('/journal/attest')) return Response.json({ kind: 'attested' })
         if (url.pathname.endsWith('/journal/begin')) {
           return Response.json({ kind: 'claimed', claimRef: 'provider-claim:test' })
         }
