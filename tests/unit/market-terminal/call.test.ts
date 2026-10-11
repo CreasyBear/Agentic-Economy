@@ -796,3 +796,13 @@ describe('market-terminal authenticated Tool Call', () => {
     }
   })
 })
+
+describe('refusal nextCommand fallback', () => {
+  it('maps funding codes to fund and others to call status', async () => {
+    const { refusalNextCommand } = await import('../../../tools/ae/lib/journey-next-command')
+    const opts = { baseUrl: 'https://market.example', baseUrlSource: 'flag' as const, json: false }
+    expect(refusalNextCommand('insufficient_balance', 'call:1', opts)).toContain('ae fund')
+    expect(refusalNextCommand('rate_limited', 'call:1', opts)).toContain('ae status call:1')
+    expect(refusalNextCommand('rate_limited', undefined, opts)).toBeUndefined()
+  })
+})

@@ -30,7 +30,7 @@ import { attachPurchaseRecovery, purchaseRecoveryRequired, purchaseResumeCommand
 import { CliFailure, callJson, heading, line, printJson, requireOk, table } from '../lib/output'
 import { usageFailure } from '../lib/help'
 import { toolCallCommand } from '../lib/tool-format'
-import { journeyNextCommand } from '../lib/journey-next-command'
+import { journeyNextCommand, refusalNextCommand } from '../lib/journey-next-command'
 import { continuationCommand } from '../lib/continuation-command'
 import {
   connectionContinuationForCli,
@@ -131,8 +131,10 @@ function callOutput(
   result: CallMachineResult | CallStatusResult,
   options: CliOptions,
 ): Record<string, unknown> {
-  const nextCommand = 'next' in result && Array.isArray(result.next)
+  const fromNext = 'next' in result && Array.isArray(result.next)
     ? journeyNextCommand(result.next[0], options) : undefined
+  const nextCommand = fromNext ?? (result.kind === 'refused'
+    ? refusalNextCommand(result.code, 'callRef' in result ? result.callRef : undefined, options) : undefined)
   return {
     ...result,
     ...(nextCommand === undefined ? {} : { nextCommand }),
