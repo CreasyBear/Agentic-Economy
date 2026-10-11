@@ -766,6 +766,43 @@ describe('Account AUD funding through Formance', () => {
     expect(cases[0]?.evidenceRefs).toEqual(expect.arrayContaining([event.disputeId]))
   })
 
+  it('resolves the dispute case on won and claws back credit on lost', async () => {
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    const fixture = await publishedBusinessOwner(backend, 'formance-funding-dispute-closed')
+    const run = async (event: ReturnType<typeof createTestDisputeEvent>, fn: 'prepareVerifiedEvent' | 'finalizeVerifiedDispute', extra = {}) =>
+      await fixture.owner.mutation(internal.moneyAccountFunding[fn] as never, await withSourceWrite('billing', {
+        event, operationKey: 'moneyAccountFunding:applyVerifiedEvent', correlationId: event.stripeEventId, ...extra,
+      }) as never)
+    const caseRows = async () => await backend.run(async (ctx) => await ctx.db.query('moneyReconciliationCases').collect())
+    for (const [paymentId, disputeId, status] of [['pi_dispute_won', 'dp_won', 'won'], ['pi_dispute_lost', 'dp_lost', 'lost']] as const) {
+      await insertSettledFunding(backend, {
+        accountRef: fixture.canonicalAccountRef,
+        actorPrincipalRef: fixture.canonicalPrincipalRef,
+        commandRef: `account-funding:${disputeId}`,
+        paymentId,
+      })
+      await run(createTestDisputeEvent({ paymentId, disputeId, stripeEventId: `evt_${disputeId}_open` }), 'prepareVerifiedEvent')
+      const closed = { ...createTestDisputeEvent({ paymentId, disputeId, stripeEventId: `evt_${disputeId}_closed`, eventType: 'charge.dispute.closed' }), disputeStatus: status }
+      if (status === 'won') {
+        await expect(run(closed, 'prepareVerifiedEvent')).resolves.toMatchObject({ kind: 'accepted', status: 'ignored' })
+        expect((await caseRows()).find((c) => c.evidenceRefs.includes(disputeId))).toMatchObject({
+          status: 'resolved', resolutionEvidenceRefs: [closed.stripeEventId],
+        })
+      } else {
+        await expect(run(closed, 'prepareVerifiedEvent')).resolves.toMatchObject({
+          kind: 'prepared', bookingKind: 'reversal', booking: { commandRef: 'funding-reversal:dp_lost' },
+        })
+        const ref = 'formance:tx:dispute-reversal'
+        await expect(run(closed, 'finalizeVerifiedDispute', { formanceTransactionRef: ref }))
+          .resolves.toEqual({ kind: 'accepted', status: 'applied', appliedRef: ref })
+        const command = await backend.run(async (ctx) => await ctx.db.query('moneyFundingCommands')
+          .withIndex('by_paymentId', (q) => q.eq('paymentId', paymentId)).unique())
+        expect(command).toMatchObject({ state: 'reversed', reversalRefundId: disputeId, reversalTransactionRef: ref })
+        expect((await caseRows()).find((c) => c.evidenceRefs.includes(disputeId))).toMatchObject({ status: 'open' })
+      }
+    }
+  })
+
   it('occupies one funding-command reversal for two succeeded Stripe refunds', async () => {
     const backend = convexTestWithMarketComponents()
     const fixture = await publishedBusinessOwner(backend, 'formance-funding-second-refund')

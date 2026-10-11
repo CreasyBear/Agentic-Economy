@@ -6,7 +6,7 @@ import { eventRowFields, eventRowMatches } from '../../../moneyStripeEvents'
 import { recordFundingReversalDocument } from './stripeEventDocuments'
 import { ensureEventConsistency, refused, type FinalizeFundingResult, type FundingBooking, type FundingProviderEvidence, type FundingRefundEvidence, type PrepareFundingResult } from './stripeEventPipeline'
 
-function fundingReversalBooking(
+export function fundingReversalBooking(
   command: Readonly<{
     accountRef: string
     externalRef?: string
@@ -170,6 +170,55 @@ export async function prepareFundingRefundEvent(
   }
 }
 
+type ReversalFinalizeArgs = Readonly<{
+  event: StripeMoneyWebhookEvent
+  paymentId: string
+  providerRefId: string
+  evidenceDigest: string
+  formanceTransactionRef: string
+}>
+
+export async function finalizeFundingReversal(ctx: MutationCtx, args: ReversalFinalizeArgs): Promise<FinalizeFundingResult> {
+  const command = await ctx.db.query('moneyFundingCommands')
+    .withIndex('by_paymentId', (builder) => builder.eq('paymentId', args.paymentId))
+    .unique()
+  if (command !== null && !financialEnvironmentMatches(command.environment)) return refused('environment_mismatch')
+  const event = await ctx.db.query('moneyStripeEvents')
+    .withIndex('by_stripeEventId', (builder) => builder.eq('stripeEventId', args.event.stripeEventId))
+    .unique()
+  if (command === null || event === null || !eventRowMatches(event, args.event)) {
+    return refused('payment_binding_invalid')
+  }
+  if (command.state === 'reversed') {
+    return command.reversalRefundId === args.providerRefId
+      && command.reversalTransactionRef === args.formanceTransactionRef
+      ? { kind: 'accepted', status: 'replayed', appliedRef: args.formanceTransactionRef }
+      : refused('funding_idempotency_conflict')
+  }
+  if (command.state !== 'succeeded'
+    || event.status !== 'received'
+    || command.reversalRefundId !== args.providerRefId
+    || command.reversalEvidenceDigest !== args.evidenceDigest) {
+    return refused('funding_state_conflict')
+  }
+  const observedAt = args.event.observedAt
+  await recordFundingReversalDocument(ctx, command, args.formanceTransactionRef, observedAt)
+  await ctx.db.patch(command._id, {
+    state: 'reversed',
+    providerStatus: 'reversed',
+    reversalState: 'succeeded',
+    reversalTransactionRef: args.formanceTransactionRef,
+    reversedAt: observedAt,
+    updatedAt: observedAt,
+  })
+  await ctx.db.patch(event._id, {
+    status: 'applied',
+    appliedRef: args.formanceTransactionRef,
+    appliedAt: observedAt,
+  })
+  return { kind: 'accepted', status: 'applied', appliedRef: args.formanceTransactionRef }
+}
+
 export async function finalizeFundingRefundHandler(
   ctx: MutationCtx,
   args: Readonly<{
@@ -181,42 +230,11 @@ export async function finalizeFundingRefundHandler(
   if (args.event.kind !== 'refund'
     || args.event.status !== 'succeeded'
     || args.refundReadback === undefined) return refused('payment_binding_invalid')
-  const refundEvent = args.event
-  const command = await ctx.db.query('moneyFundingCommands')
-    .withIndex('by_paymentId', (builder) => builder.eq('paymentId', refundEvent.paymentId))
-    .unique()
-  if (command !== null && !financialEnvironmentMatches(command.environment)) return refused('environment_mismatch')
-  const event = await ctx.db.query('moneyStripeEvents')
-    .withIndex('by_stripeEventId', (builder) => builder.eq('stripeEventId', args.event.stripeEventId))
-    .unique()
-  if (command === null || event === null || !eventRowMatches(event, refundEvent)) {
-    return refused('payment_binding_invalid')
-  }
-  if (command.state === 'reversed') {
-    return command.reversalRefundId === refundEvent.refundId
-      && command.reversalTransactionRef === args.formanceTransactionRef
-      ? { kind: 'accepted', status: 'replayed', appliedRef: args.formanceTransactionRef }
-      : refused('funding_idempotency_conflict')
-  }
-  if (command.state !== 'succeeded'
-    || event.status !== 'received'
-    || command.reversalRefundId !== refundEvent.refundId
-    || command.reversalEvidenceDigest !== args.refundReadback.evidenceDigest) {
-    return refused('funding_state_conflict')
-  }
-  await recordFundingReversalDocument(ctx, command, args.formanceTransactionRef, refundEvent.observedAt)
-  await ctx.db.patch(command._id, {
-    state: 'reversed',
-    providerStatus: 'reversed',
-    reversalState: 'succeeded',
-    reversalTransactionRef: args.formanceTransactionRef,
-    reversedAt: refundEvent.observedAt,
-    updatedAt: refundEvent.observedAt,
+  return await finalizeFundingReversal(ctx, {
+    event: args.event,
+    paymentId: args.event.paymentId,
+    providerRefId: args.event.refundId,
+    evidenceDigest: args.refundReadback.evidenceDigest,
+    formanceTransactionRef: args.formanceTransactionRef,
   })
-  await ctx.db.patch(event._id, {
-    status: 'applied',
-    appliedRef: args.formanceTransactionRef,
-    appliedAt: refundEvent.observedAt,
-  })
-  return { kind: 'accepted', status: 'applied', appliedRef: args.formanceTransactionRef }
 }

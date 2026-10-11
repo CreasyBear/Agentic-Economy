@@ -79,15 +79,26 @@ export async function applyVerifiedEventFromInboxHandler(
         ? await ctx.runMutation(internal.moneyAccountFunding.finalizeVerifiedEventFromInbox, {
             ...args, formanceTransactionRef,
           })
-        : await ctx.runMutation(internal.moneyAccountFunding.finalizeVerifiedRefundFromInbox, {
-            ...args, formanceTransactionRef,
-          })
+        : await ctx.runMutation(
+            args.event.kind === 'dispute'
+              ? internal.moneyAccountFunding.finalizeVerifiedDisputeFromInbox
+              : internal.moneyAccountFunding.finalizeVerifiedRefundFromInbox,
+            { ...args, formanceTransactionRef },
+          )
     }
     if (booked.kind === 'outcome_unknown') {
       if (args.event.kind === 'checkout') {
         await ctx.runMutation(internal.moneyAccountFunding.markFundingBookingUnknown, {
           commandRef: args.event.commandRef,
           stripeEventId: args.event.stripeEventId,
+          observedAt: args.event.observedAt,
+        })
+      } else if (args.event.kind === 'dispute') {
+        await ctx.runMutation(internal.moneyAccountFunding.markFundingReversalUnknown, {
+          paymentId: args.event.paymentId,
+          refundId: args.event.disputeId,
+          stripeEventId: args.event.stripeEventId,
+          statusRef: booked.statusRef,
           observedAt: args.event.observedAt,
         })
       } else if (args.event.kind === 'refund') {

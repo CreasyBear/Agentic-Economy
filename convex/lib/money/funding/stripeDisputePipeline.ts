@@ -1,9 +1,12 @@
 import { canonicalDigest } from '../../../../src/modules/common/canonical-digest'
+import type { Doc } from '../../../_generated/dataModel'
 import type { MutationCtx } from '../../../_generated/server'
 import type { StripeMoneyWebhookEvent } from '../../../../src/modules/money/public'
 import { eventRowFields } from '../../../moneyStripeEvents'
 import { enqueueOperatorAlert } from '../../../operatorDigest'
-import { ensureEventConsistency, refused, type FundingProviderEvidence, type FundingRefundEvidence, type PrepareFundingResult } from './stripeEventPipeline'
+import { AUD_EXPONENT, compareExactAmounts } from '../../../../src/modules/money/public'
+import { finalizeFundingReversal, fundingReversalBooking } from './stripeRefundPipeline'
+import { ensureEventConsistency, refused, type FundingProviderEvidence, type FinalizeFundingResult, type FundingRefundEvidence, type PrepareFundingResult } from './stripeEventPipeline'
 
 /**
  * Stripe dispute webhooks (charge.dispute.created/updated/closed): the signed event is the evidence.
@@ -40,11 +43,6 @@ export async function prepareFundingDisputeEvent(
   const { command, priorEvent } = consistency
   if (command.appliedTransactionRef === undefined) return refused('funding_pending', true)
 
-  if (event.eventType === 'charge.dispute.closed') {
-    if (priorEvent === null) await ctx.db.insert('moneyStripeEvents', { ...eventRowFields(event), status: 'ignored' })
-    return { kind: 'accepted', status: 'ignored' }
-  }
-
   const caseRef = `money-case:${canonicalDigest({
     format: 'ae.funding-dispute:v1',
     fundingCommandRef: command.commandRef,
@@ -52,26 +50,75 @@ export async function prepareFundingDisputeEvent(
   const existingCase = await ctx.db.query('moneyReconciliationCases')
     .withIndex('by_caseRef', (builder) => builder.eq('caseRef', caseRef))
     .unique()
-  if (existingCase === null) {
-    await ctx.db.insert('moneyReconciliationCases', {
-      caseRef,
-      accountRef: command.accountRef,
-      kind: 'processor_difference',
-      status: 'open',
-      scopeType: 'account',
-      scopeRef: command.accountRef,
-      transactionRef: command.appliedTransactionRef,
-      reasonCode: 'funding_dispute_open',
-      evidenceRefs: [event.stripeEventId, event.disputeId],
-      createdAt: event.observedAt,
-      updatedAt: event.observedAt,
+  const recordIgnored = async (appliedRef?: string) => {
+    if (priorEvent === null) await ctx.db.insert('moneyStripeEvents', {
+      ...eventRowFields(event), status: 'ignored', ...(appliedRef === undefined ? {} : { appliedRef }),
     })
-  } else {
-    await ctx.db.patch(existingCase._id, {
-      evidenceRefs: [...new Set([...existingCase.evidenceRefs, event.stripeEventId, event.disputeId])].slice(-32),
-      updatedAt: event.observedAt,
-    })
+    return { kind: 'accepted', status: 'ignored', ...(appliedRef === undefined ? {} : { appliedRef }) } as const
   }
+
+  if (event.eventType === 'charge.dispute.closed') {
+    if (event.disputeStatus === 'won' || event.disputeStatus === 'warning_closed') {
+      if (existingCase === null) return await recordIgnored()
+      if (existingCase.status === 'open') {
+        await ctx.db.patch(existingCase._id, {
+          status: 'resolved',
+          resolutionEvidenceRefs: [event.stripeEventId],
+          resolvedAt: event.observedAt,
+          updatedAt: event.observedAt,
+        })
+      }
+      return await recordIgnored(caseRef)
+    }
+    const fullAmount = compareExactAmounts(event.amount, {
+      currency: 'AUD', exponent: AUD_EXPONENT, units: command.totalUnits,
+    }) === 0
+    // Keep the case open (account stays frozen) and tell the operator.
+    const holdOpen = async (subject: string, text: string) => {
+      await openDisputeCase(ctx, command, event, caseRef, existingCase)
+      await enqueueOperatorAlert(ctx, { alertRef: `dispute-closed:${event.disputeId}`, subject, text })
+      return await recordIgnored(caseRef)
+    }
+    if (event.disputeStatus !== 'lost' || !fullAmount) {
+      return await holdOpen(
+        'Dispute closed, needs review',
+        `Dispute ${event.disputeId} closed as ${event.disputeStatus} for ${event.amount.units} on payment ${event.paymentId}. Case ${caseRef} stays open.`,
+      )
+    }
+    if (command.state === 'reversed') {
+      return command.reversalRefundId === event.disputeId && command.reversalTransactionRef !== undefined
+        ? { kind: 'accepted', status: 'replayed', appliedRef: command.reversalTransactionRef }
+        : refused('funding_state_conflict')
+    }
+    if (command.state !== 'succeeded') return refused('funding_state_conflict')
+    const pendingOther = command.reversalRefundId !== undefined && command.reversalRefundId !== event.disputeId
+    if (pendingOther) return refused('funding_state_conflict')
+    await openDisputeCase(ctx, command, event, caseRef, existingCase)
+    await enqueueOperatorAlert(ctx, {
+      alertRef: `dispute-lost:${event.disputeId}`,
+      subject: 'Dispute lost, reversal needs review',
+      text: `Dispute ${event.disputeId} lost on payment ${event.paymentId}. Credit reversal is being posted; case ${caseRef} stays open to review any shortfall.`,
+    })
+    if (priorEvent === null) await ctx.db.insert('moneyStripeEvents', { ...eventRowFields(event), status: 'received' })
+    if (command.reversalRefundId === undefined) {
+      await ctx.db.patch(command._id, {
+        reversalState: 'pending',
+        reversalStripeEventId: event.stripeEventId,
+        reversalRefundId: event.disputeId,
+        reversalChargeId: event.chargeId,
+        reversalEvidenceDigest: event.disputeDigest,
+        updatedAt: event.observedAt,
+      })
+    }
+    return {
+      kind: 'prepared',
+      bookingKind: 'reversal',
+      expectedEnvironment: command.environment,
+      booking: fundingReversalBooking(command, event.disputeId, command.reversalEvidenceDigest ?? event.disputeDigest),
+    }
+  }
+
+  await openDisputeCase(ctx, command, event, caseRef, existingCase)
   if (existingCase === null || !existingCase.evidenceRefs.includes(event.disputeId)) {
     await enqueueOperatorAlert(ctx, {
       alertRef: `dispute:${event.disputeId}`,
@@ -89,4 +136,51 @@ export async function prepareFundingDisputeEvent(
     ...eventRowFields(event), status: 'ignored', appliedRef: caseRef,
   })
   return { kind: 'accepted', status: 'ignored', appliedRef: caseRef }
+}
+
+type DisputeEvent = Extract<StripeMoneyWebhookEvent, { kind: 'dispute' }>
+
+async function openDisputeCase(
+  ctx: MutationCtx,
+  command: Doc<'moneyFundingCommands'>,
+  event: DisputeEvent,
+  caseRef: string,
+  existingCase: Doc<'moneyReconciliationCases'> | null,
+): Promise<void> {
+  if (existingCase === null) {
+    await ctx.db.insert('moneyReconciliationCases', {
+      caseRef,
+      accountRef: command.accountRef,
+      kind: 'processor_difference',
+      status: 'open',
+      scopeType: 'account',
+      scopeRef: command.accountRef,
+      ...(command.appliedTransactionRef === undefined ? {} : { transactionRef: command.appliedTransactionRef }),
+      reasonCode: 'funding_dispute_open',
+      evidenceRefs: [event.stripeEventId, event.disputeId],
+      createdAt: event.observedAt,
+      updatedAt: event.observedAt,
+    })
+  } else {
+    await ctx.db.patch(existingCase._id, {
+      evidenceRefs: [...new Set([...existingCase.evidenceRefs, event.stripeEventId, event.disputeId])].slice(-32),
+      updatedAt: event.observedAt,
+    })
+  }
+}
+
+export async function finalizeFundingDisputeHandler(
+  ctx: MutationCtx,
+  args: Readonly<{ event: StripeMoneyWebhookEvent; formanceTransactionRef: string }>,
+): Promise<FinalizeFundingResult> {
+  if (args.event.kind !== 'dispute'
+    || args.event.eventType !== 'charge.dispute.closed'
+    || args.event.disputeStatus !== 'lost') return refused('payment_binding_invalid')
+  return await finalizeFundingReversal(ctx, {
+    event: args.event,
+    paymentId: args.event.paymentId,
+    providerRefId: args.event.disputeId,
+    evidenceDigest: args.event.disputeDigest,
+    formanceTransactionRef: args.formanceTransactionRef,
+  })
 }
