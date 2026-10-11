@@ -204,5 +204,6 @@ async function publicationOwnerOpen(ctx: Pick<QueryCtx, 'db'>, businessId: Doc<'
   if (ownerships.length === 0) return true
   const owners = await Promise.all(ownerships.map((o) => ctx.db.query('principals')
     .withIndex('by_principalRef', (q) => q.eq('principalRef', o.ownerPrincipalRef)).unique()))
-  return owners.some((owner) => owner?.lifecycle === 'active')
+  // Closed only when every owner row exists and none is active; missing rows fail open.
+  return !owners.every((owner) => owner !== null && owner.lifecycle !== 'active')
 }
