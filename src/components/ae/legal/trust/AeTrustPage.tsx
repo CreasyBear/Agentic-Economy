@@ -1,6 +1,7 @@
 import { Link } from '@tanstack/react-router'
 
 import { AeSiteUtilityDocument } from '@/components/ae/website/AeSiteUtilityDocument'
+import { TERMS_VERSION } from '@/components/ae/legal/legal-version'
 import { trustLastUpdated, trustSections } from './trust.contracts'
 
 const linkClassName = 'text-primary underline underline-offset-4'
@@ -11,7 +12,7 @@ export function AeTrustPage() {
       title="Trust centre."
       description="How credit, Tool results and your data are handled."
       lastUpdated={trustLastUpdated}
-      version="Alpha draft for review"
+      version={TERMS_VERSION}
       sections={trustSections}
       intro={(
         <p>
@@ -24,7 +25,6 @@ export function AeTrustPage() {
           Read the <Link to="/terms" className={linkClassName}>Terms</Link>{' '}
           and <Link to="/privacy" className={linkClassName}>Privacy policy</Link>,{' '}
           or check <Link to="/status" className={linkClassName}>Status</Link>.
-          Legal entity, contact ownership and the privacy details marked in the draft need confirmation before publication.
         </p>
       )}
     />

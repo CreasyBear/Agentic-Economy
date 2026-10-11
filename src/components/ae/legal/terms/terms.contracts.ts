@@ -2,7 +2,7 @@ import { LEGAL_ENTITY_LINE } from '@/components/ae/legal/legal-version'
 import type { AeSiteUtilityDocumentSection } from '@/components/ae/website/utility-document.contracts'
 
 // Terms for the invitation-only alpha.
-export const termsLastUpdated = '1 October 2026'
+export const termsLastUpdated = '11 October 2026'
 export const termsTitle = 'Terms of service.'
 export const termsDescription = 'Terms for the invitation-only alpha, promotional credits and Tool Calls through Agentic Economy.'
 export const termsIntro = `These terms describe the invitation-only alpha and are made between the user and ${LEGAL_ENTITY_LINE}.`

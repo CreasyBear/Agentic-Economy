@@ -2,7 +2,7 @@ import { LEGAL_ENTITY_LINE } from '@/components/ae/legal/legal-version'
 import type { AeSiteUtilityDocumentSection } from '@/components/ae/website/utility-document.contracts'
 
 // Privacy policy for the invitation-only alpha.
-export const privacyLastUpdated = '6 October 2026'
+export const privacyLastUpdated = '11 October 2026'
 export const privacyTitle = 'Privacy policy.'
 export const privacyIntro = 'How Agentic Economy collects and uses data.'
 export const privacyOpening = 'This alpha notice describes information handled by the website, accounts, chat and Tool Calls. The alpha content and learning periods are set out below. This policy is issued by '+LEGAL_ENTITY_LINE+'.'
@@ -168,7 +168,7 @@ export const privacySections = [
     id: 'updates',
     heading: 'Changes to this policy',
     body: [
-      'This policy was last updated on 6 October 2026. AE reviews the policy when its services, information practices or legal obligations change.',
+      'This policy was last updated on 11 October 2026. AE reviews the policy when its services, information practices or legal obligations change.',
       'Revisions display their update date. Material changes require appropriate notice before new handling begins, and fresh consent where required. Publishing a revised notice does not retrospectively authorise an unrelated use of information already collected.',
     ],
   },
