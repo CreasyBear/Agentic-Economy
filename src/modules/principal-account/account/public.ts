@@ -35,6 +35,7 @@ export {
   accountSecurityPolicyValue,
   accountTables,
   accountValue,
+  attributionTouchValue,
   lowCreditThresholdCentsValue,
   membershipLifecycleValue,
   membershipValue,

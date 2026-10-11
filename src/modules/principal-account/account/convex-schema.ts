@@ -37,6 +37,18 @@ export const accountActionContextValue = v.object({
   idempotencyRef: v.string(),
 })
 
+export const attributionTouchValue = v.object({
+  source: v.optional(v.string()),
+  medium: v.optional(v.string()),
+  campaign: v.optional(v.string()),
+  content: v.optional(v.string()),
+  term: v.optional(v.string()),
+  referrer: v.optional(v.string()),
+  landingPath: v.optional(v.string()),
+  clickId: v.optional(v.string()),
+  at: v.number(),
+})
+
 export const accountValue = v.object({
   accountRef: v.string(),
   displayName: v.string(),
@@ -50,6 +62,8 @@ export const accountValue = v.object({
   createdAt: v.number(),
   updatedAt: v.number(),
   lastAction: accountActionContextValue,
+  firstTouch: v.optional(attributionTouchValue),
+  lastTouch: v.optional(attributionTouchValue),
 })
 
 export const accountOwnershipValue = v.object({
