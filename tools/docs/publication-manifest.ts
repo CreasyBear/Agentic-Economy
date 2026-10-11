@@ -73,7 +73,7 @@ export const publicationManifest = {
   },
   externalLinks: [
     'https://github.com/CreasyBear/aecon-cli/releases',
-    'https://app.aecon.ai/mcp',
+    'https://app.aecon.ai/mcp', 'https://app.aecon.ai/mcp?readonly=1',
     'https://app.aecon.ai/.well-known/oauth-authorization-server',
     'https://app.aecon.ai/.well-known/oauth-protected-resource',
     'https://app.aecon.ai/.well-known/ucp',
