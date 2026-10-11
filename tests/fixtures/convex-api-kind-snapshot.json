@@ -4080,6 +4080,12 @@
     "kind": "mutation"
   },
   {
+    "visibility": "internal",
+    "module": "personalAccount",
+    "method": "sendDeletionNotice",
+    "kind": "mutation"
+  },
+  {
     "visibility": "public",
     "module": "platformLaunch",
     "method": "readOwnerPaymentAccess",
