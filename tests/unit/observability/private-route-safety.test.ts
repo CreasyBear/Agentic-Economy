@@ -170,6 +170,13 @@ describe('private inquiry record telemetry safety', () => {
     expect(JSON.stringify(sanitizeTelemetryValue({ sharePath }))).not.toContain(shareToken)
     expect(isTelemetryAllowedForCurrentRoute()).toBe(false)
   })
+  it('still redacts a utm-tagged share link', () => {
+    const tagged = `/s/${'b'.repeat(64)}?utm_source=aecon&utm_medium=share&utm_campaign=chat_share`
+    const location: BrowserLocationLike = { pathname: tagged.split('?')[0], search: tagged.slice(tagged.indexOf('?')), hash: '' }
+    expect(securePrivateRecordLocation(location, { state: undefined, replaceState: () => {} })).toBe(true)
+    expect(safeTelemetryPath(location)).toBe('/s/[Filtered]')
+    expect(JSON.stringify(sanitizeTelemetryValue({ url: `https://example.test${tagged}` }))).not.toContain('b'.repeat(64))
+  })
 })
 
 describe('onboarding locator telemetry', () => {

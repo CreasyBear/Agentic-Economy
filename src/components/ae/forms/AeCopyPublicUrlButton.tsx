@@ -4,6 +4,7 @@ import { useState } from 'react'
 
 import { Button, type ButtonSize, type ButtonVariant } from '@/components/arc/button/button'
 
+import { withUtm } from '@/lib/attribution/with-utm'
 import { emitFunnelEvent } from '@/lib/observability/funnel-client'
 import { copyTextToClipboard } from '@/lib/ui/copy-text-to-clipboard'
 import { captureRouteException } from '@/lib/observability/capture-route-exception'
@@ -52,7 +53,7 @@ export function AeCopyPublicUrlButton({
   const copyStatusId = `${slug}-copy-status`
 
   async function handleCopy() {
-    const actionPublicUrl = `${window.location.origin}${publicPath}`
+    const actionPublicUrl = withUtm(`${window.location.origin}${publicPath}`, { source: 'aecon', medium: 'share', campaign: 'public_url' })
     setPublicUrl(actionPublicUrl)
     try {
       await copyTextToClipboard(actionPublicUrl)
