@@ -182,6 +182,12 @@
   {
     "visibility": "public",
     "module": "adminTreasuryCommands",
+    "method": "setPaymentsAudience",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "adminTreasuryCommands",
     "method": "setPaymentsPaused",
     "kind": "mutation"
   },
@@ -4071,6 +4077,12 @@
     "visibility": "public",
     "module": "platformLaunch",
     "method": "readOwnerPaymentAccess",
+    "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "platformLaunch",
+    "method": "readPublicAvailability",
     "kind": "query"
   },
   {
