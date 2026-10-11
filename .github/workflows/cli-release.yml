@@ -47,9 +47,11 @@ jobs:
       - name: Install the source-proof Chromium browser
         run: npm exec -- playwright install --with-deps chromium
 
+      - name: Install the docs site dependencies
+        run: npm --prefix packages/docs ci
+
       - name: Pass source release gate before packing
         env:
-          AE_DEPLOYMENT_ENVIRONMENT: development
           CLERK_JWT_ISSUER_DOMAIN: https://relative-phoenix-8958.clerk.accounts.dev
           CLERK_PUBLISHABLE_KEY: ${{ secrets.AE_AUTHENTICATED_E2E_CLERK_PUBLISHABLE_KEY }}
           VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.AE_AUTHENTICATED_E2E_CLERK_PUBLISHABLE_KEY }}

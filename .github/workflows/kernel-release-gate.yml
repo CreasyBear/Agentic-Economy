@@ -164,12 +164,14 @@ jobs:
             '{repositorySha: $repositorySha, workflowRun: $workflowRun, evidenceClass: $evidenceClass, sanitized: true}' \
           > output/release/source-metadata.json
 
+      - name: Install the docs site dependencies
+        run: npm --prefix packages/docs ci
+
       # The browser proof boots the real app, which mounts ClerkProvider and
       # clerkMiddleware unconditionally; the Clerk development instance is the
       # only credential this job receives.
       - name: Run the full local release gate
         env:
-          AE_DEPLOYMENT_ENVIRONMENT: development
           CLERK_JWT_ISSUER_DOMAIN: https://relative-phoenix-8958.clerk.accounts.dev
           CLERK_PUBLISHABLE_KEY: ${{ secrets.AE_AUTHENTICATED_E2E_CLERK_PUBLISHABLE_KEY }}
           VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.AE_AUTHENTICATED_E2E_CLERK_PUBLISHABLE_KEY }}
