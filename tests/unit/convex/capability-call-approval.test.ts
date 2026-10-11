@@ -53,7 +53,6 @@ import {
   materializeRuntimePublishedTool,
 } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { pricingConfigDecisionAmount } from '@/modules/money/public'
 import { normalizeStoredAgentAccessGrant } from '@/modules/agent-access/policy'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import { convexTest } from 'convex-test'
@@ -88,7 +87,7 @@ function readField(row: Row, path: string): unknown {
 class MemoryDb {
   private readonly tables = new Map<string, Row[]>()
   seed(table: string, row: Row): void {
-    const rows = this.tables.get(table) ?? []
+    const rows = (this.tables.get(table) ?? []).filter((r) => r._id !== row._id)
     rows.push(row)
     this.tables.set(table, rows)
   }
@@ -277,7 +276,7 @@ function authorityRequest() {
     toolRef,
     consequence: descriptor.consequenceClass,
     retryClass: descriptor.retryClass,
-    maximumSpend: pricingConfigDecisionAmount(operation.pricingConfig),
+    maximumSpend: { currency: 'AUD', units: '7654321', exponent: 6 },
     dataFields: [...descriptor.materialInputPointers],
   }
 }
@@ -354,10 +353,12 @@ function context(options: Readonly<{
   invocation?: Row
   grant?: Row
   includeOperation?: boolean
+  seedQuote?: boolean
 }> = {}) {
   const db = new MemoryDb()
   if (options.grant !== undefined) db.seed('agentAccessGrants', options.grant)
   if (options.invocation !== undefined) db.seed('capabilityCalls', options.invocation)
+  if (options.invocation !== undefined && options.seedQuote !== false) db.seed('capabilityQuotes', acceptedQuote())
   const identity = options.identity === undefined
     ? ownerIdentity
     : typeof options.identity === 'string'
@@ -442,7 +443,7 @@ describe('capability operation approval Convex handlers', () => {
   })
 
   it.each([quoteRef, undefined])('keeps a pending approval visible when its Quote or reference is missing: %s', async (reference) => {
-    const ctx = context({ invocation: invocation({ quoteRef: reference }) })
+    const ctx = context({ invocation: invocation({ quoteRef: reference }), seedQuote: false })
     const query = vi.spyOn(ctx.db, 'query')
     await expect(listHandler(ctx, {})).resolves.toMatchObject([{ decisionContext: {
       agent: { currentDisplayName: null }, purpose: null,
@@ -495,6 +496,19 @@ describe('capability operation approval Convex handlers', () => {
       await expect(listHandler(ctx, {})).resolves.toMatchObject([{ decisionContext: { agent: { currentDisplayName: null } } }])
     },
   )
+
+  it('approves a Tool (managed_x402 shape) whose authority request carries the accepted Quote amount, and refuses a tampered one', async () => {
+    // Quote units (7654321) differ from the Tool pricingConfig amount, as for managed_x402.
+    const row = invocation()
+    const ok = context({ invocation: row, grant: grant() })
+    ok.db.seed('capabilityQuotes', acceptedQuote())
+    await expect(approvalHandler(ok, { callRef: row.callRef, decision: 'approve' })).resolves.toEqual({ kind: 'approved', callRef: row.callRef })
+    const bad = invocation({ result: { ...needsAuthorityResult(String(row.callRef)),
+      authorityRequest: { ...authorityRequest(), maximumSpend: { currency: 'AUD', units: '1', exponent: 6 } } } })
+    const tampered = context({ invocation: bad, grant: grant() })
+    tampered.db.seed('capabilityQuotes', acceptedQuote())
+    await expect(approvalHandler(tampered, { callRef: bad.callRef, decision: 'approve' })).resolves.toEqual({ kind: 'refused', code: 'invocation_invalid' })
+  })
 
   it('removes the current Agent label after membership revocation without replacing accepted Tool facts', async () => {
     const ctx = context({ invocation: invocation() })
@@ -663,7 +677,7 @@ describe('capability operation approval Convex handlers', () => {
 
   it('denies terminally, replays denial, and frees the pending authority slot', async () => {
     const row = invocation()
-    const ctx = context({ invocation: row, grant: grant() })
+    const ctx = context({ invocation: row, grant: grant(), seedQuote: false })
 
     await expect(approvalHandler(ctx, { callRef: row.callRef, decision: 'deny' })).resolves.toEqual({
       kind: 'denied',

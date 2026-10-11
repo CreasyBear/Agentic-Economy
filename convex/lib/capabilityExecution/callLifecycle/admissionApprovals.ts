@@ -6,7 +6,7 @@ import type { MutationCtx, QueryCtx } from '../../../_generated/server'
 import { readCurrentPublishedTool } from '../../capabilitySupply/currentTool/reads'
 import { enqueueCallDispatch } from './dispatchEnqueue'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { exactAmountSchema, pricingConfigDecisionAmount } from '@/modules/money/public'
+import { exactAmountSchema } from '@/modules/money/public'
 import { isBoundedJsonValue } from '@/modules/capability-contract/public'
 import { isRecord } from '@/modules/common/is-record'
 import { createPublicToolRef, isPublicToolRef } from '@/modules/capability-supply/public'
@@ -140,7 +140,7 @@ async function acceptedApprovalQuote(
   if (material === null || !exactAmountSchema.safeParse(maximumSpend).success
     || quote.toolMaterialDigest !== material.operation.materialDigest
     || quote.toolVersion !== material.operation.identity.publicationRevision
-    || !approvalRequestMatches(row, material.operation, materializeRuntimePublishedTool(material.operation))) {
+    || !approvalRequestMatches(row, quote.decisionAudUnits, materializeRuntimePublishedTool(material.operation))) {
     return { kind: 'unavailable', reason: 'material_invalid' }
   }
   const contract = material.operation.contract
@@ -355,11 +355,12 @@ function loadApprovalMaterial(row: PendingApprovalRow): ApprovalMaterial | null 
 
 function approvalRequestMatches(
   row: PendingApprovalRow,
-  operation: PublishedTool,
+  decisionAudUnits: string | undefined,
   descriptor: RuntimePublishedToolDescriptor,
 ): boolean {
-  const maximumSpend = pricingConfigDecisionAmount(operation.pricingConfig)
-  if (maximumSpend === undefined) return false
+  // The authority request was built from the accepted Quote, so compare to it.
+  if (decisionAudUnits === undefined) return false
+  const maximumSpend = { currency: 'AUD', units: decisionAudUnits, exponent: 6 } as const
   const expected = {
     kind: 'approval_required' as const,
     toolRef: row.toolRef,
@@ -399,7 +400,11 @@ async function loadApprovalRuntime(
   if (!commitmentsMatch) return null
   try {
     const descriptor = materializeRuntimePublishedTool(operation)
-    return approvalRequestMatches(row, operation, descriptor) ? { operation, descriptor } : null
+    const quoteRef = row.quoteRef
+    const quote = quoteRef === undefined ? null : await ctx.db.query('capabilityQuotes')
+      .withIndex('by_quoteRef', (q) => q.eq('quoteRef', quoteRef)).unique()
+    const units = quote?.consumedCallRef === row.callRef ? quote.decisionAudUnits : undefined
+    return approvalRequestMatches(row, units, descriptor) ? { operation, descriptor } : null
   } catch (cause) {
     return degradeBackend(cause, null, { site: 'loadApprovalRuntime', reason: 'invalid_response' })
   }
