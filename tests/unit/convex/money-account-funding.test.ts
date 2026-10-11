@@ -1,4 +1,6 @@
 /// <reference types="vite/client" />
+import { register as registerWorkpool } from '@convex-dev/workpool/test'
+import { createTestDisputeEvent } from '../../helpers/stripe-events'
 import { anyApi } from 'convex/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -732,6 +734,36 @@ describe('Account AUD funding through Formance', () => {
     await expect(fixture.owner.query(listCases, {
       paginationOpts: { numItems: 10, cursor: null },
     })).resolves.toMatchObject({ page: [expect.objectContaining({ scopeType: 'account' })] })
+  })
+
+  it('freezes the Account on a dispute, alerts once, and replays the event', async () => {
+    const backend = convexTestWithMarketComponents()
+    registerWorkpool(backend, 'notificationWorkpool')
+    const fixture = await publishedBusinessOwner(backend, 'formance-funding-dispute')
+    const paymentId = 'pi_dispute_one'
+    await insertSettledFunding(backend, {
+      accountRef: fixture.canonicalAccountRef,
+      actorPrincipalRef: fixture.canonicalPrincipalRef,
+      commandRef: 'account-funding:dispute-one',
+      paymentId,
+    })
+    const event = createTestDisputeEvent({ paymentId, stripeEventId: 'evt_dispute_one' })
+    const args = () => withSourceWrite('billing', {
+      event,
+      operationKey: 'moneyAccountFunding:applyVerifiedEvent',
+      correlationId: event.stripeEventId,
+    })
+    const first = await fixture.owner.mutation(internal.moneyAccountFunding.prepareVerifiedEvent, await args())
+    expect(first).toMatchObject({ kind: 'accepted', status: 'ignored' })
+    await expect(fixture.owner.mutation(internal.moneyAccountFunding.prepareVerifiedEvent, await args()))
+      .resolves.toMatchObject({ kind: 'accepted', status: 'replayed' })
+    const cases = await backend.run(async (ctx) => await ctx.db.query('moneyReconciliationCases').collect())
+    expect(cases).toHaveLength(1)
+    expect(cases[0]).toMatchObject({
+      scopeType: 'account', scopeRef: fixture.canonicalAccountRef,
+      reasonCode: 'funding_dispute_open', status: 'open',
+    })
+    expect(cases[0]?.evidenceRefs).toEqual(expect.arrayContaining([event.disputeId]))
   })
 
   it('occupies one funding-command reversal for two succeeded Stripe refunds', async () => {

@@ -49,7 +49,7 @@ export const ingest = mutation({
     }
     const destinationMatches = args.destination === 'accounts_v2'
       ? args.event.kind === 'account'
-      : args.event.kind === 'checkout' || args.event.kind === 'refund'
+      : args.event.kind === 'checkout' || args.event.kind === 'refund' || args.event.kind === 'dispute'
     if (!destinationMatches || args.correlationId !== args.event.stripeEventId) {
       return { kind: 'refused', code: 'payment_binding_invalid', retryable: false }
     }

@@ -50,12 +50,21 @@ export const process = internalAction({
     if (event.kind === 'account') return { kind: 'accepted', status: 'ignored' }
     // Persisted origin is checked before configuration/readback so old queued
     // work terminates deterministically even while the new provider is unready.
-    const durable = event.kind === 'refund'
+    const durable = event.kind === 'refund' || event.kind === 'dispute'
       ? await ctx.runQuery(internal.moneyAccountFunding.readWebhookRefundCommandForWorker, { paymentId: event.paymentId })
       : await ctx.runQuery(internal.moneyAccountFunding.readWebhookCommandForWorker, {
           commandRef: event.commandRef, externalRef: event.sessionId,
         })
     if (durable.kind === 'refused') return retryOrReconcile(durable)
+    // The signature-verified dispute event is the evidence (Stripe dispute webhooks); no readback.
+    if (event.kind === 'dispute') {
+      const result = await ctx.runAction(internal.moneyAccountFundingFormance.applyVerifiedEventFromInbox, {
+        event,
+        operationKey: 'moneyStripeWebhookInbox:process',
+        correlationId: event.stripeEventId,
+      })
+      return result.kind === 'refused' ? retryOrReconcile(result) : result
+    }
     const config = readStripeMoneyReadbackProviderConfig(globalThis.process.env)
     if (isMoneyRefusal(config)) return retryOrReconcile(config)
     const providerContext = resolveStripeMoneyProviderContext({ config })

@@ -69,3 +69,29 @@ export function createTestChargeRefundedEvent(options: TestChargeRefundedEventOp
     observedAt: options.observedAt ?? 1_800_000_000_000,
   }
 }
+
+export function createTestDisputeEvent(options: Readonly<{
+  stripeEventId?: string
+  disputeId?: string
+  paymentId?: string
+  eventType?: 'charge.dispute.created' | 'charge.dispute.updated' | 'charge.dispute.closed'
+  observedAt?: number
+}> = {}) {
+  const paymentId = options.paymentId ?? 'pi_test_payment'
+  return {
+    kind: 'dispute' as const,
+    stripeEventId: options.stripeEventId ?? 'evt_test_dispute',
+    eventType: options.eventType ?? ('charge.dispute.created' as const),
+    externalRef: options.disputeId ?? 'dp_test_dispute',
+    disputeId: options.disputeId ?? 'dp_test_dispute',
+    paymentId,
+    chargeId: `ch_${paymentId}`,
+    disputeStatus: 'needs_response',
+    reason: 'fraudulent',
+    amount: { currency: 'AUD', units: '578', exponent: 2 },
+    evidenceDueBy: 1_800_600_000_000,
+    disputeDigest: `sha256:${'7'.repeat(64)}`,
+    payloadDigest: `sha256:${'8'.repeat(64)}`,
+    observedAt: options.observedAt ?? 1_800_000_000_000,
+  }
+}

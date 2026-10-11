@@ -108,7 +108,7 @@ export async function ensureEventConsistency(
         return { kind: 'replay', appliedRef: priorEvent.appliedRef }
       }
     }
-    if (event.kind === 'refund' && priorEvent.status === 'ignored') {
+    if ((event.kind === 'refund' || event.kind === 'dispute') && priorEvent.status === 'ignored') {
       return priorEvent.appliedRef !== undefined
         ? { kind: 'replay', appliedRef: priorEvent.appliedRef }
         : { kind: 'replay' }

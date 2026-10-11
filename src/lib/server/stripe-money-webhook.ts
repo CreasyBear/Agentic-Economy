@@ -11,6 +11,7 @@ import {
 import { readCheckoutSessionMaterial } from "./stripe-checkout-evidence";
 import { resolveStripeMoneyProviderContext } from "./stripe-money-client";
 import {
+  exponentForCurrency,
   refusal,
   sessionMatchesMode,
   validBoundedWebhookBody,
@@ -61,9 +62,71 @@ export function mapStripeMoneyWebhookEvent(
     case "refund.updated":
     case "refund.failed":
       return mapRefundWebhookEvent(event);
+    case "charge.dispute.created":
+    case "charge.dispute.updated":
+    case "charge.dispute.closed":
+      return mapDisputeWebhookEvent(event);
     default:
       return refusal("payment_binding_invalid", false);
   }
+}
+
+function mapDisputeWebhookEvent(
+  event:
+    | Stripe.ChargeDisputeCreatedEvent
+    | Stripe.ChargeDisputeUpdatedEvent
+    | Stripe.ChargeDisputeClosedEvent,
+): StripeMoneyWebhookEvent | MoneyRefusal {
+  const dispute = event.data.object;
+  const paymentId =
+    typeof dispute.payment_intent === "string"
+      ? dispute.payment_intent
+      : dispute.payment_intent?.id;
+  const exponent = exponentForCurrency(dispute.currency);
+  const dueBy = dispute.evidence_details?.due_by;
+  if (
+    !validIdentifier(dispute.id) ||
+    !validIdentifier(paymentId) ||
+    !validIdentifier(dispute.charge) ||
+    !validIdentifier(dispute.status) ||
+    !validIdentifier(dispute.reason) ||
+    exponent === undefined ||
+    !Number.isSafeInteger(dispute.amount) ||
+    dispute.amount <= 0
+  ) {
+    return refusal("payment_binding_invalid", false);
+  }
+  const amount = {
+    currency: dispute.currency.toUpperCase(),
+    units: String(dispute.amount),
+    exponent,
+  };
+  return {
+    kind: "dispute",
+    stripeEventId: event.id,
+    eventType: event.type,
+    externalRef: dispute.id,
+    disputeId: dispute.id,
+    paymentId,
+    chargeId: dispute.charge,
+    disputeStatus: dispute.status,
+    reason: dispute.reason,
+    amount,
+    ...(typeof dueBy === "number" && Number.isSafeInteger(dueBy * 1000)
+      ? { evidenceDueBy: dueBy * 1000 }
+      : {}),
+    disputeDigest: canonicalDigest({
+      format: "stripe-dispute:v1",
+      disputeId: dispute.id,
+      paymentId,
+      chargeId: dispute.charge,
+      status: dispute.status,
+      reason: dispute.reason,
+      amount,
+    }),
+    payloadDigest: canonicalDigest({ format: "stripe-webhook-payload:v1", event }),
+    observedAt: event.created * 1000,
+  };
 }
 
 function mapRefundWebhookEvent(

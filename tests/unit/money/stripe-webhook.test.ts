@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { handleRawStripeWebhookRequest as handleStripeWebhookRequest } from '../../../src/modules/money/server'
 import type { StripeMoneyWebhookEvent } from '../../../src/modules/money/server'
+import { createTestDisputeEvent } from '../../helpers/stripe-events'
 
 describe('money Stripe webhook handler', () => {
   it('rejects a missing signature before provider application', async () => {
@@ -37,6 +38,20 @@ describe('money Stripe webhook handler', () => {
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({ kind: 'accepted', status: 'queued' })
     expect(admitted).toEqual([{ stripeEventId: 'evt_1', rawBody: '{"ok":true}' }])
+  })
+
+  it('admits a dispute event through the same durable path', async () => {
+    const disputeEvent = createTestDisputeEvent()
+    const response = await handleStripeWebhookRequest({
+      request: new Request('http://localhost/api/stripe/webhook', { method: 'POST', body: '{}', headers: { 'stripe-signature': 'sig' } }),
+      verifier: { verify: async () => disputeEvent },
+      ingester: { ingest: async (input: { event: StripeMoneyWebhookEvent }) => (
+        input.event.kind === 'dispute'
+          ? { kind: 'accepted' as const, status: 'queued' as const }
+          : { kind: 'refused' as const, code: 'payment_binding_invalid' as const, retryable: false }
+      ) },
+    })
+    expect(response.status).toBe(200)
   })
 
   it('returns retryable pending with Retry-After', async () => {
