@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 import { makeFunctionReference, type UserIdentity } from 'convex/server'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { internal } from '../../../convex/_generated/api'
 import { createCustomerRequestServiceAssertion } from '@/modules/agent-access/service-auth-envelope'
@@ -177,7 +177,11 @@ describe('personalAccount retirePersonalAccountForServer (W-09)', () => {
         })
       }
     })
-    await retire(backend, retireCommand(TOKEN_IDENTIFIER))
+    vi.useFakeTimers()
+    try {
+      await retire(backend, retireCommand(TOKEN_IDENTIFIER))
+      await backend.finishAllScheduledFunctions(vi.runAllTimers)
+    } finally { vi.useRealTimers() }
     const rows = await backend.run(async (ctx) => await ctx.db.query('agentAccessPrincipals').collect())
     expect(rows).toHaveLength(70)
     expect(rows.every((row) => row.lifecycle === 'revoked')).toBe(true)

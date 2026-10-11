@@ -18,12 +18,12 @@ function renderChatEvent(event: ChatEvent, json: boolean): void {
     case 'start': process.stdout.write(sanitizeText(`Turn ${event.turnRef} (thread ${event.threadId})\n`)); break
     case 'text-delta': process.stdout.write(sanitizeText(String(event.text))); break
     case 'reasoning-summary': process.stderr.write(sanitizeText(`\nThinking: ${event.text}\n`)); break
-    case 'tool-call': process.stdout.write(`\nTool: ${event.toolName}\n`); break
-    case 'tool-result': process.stdout.write(`\nTool result: ${event.toolName}\n`); break
-    case 'quote': process.stdout.write(`\nQuote ${event.quoteRef}: AUD ${event.maxSpendAud}\n`); break
-    case 'receipt': process.stdout.write(`\nCall ${event.callRef}: payment ${event.payment}\n`); break
-    case 'state': process.stdout.write(`\nState: ${event.workState}\n`); break
-    case 'finish': process.stdout.write(`\nTurn ${event.state}\n`); break
+    case 'tool-call': process.stdout.write(sanitizeText(`\nTool: ${event.toolName}\n`)); break
+    case 'tool-result': process.stdout.write(sanitizeText(`\nTool result: ${event.toolName}\n`)); break
+    case 'quote': process.stdout.write(sanitizeText(`\nQuote ${event.quoteRef}: AUD ${event.maxSpendAud}\n`)); break
+    case 'receipt': process.stdout.write(sanitizeText(`\nCall ${event.callRef}: payment ${event.payment}\n`)); break
+    case 'state': process.stdout.write(sanitizeText(`\nState: ${event.workState}\n`)); break
+    case 'finish': process.stdout.write(sanitizeText(`\nTurn ${event.state}\n`)); break
     case 'error': process.stderr.write(`\nChat error: ${JSON.stringify(event.problem)}\n`); break
   }
 }

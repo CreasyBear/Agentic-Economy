@@ -322,7 +322,7 @@ export class CapabilityProcurementEngine {
         }
         if (!quoteRes.retryable) return await finish(refused)
         // A retryable refusal frees the untouched reservation so the same key can Quote again.
-        acceptedIdentity(await identity.release(input, principal))
+        try { acceptedIdentity(await identity.release(input, principal)) } catch { /* the refusal still reaches the caller */ }
         return refused
       }
       quote = quoteSnapshotSchema.parse({

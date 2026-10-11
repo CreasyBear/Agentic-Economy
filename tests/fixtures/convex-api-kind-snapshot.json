@@ -4112,6 +4112,12 @@
   {
     "visibility": "internal",
     "module": "personalAccount",
+    "method": "revokeMachineAgentsChunk",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "personalAccount",
     "method": "sendDeletionNotice",
     "kind": "mutation"
   },
