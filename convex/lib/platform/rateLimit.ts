@@ -30,14 +30,11 @@ export async function limitOrRetryAfter(limit: () => Promise<RateLimitReturns>):
   }
 }
 
-const guardedLimit = (...args: Parameters<typeof rateLimiter.limit>) =>
-  limitOrRetryAfter(() => rateLimiter.limit(...args))
-
 export async function assertAdmission(
   ctx: RunMutationCtx,
   input: Readonly<{ name: RateLimitName; key: string }>,
 ): Promise<RateLimitReturns> {
-  return await guardedLimit(ctx, input.name, { key: input.key })
+  return await limitOrRetryAfter(() => rateLimiter.limit(ctx, input.name, { key: input.key }))
 }
 
 export async function assertAgentAccessRateAdmission(
@@ -51,7 +48,7 @@ export async function assertAgentAccessRateAdmission(
   // Rate state belongs to the Agent. Credential rotation must not create a
   // fresh bucket, while the hour/minute token-bucket attempts stay separate.
   const key = `agent-access:${input.principalRef}`
-  const hour = await guardedLimit(ctx, 'agent-access-hour', {
+  const hour = await limitOrRetryAfter(() => rateLimiter.limit(ctx, 'agent-access-hour', {
     key,
     config: {
       kind: 'token bucket',
@@ -59,9 +56,9 @@ export async function assertAgentAccessRateAdmission(
       period: HOUR,
       capacity: Math.min(input.maximumCallsPerHour, 300),
     },
-  })
+  }))
   if (!hour.ok) return hour
-  return await guardedLimit(ctx, 'agent-access-minute', {
+  return await limitOrRetryAfter(() => rateLimiter.limit(ctx, 'agent-access-minute', {
     key,
     config: {
       kind: 'token bucket',
@@ -69,25 +66,25 @@ export async function assertAgentAccessRateAdmission(
       period: MINUTE,
       capacity: Math.min(input.maximumCallsPerMinute, 60),
     },
-  })
+  }))
 }
 
 export async function assertAuthorityCredentialChangeAdmission(
   ctx: RunMutationCtx,
   activeAccountRef: string,
 ): Promise<RateLimitReturns> {
-  return await guardedLimit(ctx, 'authority-credential-change', {
+  return await limitOrRetryAfter(() => rateLimiter.limit(ctx, 'authority-credential-change', {
     key: `account:${activeAccountRef}`,
-  })
+  }))
 }
 
 export async function assertPayoutTransferAdmission(
   ctx: RunMutationCtx,
   activeAccountRef: string,
 ): Promise<RateLimitReturns> {
-  return await guardedLimit(ctx, 'payout-transfer', {
+  return await limitOrRetryAfter(() => rateLimiter.limit(ctx, 'payout-transfer', {
     key: `account:${activeAccountRef}`,
-  })
+  }))
 }
 
 export async function admitAuthorityCredentialChangeRate(
