@@ -1,7 +1,5 @@
-// @ts-nocheck vendored upstream code is not written for exactOptionalPropertyTypes/noUncheckedIndexedAccess; our own wrappers in src/emails are checked.
-// T2 must drop this Inter @import (rsms.me): doc 2.2 allows no webfont; stack is Manrope, -apple-system, Segoe UI, Arial, Helvetica, sans-serif. Imports rewritten from "react-email" to "@react-email/components" (1.0.12).
 // Vendored from emailcn (MIT, Copyright (c) 2026 Shadcn Labs), see ./LICENSE.
-// Source: https://www.emailcn.run/r/react-email/ (registry item for font-default.tsx), fetched 2026-10-11. Do not hand-edit; theme goes in src/emails/theme.ts.
+// Source: https://www.emailcn.run/r/react-email/default-fonts.json (registry/bases/react-email/fonts/font-default.tsx), fetched 2026-10-11. Local rewrite: import "react-email" to "@react-email/components" (1.0.12). Do not hand-edit; theme goes in src/emails/theme.ts. Pins and props: ./upstream-manifest.json.
 import { Font } from "@react-email/components";
 
 export const DefaultFonts = () => (

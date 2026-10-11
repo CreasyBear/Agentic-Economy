@@ -73,7 +73,7 @@ export default function FundingReceiptEmail({
       reason="You get this because you added credit to your aecon account. It is your record of the purchase."
       showSettings
     >
-      {/* Structure from emailcn receipt-default (vendored at ../vendor/emailcn/receipt-default.tsx; its export is a full-document wrapper and cannot nest, so the body is copied into Layout): title, reference line, rows, divider, total, one button. */}
+      {/* Structure from emailcn receipt-default (not vendored; its export is a full-document wrapper and cannot nest, so the body is copied into Layout): title, reference line, rows, divider, total, one button. */}
       <Text className="ae-text" style={{ ...bodyText, fontSize: 22, fontWeight: 500, lineHeight: '28px', margin: '0 0 4px' }}>Tax invoice</Text>
       <Text className="ae-muted" style={{ ...bodyText, ...muted, margin: '0 0 16px' }}>
         {[invoiceNumber, confirmedAt === undefined ? undefined : `${formatTimestamp(confirmedAt, timeZone)} ${zoneLabel(confirmedAt, timeZone)}`.trim()].filter(Boolean).join(' | ')}

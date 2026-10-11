@@ -1,6 +1,5 @@
-// @ts-nocheck vendored upstream code is not written for exactOptionalPropertyTypes/noUncheckedIndexedAccess; our own wrappers in src/emails are checked.
 // Vendored from emailcn (MIT, Copyright (c) 2026 Shadcn Labs), see ./LICENSE.
-// Source: https://www.emailcn.run/r/react-email/ (registry item for email-theme.ts), fetched 2026-10-11. Do not hand-edit; theme goes in src/emails/theme.ts.
+// Source: https://www.emailcn.run/r/react-email/theme-default.json (registry/bases/react-email/themes/email-theme.ts), fetched 2026-10-11. Local rewrite: imports "react-email" to "@react-email/components" (1.0.12). Do not hand-edit; theme goes in src/emails/theme.ts. Pins and props: ./upstream-manifest.json.
 import { pixelBasedPreset } from "@react-email/components";
 import type { TailwindConfig } from "@react-email/components";
 import plugin from "tailwindcss/plugin";

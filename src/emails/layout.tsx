@@ -30,7 +30,7 @@ const reasonText: CSSProperties = { color: light.muted, fontFamily: EMAIL_FONT, 
 const footerText: CSSProperties = { color: EMAIL_COLORS.onForestMuted, fontFamily: EMAIL_FONT, fontSize: 13, lineHeight: '20px', margin: '0 0 8px' }
 const footerLink: CSSProperties = { color: EMAIL_COLORS.onForest, textDecoration: 'underline' }
 
-/** The one button. Structure from emailcn `button` (primary): Section (a table) holding a padded Link, restyled to the website pair, charcoal fill with chalk text, flipped in dark. Source: https://www.emailcn.run/r/react-email/ button.tsx, vendored at ./vendor/emailcn/button.tsx, whose export is a full-document wrapper and cannot nest. Table based: Section, Row, Column carry the fill and radius, and the Link pads inside the cell so Outlook keeps the shape. */
+/** The one button. Structure from emailcn `button` (primary): Section (a table) holding a padded Link, restyled to the website pair, charcoal fill with chalk text, flipped in dark. Source: https://www.emailcn.run/r/react-email/ button.tsx, not vendored, whose export is a full-document wrapper and cannot nest. Table based: Section, Row, Column carry the fill and radius, and the Link pads inside the cell so Outlook keeps the shape. */
 export function CtaButton({ href, children }: { href: string; children: ReactNode }) {
   return (
     <Section style={{ margin: '24px 0', textAlign: 'left' }}>

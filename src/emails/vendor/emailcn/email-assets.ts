@@ -1,6 +1,6 @@
-// @ts-nocheck vendored upstream code is not written for exactOptionalPropertyTypes/noUncheckedIndexedAccess; our own wrappers in src/emails are checked.
+// @ts-nocheck upstream types fail under our tsconfig, see upstream-manifest.json.
 // Vendored from emailcn (MIT, Copyright (c) 2026 Shadcn Labs), see ./LICENSE.
-// Source: https://www.emailcn.run/r/react-email/ (registry item for email-assets.ts), fetched 2026-10-11. Do not hand-edit; theme goes in src/emails/theme.ts.
+// Source: https://www.emailcn.run/r/react-email/header-with-logo.json (registry/email-assets.ts), fetched 2026-10-11. Local rewrite: none. Do not hand-edit; theme goes in src/emails/theme.ts. Pins and props: ./upstream-manifest.json.
 const ASSET_ORIGIN = "https://www.emailcn.run";
 const ICONS8_ORIGIN = "https://img.icons8.com";
 const UNSPLASH_ORIGIN = "https://images.unsplash.com";
