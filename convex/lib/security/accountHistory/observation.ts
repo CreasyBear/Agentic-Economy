@@ -1,4 +1,5 @@
 import { v, type Infer } from 'convex/values'
+import { enqueueAccountNotice } from '../../principalAccount/notifications/enqueue'
 import { CLERK_SECURITY_OBSERVE_OPERATION, CLERK_SECURITY_OBSERVE_SCOPE, type ClerkSecurityObservation } from '../../../../src/modules/security/account-security'
 import { canonicalDigest } from '../../../../src/modules/common/canonical-digest'
 import { brandNonEmpty } from '../../../../src/modules/common/ids'
@@ -122,7 +123,7 @@ function validObservation(value: ClerkSecurityObservation): boolean {
 }
 
 async function persistObservation(
-  ctx: Pick<MutationCtx, 'db'>,
+  ctx: MutationCtx,
   observation: ClerkSecurityObservation,
   authority: Readonly<{ accountRef: string; principalRef: string; bindingRef: string; binding: Doc<'externalIdentityBindings'> }>,
   revocationCutoff: number | undefined,
@@ -185,6 +186,21 @@ async function persistObservation(
         revision: principal.revision + 1,
         updatedAt: createdAt,
       })
+    }
+  }
+  if (observation.primaryEmailDigest !== undefined) {
+    const principal = await ctx.db.query('principals')
+      .withIndex('by_principalRef', (index) => index.eq('principalRef', authority.principalRef))
+      .unique()
+    if (principal !== null && principal.kind === 'human' && principal.primaryEmailDigest !== observation.primaryEmailDigest) {
+      await ctx.db.patch(principal._id, { primaryEmailDigest: observation.primaryEmailDigest })
+      // The first sighting only records the address; a later difference is a change.
+      if (principal.primaryEmailDigest !== undefined) {
+        await enqueueAccountNotice(ctx, {
+          eventKind: 'email_changed', accountRef: authority.accountRef,
+          recipientPrincipalRef: authority.principalRef, sourceEventRef: observation.deliveryRefHash,
+        })
+      }
     }
   }
   const machineCascadeApplies = observation.securityAction === 'revoke_interactive_credentials'

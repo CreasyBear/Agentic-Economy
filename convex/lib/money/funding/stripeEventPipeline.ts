@@ -3,6 +3,8 @@ import type { Doc } from '../../../_generated/dataModel'
 import { recordFundingTerminal } from '@/lib/observability/journey'
 import { emitFundingJourneyEvent } from '../../journey/events'
 import type { MutationCtx } from '../../../_generated/server'
+import { internal } from '../../../_generated/api'
+import { enqueueAccountNotice } from '../../principalAccount/notifications/enqueue'
 import {
   AUD_EXPONENT,
   compareExactAmounts,
@@ -115,6 +117,8 @@ export async function ensureEventConsistency(
   return { kind: 'ok', command, priorEvent }
 }
 
+const PAYMENT_STUCK_AFTER_MS = 15 * 60 * 1000
+
 export async function prepareFundingSettlementEvent(
   ctx: MutationCtx,
   args: Readonly<{
@@ -167,6 +171,10 @@ export async function prepareFundingSettlementEvent(
       return { kind: 'accepted', status: 'ignored' }
     }
     if (event.status === 'processing') {
+      // Still unconfirmed after the wait: enqueuePaymentStuck skips it if the command settled meanwhile.
+      if (command.providerStatus !== 'pending') {
+        await ctx.scheduler.runAfter(PAYMENT_STUCK_AFTER_MS, internal.notifications.enqueuePaymentStuck, { commandRef: command.commandRef })
+      }
       await ctx.db.patch(command._id, {
         providerStatus: 'pending',
         ...(args.readback.checkoutStatus === undefined ? {} : {
@@ -190,6 +198,10 @@ export async function prepareFundingSettlementEvent(
         }),
         terminalReason: 'async_payment_failed',
         updatedAt: event.observedAt,
+      })
+      await enqueueAccountNotice(ctx, {
+        eventKind: 'funding_failed', accountRef: command.accountRef,
+        sourceEventRef: command.commandRef, recipientPrincipalRef: command.actorPrincipalRef,
       })
     }
     if (priorEvent === null) await ctx.db.insert('moneyStripeEvents', {

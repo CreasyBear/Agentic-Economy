@@ -10,7 +10,7 @@ import type { Doc, Id } from '../../../_generated/dataModel'
 import type { MutationCtx, QueryCtx } from '../../../_generated/server'
 import { readFundingTaxDocuments } from '../../money/documents/taxInvoices'
 import { resolveClerkUserIdForPrincipal } from '../workspace/directory'
-import { activeOwnerPrincipalRef, PHASE3_KINDS } from './enqueue'
+import { accountOwnerPrincipalRef, ACCOUNT_STATE_KINDS, activeOwnerPrincipalRef, PHASE3_KINDS } from './enqueue'
 import { isStalledKind, readStalledDeliveryContext } from './stalled'
 import { recordSuppression, suppressionCode } from './suppression'
 
@@ -165,15 +165,52 @@ async function readMoneyNoticeContext(ctx: QueryCtx, delivery: Doc<'notification
   }
 }
 
-/** Phase 3 account notices. Recipient is re-checked as the active owner at send time; the link target comes from sourceEventRef. Required mail, so no unsubscribe target. */
+/** Who must still be the recipient at send time: the member for a role change, the person themselves for their own email and data, else the owner (even when the account is paused). */
+async function recipientStillValid(ctx: QueryCtx, delivery: Doc<'notificationDeliveries'>): Promise<boolean> {
+  switch (delivery.eventKind) {
+    case 'email_changed':
+    case 'data_request_received':
+      return true
+    case 'role_changed':
+      return (await readActiveMembership(ctx, delivery)) !== null
+    case 'account_paused':
+    case 'account_restored':
+      return await accountOwnerPrincipalRef(ctx.db, delivery.accountRef) === delivery.recipientPrincipalRef
+    default:
+      return await activeOwnerPrincipalRef(ctx.db, delivery.accountRef) === delivery.recipientPrincipalRef
+  }
+}
+
+const readActiveMembership = async (ctx: QueryCtx, delivery: Doc<'notificationDeliveries'>) =>
+  await ctx.db.query('memberships')
+    .withIndex('by_accountRef_and_memberPrincipalRef_and_lifecycle', (query) => query
+      .eq('accountRef', delivery.accountRef).eq('memberPrincipalRef', delivery.recipientPrincipalRef).eq('lifecycle', 'active'))
+    .first()
+
+/** Phase 3 and T13 account notices. Recipient is re-checked at send time; the link target comes from sourceEventRef. Required mail, so no unsubscribe target. */
 async function readAccountNoticeContext(ctx: QueryCtx, delivery: Doc<'notificationDeliveries'>): Promise<NotificationContext> {
   const skip = (code: string): NotificationContext => ({ kind: 'skip', code })
-  if (await activeOwnerPrincipalRef(ctx.db, delivery.accountRef) !== delivery.recipientPrincipalRef) return skip('recipient_changed')
+  if (!await recipientStillValid(ctx, delivery)) return skip('recipient_changed')
   const clerkUserId = await resolveClerkUserIdForPrincipal(ctx.db, delivery.recipientPrincipalRef)
   if (clerkUserId === null) return skip('no_clerk_identity')
   const siteUrl = process.env.AE_SITE_URL?.trim().replace(/\/+$/u, '')
   if (siteUrl === undefined || siteUrl.length === 0) return skip('site_url_missing')
   const props: Record<string, string> = delivery.eventKind === 'provider_live' ? { toolRef: delivery.sourceEventRef } : {}
+  if (delivery.eventKind === 'role_changed') {
+    const role = (await readActiveMembership(ctx, delivery))?.role
+    if (role === undefined) return skip('role_unknown')
+    props.role = role
+  }
+  if (delivery.eventKind === 'funding_failed' || delivery.eventKind === 'task_stuck') {
+    const command = await ctx.db.query('moneyFundingCommands')
+      .withIndex('by_commandRef', (query) => query.eq('commandRef', delivery.sourceEventRef)).unique()
+    if (command === null) return skip('funding_command_missing')
+    if (command.actorPrincipalRef !== delivery.recipientPrincipalRef) return skip('recipient_changed')
+    // Resolved before send: a later success, or for a stuck payment any settled state.
+    if (command.state === 'succeeded' || (delivery.eventKind === 'task_stuck' && command.state === 'failed')) return skip('payment_resolved')
+    const amount = moneyNoticeAmount({ currency: command.currency, units: command.principalUnits, exponent: command.exponent })
+    if (amount !== undefined) props.amount = amount
+  }
   return {
     kind: 'ready',
     deliveryRef: delivery.deliveryRef,
@@ -197,7 +234,7 @@ export async function readNotificationContextHandler(
   if (delivery !== null && delivery.state === 'pending' && MONEY_NOTICE_KINDS.has(delivery.eventKind)) {
     return await readMoneyNoticeContext(ctx, delivery)
   }
-  if (delivery !== null && delivery.state === 'pending' && PHASE3_KINDS.has(delivery.eventKind)) {
+  if (delivery !== null && delivery.state === 'pending' && (PHASE3_KINDS.has(delivery.eventKind) || ACCOUNT_STATE_KINDS.has(delivery.eventKind))) {
     return await readAccountNoticeContext(ctx, delivery)
   }
   if (delivery === null || delivery.state !== 'pending' || delivery.eventKind !== 'agent_approval_requested') {

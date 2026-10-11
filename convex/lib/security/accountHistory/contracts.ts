@@ -24,6 +24,7 @@ export const observationArgs = {
     ),
   ),
   profileDisplayName: v.optional(v.string()),
+  primaryEmailDigest: v.optional(v.string()),
 }
 
 export const observationResult = v.union(

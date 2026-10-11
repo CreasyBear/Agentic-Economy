@@ -8,6 +8,7 @@ import {
 import { accountRef, principalRef } from '../../../../src/modules/principal-account/public'
 import { DelegationService, delegationGrantRef } from '../../../../src/modules/authority/delegation/public'
 import { createConvexDelegationStore } from '../delegation/persistence'
+import { enqueueAccountNotice } from '../../principalAccount/notifications/enqueue'
 import { resolveRecoveryAccountFacts } from './accountFacts'
 import { resolveRecoveryOperator } from './operator'
 import { createRecoveryDelegationContextPort } from './delegation'
@@ -73,6 +74,10 @@ async function applyRecoveryEffect(ctx: MutationCtx, admission: RecoveryAdmissio
       lifecycle: 'suspended',
       revision: account.revision + 1,
       updatedAt: admission.admittedAt,
+    })
+    await enqueueAccountNotice(ctx, {
+      eventKind: 'account_paused', accountRef: admission.accountRef,
+      sourceEventRef: `${admission.accountRef}:${admission.admittedAt}`,
     })
     return
   }

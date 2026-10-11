@@ -24,6 +24,8 @@ export const principalValue = v.object({
   createdAt: v.number(),
   updatedAt: v.number(),
   mergedIntoPrincipalRef: v.optional(v.string()),
+  /** Digest of the primary email Clerk last reported, so a change can be noticed. Never the address itself. */
+  primaryEmailDigest: v.optional(v.string()),
 })
 
 export const principalTables = {

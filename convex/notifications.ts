@@ -17,7 +17,7 @@ import {
   resendEventArgs,
   resendEventResult,
 } from './lib/principalAccount/notifications/delivery'
-import { enqueueAgentApprovalRequestedHandler, enqueueFundingReceiptHandler } from './lib/principalAccount/notifications/enqueue'
+import { enqueueAgentApprovalRequestedHandler, enqueueDataExportHandler, enqueueFundingReceiptHandler, enqueuePaymentStuckHandler } from './lib/principalAccount/notifications/enqueue'
 import { paginationOptsValidator } from 'convex/server'
 import { internal } from './_generated/api'
 import { STALLED_STEP_NAMES, stalledStepValue } from './lib/journey/stalled'
@@ -52,6 +52,18 @@ export const enqueueFundingReceipt = internalMutation({
   args: { commandRef: v.string() },
   returns: v.null(),
   handler: enqueueFundingReceiptHandler,
+})
+
+export const enqueuePaymentStuck = internalMutation({
+  args: { commandRef: v.string() },
+  returns: v.null(),
+  handler: enqueuePaymentStuckHandler,
+})
+
+export const recordDataExportRequested = mutation({
+  args: {},
+  returns: v.null(),
+  handler: enqueueDataExportHandler,
 })
 
 export const enqueueAgentApprovalRequested = internalMutation({

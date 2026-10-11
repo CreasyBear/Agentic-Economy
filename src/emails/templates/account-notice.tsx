@@ -45,10 +45,10 @@ const NOTICES: Record<NoticeKind, Notice> = {
     label: 'View receipt', path: '/owner/operations', campaign: 'task_refunded',
   },
   task_stuck: {
-    subject: () => 'A call is taking longer than expected',
-    preheader: () => 'Check the receipt for its status.',
-    body: () => "A call has been running for over an hour. We're still checking it and will tell you if it is refunded.",
-    label: 'View receipt', path: '/owner/operations', campaign: 'task_stuck',
+    subject: ({ amount }) => (amount === undefined ? "We're still confirming your payment" : `We're still confirming your ${amount} payment`),
+    preheader: () => 'Check the receipt before paying again.',
+    body: () => "Your payment hasn't been confirmed yet, so no credit was added. Check your receipts before you pay again. We'll email you once it is confirmed or fails.",
+    label: 'View receipt', path: '/owner/credit', campaign: 'payment_stuck',
   },
   credit_exhausted: {
     subject: () => 'Your aecon credit has run out',
@@ -117,10 +117,10 @@ const NOTICES: Record<NoticeKind, Notice> = {
     label: 'View details', path: '/owner/settings/receipts', campaign: 'provider_offboarded',
   },
   data_request_received: {
-    subject: () => 'We received your data request',
-    preheader: () => "We'll email you when it moves forward.",
-    body: () => "We have your data request and will email you when it moves forward.",
-    label: 'View request', path: '/owner/settings/privacy', campaign: 'data_request',
+    subject: () => 'Your aecon data export was downloaded',
+    preheader: () => "If this wasn't you, contact support@aecon.ai.",
+    body: () => "Your account data was exported and downloaded. If this wasn't you, contact support@aecon.ai.",
+    label: 'Review settings', path: '/owner/settings/privacy', campaign: 'data_export',
   },
 }
 

@@ -39,6 +39,8 @@ export type ClerkSecurityObservation = Readonly<{
   securityAction?: ClerkSecurityAction
   /** Redacted display name from Clerk profile fields when a name change is observed. */
   profileDisplayName?: string
+  /** Digest of the primary email, so convex can notice a change without storing the address. */
+  primaryEmailDigest?: string
 }>
 
 export type ClerkSecurityObservationResult =
