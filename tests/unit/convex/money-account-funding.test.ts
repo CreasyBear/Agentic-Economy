@@ -772,7 +772,7 @@ describe('Account AUD funding through Formance', () => {
     const backend = convexTestWithWorkers({ pauseWorkpool: true })
     const fixture = await publishedBusinessOwner(backend, 'formance-funding-dispute-closed')
     const run = async (event: ReturnType<typeof createTestDisputeEvent>, fn: 'prepareVerifiedEvent' | 'finalizeVerifiedDispute', extra = {}) =>
-      await fixture.owner.mutation(internal.moneyAccountFunding[fn] as never, await withSourceWrite('billing', {
+      await fixture.owner.mutation(internal.moneyAccountFunding[fn] as any, await withSourceWrite('billing', {
         event, operationKey: 'moneyAccountFunding:applyVerifiedEvent', correlationId: event.stripeEventId, ...extra,
       }) as never)
     const caseRows = async () => await backend.run(async (ctx) => await ctx.db.query('moneyReconciliationCases').collect())
