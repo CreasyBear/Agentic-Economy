@@ -6,6 +6,7 @@ import { amountFromParts } from '@/modules/money/public'
 import { EMAIL_COLORS, EMAIL_LEGAL_LINES } from '../brand'
 import { bodyText, CtaButton, Layout } from '../layout'
 import { emailUrl } from '../links'
+import { TextOnlySeparator } from '../text-only'
 import { formatMoney } from '../money'
 import { formatTimestamp, formatZoneName } from '../../lib/ui/format-time'
 
@@ -43,7 +44,7 @@ function Line({ label, children, strong = false }: { label: string; children: Re
   const weight = strong ? { fontWeight: 500 } : {}
   return (
     <Row>
-      <Column className="ae-muted" style={{ ...row, ...muted, width: '45%' }}>{label}</Column>
+      <Column className="ae-muted" style={{ ...row, ...muted, width: '45%' }}>{label}<TextOnlySeparator /></Column>
       <Column className="ae-text" align="right" style={{ ...row, ...weight, textAlign: 'right' }}>{children}</Column>
     </Row>
   )

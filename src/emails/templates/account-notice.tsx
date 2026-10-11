@@ -3,6 +3,7 @@ import { Column, Row, Section, Text } from '@react-email/components'
 import { EMAIL_COLORS } from '../brand'
 import { bodyText, CtaButton, Layout } from '../layout'
 import { emailUrl } from '../links'
+import { TextOnlySeparator } from '../text-only'
 
 /** Phase 2 and 3 notices. All are required transactional mail: no unsubscribe, the footer links to settings. */
 export type NoticeKind =
@@ -199,7 +200,7 @@ export default function AccountNoticeEmail({ kind, ...props }: NoticeProps & { k
         <Section style={{ margin: '0 0 16px' }}>
           {notice.rows(props).map(([label, value]) => (
             <Row key={label}>
-              <Column className="ae-muted" style={{ ...bodyText, fontSize: 14, lineHeight: '20px', margin: 0, padding: '8px 0', borderBottom: `1px solid ${EMAIL_COLORS.light.border}`, color: EMAIL_COLORS.light.muted }}>{label}</Column>
+              <Column className="ae-muted" style={{ ...bodyText, fontSize: 14, lineHeight: '20px', margin: 0, padding: '8px 0', borderBottom: `1px solid ${EMAIL_COLORS.light.border}`, color: EMAIL_COLORS.light.muted }}>{label}<TextOnlySeparator /></Column>
               <Column className="ae-text" align="right" style={{ ...bodyText, fontSize: 14, lineHeight: '20px', margin: 0, padding: '8px 0', borderBottom: `1px solid ${EMAIL_COLORS.light.border}`, textAlign: 'right' }}>{value}</Column>
             </Row>
           ))}

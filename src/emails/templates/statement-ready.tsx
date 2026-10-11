@@ -6,6 +6,7 @@ import type { ExactAmount } from '@/modules/money/public'
 import { EMAIL_COLORS } from '../brand'
 import { bodyText, CtaButton, Layout } from '../layout'
 import { emailUrl } from '../links'
+import { TextOnlySeparator } from '../text-only'
 import { formatMoney } from '../money'
 import { formatCount, formatTimestamp } from '../../lib/ui/format-time'
 
@@ -43,6 +44,7 @@ export default function StatementReadyEmail({ siteUrl, periodLabel, rows, total,
             <Column className="ae-text ae-rule" style={{ ...cell, width: '60%' }}>
               {[row.product, row.provider].filter(Boolean).join(', ') || row.id}
               {row.at === undefined ? null : <span className="ae-muted" style={{ color: EMAIL_COLORS.light.muted }}><br />{formatTimestamp(row.at, timeZone)}</span>}
+              <TextOnlySeparator />
             </Column>
             <Column className="ae-text ae-rule" align="right" style={{ ...cell, textAlign: 'right' }}>{formatMoney(row.total)}</Column>
           </Row>
@@ -53,7 +55,7 @@ export default function StatementReadyEmail({ siteUrl, periodLabel, rows, total,
           </Row>
         ) : null}
         <Row>
-          <Column className="ae-text" style={{ ...cell, fontWeight: 500, borderBottom: 'none' }}>Total</Column>
+          <Column className="ae-text" style={{ ...cell, fontWeight: 500, borderBottom: 'none' }}>Total<TextOnlySeparator /></Column>
           <Column className="ae-text" align="right" style={{ ...cell, fontWeight: 500, textAlign: 'right', borderBottom: 'none' }}>{formatMoney(total)}</Column>
         </Row>
       </Section>
