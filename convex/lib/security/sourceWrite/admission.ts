@@ -2,6 +2,8 @@ import { isSourceWriteBodyDigest, SourceWriteAdmissionError, SourceWriteAdmissio
 import { consumeSourceWriteNonce, type SourceWriteMutationCtx } from './nonce'
 import type { SourceWriteArgs, SourceWriteCheck } from './contracts'
 
+export const SOURCE_READ_MAX_AGE_MS = 30_000
+
 export async function requireSourceRead(
   args: SourceWriteArgs & { operationKey: string; correlationId: string },
   scope: SourceWriteAdmissionScope,
@@ -27,6 +29,7 @@ export async function requireSourceRead(
       commandDigest,
       request: expectedRequest,
     },
+    maxAgeMs: SOURCE_READ_MAX_AGE_MS,
   })
   if (verification.kind === 'rejected') return verification
   return {
@@ -107,9 +110,10 @@ async function verifyAdmission(input: {
     commandDigest: string
     request: SourceWriteAdmissionRequest
   }
+  maxAgeMs?: number
 }): Promise<{ kind: 'accepted'; admission: SourceWriteAdmission } | { kind: 'rejected'; reason: SourceWriteAdmissionFailureReason }> {
   try {
-    return await verifySourceWriteAdmission({ admission: input.admission, expected: input.expected })
+    return await verifySourceWriteAdmission({ admission: input.admission, expected: input.expected, ...(input.maxAgeMs === undefined ? {} : { maxAgeMs: input.maxAgeMs }) })
   } catch (error) {
     if (error instanceof SourceWriteAdmissionError) return { kind: 'rejected', reason: sourceWriteErrorReason(error) }
     throw error

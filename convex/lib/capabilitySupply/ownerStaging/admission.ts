@@ -4,6 +4,7 @@ import {
   validX402SellerClaimTime,
 } from '@/modules/capability-supply/public'
 
+import { providerRouteabilityIsFrozen } from '../providerOffboarding/freeze'
 import type { MutationCtx } from '../../../_generated/server'
 import { resolveBusinessActor } from '../../../authz'
 import { requireSourceWrite } from '../../security/sourceWrite/admission'
@@ -38,6 +39,9 @@ export async function stageOwnerX402CapabilityHandler(
     || business.suppressedAt !== undefined
     || !validRegistrationContext(args)
   ) return { kind: 'refused', reason: 'authorization_denied' }
+  if (await providerRouteabilityIsFrozen(ctx, args.businessId)) {
+    return { kind: 'refused', reason: 'authorization_denied' }
+  }
 
   const now = Date.now()
   const runtimeEnvironment = exactOwnerX402Environment(args.prepared, args.sellerClaim)

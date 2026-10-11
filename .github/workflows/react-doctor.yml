@@ -26,9 +26,10 @@ jobs:
     timeout-minutes: 15
     steps:
       # Keep full history available for React Doctor's change comparison.
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - uses: millionco/react-doctor@013f7373f91a3b9e68bd1dc7d4d354f4b041b117
         with:

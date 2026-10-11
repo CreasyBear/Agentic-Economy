@@ -196,6 +196,32 @@ describe('Convex secret lifecycle persistence driver', () => {
     })
   })
 
+  it('binds journal replace and provision pointer reads to the caller authority and snapshot', async () => {
+    const backend = convexTest(schema, convexModules)
+    const rotate = authority('rotate', '90')
+    const stranger = authority('rotate', '91', { idempotencyRef: rotate.idempotencyRef })
+    const noSnapshot = authority('provision', '92')
+    await seedSnapshot(backend, rotate)
+    await seedSnapshot(backend, stranger)
+    await insertJournalRow(backend, rotate)
+    await backend.run(async (ctx) => {
+      await expect(createConvexSecretLifecyclePersistence(ctx, stranger).journal
+        .replace({ ...record(rotate), state: 'active' }, 'prepared'))
+        .rejects.toMatchObject({ code: 'secret_lifecycle_conflict' })
+      await ctx.db.insert('secretPointers', {
+        secretRef: REF,
+        owningAccountRef: ACCOUNT,
+        activeGeneration: FIRST,
+        revision: 1,
+        createdAt: 1_000,
+        updatedAt: 1_000,
+        lastAction: noSnapshot,
+      })
+      await expect(createConvexSecretLifecyclePersistence(ctx, noSnapshot).pointerControl.getActive(REF))
+        .rejects.toBeDefined()
+    })
+  })
+
   it('rejects malformed prepared records and both journal uniqueness collisions', async () => {
     const backend = convexTest(schema, convexModules)
     const rotate = authority('rotate', '63')

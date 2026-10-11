@@ -6,8 +6,8 @@ import { handlePersonalDataExportRequest } from '@/lib/server/personal-data-expo
 export const Route = createFileRoute('/api/owner/data-export')({
   server: {
     handlers: defineRouteHandlers({
-      GET: () => handlePersonalDataExportRequest(),
-      HEAD: () => handlePersonalDataExportRequest(true),
+      GET: ({ request }) => handlePersonalDataExportRequest(request),
+      HEAD: ({ request }) => handlePersonalDataExportRequest(request, true),
     }),
   },
 })

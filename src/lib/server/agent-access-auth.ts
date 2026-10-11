@@ -161,7 +161,7 @@ export type AgentAccessAuthenticationOptions = Readonly<{
 
 /**
  * The Clerk-verified API key candidate for the request, or null when the
- * credential is missing, malformed, rejected or unverifiable. Callers pick a
+ * credential is missing or definitively rejected (Clerk 4xx). Transient failures throw. Callers pick a
  * rate bucket by verified identity and reuse the candidate instead of verifying
  * the same secret twice.
  */
@@ -188,8 +188,10 @@ export async function verifyApiKeyCandidate(
       scopes: verified.scopes,
       claims: verified.claims,
     }
-  } catch {
-    return null
+  } catch (cause) {
+    // Only a definitive Clerk 4xx rejection is a null candidate; a Clerk 5xx, 429 or network failure rethrows so the caller answers 503 rather than a hard 401.
+    if (isClerkAPIResponseError(cause) && cause.status >= 400 && cause.status < 500 && cause.status !== 429) return null
+    throw cause
   }
 }
 

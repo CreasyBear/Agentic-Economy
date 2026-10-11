@@ -8,6 +8,12 @@ import {
 } from '@/modules/security/source-write-admission'
 
 export const testSourceWriteSecret = 'test-source-write-secret-material-32'
+const FAMILIES = ['BILLING', 'PROTECTED', 'CATALOG', 'OPERATOR', 'REPAIR', 'SESSION'] as const
+// A production deployment disables the root-secret fallback, so every family also gets an explicit key and tests pass in either mode.
+const testSourceWriteEnv: Record<string, string> = {
+  AE_SOURCE_WRITE_SECRET: testSourceWriteSecret,
+  ...Object.fromEntries(FAMILIES.map((family) => [`AE_SOURCE_WRITE_KEY_${family}`, `test-${family.toLowerCase()}:${testSourceWriteSecret}`])),
+}
 
 export function installTestSourceWriteSecret(): void {
   for (const name of [
@@ -38,7 +44,7 @@ export function installTestSourceWriteSecret(): void {
   ]) {
     delete process.env[name]
   }
-  process.env.AE_SOURCE_WRITE_SECRET = testSourceWriteSecret
+  Object.assign(process.env, testSourceWriteEnv)
 }
 
 export async function sourceWriteAdmission(
@@ -59,7 +65,7 @@ export async function sourceWriteAdmission(
     ...(options.nonce === undefined ? {} : { nonce: options.nonce }),
     request,
     now: new Date().getTime(),
-    env: { AE_SOURCE_WRITE_SECRET: testSourceWriteSecret },
+    env: testSourceWriteEnv,
   })
 }
 
@@ -81,7 +87,7 @@ export async function withSourceWrite<T extends { operationKey: string; correlat
       ...(options.nonce === undefined ? {} : { nonce: options.nonce }),
       request: sourceWriteRequest,
       now: new Date().getTime(),
-      env: { AE_SOURCE_WRITE_SECRET: testSourceWriteSecret },
+      env: testSourceWriteEnv,
     }),
   }
 }
@@ -110,7 +116,7 @@ export async function withSourceWriteCommand<
       commandDigest: sourceWriteCommandDigest(command),
       request: sourceWriteRequest,
       now: new Date().getTime(),
-      env: { AE_SOURCE_WRITE_SECRET: testSourceWriteSecret },
+      env: testSourceWriteEnv,
     }),
   }
 }

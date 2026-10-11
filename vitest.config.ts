@@ -14,7 +14,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     // Tests run in an explicitly isolated money world; production cases opt in.
-    env: { AE_DEPLOYMENT_ENVIRONMENT: 'development', AE_FORMANCE_ENVIRONMENT: 'sandbox', SENTRY_DSN: '', SENTRY_ENVIRONMENT: 'development', VITE_SENTRY_DSN: '', POSTHOG_KEY: '', VITE_POSTHOG_KEY: '', DO_NOT_TRACK: '', AE_DISABLE_ANALYTICS: '', VITE_AE_DISABLE_ANALYTICS: '' },
+    env: { EMAIL_UNSUBSCRIBE_SECRET: 'vitest-unsubscribe-secret', EMAIL_SUPPRESSION_HASH_SECRET: 'vitest-suppression-secret', AE_DEPLOYMENT_ENVIRONMENT: 'development', AE_FORMANCE_ENVIRONMENT: 'sandbox', SENTRY_DSN: '', SENTRY_ENVIRONMENT: 'development', VITE_SENTRY_DSN: '', POSTHOG_KEY: '', VITE_POSTHOG_KEY: '', DO_NOT_TRACK: '', AE_DISABLE_ANALYTICS: '', VITE_AE_DISABLE_ANALYTICS: '' },
     include: [
       'tests/**/*.test.ts',
       'tests/**/*.test.tsx',

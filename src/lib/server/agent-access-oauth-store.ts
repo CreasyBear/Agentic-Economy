@@ -61,6 +61,7 @@ type GrantArgs = SourceWriteArgs & {
     nextPollAt?: number
     deliveryClaimToken?: string
     deliveryCredentialHash?: string
+    accessTokenHash?: string
     deliveryReplayUntil?: number
     denialReason?: 'access_denied'
     connectionTarget?: AgentAccessOAuthGrant['connectionTarget']
@@ -97,6 +98,7 @@ type GrantUpdateArgs = SourceWriteArgs & {
     nextPollAt?: number
     deliveryClaimToken?: string
     deliveryCredentialHash?: string
+    accessTokenHash?: string
     deliveryReplayUntil?: number
     displayName?: string
     denialReason?: 'access_denied'
@@ -163,6 +165,7 @@ export type AgentAccessOAuthRefreshCommitResult =
 
 export type AgentAccessOAuthRefreshRevokeResult = Readonly<{
   kind: 'completed' | 'replayed' | 'unknown'
+  providerCredentialId?: string
 }>
 
 export type AgentAccessOAuthRefreshStore = Readonly<{
@@ -422,6 +425,7 @@ function grantForConvex(grant: AgentAccessOAuthGrant): GrantArgs['grant'] {
     ...(grant.nextPollAt === undefined ? {} : { nextPollAt: grant.nextPollAt }),
     ...(grant.deliveryClaimToken === undefined ? {} : { deliveryClaimToken: grant.deliveryClaimToken }),
     ...(grant.deliveryCredentialHash === undefined ? {} : { deliveryCredentialHash: grant.deliveryCredentialHash }),
+    ...(grant.accessTokenHash === undefined ? {} : { accessTokenHash: grant.accessTokenHash }),
     ...(grant.deliveryReplayUntil === undefined ? {} : { deliveryReplayUntil: grant.deliveryReplayUntil }),
     ...(grant.denialReason === undefined ? {} : { denialReason: grant.denialReason }),
     ...(grant.connectionTarget === undefined ? {} : { connectionTarget: grant.connectionTarget }),
@@ -481,6 +485,7 @@ function patchForConvex(patch: AgentAccessOAuthGrantPatch): GrantUpdateArgs['pat
     ...(patch.nextPollAt === undefined ? {} : { nextPollAt: patch.nextPollAt }),
     ...(patch.deliveryClaimToken === undefined ? {} : { deliveryClaimToken: patch.deliveryClaimToken }),
     ...(patch.deliveryCredentialHash === undefined ? {} : { deliveryCredentialHash: patch.deliveryCredentialHash }),
+    ...(patch.accessTokenHash === undefined ? {} : { accessTokenHash: patch.accessTokenHash }),
     ...(patch.deliveryReplayUntil === undefined ? {} : { deliveryReplayUntil: patch.deliveryReplayUntil }),
     ...(patch.displayName === undefined ? {} : { displayName: patch.displayName }),
     ...(patch.denialReason === undefined ? {} : { denialReason: patch.denialReason }),

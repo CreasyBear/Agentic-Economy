@@ -20,7 +20,9 @@ export const claimResult = v.union(v.null(), workValue)
 export async function claimHandler(ctx: MutationCtx, args: { callRef: string }) {
   const row = await ctx.db.query('paidCallReports').withIndex('by_callRef', q => q.eq('callRef', args.callRef)).unique()
   if (row?.state !== 'pending' || !financialEnvironmentMatches(row.environment)) return null
-  await ctx.db.patch(row._id, { nextWorkAt: Date.now() + 60_000, updatedAt: Date.now() })
+  const now = Date.now()
+  if (row.nextWorkAt !== undefined && row.nextWorkAt > now) return null
+  await ctx.db.patch(row._id, { nextWorkAt: now + 60_000, updatedAt: now })
   return { expectedEnvironment: row.environment, booking: row.booking, originalSettlementRefs: row.originalSettlementRefs, reportDigest: row.reportDigest }
 }
 

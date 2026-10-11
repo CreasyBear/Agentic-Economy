@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { requireSourceWrite } from '../../../convex/lib/security/sourceWrite/admission'
+import { requireSourceRead, requireSourceWrite } from '../../../convex/lib/security/sourceWrite/admission'
 import {
   createSourceWriteAdmission,
   sourceWriteBodyDigest,
@@ -21,6 +21,7 @@ const request: SourceWriteAdmissionRequest = {
 
 
 afterEach(() => {
+  vi.useRealTimers()
   vi.unstubAllEnvs()
 })
 
@@ -40,6 +41,18 @@ describe('Convex source-write:v2 admission', () => {
     })
     expect(db.inserts).toHaveLength(1)
     expect(db.inserts[0]).toMatchObject({ commandDigest: sourceWriteCommandDigest(args) })
+  })
+
+  it('expires read admissions after 30 s while write admissions keep the longer window', async () => {
+    vi.stubEnv('AE_SOURCE_WRITE_SECRET', secret)
+    vi.useFakeTimers({ toFake: ['Date'] })
+    const args = await validArgs('nonce:read-age')
+    const read = () => requireSourceRead(args as never, 'protected_action')
+    vi.advanceTimersByTime(5_000)
+    await expect(read()).resolves.toMatchObject({ kind: 'accepted' })
+    vi.advanceTimersByTime(26_000)
+    await expect(read()).resolves.toEqual({ kind: 'rejected', reason: 'stale_source_write_admission' })
+    await expect(requireSourceWrite({ db: createNonceDb() }, args, 'protected_action')).resolves.toMatchObject({ kind: 'accepted' })
   })
 
   it('recomputes the command digest and rejects changed args before nonce consumption', async () => {

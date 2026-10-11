@@ -15,7 +15,7 @@ import {
   refreshCapabilitySupplyReadinessHandler, refreshCurrentMarketPresenceHandler,
   refreshMarketFlowHandler,
   refreshReferenceRateHandler, refreshPaymentReadinessHandler,
-  retryJourneyEventForwardsHandler, sendOperatorDigestHandler, sendStalledStepEmailsHandler, snapshotMarketplaceMetricsDayHandler, reconcileTreasuryBalancesHandler,
+  alertStuckStripeInboxHandler, retryJourneyEventForwardsHandler, sendOperatorDigestHandler, sendStalledStepEmailsHandler, snapshotMarketplaceMetricsDayHandler, reconcileTreasuryBalancesHandler,
 } from './lib/platform/workloadCron/scheduled'
 
 export const admit = internalQuery({
@@ -141,6 +141,12 @@ export const retryJourneyEventForwards = internalAction({
   args: {},
   returns: v.null(),
   handler: retryJourneyEventForwardsHandler,
+})
+
+export const alertStuckStripeInbox = internalAction({
+  args: {},
+  returns: v.null(),
+  handler: alertStuckStripeInboxHandler,
 })
 
 export const snapshotMarketplaceMetricsDay = internalAction({

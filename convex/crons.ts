@@ -25,6 +25,7 @@ const HANDLERS: Record<TimedWorkloadName, FunctionReference<'mutation' | 'action
   'refresh market flow': internal.workloadCron.refreshMarketFlow,
   'send operator stalled digest': internal.workloadCron.sendOperatorDigest,
   'send stalled step emails': internal.workloadCron.sendStalledStepEmails,
+  'alert stuck stripe inbox': internal.workloadCron.alertStuckStripeInbox,
   'retry journey event forwards': internal.workloadCron.retryJourneyEventForwards,
   'refresh payment readiness': internal.workloadCron.refreshPaymentReadiness,
 }

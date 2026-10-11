@@ -144,6 +144,7 @@ export type AgentAccessOAuthGrant = Readonly<{
   nextPollAt?: number
   deliveryClaimToken?: string
   deliveryCredentialHash?: string
+  accessTokenHash?: string
   deliveryReplayUntil?: number
   displayName: string
   denialReason?: 'access_denied'
@@ -627,7 +628,7 @@ export async function claimGrantDelivery(
 
 export async function completeGrantDelivery(
   store: AgentAccessOAuthStore,
-  input: Readonly<{ grantRef: string; claimToken: string; now: number }>,
+  input: Readonly<{ grantRef: string; claimToken: string; now: number; accessTokenHash?: string }>,
 ): Promise<AgentAccessOAuthTransition<AgentAccessOAuthGrant>> {
   const grant = await store.getGrantByRef(input.grantRef)
   if (grant === null || grant.deliveryClaimToken !== input.claimToken) return { kind: 'refused', reason: 'delivery_claim_mismatch' }
@@ -635,7 +636,7 @@ export async function completeGrantDelivery(
     return { kind: 'ok', value: grant }
   }
   if (grant.status !== 'delivery_claimed') return { kind: 'refused', reason: 'delivery_claim_mismatch' }
-  const completed = await store.updateGrant(grant.grantRef, 'delivery_claimed', grant.revision, { status: 'consumed', consumedAt: input.now })
+  const completed = await store.updateGrant(grant.grantRef, 'delivery_claimed', grant.revision, { status: 'consumed', consumedAt: input.now, ...(input.accessTokenHash === undefined ? {} : { accessTokenHash: input.accessTokenHash }) })
   if (completed === null) return { kind: 'conflict', reason: 'delivery_claim_lost' }
   return { kind: 'ok', value: completed }
 }

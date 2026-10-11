@@ -367,8 +367,25 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  authenticated-platform-proof-required:
+    # A skipped proof (dispatch from a tag or release branch) must not read as a green gate.
+    if: always() && github.event_name == 'workflow_dispatch'
+    name: Authenticated platform proof must have run
+    needs: authenticated-platform-proof
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Fail unless the proof job succeeded
+        env:
+          PROOF_RESULT: ${{ needs.authenticated-platform-proof.result }}
+        run: |
+          if [ "$PROOF_RESULT" != "success" ]; then
+            echo "authenticated-platform-proof result was '$PROOF_RESULT'; dispatch the gate from refs/heads/main." >&2
+            exit 1
+          fi
+
   authenticated-platform-proof:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     name: Required exact-revision authenticated platform proof
     needs: source-proof
     runs-on: ubuntu-latest

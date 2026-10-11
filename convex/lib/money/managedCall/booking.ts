@@ -73,6 +73,11 @@ export function bookingFromRows(
     || quote.treasuryCustodyGeneration === undefined
     || quote.treasuryEvidenceDigest === undefined) return null
   try {
+    const decision = BigInt(quote.decisionAudUnits)
+    if (decision > BigInt(quote.maximumSpendPerCallUnits)
+      || (call.planAllocation !== undefined && decision > BigInt(call.planAllocation.nodeCeilingUnits))) return null
+  } catch (cause) { return degradeBackend(cause, null, { site: 'bookingFromRows', reason: 'invalid_response' }) }
+  try {
     const rate = JSON.parse(quote.rateEvidenceJson ?? 'null') as ExecutableRateEvidence
     if (rate === null || !validateExecutableRateEvidenceIntegrity(rate)
       || rate.evidenceDigest !== quote.rateEvidenceDigest

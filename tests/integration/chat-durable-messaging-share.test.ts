@@ -5,6 +5,7 @@ import type { ActionCtx } from '../../convex/_generated/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { api, components, internal } from '../../convex/_generated/api'
+import { endAccountDependents } from '../../convex/lib/principalAccount/workspace/close'
 import { streamDurableChatResponse } from '../../convex/lib/chat/generate/stream'
 import { streamAnonymousChatResponse } from '../../convex/lib/chat/anonymous/stream'
 import type { IndexedSource } from '../../convex/lib/market/directoryIndex/contracts'
@@ -950,6 +951,30 @@ describe.sequential('durable Tool chat messaging and shares', () => {
       shareToken: second.shareToken,
       paginationOpts: { cursor: null, numItems: 20 },
     })).resolves.toMatchObject({ title: 'Compare current weather Tools' })
+    await drainExpectedUnavailableGenerations(backend)
+  })
+
+  it('stops serving a share once the owner account is closed or retired', async () => {
+    const backend = convexTestWithMarketComponents()
+    const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'chat-share-closed')
+    const sent = await owner.mutation(internal.chatMessages.sendMessage, { prompt: 'Compare current weather Tools' })
+    await drainExpectedUnavailableGenerations(backend)
+    const { shareToken } = await owner.mutation(api.chatShares.issueShare, { threadId: sent.threadId })
+    const read = () => backend.query(api.chatShares.listSharedMessages, {
+      shareToken,
+      paginationOpts: { cursor: null, numItems: 20 },
+    })
+    await expect(read()).resolves.toMatchObject({ title: 'Compare current weather Tools' })
+    await backend.run(async (ctx) => {
+      const account = await ctx.db.query('accounts')
+        .withIndex('by_accountRef', (index) => index.eq('accountRef', canonicalAccountRef)).unique()
+      await ctx.db.patch(account!._id, { lifecycle: 'closed' })
+    })
+    await expect(read()).rejects.toThrow('shared_thread_not_found')
+    await backend.run((ctx) => endAccountDependents(ctx, canonicalAccountRef, Date.now()))
+    const shares = await backend.run((ctx) => ctx.db.query('chatThreadShares')
+      .withIndex('by_threadId', (index) => index.eq('threadId', sent.threadId)).collect())
+    expect(shares).toHaveLength(0)
     await drainExpectedUnavailableGenerations(backend)
   })
 

@@ -1069,6 +1069,19 @@ describe('resend delivery webhook', () => {
   const deliveryState = async (backend: InteractiveAuthorityBackend, id: Id<'notificationDeliveries'>) =>
     (await backend.run((ctx) => ctx.db.get(id)))?.state
 
+  it('rejects unsigned and oversize webhook bodies before the verify action', async () => {
+    vi.stubEnv('RESEND_WEBHOOK_SECRET', WEBHOOK_SECRET)
+    const backend = await createNotificationBackend()
+    const unsigned = await backend.fetch('/resend/webhook', { method: 'POST', body: '{}' })
+    expect(unsigned.status).toBe(400)
+    const big = await backend.fetch('/resend/webhook', {
+      method: 'POST',
+      headers: { 'svix-id': 'msg_big', 'svix-timestamp': '1', 'svix-signature': 'v1,x' },
+      body: 'x'.repeat(1024 * 1024),
+    })
+    expect(big.status).toBe(413)
+  })
+
   it('records a permanent bounce, moves the delivery to bounced and suppresses the address', async () => {
     vi.stubEnv('RESEND_WEBHOOK_SECRET', WEBHOOK_SECRET)
     const backend = await createNotificationBackend()

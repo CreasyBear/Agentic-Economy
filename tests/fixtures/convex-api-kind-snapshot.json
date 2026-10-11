@@ -3680,6 +3680,12 @@
   {
     "visibility": "internal",
     "module": "moneyStripeWebhookInbox",
+    "method": "alertStuck",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyStripeWebhookInbox",
     "method": "complete",
     "kind": "mutation"
   },
@@ -4396,6 +4402,12 @@
     "module": "workloadCron",
     "method": "admit",
     "kind": "query"
+  },
+  {
+    "visibility": "internal",
+    "module": "workloadCron",
+    "method": "alertStuckStripeInbox",
+    "kind": "action"
   },
   {
     "visibility": "internal",

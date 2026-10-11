@@ -258,9 +258,9 @@ describe('Call content retention boundary', () => {
     const input = { kind: 'exact', toolRef, input: { q: 1 }, maxSpendAud: '0.50', idempotencyKey: 'release-key' }
     const row = (over: Record<string, unknown>) => backend.run(ctx => ctx.db.insert('operationKeys', { scope: 'capability_execution', actorKind: 'agent',
       actorRef: principal.principalId, operationName: 'tool.procure', key: input.idempotencyKey, requestHash: canonicalDigest(input),
-      status: 'in_progress', effectRefs: [], createdAt: 1, updatedAt: 1, ...over } as never))
-    const release = async () => backend.mutation(api.capabilityProcure.release, await withSourceWrite('protected_action', {
-      principal, idempotencyKey: input.idempotencyKey, inputJson: JSON.stringify(input),
+      status: 'in_progress', effectRefs: [], reservationNonce: 'A', createdAt: 1, updatedAt: 1, ...over } as never))
+    const release = async (reservationNonce = 'A') => backend.mutation(api.capabilityProcure.release, await withSourceWrite('protected_action', {
+      principal, idempotencyKey: input.idempotencyKey, inputJson: JSON.stringify(input), reservationNonce,
       operationKey: `release:${crypto.randomUUID()}`, correlationId: 'release',
     }))
     const count = () => backend.run(async ctx => (await ctx.db.query('operationKeys').collect()).length)
@@ -270,8 +270,13 @@ describe('Call content retention boundary', () => {
       expect(await count()).toBe(1)
       await backend.run(ctx => ctx.db.delete(id))
     }
-    await row({})
+    const owned = await row({})
+    expect(await release('B')).toMatchObject({ kind: 'replay' })
+    expect(await backend.run(ctx => ctx.db.get(owned))).toMatchObject({ status: 'in_progress', reservationNonce: 'A' })
     expect(await release()).toEqual({ kind: 'reserved' })
     expect(await count()).toBe(0)
+    await row({ reservationNonce: undefined })
+    expect(await release()).toMatchObject({ kind: 'replay' })
+    expect(await count()).toBe(1)
   })
 })

@@ -174,6 +174,18 @@ describe('source-write RFC 9421 signing', () => {
     })).resolves.toEqual({ kind: 'rejected', reason: 'source_write_command_mismatch' })
   })
 
+  it('enforces production secret rules when only AE_DEPLOYMENT_ENVIRONMENT is production', async () => {
+    const command = { operationKey: 'op:prod', correlationId: 'corr:prod' }
+    await expect(createSourceWriteAdmission({
+      env: { AE_DEPLOYMENT_ENVIRONMENT: 'production', AE_SOURCE_WRITE_SECRET: SOURCE_WRITE_SECRET },
+      request: requestFor('POST', '', sourceWriteBodyDigest('body')),
+      scope: 'billing',
+      operationKey: command.operationKey,
+      correlationId: command.correlationId,
+      commandDigest: sourceWriteCommandDigest(command),
+    })).rejects.toMatchObject({ code: 'missing_source_write_secret' })
+  })
+
   it('rejects weak key material and unsafe key ids', async () => {
     const command = { operationKey: 'op:key', correlationId: 'corr:key' }
     const request = requestFor('POST', '', sourceWriteBodyDigest('body'))

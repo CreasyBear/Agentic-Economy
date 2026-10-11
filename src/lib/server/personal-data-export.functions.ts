@@ -7,6 +7,7 @@ import {
   type ConvexSourceTransport,
 } from '@/lib/server/convex-source'
 import { problem } from '@/lib/server/problem'
+import { rateLimitedResponse, createHttpRateLimitAdmission } from '@/lib/server/rate-limit'
 
 import {
   assemblePersonalDataExport,
@@ -90,8 +91,14 @@ export async function readPersonalDataExportThroughSource(): Promise<PersonalDat
   })
 }
 
-export async function handlePersonalDataExportRequest(head = false): Promise<Response> {
+const admitExport = createHttpRateLimitAdmission('public-mutation')
+
+export async function handlePersonalDataExportRequest(request: Request, head = false): Promise<Response> {
   try {
+    if (!head) {
+      const admission = await admitExport({ request, keySuffix: 'personal-data-export' })
+      if (!admission.ok) return rateLimitedResponse(admission.retryAfter)
+    }
     const data = await readPersonalDataExportThroughSource()
     const date = data.exportedAt.slice(0, 10)
     // The notice never blocks or fails the download.

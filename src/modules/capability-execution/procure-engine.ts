@@ -85,6 +85,7 @@ export type ProcureIdentityPort = Readonly<{
 }>
 
 export function createProcureIdentityPort(request: Request, bodyText: string, correlationId: string): ProcureIdentityPort {
+  const reservationNonce = globalThis.crypto.randomUUID()
   async function invoke(phase: keyof typeof identityMutation, input: ExactProcureInput, principal: AgentAccessPrincipal, extra: Record<string, unknown> = {}) {
     const operationKey = canonicalDigest({ phase, principalId: principal.principalId, key: input.idempotencyKey })
     const command = {
@@ -99,14 +100,14 @@ export function createProcureIdentityPort(request: Request, bodyText: string, co
     }))
   }
   return {
-    reserve: async (input, principal) => await invoke('reserve', input, principal),
+    reserve: async (input, principal) => await invoke('reserve', input, principal, { reservationNonce }),
     checkpoint: async (input, principal, quote) => await invoke('checkpoint', input, principal, {
       quoteRef: quote.quoteRef, quoteJson: JSON.stringify(quote),
     }),
     complete: async (input, principal, result) => await invoke('complete', input, principal, {
       resultJson: JSON.stringify(result),
     }),
-    release: async (input, principal) => await invoke('release', input, principal),
+    release: async (input, principal) => await invoke('release', input, principal, { reservationNonce }),
   }
 }
 

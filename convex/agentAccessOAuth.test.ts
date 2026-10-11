@@ -23,6 +23,8 @@ import {
 
 const modules = import.meta.glob('./**/*.ts')
 const SOURCE_WRITE_SECRET = 'oauth-local-source-write-secret-material-32'
+// A production deployment disables the root-secret fallback, so these tests also hold the session family key.
+const SESSION_KEY = `oauth-test:${SOURCE_WRITE_SECRET}`
 const SOURCE_REQUEST = {
   method: 'POST',
   initiatorOrigin: 'https://ae.example',
@@ -36,7 +38,7 @@ const sourceArgs = async (
   nonce = command.operationKey,
 ) => {
   const sourceWrite = await createSourceWriteAdmission({
-    env: { AE_SOURCE_WRITE_SECRET: SOURCE_WRITE_SECRET },
+    env: { AE_SOURCE_WRITE_SECRET: SOURCE_WRITE_SECRET, AE_SOURCE_WRITE_KEY_SESSION: SESSION_KEY },
     request: { ...SOURCE_REQUEST, bodyDigest: sourceWriteCommandBodyDigest(command) },
     scope: 'agent_identity',
     operationKey: command.operationKey,
@@ -55,6 +57,7 @@ const previousDeploymentEnvironment = process.env.AE_DEPLOYMENT_ENVIRONMENT
 
 beforeEach(() => {
   vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
+  vi.stubEnv('AE_SOURCE_WRITE_KEY_SESSION', SESSION_KEY)
 })
 
 afterEach(() => {
@@ -311,6 +314,34 @@ describe('Agent Access OAuth Convex persistence adapter', () => {
       operationKey: 'oauth:test:unauthenticated-client',
       correlationId: 'oauth:test:unauthenticated-client',
     })).rejects.toThrow('agent_access_oauth_source_write_rejected:missing_source_write_admission')
+  })
+
+  it('revokes a device grant access token by its stored hash and returns the provider credential', async () => {
+    process.env.AE_SOURCE_WRITE_SECRET = SOURCE_WRITE_SECRET
+    const backend = convexTest(schema, modules)
+    const insertCommand = {
+      grant: { ...grant, keyId: 'ak_device_access', accessTokenHash: 'sha256:device-access' },
+      operationKey: 'oauth:test:device-access-insert',
+      correlationId: 'oauth:test:device-access-insert',
+    }
+    await backend.mutation(api.agentAccessOAuth.insertGrant, {
+      ...insertCommand, ...(await sourceArgs(insertCommand, 'nonce:oauth:test:device-access-insert')),
+    })
+    const revoke = (tokenHash: string, clientId: string, key: string) => ({
+      tokenHash, clientId, now: 2_000, reason: 'oauth_revocation', operationKey: key, correlationId: key,
+    })
+    const call = async (tokenHash: string, clientId: string, key: string) => {
+      const command = revoke(tokenHash, clientId, key)
+      return await backend.mutation(api.agentAccessOAuth.revokeRefreshFamilyByAccessToken, {
+        ...command, ...(await sourceArgs(command)),
+      })
+    }
+    await expect(call('sha256:device-access', grant.clientId, 'oauth:test:device-revoke-1'))
+      .resolves.toEqual({ kind: 'completed', providerCredentialId: 'ak_device_access' })
+    await expect(call('sha256:device-access', 'other-client', 'oauth:test:device-revoke-2'))
+      .resolves.toEqual({ kind: 'unknown' })
+    await expect(call('sha256:unknown', grant.clientId, 'oauth:test:device-revoke-3'))
+      .resolves.toEqual({ kind: 'unknown' })
   })
 
   it('inserts and reads a grant by reference and each exact hash index', async () => {
@@ -613,6 +644,21 @@ describe('Agent Access OAuth Convex persistence adapter', () => {
       ...conflictingClient,
       ...(await sourceArgs(conflictingClient)),
     })).rejects.toThrow('agent_access_oauth_client_conflict')
+  })
+
+  it('rejects client registration at the registry cap', async () => {
+    process.env.AE_SOURCE_WRITE_SECRET = SOURCE_WRITE_SECRET
+    const backend = convexTest(schema, modules)
+    await backend.run(async (ctx) => {
+      for (let index = 0; index < 5000; index += 1) {
+        await ctx.db.insert('agentAccessOAuthClients', { ...client, clientId: `cap-${index}` })
+      }
+    })
+    const insertCommand = { client, operationKey: 'oauth:test:cap', correlationId: 'oauth:test:cap' }
+    await expect(backend.mutation(api.agentAccessOAuth.insertClient, {
+      ...insertCommand,
+      ...(await sourceArgs(insertCommand)),
+    })).rejects.toThrow('agent_access_oauth_client_registry_full')
   })
 
   it('keeps OAuth client metadata public while grants remain source-admitted', async () => {
@@ -1470,6 +1516,20 @@ describe('Agent Access OAuth grant cleanup', () => {
     expect(remaining[0]).toMatchObject({ grantRef: 'cleanup:grace', expiresAt: cutoff + 1 })
   })
 
+  it('removes stale unused clients and keeps used or granted ones', async () => {
+    const backend = convexTest(schema, modules)
+    const workload = await admitOAuthCleanupWorkload(backend)
+    const now = 100 * 24 * 60 * 60 * 1_000
+    await backend.run(async (ctx) => {
+      await ctx.db.insert('agentAccessOAuthClients', { ...client, clientId: 'stale', createdAt: 1 })
+      await ctx.db.insert('agentAccessOAuthClients', { ...client, clientId: 'used', createdAt: 1, lastUsedAt: 2 })
+      await ctx.db.insert('agentAccessOAuthClients', { ...client, clientId: 'fresh', createdAt: now })
+    })
+    await backend.mutation(internal.agentAccessOAuth.cleanupExpiredOAuthGrants, { now, batchSize: 10, workload })
+    const ids = (await backend.run((ctx) => ctx.db.query('agentAccessOAuthClients').collect())).map((row) => row.clientId).sort()
+    expect(ids).toEqual(['fresh', 'used'])
+  })
+
   it('caps cleanup batches at 200 rows', async () => {
     const backend = convexTest(schema, modules)
     const workload = await admitOAuthCleanupWorkload(backend)
@@ -1559,6 +1619,7 @@ describe('Agent Access OAuth grant cleanup', () => {
 describe('durable OAuth refresh families', () => {
   beforeEach(() => {
     vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development')
+    vi.stubEnv('AE_SOURCE_WRITE_KEY_SESSION', SESSION_KEY)
   })
 
   it('refuses a fresh refresh claim after a deployment flip while allowing expiry revocation', async () => {

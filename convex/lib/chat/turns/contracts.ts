@@ -90,7 +90,7 @@ export const authorizeKeyGenerationResult = v.union(v.object({ ownerId: v.string
 export const recordOwnerChatCallArgs = { authority: trustedChatAuthorityValue, quoteRef: v.string(), callRef: v.string() }
 export const recordOwnerChatCallResult = v.boolean()
 
-export const authorizePayableToolArgs = { authority: trustedChatAuthorityValue, toolRef: v.string() }
+export const authorizePayableToolArgs = { authority: trustedChatAuthorityValue, toolRef: v.optional(v.string()) }
 export const authorizePayableToolResult = v.boolean()
 
 export const finishTurnArgs = { turnRef: v.string(), promptMessageId: v.string(),

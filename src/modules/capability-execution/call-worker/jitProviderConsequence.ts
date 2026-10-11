@@ -190,13 +190,14 @@ export function createJitProviderConsequenceBoundary(
           expiredBeforeRelease = true
           throw new Error('provider_consequence_expired')
         }
+        const priorRelease = releaseAttempted
         releaseAttempted = true
         try {
           return await options.send(target, init)
         } catch (error) {
           if (error instanceof ProviderConsequencePreReleaseRefusal) {
-            releaseAttempted = false
-            transportRefusedBeforeRelease = true
+            releaseAttempted = priorRelease
+            transportRefusedBeforeRelease = !priorRelease
           }
           throw error
         }

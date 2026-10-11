@@ -49,5 +49,15 @@ export const readDeltasHandler = async (ctx: QueryCtx, args: ObjectType<typeof r
     }
   })
 
-export const authorizePayableToolHandler = async (ctx: QueryCtx, args: ObjectType<typeof authorizePayableToolArgs>) => await resolveTrustedChatAuthority(ctx, args.authority, args.toolRef) !== null
+/** Without a toolRef this is the cheap turn-only fence (live turn, same credential and grant); with one, full authority. */
+export const authorizePayableToolHandler = async (ctx: QueryCtx, args: ObjectType<typeof authorizePayableToolArgs>) => {
+  if (args.toolRef !== undefined) return await resolveTrustedChatAuthority(ctx, args.authority, args.toolRef) !== null
+  const { authority } = args
+  if (authority.kind !== 'agent_key') return false
+  const turn = await ctx.db.query('chatTurns').withIndex('by_turnRef', (q) => q.eq('turnRef', authority.turnRef)).unique()
+  return turn !== null && turn.principalKind === 'agent_key'
+    && turn.credentialLocator === authority.credentialLocator && turn.grantRef === authority.grantRef
+    && turn.cancelRequestedAt === undefined
+    && turn.state !== 'canceled' && turn.state !== 'failed' && turn.state !== 'completed' && turn.state !== 'rejected'
+}
 

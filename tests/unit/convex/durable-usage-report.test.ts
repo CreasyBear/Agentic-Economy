@@ -56,7 +56,8 @@ describe('durable complete-period Call usage reports',()=>{
     expect((await f.read())).toEqual(result)
     const audits=await f.backend.run(ctx=>ctx.db.query('auditEvents').withIndex('by_eventType_and_createdAt',q=>q.eq('eventType','billing.call_usage_export_requested')).collect())
     expect(audits).toHaveLength(1);expect(audits[0]?.redactedPayloadJson).not.toContain('PRIVATE_FORMULA')
-  },90000)
+  // 1,000 sequential capture mutations take ~41s alone and ~58s under load; 90s left no CI headroom.
+  },240000)
   it('rejects tampered parts, truncation, cursor replay and changed summaries without exposing a partial artifact',async()=>{
     const f=await fixture(21);await f.request();for(let page=0;page<3;page++)await f.capture(page)
     const result=await f.read();if(result.kind!=='available')throw new Error('report missing')

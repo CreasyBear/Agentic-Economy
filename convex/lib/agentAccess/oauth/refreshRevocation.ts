@@ -32,7 +32,10 @@ export const revokeRefreshFamilyByAccessTokenArgs = {
   tokenHash: v.string(), clientId: v.string(), now: v.number(), reason: v.string(),
   operationKey: v.string(), correlationId: v.string(), ...sourceWriteArgs,
 }
-export const revokeRefreshFamilyByAccessTokenResult = v.object({ kind: v.union(v.literal('completed'), v.literal('replayed'), v.literal('unknown')) })
+export const revokeRefreshFamilyByAccessTokenResult = v.object({
+  kind: v.union(v.literal('completed'), v.literal('replayed'), v.literal('unknown')),
+  providerCredentialId: v.optional(v.string()),
+})
 export async function revokeRefreshFamilyByAccessTokenHandler(
   ctx: MutationCtx,
   args: ObjectType<typeof revokeRefreshFamilyByAccessTokenArgs>,
@@ -40,7 +43,14 @@ export async function revokeRefreshFamilyByAccessTokenHandler(
   await requireOAuthSourceWrite(ctx, args)
   const matchingTokens = await ctx.db.query('agentAccessOAuthRefreshTokens')
     .withIndex('by_accessTokenHash', (query) => query.eq('accessTokenHash', args.tokenHash)).take(3)
-  if (matchingTokens.length === 0) return { kind: 'unknown' as const }
+  if (matchingTokens.length === 0) {
+    // Device and non-offline grants have no refresh family; the grant row
+    // carries the access-token hash and the provider credential to revoke.
+    const grant = await ctx.db.query('agentAccessOAuthGrants')
+      .withIndex('by_accessTokenHash', (query) => query.eq('accessTokenHash', args.tokenHash)).first()
+    if (grant === null || grant.clientId !== args.clientId || grant.keyId === undefined) return { kind: 'unknown' as const }
+    return { kind: 'completed' as const, providerCredentialId: grant.keyId }
+  }
   const familyRefs = [...new Set(matchingTokens.map((token) => token.familyRef))]
   if (familyRefs.length !== 1) throw new Error('refresh_family_access_token_ambiguous')
   const familyRef = familyRefs[0]

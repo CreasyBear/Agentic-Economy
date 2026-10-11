@@ -16,9 +16,9 @@ const fields = {
   ...sourceWriteArgs,
 } as const
 
-export const reserveProcureArgs = fields
+export const reserveProcureArgs = { ...fields, reservationNonce: v.optional(v.string()) }
 export const checkpointProcureArgs = { ...fields, quoteRef: v.string(), quoteJson: v.string() }
-export const releaseProcureArgs = fields
+export const releaseProcureArgs = { ...fields, reservationNonce: v.optional(v.string()) }
 export const completeProcureArgs = { ...fields, resultJson: v.string() }
 export const procureIdentityResult = v.union(
   v.object({ kind: v.literal('reserved') }),
@@ -35,6 +35,7 @@ type Command = {
   inputJson: string
   operationKey: string
   correlationId: string
+  reservationNonce?: string
   sourceWrite?: unknown
   sourceWriteRequest?: unknown
 }
@@ -78,7 +79,7 @@ export async function reserveProcureHandler(ctx: MutationCtx, args: Command) {
   await ctx.db.insert('operationKeys', {
     scope: 'capability_execution', actorKind: 'agent', actorRef: args.principal.principalId,
     operationName: 'tool.procure', key: args.idempotencyKey, requestHash: digest,
-    status: 'in_progress', effectRefs: [], createdAt: now, updatedAt: now,
+    status: 'in_progress', ...(args.reservationNonce === undefined ? {} : { reservationNonce: args.reservationNonce }), effectRefs: [], createdAt: now, updatedAt: now,
   })
   return { kind: 'reserved' as const }
 }
@@ -151,6 +152,10 @@ export async function releaseProcureHandler(ctx: MutationCtx, args: Command) {
   if (row.requestHash !== material(args) || row.scope !== 'capability_execution') return { kind: 'conflict' as const }
   if (row.status !== 'in_progress' || row.effectRefs.length > 0) {
     return { kind: 'replay' as const, resultJson: row.resultJson ?? null, quoteRef: row.effectRefs[0] ?? null }
+  }
+  // Only the reserving request may release; rows without a nonce fail closed.
+  if (row.reservationNonce === undefined || row.reservationNonce !== args.reservationNonce) {
+    return { kind: 'replay' as const, resultJson: row.resultJson ?? null, quoteRef: null }
   }
   await ctx.db.delete(row._id)
   return { kind: 'reserved' as const }

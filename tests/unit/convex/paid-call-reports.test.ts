@@ -114,6 +114,20 @@ describe('paid Call reports', () => {
     expect(await owner.owner.query(api.capabilityCallReports.readOwner, { callRef: good })).toMatchObject({ kind: 'eligible', remainingToday: 3 })
   })
 
+  it('claim honours its lease until 60s pass', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(now)
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development')
+    const backend = convexTestWithMarketComponents()
+    const owner = await publishedBusinessOwner(backend, 'lease-owner')
+    const callRef = await seedPaidCall(backend, owner.canonicalAccountRef, 'lease')
+    await owner.owner.mutation(internal.capabilityCallReports.admit, { callRef })
+    expect(await backend.mutation(internal.capabilityCallReports.claimWork, { callRef })).not.toBeNull()
+    expect(await backend.mutation(internal.capabilityCallReports.claimWork, { callRef })).toBeNull()
+    vi.setSystemTime(now + 60_001)
+    expect(await backend.mutation(internal.capabilityCallReports.claimWork, { callRef })).not.toBeNull()
+  })
+
   it('replays one report before quota and rejects the fourth distinct Call for one owner', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(now)

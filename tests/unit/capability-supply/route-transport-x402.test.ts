@@ -15,6 +15,7 @@ import { privateKeyToAccount } from 'viem/accounts'
 
 import type { RouteTransportFetch } from '@/modules/capability-supply/route-transport-runtime'
 import { x402PaymentCredentialRefFromEnvironment } from '@/modules/capability-supply/server'
+import { offerReceiptDropped } from '@/modules/capability-supply/internal/route-transport-x402'
 import { prepareX402PaymentMaterial } from '@/modules/capability-supply/internal/route-transport-x402-payment'
 
 import {
@@ -551,6 +552,14 @@ describe('registered route transport runtime', () => {
     expect(sign).not.toHaveBeenCalled()
     expect(send).toHaveBeenCalledTimes(1)
     expect(fresh.wasCanceled()).toBe(true)
+  })
+
+  it('treats a fresh 402 that drops the committed offer-receipt as drift', () => {
+    const bare = x402PaymentRequired('https://provider.example/fresh-offer') as unknown as Parameters<typeof offerReceiptDropped>[0]
+    const withOffer = { ...bare, extensions: { 'offer-receipt': { info: { offers: [{ format: 'jws' }] } } } } as typeof bare
+    expect(offerReceiptDropped(withOffer, bare)).toBe(true)
+    expect(offerReceiptDropped(withOffer, withOffer)).toBe(false)
+    expect(offerReceiptDropped(bare, bare)).toBe(false)
   })
 
   it('does not follow or sign a redirect returned by the fresh unpaid request', async () => {

@@ -59,6 +59,11 @@ export async function listSharedMessagesHandler(
     .withIndex('by_threadId', (index) => index.eq('threadId', grant.threadId))
     .unique()
   if (thread === null) throw new Error('shared_thread_not_found')
+  const owner = await ctx.db
+    .query('accounts')
+    .withIndex('by_accountRef', (index) => index.eq('accountRef', thread.ownerId))
+    .unique()
+  if (owner === null || owner.lifecycle !== 'active') throw new Error('shared_thread_not_found')
 
   const messages = await listUIMessages(ctx, components.agent, {
     threadId: thread.threadId,

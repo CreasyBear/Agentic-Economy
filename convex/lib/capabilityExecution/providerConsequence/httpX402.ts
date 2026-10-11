@@ -119,10 +119,11 @@ function canonicalX402Args(
 
 export async function providerConsequenceX402RpcHandler(ctx: GenericActionCtx<GenericDataModel>, request: Request): Promise<Response> {
   const token = bearer(request)
+  if (token === undefined) return json({ kind: 'unavailable' }, 401)
   // The checkpoint can carry a 512 KiB normalized JSON response inside a JSON string.
   const body = await boundedJson(request, 1024 * 1024 + 16 * 1024)
-  if (token === undefined || body === undefined || !exactKeys(body, ['ticketRef', 'operation', 'args'])) {
-    return json({ kind: 'unavailable' }, token === undefined ? 401 : 400)
+  if (body === undefined || !exactKeys(body, ['ticketRef', 'operation', 'args'])) {
+    return json({ kind: 'unavailable' }, 400)
   }
   if (!canonicalRef(body.ticketRef)
     || typeof body.operation !== 'string'

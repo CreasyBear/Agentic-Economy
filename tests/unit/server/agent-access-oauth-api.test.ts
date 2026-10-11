@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST, MARKET_SUPPLY_MANAGE_SCOPE } from '@/modules/agent-access/contract'
+import { AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST, CUSTOMER_REQUEST_READ_ONLY_SCOPE, MARKET_SUPPLY_MANAGE_SCOPE, MARKET_TOOLS_CALL_SCOPE } from '@/modules/agent-access/contract'
 import { AGENT_ACCESS_KEY_TTL_SECONDS } from '@/modules/agent-access/agent-access'
 import {
   createOAuthStoreFixture,
@@ -31,6 +31,7 @@ import {
   hashOAuthValue,
   type AgentAccessOAuthStore,
 } from '@/modules/agent-access/oauth-state'
+import { authenticateAgentAccess } from '@/lib/server/agent-access-auth'
 import type { AgentAccessOAuthRefreshStore } from '@/lib/server/agent-access-oauth-store'
 
 const allTools = { toolAccess: 'all_admitted' as const, toolRefs: [] as const }
@@ -714,6 +715,24 @@ describe('Customer Request OAuth HTTP adapter', () => {
     })
   })
 
+  it('shares one IP-only aggregate budget across rotated client_id values', async () => {
+    const used = new Map<string, number>()
+    const rateLimit = async ({ keySuffix = '' }: { keySuffix?: string }) => {
+      const n = (used.get(keySuffix) ?? 0) + 1
+      used.set(keySuffix, n)
+      return keySuffix === 'oauth-aggregate' && n > 100 ? { ok: false as const, retryAfter: 1_000 } : { ok: true as const }
+    }
+    let limited = 0
+    for (let i = 0; i < 200; i++) {
+      const response = await handleDeviceAuthorizationPost(formRequest('http://localhost/oauth/device_authorization', {
+        client_id: `rotated-${i}`,
+        scope: 'market_tools:call customer_requests:read_only',
+      }), { store: storeFixture(), now: () => 1_000, rateLimit })
+      if (response.status === 429) limited++
+    }
+    expect(limited).toBe(100)
+  })
+
   it('uses the configured canonical base URL for OAuth verification redirects instead of the request host', async () => {
     vi.stubEnv('AE_CANONICAL_BASE_URL', 'https://canonical.agentic.test/')
     try {
@@ -1041,11 +1060,34 @@ describe('Customer Request OAuth HTTP adapter', () => {
       .mockResolvedValueOnce({ kind: 'completed' })
       .mockResolvedValue({ kind: 'unknown' })
     const byAccess = vi.fn<AgentAccessOAuthRefreshStore['revokeRefreshFamilyByAccessToken']>()
-      .mockResolvedValue({ kind: 'completed' })
+      .mockResolvedValueOnce({ kind: 'completed', providerCredentialId: 'ak_device_access' })
+      .mockResolvedValue({ kind: 'unknown' })
     const refreshStore = refreshStoreFixture({ revokeRefreshFamily: byRefresh, revokeRefreshFamilyByAccessToken: byAccess })
+    let credentialRevoked = false
+    const revokeProviderCredential = vi.fn(async () => { credentialRevoked = true })
     const options: OAuthApiOptions = {
       store, refreshStore, now: () => 1_000,
+      getProviderCredential: async () => ({ revoked: false }),
+      revokeProviderCredential,
     }
+
+    const scopes = [MARKET_TOOLS_CALL_SCOPE, CUSTOMER_REQUEST_READ_ONLY_SCOPE]
+    const authAccessToken = () => authenticateAgentAccess({
+      requiredScope: MARKET_TOOLS_CALL_SCOPE,
+      consequenceResource: 'surface:test:agent-access',
+      resolvePrincipal: async (projection) => ({
+        ...projection, principalId: 'prn_00000000000040008000000000000040', ownerId: 'acc_00000000000040008000000000000040',
+      }),
+      authenticate: async () => ({
+        isAuthenticated: true, tokenType: 'api_key', id: 'ak_device_access', subject: 'user_1', userId: 'user_1', orgId: null,
+        scopes, claims: { aeEnvironment: 'sandbox' },
+      }),
+      verifyKeyState: async () => ({
+        id: 'ak_device_access', subject: 'user_1', revoked: credentialRevoked, expired: false, scopes,
+        claims: { aeEnvironment: 'sandbox' },
+      }),
+    })
+    expect((await authAccessToken()).kind).toBe('authenticated')
 
     const refresh = await handleOAuthRevokePost(formRequest('http://localhost/oauth/revoke', {
       token: 'known-refresh', token_type_hint: 'access_token', client_id: 'client-durable',
@@ -1060,7 +1102,10 @@ describe('Customer Request OAuth HTTP adapter', () => {
     expect(refresh.status).toBe(200)
     expect(access.status).toBe(200)
     expect(unknown.status).toBe(200)
+    expect(await authAccessToken()).toMatchObject({ kind: 'refused', status: 401 })
     expect(refresh.headers.get('cache-control')).toBe('no-store')
+    expect(revokeProviderCredential).toHaveBeenCalledTimes(1)
+    expect(revokeProviderCredential).toHaveBeenCalledWith('ak_device_access', expect.any(String))
     expect(byAccess).toHaveBeenCalledWith(expect.objectContaining({
       tokenHash: await hashOAuthValue('known-access'), clientId: 'client-durable',
     }))

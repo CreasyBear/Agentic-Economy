@@ -27,7 +27,7 @@ import { readManagedX402InspectionTarget } from '../../capabilitySupply/currentT
 import { readAgentPaymentAdmission } from '../../money/treasury/paymentAdmission'
 import { readCommercialPolicyGate } from '../../../moneyCommercialPolicy'
 import { principalValue } from '../callLifecycle/contracts'
-import { hasCurrentAgentGrant, resolveCurrentAgentAuthority } from '../callLifecycle/agentCallAuthority'
+import { resolveCurrentAgentAuthority } from '../callLifecycle/agentCallAuthority'
 import { requireSourceWrite } from '../../security/sourceWrite/admission'
 import { sourceWriteArgs } from '../../security/sourceWrite/contracts'
 import { resolveAndBindLegalCustomer } from '../../money/legalCustomer/binding'
@@ -81,7 +81,7 @@ export const admitCallableResolveArgs = {
 
 export const admitCallableResolveResult = v.union(
   v.object({ kind: v.literal('admitted') }),
-  v.object({ kind: v.literal('refused'), code: v.union(v.literal('inspection_unavailable'), v.literal('grant_not_found')), reason: v.optional(v.string()) }),
+  v.object({ kind: v.literal('refused'), code: v.union(v.literal('inspection_unavailable'), v.literal('grant_not_found'), v.literal('budget_exceeded')), reason: v.optional(v.string()) }),
 )
 
 /**
@@ -95,7 +95,14 @@ export async function admitCallableResolveHandler(
 ): Promise<Infer<typeof admitCallableResolveResult>> {
   const sourceWrite = await requireSourceWrite(ctx, args, 'protected_action')
   if (sourceWrite.kind === 'rejected') return { kind: 'refused', code: 'inspection_unavailable', reason: sourceWrite.reason }
-  return await hasCurrentAgentGrant(ctx, args.principal, Date.now()) ? { kind: 'admitted' } : { kind: 'refused', code: 'grant_not_found' }
+  const authority = await resolveCurrentAgentAuthority(ctx, args.principal, Date.now(), { kind: 'receipt_list' })
+  if (authority === null) return { kind: 'refused', code: 'grant_not_found' }
+  // Resolving a URL probes outbound and can publish to the directory, which a read-only Agent must not trigger.
+  if (authority.principal.authorityMode === 'read_only') return {
+    kind: 'refused', code: 'budget_exceeded',
+    reason: 'This Agent is read-only, so it cannot quote Tools from a URL. Give it a monthly budget in Agents to let it spend.',
+  }
+  return { kind: 'admitted' }
 }
 
 /** Called only after the public source-write gate or the trusted chat mutation's live turn/grant check. */

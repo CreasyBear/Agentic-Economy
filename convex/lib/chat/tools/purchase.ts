@@ -29,7 +29,7 @@ const callRef = makeFunctionReference<'action', {
   quoteRef: string; idempotencyKey: string; requireApproval?: boolean
 }, CallResult>('chatCall:call')
 const payableAdmissionRef = makeFunctionReference<'query', {
-  authority: TrustedChatAuthority; toolRef: string
+  authority: TrustedChatAuthority; toolRef?: string
 }, boolean>('chatTurns:authorizePayableTool')
 
 const chatToolQuoteInputSchema = z.strictObject({
@@ -120,6 +120,8 @@ export function createPurchaseTools(authority: TrustedChatAuthority & { kind: 'a
         execute: async (ctx: ToolCtx, input: ToolQuoteInput) => {
           const denied = reserve('tool.quote')
           if (denied !== null) return denied
+          // Ref-independent turn fence first: a stopped turn never triggers URL resolution/egress.
+          if (!await ctx.runQuery(payableAdmissionRef, { authority })) return failure('tool.quote', 'turn_stopped')
           const toolRef = await callableToolRef(ctx, input.toolRef)
           if (toolRef === null) return failure('tool.quote', 'tool_unavailable')
           if (!await ctx.runQuery(payableAdmissionRef, { authority, toolRef })) {

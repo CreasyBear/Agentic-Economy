@@ -511,7 +511,7 @@ describe('consequence admission and revocation', () => {
     expect(Object.isFrozen(snapshot.ancestry[0])).toBe(true)
 
     await fixture.service.revoke({ grantRef: issued.grantRef, expectedGeneration: 1, context: fixture.context(OWNER, 'revoke-after-admit') })
-    expect(await fixture.service.admitConsequence(request)).toStrictEqual(snapshot)
+    await expect(fixture.service.admitConsequence(request)).rejects.toBeInstanceOf(DelegationError)
   })
 
   it('rejects a forged persisted snapshot instead of blessing it through admission replay', async () => {

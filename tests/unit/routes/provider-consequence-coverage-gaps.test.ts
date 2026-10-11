@@ -163,6 +163,7 @@ describe('provider consequence route coverage gaps', () => {
     const visited: string[] = []
     vi.stubGlobal('fetch', vi.fn<typeof globalThis.fetch>(async (input) => {
       visited.push(String(input))
+      if (String(input).endsWith('/journal/attest')) return Response.json({ kind: 'attested' })
       throw new Error('vault_offline')
     }))
     const response = await handleProviderConsequenceRequest(consequenceRequest(), environment({
@@ -445,6 +446,7 @@ describe('provider consequence route coverage gaps', () => {
           },
         })
       }
+      if (url.pathname.endsWith('/journal/attest')) return Response.json({ kind: 'attested' })
       throw new Error(`unexpected_fetch:${url}`)
     }))
 
@@ -545,7 +547,7 @@ describe('provider consequence route coverage gaps', () => {
       }
     })
     const dynamicRoute = await import('@/routes/api.internal.provider-consequence')
-    vi.stubGlobal('fetch', vi.fn<typeof globalThis.fetch>())
+    vi.stubGlobal('fetch', vi.fn<typeof globalThis.fetch>(async () => Response.json({ kind: 'attested' })))
     try {
       const response = await dynamicRoute.handleProviderConsequenceRequest(consequenceRequest(), environment())
       expect(response.status).toBe(200)
@@ -833,6 +835,7 @@ function probeFetch(
         },
       })
     }
+    if (url.pathname.endsWith('/journal/attest')) return Response.json({ kind: 'attested' })
     if (url.pathname.endsWith('/journal/complete')) return Response.json({ kind: 'completed' })
     if (url.pathname.endsWith('/journal/abort')) {
       abortCalls += 1

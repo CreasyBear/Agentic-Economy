@@ -142,4 +142,16 @@ describe('anonymous chat Convex boundary', () => {
     }
     expect(statuses).toEqual([200, 200, 429, 429])
   })
+
+  it('rejects oversize bodies with 413 before admission or streaming', async () => {
+    const admit = vi.fn()
+    const stream = vi.fn()
+    const response = await handleAnonymousChatRequest(
+      proxyRequest({ messages: [{ role: 'user', content: 'x'.repeat(70 * 1024) }] }),
+      { proxySecret: PROXY_SECRET, admit, stream } as unknown as AnonymousChatHandlerDependencies,
+    )
+    expect(response.status).toBe(413)
+    expect(admit).not.toHaveBeenCalled()
+    expect(stream).not.toHaveBeenCalled()
+  })
 })

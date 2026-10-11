@@ -338,6 +338,37 @@ describe('personalAccount exportUserData (W-09)', () => {
     expect(serialized).not.toContain('Bearer ')
   })
 
+  it('X7: export lists only the requester\'s own audit events', async () => {
+    const backend = createBackend()
+    await seedAuthority(backend)
+    const OTHER_REF = 'user_other-member'
+    await backend.run(async (ctx) => {
+      for (const [id, actor] of [['mine', PRINCIPAL_REF], ['theirs', OTHER_REF]] as const) {
+        await ctx.db.insert('auditEvents', {
+          eventId: `audit:export:${id}`,
+          eventType: 'account.session.created',
+          actorKind: 'owner',
+          actorRef: actor,
+          targetType: 'session',
+          targetRef: `session:${id}`,
+          afterState: 'created',
+          sourceSystem: 'clerk_observed',
+          activeAccountRef: ACCOUNT_REF,
+          idempotencyKey: `export:${id}`,
+          correlationId: `correlation:${id}`,
+          evidenceRefs: [],
+          redactedPayloadJson: '{}',
+          payloadHash: canonicalDigest({ id }),
+          createdAt: NOW,
+        } as never)
+      }
+    })
+
+    const refs = (await exportData(backend)).securityHistory.map((e) => e.eventRef)
+    expect(refs).toContain('audit:export:mine')
+    expect(refs).not.toContain('audit:export:theirs')
+  })
+
   it('X6: retired principal cannot call exportUserData', async () => {
     process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN = serviceKey
     const backend = createBackend()

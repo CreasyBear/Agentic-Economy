@@ -82,7 +82,8 @@ describe('trial activation page', () => {
     render(<AeTrialPage />)
     fireEvent.click(screen.getByRole('button', { name: 'Check credit status' }))
     expect(await screen.findByText(/trial approval could not be verified/)).toBeTruthy()
-    expect(screen.queryByText('Confirming your trial credit')).toBeNull()
+    // The pending banner clears on a later commit than the refusal text; wait rather than assert once.
+    await waitFor(() => expect(screen.queryByText('Confirming your trial credit')).toBeNull())
   })
 
   it('keeps a completed refusal ahead of a grant query received while the claim was pending', async () => {

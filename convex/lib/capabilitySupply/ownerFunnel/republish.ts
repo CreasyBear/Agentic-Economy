@@ -10,6 +10,7 @@ import { resolveBusinessActor } from '../../../authz'
 import { admitAgentPublicationConsequence } from '../../authority/consequence/publication'
 import { admitInteractiveOwnerConsequence } from '../../authority/consequence/owner'
 import type { OwnerSupplyCommandArgs, OwnerSupplyCommandResult } from './contracts'
+import { providerRouteabilityIsFrozen } from '../providerOffboarding/freeze'
 import { loadOwnerSupplyPublication } from './maintenance'
 import { reconstructPreparedRepublishMaterial } from './republishMaterial'
 
@@ -22,6 +23,9 @@ export async function republishOwnerCapabilityHandler(
       return { kind: 'refused', reason: 'authorization_denied' }
     const loaded = await loadOwnerSupplyPublication(ctx, args)
     if (loaded.kind === 'refused') return loaded
+    if (await providerRouteabilityIsFrozen(ctx, args.businessId)) {
+      return { kind: 'refused', reason: 'authorization_denied' }
+    }
     if (loaded.publication.disposition !== 'withdrawn') {
       return { kind: 'refused', reason: 'revision_changed' }
     }
