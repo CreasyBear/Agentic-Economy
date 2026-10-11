@@ -16,7 +16,7 @@ Takes production from `d3c9061f4` to `origin/main` (`616291e71` when written, ab
 
 **Observability.** `journeyEvents` table with hourly forward retry, an hourly stuck Stripe inbox alert, a six-row `/status` page, and Sentry noise cleanup.
 
-**Routes.** `_operator/owner.*` moved to `/owner/settings/team` and `/owner/agent-keys`.
+**Routes.** Owner team and agent keys screens renamed to `/owner/settings/team` and `/owner/settings/agent-keys`. `/owner/agent-keys` redirects to the latter.
 
 **Deploy mechanics.** `vercel.json` stops main auto-deploying and pins npm 11.19.1. GitHub workflows are manual or tag driven only.
 
@@ -32,15 +32,16 @@ Takes production from `d3c9061f4` to `origin/main` (`616291e71` when written, ab
 
 ### Must set before deploy
 
-None are strictly required for the deploy to succeed, but without these three the email pipeline is partly dead. Set them in Convex production before deploy.
+None are strictly required for the deploy to succeed, but without the three email secrets the email pipeline is mostly dead: sends that reach the suppression check throw an error per send. Set all four rows in Convex production before deploy.
 
 | Name | Where | New? | Secret? | How to generate | Rotation rule |
 |---|---|---|---|---|---|
 | `EMAIL_SUPPRESSION_HASH_SECRET` | Convex prod | Yes | Yes | `openssl rand -base64 32` | Never rotate. It keys the hash of suppressed addresses, so rotating un-suppresses everyone and bounced addresses get mailed again. Back it up in the password manager. |
-| `EMAIL_UNSUBSCRIBE_SECRET` | Convex prod | Yes | Yes | `openssl rand -base64 32` | Rotation breaks outstanding unsubscribe links unless `UNSUBSCRIBE_KID` (`unsubscribe.ts:16`, now `v1`) is bumped in code first. |
+| `EMAIL_UNSUBSCRIBE_SECRET` | Convex prod | Yes | Yes | `openssl rand -base64 32` | Rotation breaks outstanding unsubscribe links unless `UNSUBSCRIBE_KID` (`convex/lib/principalAccount/notifications/unsubscribe.ts:16`, now `v1`) is bumped in code first. |
 | `RESEND_WEBHOOK_SECRET` | Convex prod | Yes | Yes | Copy the `whsec_...` signing secret from the Resend webhook | Rotate in Resend and update here at the same time. Unset, the webhook returns 400. |
+| `AE_RELEASE_SOURCE_REVISION` | Convex prod | Yes | No | The exact 40-character lowercase git revision being deployed (`git rev-parse HEAD`) | Set on every Convex deploy to the revision deployed. Nothing in the repo sets it; step 4 of the sequence reads it back. |
 
-Without `EMAIL_SUPPRESSION_HASH_SECRET` sends are skipped. Without `EMAIL_UNSUBSCRIBE_SECRET` the footer link is omitted and `/api/unsubscribe` shows an invalid page.
+Without `EMAIL_SUPPRESSION_HASH_SECRET`, `emailAddressHash` throws (`convex/lib/principalAccount/notifications/suppression.ts:9`) and `convex/notificationDelivery.ts:53` has no try/catch, so every send that reaches that line errors. Without `EMAIL_UNSUBSCRIBE_SECRET`, or without `AE_SITE_URL`, `unsubscribeUrlFor` returns null (`convex/lib/principalAccount/notifications/unsubscribe.ts:80-81`) and lifecycle and usage-alert sends are skipped with `unsubscribe_url_missing`. `/api/unsubscribe` shows an invalid page.
 
 ### Optional
 
@@ -53,31 +54,31 @@ Without `EMAIL_SUPPRESSION_HASH_SECRET` sends are skipped. Without `EMAIL_UNSUBS
 | `AE_EMAIL_LIFECYCLE_ENABLED` | Convex prod | Yes | No | On. Only `false` disables. |
 | `AE_EMAIL_PHASE2_ENABLED` | Convex prod | Yes | No | Off. Only `true` enables, whatever the stream switch says. |
 | `AE_EMAIL_PHASE3_ENABLED` | Convex prod | Yes | No | Off. Only `true` enables, whatever the stream switch says. |
-| `AE_EMAIL_KIND_<KIND>_ENABLED` | Convex prod | Yes | No | Must be exactly `true` (`enqueue.ts:35`). |
-| `POSTHOG_KEY` | Convex prod | Yes | No (public key) | Convex side analytics off (not verified against capture code). |
-| `POSTHOG_HOST` | Convex prod | Yes | No | Default host (not verified). |
+| `AE_EMAIL_KIND_<KIND>_ENABLED` | Convex prod | Yes | No | Must be exactly `true` (`convex/lib/principalAccount/notifications/enqueue.ts:35`). |
+| `POSTHOG_KEY` | Vercel | Yes | No (public key) | Analytics off, or falls back to `VITE_POSTHOG_KEY` (`src/lib/observability/config.ts:82`). Convex only declares the name (`convex/convex.config.ts:44`) and never reads it. |
+| `POSTHOG_HOST` | Vercel | Yes | No | Falls back to `VITE_POSTHOG_HOST`, then the default host (`config.ts:83`). |
 
-Existing and unchanged, confirm still set: Vercel `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_V2_WEBHOOK_SECRET`, `CLERK_WEBHOOK_SIGNING_SECRET`, `SENTRY_DSN`, `VITE_SENTRY_DSN`, `SENTRY_ENVIRONMENT` and `VITE_SENTRY_ENVIRONMENT` (both `production`), and `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT` (all three together). Convex `STRIPE_READBACK_KEY`, `STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID`, `STRIPE_CHECKOUT_HOST`, `RESEND_API_KEY`, `NOTIFICATION_FROM_EMAIL`. Stripe keys in production use the `rk_live_` prefix.
+Existing and unchanged, confirm still set: Convex `AE_SITE_URL` (unsubscribe links and the usage-alert path need it), `AE_DEPLOYMENT_ENVIRONMENT` (required, a `production` or `development` union in `convex/convex.config.ts:21`; the deploy fails if unset) and `CLERK_JWT_ISSUER_DOMAIN`. Vercel `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_V2_WEBHOOK_SECRET`, `CLERK_WEBHOOK_SIGNING_SECRET`, `SENTRY_DSN`, `VITE_SENTRY_DSN`, `SENTRY_ENVIRONMENT` and `VITE_SENTRY_ENVIRONMENT` (both `production`), and `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT` (all three together). Convex `STRIPE_READBACK_KEY`, `STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID`, `STRIPE_CHECKOUT_HOST`, `RESEND_API_KEY`, `NOTIFICATION_FROM_EMAIL`. Stripe keys in production use the `rk_live_` prefix.
 
 ## 2. Schema and data
 
 Order of concern:
 
 1. **Nothing blocks the deploy.** No required field is added to an existing table. New tables are empty on deploy: `journeyEvents`, `termsAcceptances`, `emailSuppressions`, `emailWebhookEvents`. New indexes on `emailDeliveries` (`by_vendorMessageId`, `by_state_and_updatedAt`) and the grants table build on deploy.
-2. **Backfill gap (action or accept).** `accessTokenHash` is a new optional field on grants with index `by_accessTokenHash` (`oauth-convex-schema.ts:123, 135`). Existing grant rows have no hash. `refreshRevocation.ts:50` falls back to this index for device and non-offline grants, so revoking by access token returns `unknown` for grants created before deploy. No backfill exists and `convex/migrations.ts` is unchanged. A backfill needs a computed hash, so it cannot be derived from stored fields. Either write one, or accept the gap and revoke those grants from the owner screen or let them expire. Decision recorded in section 8.
+2. **Backfill gap (action or accept).** `accessTokenHash` is a new optional field on grants with index `by_accessTokenHash` (`src/modules/agent-access/internal/oauth-convex-schema.ts:123, 135`). Existing grant rows have no hash. `convex/lib/agentAccess/oauth/refreshRevocation.ts:50` falls back to this index for device and non-offline grants only, so revoking by access token returns `unknown` for device and non-offline grants created before deploy. Offline grants already resolve through the refresh-token table, which has always carried a required `accessTokenHash` (`refreshRevocation.ts:45`). No backfill exists and `convex/migrations.ts` is unchanged. A backfill needs a computed hash, so it cannot be derived from stored fields. Either write one, or accept the gap and revoke those grants from the owner screen or let them expire. Decision recorded in section 8.
 3. **Product effect, not an error.** Existing owners show `accepted: false` for terms (`convex/termsAcceptance.ts:14`) until they accept the new version.
 4. **Removed or narrowed validators.** `external_listing` is gone from the access filter and `searchCompactArgs`. These are arguments, not stored data. Old clients sending it will be refused.
 5. **Crons.** Added: operator stalled digest (daily 22:00 UTC), stalled step emails (daily 22:30 UTC), stuck Stripe inbox alert (hourly), journey event forward retry (hourly). Removed: facilitator discovery refresh. The market flow refresh now swallows action errors.
-6. No backfill for `signed_up` journey events (by design, `convex/attribution.ts:42`).
+6. No backfill of missing `signed_up` journey events. `convex/attribution.ts:41-50` only patches `first_*` props onto an existing `signed_up` row.
 
 ## 3. Deploy sequence
 
-Convex first, then Vercel. Pushing to main does not deploy.
+Convex first, then Vercel. Pushing to main does not deploy. The order matters because the Vercel proxies (`src/routes/api.unsubscribe.ts`, `src/routes/api.resend.webhook.ts`) forward to the Convex HTTP routes `/notifications/unsubscribe` and `/resend/webhook`, which return 404 until the new Convex code is live. Run smoke 7 and 8 after step 4, before the promote in step 6.
 
 1. **Codegen.** `npm run check:convex-codegen`. If it fails, `npm run generate:convex` and review the diff. Check: no diff left.
 2. **Verify.** `npm run check`, then the affected tests. Check: green.
 3. **Gate.** `npm run gate` on the frozen tree. It runs the deployment manifest check, `.env.example` check, anonymous Convex generated check, release integrity, then lint, typecheck, unit, integration, e2e, a11y, CLI package and docs build. Check: green.
-4. **Convex deploy.** Deploy the exact source revision to `upbeat-cricket-954` with the Convex CLI. Check: deploy finishes without schema errors, the new crons appear in the dashboard, the removed facilitator cron is gone, and `AE_RELEASE_SOURCE_REVISION` reads back the exact revision.
+4. **Convex deploy.** Deploy the exact source revision to `upbeat-cricket-954` with the Convex CLI. Check: deploy finishes without schema errors, the new crons appear in the dashboard, the removed facilitator cron is gone, and `npx convex env get AE_RELEASE_SOURCE_REVISION` reads back the exact revision set in section 1.
 5. **Vercel build.** Build the candidate from the same revision (not by pushing to main). Check: state READY, region `syd1`, Node 22.
 6. **Vercel promote.** Promote the READY deployment. A successful build alone is not enough. Check: the app serves the new revision.
 7. **Release identity.** `curl -s https://app.aecon.ai/api/v1/release` must report the exact source revision. Check health and readiness separately (section 5).
@@ -87,7 +88,7 @@ Convex first, then Vercel. Pushing to main does not deploy.
 
 **Stripe** (Dashboard, Developers, Webhooks)
 - Endpoint URL ends `/api/stripe/webhook`. Events: `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`, `checkout.session.expired`, `charge.dispute.created`, `charge.dispute.updated`, `charge.dispute.closed`, `refund.created`, `refund.failed`, `refund.updated`.
-- Accounts v2 destination ends `/api/stripe/webhook/accounts-v2`. Signing secrets match `STRIPE_WEBHOOK_SECRET` and `STRIPE_V2_WEBHOOK_SECRET`.
+- Accounts v2 destination: no route receives it. The only Stripe route is `src/routes/api.stripe.webhook.ts` (`/api/stripe/webhook`), there is no `vercel.json` rewrite, and nothing passes destination `accounts_v2` (`src/modules/money/server.ts:149` defaults to `snapshot`). Do not create a `/api/stripe/webhook/accounts-v2` destination until a route exists in code. `STRIPE_WEBHOOK_SECRET` signs the endpoint above.
 - Restricted keys (`rk_live_`) in `STRIPE_SECRET_KEY` and `STRIPE_READBACK_KEY`.
 - Settings, Radar and automatic receipts: dashboard settings only, nothing in the repo. Check them by eye. Automatic tax is off in code.
 
@@ -108,6 +109,7 @@ Convex first, then Vercel. Pushing to main does not deploy.
 **Vercel** (Project settings, Git and Environment Variables)
 - Git: main auto-deploy is off (`vercel.json`). Install command pins npm 11.19.1. No Vercel cron; scheduled work is Convex.
 - Confirm target bindings after the Sydney re-point of the Convex deployment and GitHub deploy key.
+- Env: `CONVEX_URL` or `VITE_CONVEX_URL` (one is required, `src/lib/deployment/manifest.ts:60`) and `CONVEX_SITE_URL`. The Resend webhook and unsubscribe proxies return 503 without a resolvable `*.convex.site` origin. Set `POSTHOG_KEY` and `POSTHOG_HOST` here if wanted.
 
 **GitHub** (Settings and Actions)
 - `ci.yml` and `react-doctor.yml` are manual. `security.yml` is manual plus weekly (Monday 03:00 UTC). `cli-release.yml` and `kernel-release-gate.yml` run on `v*` tags. Release gate secrets (Clerk, Stripe, Sentry, gateway smoke) must be in Actions secrets.
@@ -122,13 +124,13 @@ Set `SITE` to the production host. Read-only unless marked.
 | 1 | `curl -s $SITE/api/ready` | 200, `status` `ready` or `disabled`, `commercial.sellable` false while payments are off | 503 `server_not_ready`: a required check failed. `disabled` is not an outage. |
 | 2 | `curl -s $SITE/api/v1/availability` | 200 with `paidCalls` boolean and `statement` | 503 `availability_unavailable`: payments switch unreadable |
 | 3 | `curl -s -o /dev/null -w '%{http_code}' $SITE/api/v1/funding/constraints` | 200 if payments open, 409 `payments_not_open` if closed | 503 `funding_constraints_unavailable` |
-| 4 | `curl -s "$SITE/api/v1/registry?q=test"` | 200 with results, lexical fallback if breaker open | Any 5xx |
+| 4 | `curl -s "$SITE/api/v1/registry?query=test"` | 200 with results, lexical fallback if breaker open | Any 5xx |
 | 5 | `curl -s $SITE/status` | Six rows: site, market, discovery, release, catalogue, payments | A row stuck at `degraded`: check the `requestRef` |
 | 6 | `curl -s $SITE/terms` | Version `2026-10-11`. Joel confirms sign-up shows the acceptance checkbox. | `terms_version_stale` on accept |
 | 7 | `curl -s -o /dev/null -w '%{http_code}' $SITE/api/unsubscribe` | 404 for a missing token. A real token from a received email gives 200. | 500 |
-| 8 | `curl -s -o /dev/null -w '%{http_code}' -X POST $SITE/api/resend/webhook` | 400 (no svix headers) | 503: `CONVEX_SITE_URL` or `CONVEX_URL` does not resolve to a `*.convex.site` origin |
+| 8 | `curl -s -o /dev/null -w '%{http_code}' -X POST $SITE/api/resend/webhook` | 400 (no svix headers). This only proves the proxy and Convex route are live. It also returns 400 when `RESEND_WEBHOOK_SECRET` is unset (`convex/emailWebhook.ts:65-70`), so it cannot detect that case: send a signed test event from Resend and confirm an `emailWebhookEvents` row, or check logs for `resend_webhook_secret_missing`. | 503: `CONVEX_SITE_URL` or `CONVEX_URL` does not resolve to a `*.convex.site` origin. 404: Convex not deployed yet |
 | 9 | `curl -s $SITE/.well-known/oauth-authorization-server`, `.../oauth-protected-resource`, and `$SITE/mcp` | 200 JSON for the first two, 401 or a protocol response for `/mcp` | 404: OAuth or MCP surface broken |
-| 10 | Joel, signed in: `$SITE/owner/settings/team` and `$SITE/owner/agent-keys` | Lists load | 404: missing redirect from the old `_operator/owner.*` routes |
+| 10 | Joel, signed in: `$SITE/owner/settings/team` and `$SITE/owner/settings/agent-keys` | Lists load | 404: the renamed routes are not live |
 | 11 | Joel: agent approval email "Review request" link | Has `utm_source`, `utm_medium`, `utm_campaign`, `utm_content=cta`, lands on `/agent-access` | 404 or missing `utm_campaign` |
 | 12 | Joel, signed in: `$SITE/agent-access` | Pending requests show | 404, or empty while Convex shows pending approvals |
 | 13 | `ae status` and `ae search <term>` against prod | Healthy status, results | `CliFailure` or 5xx |
@@ -160,12 +162,12 @@ Do these one at a time, in order, and run the check before the next step. Each i
 
 ## 8. Known risks and accepted decisions
 
-- Revocation by access token is `unknown` for grants created before deploy until a backfill is written or those grants expire.
+- Revocation by access token is `unknown` for device and non-offline grants created before deploy until a backfill is written or those grants expire. Offline grants are unaffected.
 - Existing owners must accept terms `2026-10-11` before they read as accepted.
 - `EMAIL_SUPPRESSION_HASH_SECRET` is never rotated. Losing it un-suppresses everyone.
 - Rotating `EMAIL_UNSUBSCRIBE_SECRET` breaks outstanding links unless `UNSUBSCRIBE_KID` is bumped.
 - Facilitator discovery is on demand only, so the directory can go stale between runs.
-- `POSTHOG_KEY` and `POSTHOG_HOST` behaviour on the Convex side is not verified.
+- `POSTHOG_KEY` and `POSTHOG_HOST` are read on the Vercel side only, not by Convex.
 - Marketing site PRs #46 and #48 were not verified from this repo.
 - Stripe Radar, automatic receipts, Clerk bot protection and Sentry alert rules are dashboard only and unchecked by code.
 - Deployment inventory in `deployments.md` is dated 9 October and may be stale.
