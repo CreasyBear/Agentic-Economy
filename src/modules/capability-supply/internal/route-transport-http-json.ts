@@ -530,6 +530,9 @@ export function requestTarget(
       }
       if (!isSerializableInputValue(value))
         return { kind: 'refused', failureCode: 'input_invalid' }
+      // encodeURIComponent keeps dots, and URL parsing would resolve a "." or ".." segment out of the registered path.
+      if (value === '.' || value === '..')
+        return { kind: 'refused', failureCode: 'input_invalid' }
       pathValues[mapping.parameter] = value
     }
     const pathTemplate = target.pathname

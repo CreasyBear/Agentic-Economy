@@ -67,7 +67,7 @@ export const markOutcomeUnknownHandler = async (ctx: MutationCtx, args: Infer<ty
     return { kind: 'accepted' as const, state: 'outcome_unknown', replayed: false }
   }
 
-export const finalizeReleaseArgs = v.object({ callRef: v.string(), transactionRefs: v.array(v.string()), now: v.number(), expectedBookingDigest: v.optional(v.string()) })
+export const finalizeReleaseArgs = v.object({ callRef: v.string(), transactionRefs: v.array(v.string()), now: v.number(), expectedBookingDigest: v.optional(v.string()), unusedProof: v.optional(v.literal(true)) })
 export const finalizeReleaseResult = transitionResult
 function isManualSettlementHold(row: Doc<'capabilityCalls'>): boolean {
   return row.state === 'reconciliation_required'
@@ -201,7 +201,9 @@ export const finalizeReleaseHandler = async (ctx: MutationCtx, args: Infer<typeo
         ? { kind: 'accepted' as const, state: 'released', replayed: true }
         : { kind: 'refused' as const, code: 'managed_call_release_conflict' }
     }
-    if (row.formanceFinancialState !== 'reserved') {
+    const releasable = row.formanceFinancialState === 'reserved'
+      || (args.unusedProof === true && (row.formanceFinancialState === 'possibly_submitted' || row.formanceFinancialState === 'outcome_unknown'))
+    if (!releasable) {
       return { kind: 'refused' as const, code: 'managed_call_state_conflict' }
     }
     if (row.promotionalCreditAllocation !== undefined) {

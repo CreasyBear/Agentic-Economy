@@ -12,6 +12,7 @@ import { InteractiveAuthorityError } from '../../../interactiveAuthority'
 import { persistAuditEvent } from '../../security/audit/persistence'
 import { serviceAssertion } from '../../../serviceAssertion'
 import { resolveAccountRefForPrincipal } from './identity'
+import { closeAccountAndOwnership, endAccountDependents } from '../workspace/close'
 import { revokeMachineAgentsForCreator } from './retireDependents'
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -108,11 +109,6 @@ export const retirePersonalAccountForServerHandler = async (ctx: MutationCtx, ar
       throw new InteractiveAuthorityError('authority_conflict')
     }
 
-    const accountRef = await resolveAccountRefForPrincipal(ctx, principal.principalRef)
-    if (accountRef === undefined) {
-      return { kind: 'refused', code: 'authority_conflict' }
-    }
-
     const digestValue = observation.deliveryRefHash.slice('sha256:'.length)
     const eventRef = `audit:clerk:${digestValue}`
     const existing = await ctx.db.query('auditEvents')
@@ -120,12 +116,16 @@ export const retirePersonalAccountForServerHandler = async (ctx: MutationCtx, ar
       .unique()
     const commandDigest = canonicalDigest(observation)
     if (existing !== null) {
-      return existing.activeAccountRef === accountRef
-        && existing.eventType === 'account.personal_account.retired'
+      return existing.eventType === 'account.personal_account.retired'
         && existing.targetRef === principal.principalRef
         && existing.payloadHash === commandDigest
         ? { kind: 'accepted', status: 'replayed', eventRef }
         : { kind: 'refused', code: 'event_conflict' }
+    }
+
+    const accountRef = await resolveAccountRefForPrincipal(ctx, principal.principalRef)
+    if (accountRef === undefined) {
+      return { kind: 'refused', code: 'authority_conflict' }
     }
 
     const now = Date.now()
@@ -191,6 +191,25 @@ export const retirePersonalAccountForServerHandler = async (ctx: MutationCtx, ar
     }
 
     await revokeMachineAgentsForCreator(ctx, observation, principal.principalRef, now)
+
+    const ownerships = await ctx.db.query('accountOwnerships')
+      .withIndex('by_ownerPrincipalRef_and_lifecycle', (index) => index
+        .eq('ownerPrincipalRef', principal.principalRef)
+        .eq('lifecycle', 'active'))
+      .collect()
+    const ownedAccount = await ctx.db.query('accounts')
+      .withIndex('by_accountRef', (index) => index.eq('accountRef', accountRef))
+      .unique()
+    const ownedOwnership = ownerships.find((row) => row.accountRef === accountRef)
+    if (ownedAccount !== null && ownedAccount.lifecycle === 'active' && ownedOwnership !== undefined) {
+      await closeAccountAndOwnership(ctx, ownedAccount, ownedOwnership, {
+        actorPrincipalRef: principal.principalRef,
+        activeAccountRef: accountRef,
+        correlationRef: toolRef,
+        idempotencyRef: toolRef,
+      }, now)
+      await endAccountDependents(ctx, accountRef, now)
+    }
 
     const audit = createPackage3AuditEvent({
       eventId: brandNonEmpty(eventRef, 'AuditEventId'),

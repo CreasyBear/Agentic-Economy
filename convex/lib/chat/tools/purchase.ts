@@ -26,7 +26,7 @@ const quoteRef = makeFunctionReference<'action', {
 }, QuoteResult>('chatQuote:quote')
 const callRef = makeFunctionReference<'action', {
   authority: TrustedChatAuthority; operationKey: string; correlationId: string;
-  quoteRef: string; idempotencyKey: string; requireApproval?: boolean; userRequestText?: string
+  quoteRef: string; idempotencyKey: string; requireApproval?: boolean
 }, CallResult>('chatCall:call')
 const payableAdmissionRef = makeFunctionReference<'query', {
   authority: TrustedChatAuthority; toolRef: string
@@ -150,7 +150,7 @@ export function createPurchaseTools(authority: TrustedChatAuthority & { kind: 'a
         inputSchema: z.strictObject({
           quoteRef: z.string().regex(/^operation-commitment:v1:[0-9a-f]{64}$/u),
         }),
-        execute: async (ctx: ToolCtx, input: { quoteRef: string }, options?: { messages?: readonly ModelMessage[] }) => {
+        execute: async (ctx: ToolCtx, input: { quoteRef: string }) => {
           const denied = reserve('tool.call')
           if (denied !== null) return denied
           const commandDigest = canonicalDigest({
@@ -165,8 +165,6 @@ export function createPurchaseTools(authority: TrustedChatAuthority & { kind: 'a
             correlationId: `chat-invoke-corr:${commandDigest}`,
             quoteRef: input.quoteRef,
             idempotencyKey,
-            // chatCall.call decides approval from the stored quote's Tool and this text, not from per-turn memory.
-            userRequestText: userRequestText(options?.messages),
           }
           // Calls run on the worker. Replaying the same idempotent Call returns its stored
           // result, so wait briefly for the answer and let the model reply from it.

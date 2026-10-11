@@ -250,4 +250,28 @@ describe('Call content retention boundary', () => {
       contentExpiredAt: expiredAt, effectRefs: ['quote:retention', 'call:retention'], resultJson: first.resultJson })
     expect(await backend.run(ctx => ctx.db.query('capabilityCalls').collect())).toEqual([])
   })
+
+  it('releases only an untouched procurement reservation', async () => {
+    const backend = convexTestWithMarketComponents()
+    const { principal } = await createTestAgentPrincipal(backend, 'release-procure', { environment: 'sandbox' })
+    const toolRef = `operation:v1:${'a'.repeat(64)}`
+    const input = { kind: 'exact', toolRef, input: { q: 1 }, maxSpendAud: '0.50', idempotencyKey: 'release-key' }
+    const row = (over: Record<string, unknown>) => backend.run(ctx => ctx.db.insert('operationKeys', { scope: 'capability_execution', actorKind: 'agent',
+      actorRef: principal.principalId, operationName: 'tool.procure', key: input.idempotencyKey, requestHash: canonicalDigest(input),
+      status: 'in_progress', effectRefs: [], createdAt: 1, updatedAt: 1, ...over } as never))
+    const release = async () => backend.mutation(api.capabilityProcure.release, await withSourceWrite('protected_action', {
+      principal, idempotencyKey: input.idempotencyKey, inputJson: JSON.stringify(input),
+      operationKey: `release:${crypto.randomUUID()}`, correlationId: 'release',
+    }))
+    const count = () => backend.run(async ctx => (await ctx.db.query('operationKeys').collect()).length)
+    for (const kept of [{ effectRefs: ['quote:one'] }, { status: 'failed_terminal', resultJson: '{}' }, { status: 'succeeded', resultJson: '{}' }]) {
+      const id = await row(kept)
+      expect(await release()).toMatchObject({ kind: 'replay' })
+      expect(await count()).toBe(1)
+      await backend.run(ctx => ctx.db.delete(id))
+    }
+    await row({})
+    expect(await release()).toEqual({ kind: 'reserved' })
+    expect(await count()).toBe(0)
+  })
 })

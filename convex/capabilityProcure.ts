@@ -5,6 +5,8 @@ import {
   completeProcureArgs,
   completeProcureHandler,
   procureIdentityResult,
+  releaseProcureArgs,
+  releaseProcureHandler,
   reserveProcureArgs,
   reserveProcureHandler,
 } from './lib/capabilityExecution/callLifecycle/procureIdentity'
@@ -25,4 +27,10 @@ export const complete = mutation({
   args: completeProcureArgs,
   returns: procureIdentityResult,
   handler: completeProcureHandler,
+})
+
+export const release = mutation({
+  args: releaseProcureArgs,
+  returns: procureIdentityResult,
+  handler: releaseProcureHandler,
 })

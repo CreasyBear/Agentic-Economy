@@ -7,6 +7,7 @@ import {
   retirePersonalAccountForServerHandler,
   retirePersonalAccountForServerResult,
 } from './lib/principalAccount/personalAccount/retire'
+import { revokeMachineAgentsChunk as revokeMachineAgentsChunkHandler, revokeMachineAgentsChunkArgs } from './lib/principalAccount/personalAccount/retireDependents'
 import {
   readDeletionEligibilityArgs,
   readDeletionEligibilityHandler,
@@ -28,6 +29,12 @@ export const sendDeletionNotice = internalMutation({
   args: deletionNoticeArgs,
   returns: v.null(),
   handler: sendDeletionNoticeHandler,
+})
+
+export const revokeMachineAgentsChunk = internalMutation({
+  args: revokeMachineAgentsChunkArgs,
+  returns: v.null(),
+  handler: (ctx, args) => revokeMachineAgentsChunkHandler(ctx, args),
 })
 
 export const readDeletionEligibility = internalQuery({

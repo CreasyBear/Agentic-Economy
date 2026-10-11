@@ -35,13 +35,6 @@ export const authorize = internalMutation({
   },
 })
 
-export const quoteToolRef = internalQuery({
-  args: { quoteRef: v.string() },
-  returns: v.union(v.string(), v.null()),
-  handler: async (ctx, { quoteRef }) => (await ctx.db.query('capabilityQuotes')
-    .withIndex('by_quoteRef', (query) => query.eq('quoteRef', quoteRef)).unique())?.toolRef ?? null,
-})
-
 export const readTurnEffects = internalQuery({
   args: { turnRef: v.string() },
   returns: v.array(v.string()),
@@ -184,8 +177,6 @@ export const call = internalAction({
     operationKey: v.string(),
     correlationId: v.string(),
     requireApproval: v.optional(v.boolean()),
-    /** Chat-agent Calls: the latest user message. The Call waits for owner approval unless it names the quoted Tool. */
-    userRequestText: v.optional(v.string()),
   },
   returns: callResultValue,
   handler: async (ctx, args) => {
@@ -193,11 +184,8 @@ export const call = internalAction({
       authority: args.authority, quoteRef: args.quoteRef,
     })
     if (principal === null) return { kind: 'refused' as const, code: 'grant_not_found', retryable: false }
-    let requireApproval = args.requireApproval === true
-    if (args.userRequestText !== undefined) {
-      const toolRef = await ctx.runQuery(internal.chatCall.quoteToolRef, { quoteRef: args.quoteRef })
-      requireApproval = requireApproval || toolRef === null || !args.userRequestText.includes(toolRef)
-    }
+    // Owner chat always waits for the owner's decision on the pending approval; model-visible text never clears it.
+    const requireApproval = args.requireApproval === true || args.authority.applicationRef === 'ae-owner-chat'
     const result = await canonicalAgentCallCore(ctx, {
       principal, quoteRef: args.quoteRef, idempotencyKey: args.idempotencyKey,
       operationKey: args.operationKey, correlationId: args.correlationId,

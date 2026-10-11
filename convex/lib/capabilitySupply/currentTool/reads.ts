@@ -61,6 +61,7 @@ async function readCurrentPublishedToolUnchecked(
     ))
     .unique()
   if (publication === null) return undefined
+  if (!await publicationOwnerOpen(ctx, publication.businessId)) return undefined
   const [offeringDoc, bindingDoc] = await Promise.all([
     ctx.db.query('capabilityOfferings')
       .withIndex('by_offeringId', (query) => query.eq('offeringId', publication.offeringId))
@@ -187,4 +188,22 @@ export function canonicalPublicationPricing(
   } catch (cause) {
     return degradeBackend(cause, undefined, { site: 'canonicalPublicationPricing', reason: 'invalid_response' })
   }
+}
+
+/** Closed account or retired owner: the Tool stops resolving, so listing, quoting and routing close together. */
+async function publicationOwnerOpen(ctx: Pick<QueryCtx, 'db'>, businessId: Doc<'capabilityPublications'>['businessId']): Promise<boolean> {
+  const business = await ctx.db.get(businessId)
+  if (business === null) return true
+  const account = await ctx.db.query('accounts')
+    .withIndex('by_accountRef', (q) => q.eq('accountRef', business.owningAccountRef)).unique()
+  if (account === null) return true
+  if (account.lifecycle === 'closed') return false
+  const ownerships = await ctx.db.query('accountOwnerships')
+    .withIndex('by_accountRef_and_lifecycle', (q) => q.eq('accountRef', account.accountRef).eq('lifecycle', 'active'))
+    .take(8)
+  if (ownerships.length === 0) return true
+  const owners = await Promise.all(ownerships.map((o) => ctx.db.query('principals')
+    .withIndex('by_principalRef', (q) => q.eq('principalRef', o.ownerPrincipalRef)).unique()))
+  // Closed only when every owner row exists and none is active; missing rows fail open.
+  return !owners.every((owner) => owner !== null && owner.lifecycle !== 'active')
 }

@@ -58,6 +58,30 @@ export const releaseBeforeSubmissionHandler = async (ctx: ActionCtx, args: Infer
     })
   }
 
+export const releaseUnusedAuthorizationArgs = v.object({ callRef: v.string(), evidenceDigest: v.string(), now: v.number() })
+export const releaseUnusedAuthorizationResult = transitionResult
+// Called only after chain proof that the exact authorization expired or was cancelled unused.
+export const releaseUnusedAuthorizationHandler = async (ctx: ActionCtx, args: Infer<typeof releaseUnusedAuthorizationArgs>): Promise<TransitionResult> => {
+    const material: ManagedCallMaterial = await ctx.runQuery(internal.moneyManagedCall.readBooking, { callRef: args.callRef })
+    if (material.kind !== 'available') return { kind: 'refused', code: 'managed_call_reservation_not_found' }
+    if (!financialEnvironmentMatches(material.expectedEnvironment)) return { kind: 'refused', code: 'environment_mismatch' }
+    if (material.requiresManualSettlementReview) return { kind: 'refused', code: 'call_manual_settlement_review_required' }
+    if (material.remedyInProgress) return { kind: 'refused', code: 'managed_call_remedy_in_progress' }
+    if (material.financialState !== 'possibly_submitted' && material.financialState !== 'outcome_unknown'
+      && material.financialState !== 'released') return { kind: 'refused', code: 'managed_call_state_conflict' }
+    const result: FormanceMoneyResult = await ctx.runAction(internal.moneyFormance.releaseExpiredUnusedCall, {
+      expectedEnvironment: material.expectedEnvironment,
+      booking: material.booking,
+      externalEvidenceDigest: args.evidenceDigest,
+    })
+    if (result.kind !== 'completed') {
+      return { kind: 'refused', code: result.kind === 'outcome_unknown' ? 'managed_call_release_unknown' : result.code }
+    }
+    return await ctx.runMutation(internal.moneyManagedCallLifecycle.finalizeRelease, {
+      callRef: args.callRef, transactionRefs: [...result.transactionRefs], now: args.now, unusedProof: true,
+    })
+  }
+
 export const settleArgs = v.object({ callRef: v.string(), evidenceDigest: v.string(), now: v.number() })
 export const settleResult = transitionResult
 export const settleHandler = async (ctx: ActionCtx, args: Infer<typeof settleArgs>): Promise<TransitionResult> => {

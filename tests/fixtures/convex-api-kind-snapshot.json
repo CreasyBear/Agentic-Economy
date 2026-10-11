@@ -1184,6 +1184,12 @@
   {
     "visibility": "public",
     "module": "capabilityProcure",
+    "method": "release",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "public",
+    "module": "capabilityProcure",
     "method": "reserve",
     "kind": "mutation"
   },
@@ -2140,12 +2146,6 @@
     "module": "chatCall",
     "method": "call",
     "kind": "action"
-  },
-  {
-    "visibility": "internal",
-    "module": "chatCall",
-    "method": "quoteToolRef",
-    "kind": "query"
   },
   {
     "visibility": "public",
@@ -3374,6 +3374,12 @@
   {
     "visibility": "internal",
     "module": "moneyManagedCallLifecycle",
+    "method": "releaseUnusedAuthorization",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyManagedCallLifecycle",
     "method": "resolveBuyerSaleSources",
     "kind": "query"
   },
@@ -4119,6 +4125,12 @@
     "visibility": "public",
     "module": "personalAccount",
     "method": "retirePersonalAccountForServer",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "personalAccount",
+    "method": "revokeMachineAgentsChunk",
     "kind": "mutation"
   },
   {

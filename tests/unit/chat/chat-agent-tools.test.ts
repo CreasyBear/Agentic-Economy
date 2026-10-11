@@ -1055,7 +1055,6 @@ describe('Tool chat Agent tools', () => {
       correlationId: `chat-invoke-corr:${digest}`,
       idempotencyKey: `chat-invoke:${digest}`,
       quoteRef: COMMITMENT_REF,
-      userRequestText: '',
     })
   })
 
@@ -1184,14 +1183,8 @@ describe('Tool chat Agent tools', () => {
       return runAction.mock.calls.find(([reference]) => getFunctionName(reference) === 'chatCall:call')![1]
     }
 
-    it('hands the latest user text to Call so chatCall can gate on the stored quote Tool', async () => {
-      expect(await quoteThenCall('yes go ahead')).toMatchObject({ userRequestText: 'yes go ahead' })
-      expect(await quoteThenCall(`run ${OPERATION_REF}`)).toMatchObject({ userRequestText: `run ${OPERATION_REF}` })
-    })
-
-    it('does not truncate the user text at 500 characters', async () => {
-      const text = `${'x'.repeat(900)} ${OPERATION_REF}`
-      expect(await quoteThenCall(text)).toMatchObject({ userRequestText: text })
+    it('sends no user text to Call; approval is decided by the owner on the pending row', async () => {
+      expect(await quoteThenCall(`run ${OPERATION_REF}`)).not.toHaveProperty('userRequestText')
     })
 
     it('keeps provider prose inside the untrusted envelope for the model', () => {

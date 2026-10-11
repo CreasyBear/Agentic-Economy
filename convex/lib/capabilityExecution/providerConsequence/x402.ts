@@ -85,6 +85,50 @@ async function matchingStoredAttempt(
     && attempt.credentialRef === row.paymentSecretRef
 }
 
+// Mirrors x402ResourceUrlBindsTarget: origin and pathname must match; the query
+// may differ only for GET Tools (whose inputs map to the query). The Quote does
+// not record query mapping, so any GET Tool is compared on origin and pathname.
+function sameEndpoint(a: unknown, b: unknown, method: unknown): boolean {
+  if (typeof a !== 'string' || typeof b !== 'string') return false
+  try {
+    const left = new URL(a)
+    const right = new URL(b)
+    return left.origin === right.origin
+      && left.pathname === right.pathname
+      && (method === 'GET' || left.href === right.href)
+  } catch { return false }
+}
+
+// prepare_authorization may only commit the payee, amount and endpoint the
+// Quote observed and the caller consented to; caller-supplied values must match.
+async function matchingQuotedRequirement(
+  ctx: MutationCtx,
+  args: Record<string, unknown>,
+  quoteRef: string | undefined,
+): Promise<boolean> {
+  if (quoteRef === undefined) return false
+  const quote = await ctx.db.query('capabilityQuotes')
+    .withIndex('by_quoteRef', (query) => query.eq('quoteRef', quoteRef)).unique()
+  if (quote === null || quote.x402RequirementJson === undefined) return false
+  let committed: {
+    endpoint?: { url?: unknown, method?: unknown },
+    requirement?: { payTo?: unknown, amountUnits?: unknown, asset?: unknown, network?: unknown },
+  }
+  try { committed = JSON.parse(quote.x402RequirementJson) } catch { return false }
+  const { payTo, amountUnits, asset, network } = committed.requirement ?? {}
+  return typeof payTo === 'string'
+    && typeof args.payTo === 'string'
+    && args.payTo.toLowerCase() === payTo.toLowerCase()
+    && typeof amountUnits === 'string'
+    && args.amountUnits === amountUnits
+    && typeof asset === 'string'
+    && typeof args.asset === 'string'
+    && args.asset.toLowerCase() === asset.toLowerCase()
+    && typeof network === 'string'
+    && args.network === network
+    && sameEndpoint(args.providerEndpoint, committed.endpoint?.url, committed.endpoint?.method)
+}
+
 export async function authorizeProviderConsequenceX402RpcHandler(
   ctx: MutationCtx,
   input: {
@@ -120,6 +164,8 @@ export async function authorizeProviderConsequenceX402RpcHandler(
     || call.grantRef !== row.grantRef
     || call.grantGeneration !== row.grantGeneration
     || call.principalId !== row.actorPrincipalRef) return { kind: 'unavailable' as const }
+  if (input.operation === 'prepare_authorization'
+    && !await matchingQuotedRequirement(ctx, args, call.quoteRef)) return { kind: 'unavailable' as const }
   return {
     kind: 'authorized' as const,
     callRef: row.callRef,

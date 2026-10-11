@@ -62,6 +62,7 @@ const identityMutation = {
   reserve: sourceMutation<Record<string, unknown>, unknown>('capabilityProcure:reserve'),
   checkpoint: sourceMutation<Record<string, unknown>, unknown>('capabilityProcure:checkpointQuote'),
   complete: sourceMutation<Record<string, unknown>, unknown>('capabilityProcure:complete'),
+  release: sourceMutation<Record<string, unknown>, unknown>('capabilityProcure:release'),
 }
 const identityResultSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('reserved') }),
@@ -80,6 +81,7 @@ export type ProcureIdentityPort = Readonly<{
   reserve(input: ExactProcureInput, principal: AgentAccessPrincipal): Promise<IdentityResult>
   checkpoint(input: ExactProcureInput, principal: AgentAccessPrincipal, quote: z.infer<typeof quoteSnapshotSchema>): Promise<IdentityResult>
   complete(input: ExactProcureInput, principal: AgentAccessPrincipal, result: ToolProcureResult): Promise<IdentityResult>
+  release(input: ExactProcureInput, principal: AgentAccessPrincipal): Promise<IdentityResult>
 }>
 
 export function createProcureIdentityPort(request: Request, bodyText: string, correlationId: string): ProcureIdentityPort {
@@ -104,6 +106,7 @@ export function createProcureIdentityPort(request: Request, bodyText: string, co
     complete: async (input, principal, result) => await invoke('complete', input, principal, {
       resultJson: JSON.stringify(result),
     }),
+    release: async (input, principal) => await invoke('release', input, principal),
   }
 }
 
@@ -311,12 +314,16 @@ export class CapabilityProcurementEngine {
         principal, correlationId,
       })
       if (quoteRes.kind === 'refused') {
-        return await finish({
+        const refused: ToolProcureResult = {
           ...common, kind: 'refused', status: 'refused',
           code: quoteRes.code,
           retryable: quoteRes.retryable,
           detail: quoteRes.reason ?? 'Quote request refused by capability engine.',
-        })
+        }
+        if (!quoteRes.retryable) return await finish(refused)
+        // A retryable refusal frees the untouched reservation so the same key can Quote again.
+        try { acceptedIdentity(await identity.release(input, principal)) } catch { /* the refusal still reaches the caller */ }
+        return refused
       }
       quote = quoteSnapshotSchema.parse({
         quoteRef: quoteRes.quoteRef, price: quoteRes.price,

@@ -12,7 +12,7 @@ import { usageFailure } from '../lib/help'
 import { journeyNextCommand } from '../lib/journey-next-command'
 import { CALL_REF_FORMAT_EXAMPLE } from '../lib/tool-ref-format'
 import { connectionContinuationForCli } from '../lib/suggested-continuation-adapter'
-import { cliContinuation } from '../lib/continuation-command'
+import { cliContinuation, shellArgument } from '../lib/continuation-command'
 export { renderStatusResult, STATUS_REFUSED_EXIT_CODE } from './status-render'
 
 export const MAX_STATUS_WAIT_MS = 60_000
@@ -40,7 +40,7 @@ function configuredApiKeyOrigin(options: CliOptions, rawOrigin: string | undefin
       kind: 'INVALID_ARGUMENT',
       code: 'agent_access_key_origin_required',
       suggestion: 'Preserve the current credential identity and bind it to the exact selected origin.',
-      nextCommand: `export AE_API_KEY_ORIGIN=${JSON.stringify(new URL(options.baseUrl).origin)}`,
+      nextCommand: `export AE_API_KEY_ORIGIN=${shellArgument(new URL(options.baseUrl).origin)}`,
     })
   }
 

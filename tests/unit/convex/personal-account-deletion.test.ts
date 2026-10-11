@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 import { makeFunctionReference, type UserIdentity } from 'convex/server'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { internal } from '../../../convex/_generated/api'
 import { createCustomerRequestServiceAssertion } from '@/modules/agent-access/service-auth-envelope'
@@ -161,6 +161,50 @@ describe('personalAccount retirePersonalAccountForServer (W-09)', () => {
 
     const admission = await readAgentAccessPrincipal(backend, MACHINE_AGENT_REF)
     expect(admission).toMatchObject({ lifecycle: 'revoked' })
+  })
+
+  it('R7c: revokes every owned machine agent, however many', async () => {
+    process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN = serviceKey
+    const backend = createBackend()
+    await seedAuthority(backend)
+    await backend.run(async (ctx) => {
+      for (let i = 0; i < 70; i++) {
+        await ctx.db.insert('agentAccessPrincipals', {
+          principalId: `prn_bulk_${i}`, ownerId: ACCOUNT_REF, ownerTokenIdentifier: TOKEN_IDENTIFIER,
+          credentialId: `key_bulk_${i}`, applicationRef: 'agentic-economy', environment: 'sandbox',
+          scopes: ['market_tools:call'], authorityMode: 'read_only', grantGeneration: 1,
+          spendingPolicyDigest: 'sha256:bulk', lifecycle: 'active', expiresAt: 20_000, recordedAt: NOW, lastSeenAt: NOW,
+        })
+      }
+    })
+    vi.useFakeTimers()
+    try {
+      await retire(backend, retireCommand(TOKEN_IDENTIFIER))
+      await backend.finishAllScheduledFunctions(vi.runAllTimers)
+    } finally { vi.useRealTimers() }
+    const rows = await backend.run(async (ctx) => await ctx.db.query('agentAccessPrincipals').collect())
+    expect(rows).toHaveLength(70)
+    expect(rows.every((row) => row.lifecycle === 'revoked')).toBe(true)
+  })
+
+  it('R7b: closes the owned account, ends ownership, revokes owner-less agents, blocks members', async () => {
+    process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN = serviceKey
+    const backend = createBackend()
+    await seedAuthority(backend)
+    await seedTeammateMembership(backend)
+    await seedOwnerMachineAgent(backend, { ownerTokenIdentifier: undefined })
+    await retire(backend, retireCommand(TOKEN_IDENTIFIER))
+
+    const { account, ownerships, memberships } = await backend.run(async (ctx) => ({
+      account: await ctx.db.query('accounts').withIndex('by_accountRef', (q) => q.eq('accountRef', ACCOUNT_REF)).unique(),
+      ownerships: await ctx.db.query('accountOwnerships').collect(),
+      memberships: await ctx.db.query('memberships').collect(),
+    }))
+    expect(memberships.filter((row) => row.accountRef === ACCOUNT_REF).every((row) => row.lifecycle === 'ended')).toBe(true)
+    expect(account).toMatchObject({ lifecycle: 'closed' })
+    expect(ownerships.filter((row) => row.accountRef === ACCOUNT_REF).every((row) => row.lifecycle === 'ended')).toBe(true)
+    expect(await readAgentAccessPrincipal(backend, MACHINE_AGENT_REF)).toMatchObject({ lifecycle: 'revoked' })
+    expect(ownerships.some((row) => row.accountRef === ACCOUNT_REF && row.lifecycle === 'active')).toBe(false)
   })
 
   it('R8: records account.personal_account.retired audit event', async () => {
@@ -448,7 +492,10 @@ async function listNotificationPreferences(backend: InteractiveAuthorityBackend)
       .collect()) as PreferenceRow[])
 }
 
-async function seedOwnerMachineAgent(backend: InteractiveAuthorityBackend): Promise<void> {
+async function seedOwnerMachineAgent(
+  backend: InteractiveAuthorityBackend,
+  options: { ownerTokenIdentifier?: string | undefined } = { ownerTokenIdentifier: TOKEN_IDENTIFIER },
+): Promise<void> {
   const credentialId = 'key_w09_machine'
   const grantRef = 'grant:w09:machine'
   const applicationRef = 'agentic-economy'
@@ -502,7 +549,7 @@ async function seedOwnerMachineAgent(backend: InteractiveAuthorityBackend): Prom
     await ctx.db.insert('agentAccessPrincipals', {
       principalId: MACHINE_AGENT_REF,
       ownerId: ACCOUNT_REF,
-      ownerTokenIdentifier: TOKEN_IDENTIFIER,
+      ...(options.ownerTokenIdentifier === undefined ? {} : { ownerTokenIdentifier: options.ownerTokenIdentifier }),
       credentialId,
       applicationRef,
       environment,
