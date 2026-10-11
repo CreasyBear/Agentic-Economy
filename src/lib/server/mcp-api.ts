@@ -230,8 +230,11 @@ function mcpSuccessSummary(action: AnyAction, result: unknown, origin: string): 
       `Next: ${JSON.stringify(result.next)}; supply caller-owned input, maxSpendAud and a new idempotencyKey. No Quote or Call has occurred.`,
     ].join('\n')
   }
+  const stale = isRecord(result.freshness) && result.freshness.state !== 'fresh'
+    ? ` Catalogue freshness: ${String(result.freshness.state)}; results may be out of date.`
+    : ''
   if (action.id !== 'registry.tools.search') {
-    return `${action.name}: ${typeof result.kind === 'string' ? result.kind : 'completed'}.`
+    return `${action.name}: ${typeof result.kind === 'string' ? result.kind : 'completed'}.${action.id === 'registry.tools.list' ? stale : ''}`
   }
   const tools = Array.isArray(result.results) ? result.results : []
   const assessed = isRecord(result.assessed)
@@ -244,7 +247,7 @@ function mcpSuccessSummary(action: AnyAction, result: unknown, origin: string): 
   const recipient = isRecord(result.recipient) && typeof result.recipient.label === 'string' && typeof result.recipient.host === 'string'
     ? ` Ranking: ${result.recipient.label} (${result.recipient.host}) receives query and candidate summaries.`
     : ''
-  const lines = [`${summary}${assessed}.${recipient}`]
+  const lines = [`${summary}${assessed}.${stale}${recipient}`]
   for (const tool of tools) {
     if (!isRecord(tool)) continue
     if (tool.access === 'ae_callable' && parseCallableRef(tool.toolRef)?.kind === 'listing') {
