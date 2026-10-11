@@ -24,7 +24,7 @@ import type { QueryCtx } from '../../../_generated/server'
 import { getExactRegisteredCapabilityContract } from '../../capabilityContract/documents/reads'
 import { capabilitySupplyGraphPorts } from '../graphPorts/ports'
 import { readManagedX402InspectionTargetForQualifiedCandidate } from '../currentTool/inspection'
-import { toolProviderRouteabilityIsFrozen } from '../providerOffboarding/freeze'
+import { providerRouteabilityIsFrozen } from '../providerOffboarding/freeze'
 import { toCapabilityBindingRow, toCapabilityOfferingRow } from '../../../capabilitySupplyRowMappers'
 import { directoryListingRow } from '../../../capabilitySupplyDirectoryEligibility'
 import { publicAuthenticationFor, publicToolParameterMappingsFor, publicToolTransportFor } from './transport'
@@ -173,7 +173,8 @@ export async function toolRecordProjection(
   const integrated = offeringDoc.status === 'active'
     && bindingRow.admission === 'admitted'
     && bindingRow.conformance === 'conformant'
-  const routeable = qualification.status === 'eligible'
+  const frozen = await providerRouteabilityIsFrozen(ctx, publication.businessId)
+  const routeable = qualification.status === 'eligible' && !frozen
   // Reuse this row's already-fetched binding/contract docs and the
   // qualification just computed above instead of calling the standalone
   // `readManagedX402InspectionTarget(ctx, toolRef, now)` - it would re-fetch
@@ -181,11 +182,11 @@ export async function toolRecordProjection(
   // business + contract + offering + binding reads) and re-fetch the
   // binding/contract a second time for every row of every catalogue page.
   const awaitingInspection = !routeable && binding.adapter.adapterId === 'x402-fetch:v2'
-    && !(await toolProviderRouteabilityIsFrozen(ctx, publication.toolRef))
+    && !frozen
     && await readManagedX402InspectionTargetForQualifiedCandidate(ctx, {
       publication, binding: bindingDoc, contract: contractResult, qualification,
     }) !== undefined
-  const unavailableReason = routeable ? undefined : awaitingInspection ? 'inspection_required' as const : publicUnavailableReason(publication, qualification)
+  const unavailableReason = routeable ? undefined : frozen ? 'temporarily_unavailable' as const : awaitingInspection ? 'inspection_required' as const : publicUnavailableReason(publication, qualification)
   const authorityMode = publication.authorityMode
   // Managed x402 prices carry an exact USDC amount for one Call; revalidate
   // the pinned source requirement against the projected amount below.

@@ -309,6 +309,44 @@ describe('canonical Tool reads', () => {
       { toolRef: fixture.toolRef },
     )).resolves.toBeNull()
   })
+  it('projects a frozen provider Tool as not routeable in search and detail', async () => {
+    const backend = convexTestWithMarketComponents()
+    const { businessId, toolRef } = await publishCurrentTool(backend, 'frozen-provider')
+    const read = async () => {
+      const search = await backend.query(api.capabilitySupplyTools.search, { query: 'lookup', limit: 2 })
+      const detail = await backend.query(api.capabilitySupplyTools.detail, { toolRef })
+      return { search, detail }
+    }
+    const before = await read()
+    expect(before.search.kind).toBe('ok')
+    if (before.search.kind !== 'ok') return
+    expect(before.search.items.find((item) => item.toolRef === toolRef)?.availability.posture).toBe('routeable')
+    const freezeId = await backend.run(async (ctx) => {
+      const business = await ctx.db.get(businessId)
+      return ctx.db.insert('capabilityProviderOffboardingCases', {
+        caseRef: 'provider-offboarding:projection', owningAccountRef: business!.owningAccountRef, businessId, providerRef: 'provider:projection',
+        requestedByPrincipalRef: 'principal:projection',
+        authorityRevision: { binding: 1, credential: 1, principal: 1, account: 1, access: 1, currentOwnership: 1, currentOwnerPrincipal: 1 },
+        authorityProvenance: { providerNamespace: 'clerk/user', bindingRef: 'b', credentialRef: 'c', credentialGeneration: 1, accessKind: 'ownership', accessRef: 'a', currentOwnershipRef: 'o', resolvedAt: 1 },
+        toolTargetCount: 0, offeringTargetCount: 0, connectionTargetCount: 0, targetSnapshotDigest: 'd',
+        currentStep: 'freeze-routeability', state: 'freezing', retentionPolicyVersion: '',
+        blockerCodes: [], evidenceRefs: [], revision: 1, lastCommandId: 'x', lastCommandDigest: 'x', requestedAt: 1, updatedAt: 1,
+        routeabilityFrozenAt: 1,
+      })
+    })
+    const frozen = await read()
+    const tools = [
+      frozen.search.kind === 'ok' ? frozen.search.items.find((item) => item.toolRef === toolRef) : undefined,
+      frozen.detail.kind === 'found' ? frozen.detail.tool : undefined,
+    ]
+    for (const tool of tools) {
+      expect(tool?.availability.posture).not.toBe('routeable')
+      expect(tool?.availability.reason).toBe('temporarily_unavailable')
+    }
+    await backend.run(async (ctx) => { await ctx.db.delete(freezeId) })
+    const after = await read()
+    expect(after.detail.kind === 'found' ? after.detail.tool.availability.posture : undefined).toBe('routeable')
+  })
   it('drops a legacy required opaque object despite a valid example without hiding healthy Tools', async () => {
     const backend = convexTestWithMarketComponents()
     const opaque = await publishCurrentTool(backend, 'legacy-opaque-input')
