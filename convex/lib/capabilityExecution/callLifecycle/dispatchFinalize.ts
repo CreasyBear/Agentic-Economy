@@ -62,17 +62,27 @@ async function terminalFinalizationResult(
 
 const WEEK_MS = 7 * 24 * 3600_000
 
-/** first_call fires on the first completed Call. activated fires on the first completed Call that
- * carries a receipt. retained_w1 is week-1 retention: a receipted Call 7 to 14 days after activation.
+type FundingSource = 'real' | 'trial' | 'sandbox'
+
+/** Production Calls covered wholly by promotional (trial) credit are 'trial'; any purchased units make it 'real'. */
+export function callFundingSource(row: Pick<CallRow, 'environment' | 'promotionalCreditAllocation'>): FundingSource {
+  if (row.environment !== 'production') return 'sandbox'
+  const allocation = row.promotionalCreditAllocation
+  return allocation !== undefined && BigInt(allocation.purchasedUnits) === 0n ? 'trial' : 'real'
+}
+
+/** first_call fires on the first completed Call and carries its funding_source. activated fires on the first
+ * completed Call with a receipt paid from real credit (trial and sandbox Calls never activate). retained_w1 is week-1 retention: a receipted Call 7 to 14 days after activation.
  * Each is idempotent per account. */
 export async function journeyForFinalization(
   ctx: MutationCtx,
-  row: Pick<CallRow, 'callRef' | 'ownerId' | 'environment'>,
+  row: Pick<CallRow, 'callRef' | 'ownerId' | 'environment' | 'promotionalCreditAllocation'>,
   projection: Pick<CallDispatchProjectionShape, 'state' | 'result'>,
   finalizedAt: number,
 ): Promise<void> {
   if (projection.state !== 'completed') return
-  await emitJourneyEvent(ctx, row.ownerId, 'first_call')
+  const fundingSource = callFundingSource(row)
+  await emitJourneyEvent(ctx, row.ownerId, 'first_call', { props: { funding_source: fundingSource } })
   const result = projection.result
   const receipt = result !== undefined && 'receipt' in result ? result.receipt : undefined
   if (receipt === undefined) return
@@ -80,8 +90,8 @@ export async function journeyForFinalization(
     .withIndex('by_eventKey', q => q.eq('eventKey', `${row.ownerId}:activated`))
     .unique()
   if (activated === null) {
-    await emitJourneyEvent(ctx, row.ownerId, 'activated', {
-      props: { funding_source: row.environment === 'production' ? 'real' : 'sandbox' },
+    if (fundingSource === 'real') await emitJourneyEvent(ctx, row.ownerId, 'activated', {
+      props: { funding_source: fundingSource },
     })
     return
   }
