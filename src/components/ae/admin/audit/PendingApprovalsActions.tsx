@@ -151,5 +151,5 @@ function TreasuryAudienceApproval({ command, proposalRef, onOpenChange }: {
     approval={{ kind: 'approve', proposalRef }} initialEvidenceRefs={command.evidenceRefs}
     currentStateDigest={view.controls.launchStateDigest} initialReasonCode={command.reasonCode}
     targetRefs={[{ label: 'Payment environment', value: command.input.environment },
-      { label: 'Payments after approval', value: command.input.audience === 'admins' ? 'Open to admins (trial credit for alpha users)' : 'Open to everyone' }]} />
+      { label: 'Paid calls after approval', value: command.input.audience === 'everyone' ? 'On' : 'Off' }]} />
 }

@@ -97,7 +97,7 @@ export const ADMIN_ACTION_COPY = {
   grant_promotional_credit: 'Grant promotional credit',
   issue_trial: 'Approve A$10 trial',
   set_payments_paused: 'Pause or resume payments',
-  set_payments_audience: 'Open payments to everyone or admins only',
+  set_payments_audience: 'Turn paid calls on or off',
   change_treasury_thresholds: 'Change treasury thresholds',
 } satisfies Record<AdminCommandAction, string>
 

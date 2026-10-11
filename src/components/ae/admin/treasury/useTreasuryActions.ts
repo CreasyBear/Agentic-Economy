@@ -7,7 +7,7 @@ import { formatExactAmount } from '@/modules/money/public'
 import type { AdminTreasuryView } from '@/modules/money/treasury-report'
 import { parseTreasuryThresholdInputs } from './treasury-view-model'
 
-type Action = 'pause' | 'resume' | 'thresholds'
+type Action = 'pause' | 'resume' | 'thresholds' | 'audience_on' | 'audience_off'
 /**
  * Requires a reviewed treasury control digest and owner permission.
  * Ensures one immutable command survives MFA cancellation, pending outcomes and response loss.
@@ -30,6 +30,7 @@ export function useTreasuryActions(view: AdminTreasuryView) {
   const flight = useRef(false)
   const unresolved = unknown || receipt?.kind === 'pending'
   const paused = view.controls.paymentsOpenTo === 'none'
+  const paidCallsOn = (paused ? view.controls.resumePaymentsOpenTo : view.controls.paymentsOpenTo) === 'everyone'
   const targetChanged = receipt?.kind === 'refused' && receipt.code === 'target_changed'
 
   function open(next: Action) {
@@ -78,6 +79,11 @@ export function useTreasuryActions(view: AdminTreasuryView) {
         request.current = { ...shared, action: 'change_treasury_thresholds', input: { environment: view.environment, ...input },
           reasonCode: 'threshold_update', evidenceRefs: [`treasury-settings:${view.environment}`],
           expectedStateDigest: review.settingsStateDigest, approval: { kind: 'execute' } }
+      } else if (action === 'audience_on' || action === 'audience_off') {
+        const on = action === 'audience_on'
+        request.current = { ...shared, action: 'set_payments_audience', input: { environment: view.environment, audience: on ? 'everyone' : 'admins' },
+          reasonCode: on ? 'launch_open' : 'launch_close', evidenceRefs: [`platform-launch:${view.environment}`],
+          expectedStateDigest: review.launchStateDigest, approval: { kind: on ? 'propose' : 'execute' } }
       } else {
         request.current = { ...shared, action: 'set_payments_paused', input: { environment: view.environment, paused: action === 'pause' },
           reasonCode: action === 'pause' ? 'operational_pause' : 'operational_resume', evidenceRefs: [`platform-launch:${view.environment}`],
@@ -117,7 +123,7 @@ export function useTreasuryActions(view: AdminTreasuryView) {
     }
     void submit()
   }
-  return { action, paused, review, lowWater, target, pending, receipt, error, unknown, unresolved, targetChanged,
+  return { action, paused, paidCallsOn, review, lowWater, target, pending, receipt, error, unknown, unresolved, targetChanged,
     open, reviewCurrent, edit, submit, retry, proposeResume: () => { void submit(true) },
     close: () => { if (!flight.current && !unresolved) setAction(null) },
   }

@@ -29,7 +29,7 @@ export function AdminTreasuryPage() {
     {view.kind === 'refused' ? <AePageState title="Admin access required" description={ADMIN_ACCESS_REFUSED_COPY} tone="danger" /> : <div className="grid gap-section pb-page">
       <div className="flex flex-wrap items-center gap-related">
         <Badge tone="neutral">{view.environment === 'production' ? 'Production · Base' : 'Sandbox · Base Sepolia'}</Badge>
-        <Badge tone={view.controls.paymentsOpenTo === 'none' ? 'warning' : 'neutral'}>{view.controls.paymentsOpenTo === 'none' ? 'Payments paused' : view.controls.paymentsOpenTo === 'admins' ? 'Payments open to admins' : 'Payments open to everyone'}</Badge>
+        <Badge tone={view.controls.paymentsOpenTo === 'none' ? 'warning' : 'neutral'}>{view.controls.paymentsOpenTo === 'none' ? 'Payments paused' : view.controls.paymentsOpenTo === 'admins' ? 'Paid calls off: trial credit only' : 'Paid calls on'}</Badge>
         {view.snapshot === null ? <AeInlineState state="unavailable" label="Reconciliation snapshot unavailable" description="Individual sources and controls remain visible below." /> : <p className="text-xs text-muted-foreground" title={formatTimestamp(view.snapshot.snapshotAt)}>Report {formatRelativeTime(view.snapshot.snapshotAt)}</p>}
       </div>
       {view.observation !== null && now - view.observation.observedAt >= 10 * 60_000 ? <AeInlineState state="stale" label="Wallet observation is stale" description="The displayed balance is over ten minutes old." /> : null}
