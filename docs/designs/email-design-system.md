@@ -320,6 +320,8 @@ Ordered and atomic. Order is the sequence: no two tasks edit the same file unles
 | T17 | Joel: turn off Stripe automatic receipts and the finalised invoice email in the dashboard, only after T11 and T16 pass on hosted | Stripe dashboard | one live top-up produces exactly one email, from aecon |
 | T18 | Joel: align Clerk verification, sign-in and invite appearance if the branded-email plan exists (Q1) | Clerk dashboard | send a Clerk test email and compare with 2.1 |
 
+**T17 handoff (Joel, dashboard only, no code).** Not done by an agent; no repo change can do it. Do it only after T11 and T16 pass on hosted and the aecon funding receipt send is live there, because with Stripe's receipt off and an auto-charged invoice the customer gets nothing else. Steps: Stripe Settings > Business > Customer emails > Payments > turn off Successful payments; Settings > Billing > Subscriptions and emails > turn off Send finalised invoices. Check: one live top-up produces exactly one email, from aecon, no Stripe receipt. Also still blocking go-live: DNS verified for `mail.aecon.ai`. Entity, ABN and support address are settled in `EMAIL_LEGAL_LINES` (no street address, by decision). Every new send path stays dark by default.
+
 ---
 
 ## 9. Open questions for Joel
