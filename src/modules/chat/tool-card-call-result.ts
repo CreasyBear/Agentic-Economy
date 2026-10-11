@@ -5,12 +5,9 @@ import { suggestNextAction, type SuggestedNextAction } from '@/modules/market/su
 import { exactAmountSchema, formatCurrencyAmount, formatDisplayAmount } from '@/modules/money/public'
 import { paidLabel } from './tool-card-price'
 import { CHAT_TOOL_TITLES, type ChatToolId } from './tool-ids'
-import type { CallResultState, ToolCardProjection, ToolFact } from './tool-card'
+import type { CallResultState, CardChrome, ToolCardProjection, ToolFact } from './tool-card-types'
 
-export type CardChrome = Readonly<{
-  toolId: ChatToolId
-  title: string
-}>
+
 
 export const REFUSAL_SUMMARIES: Readonly<Record<string, string>> = {
   source_unavailable: 'Source unavailable',

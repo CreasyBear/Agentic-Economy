@@ -1,6 +1,5 @@
 import { parseStoredToolQuoteOutput } from './tool-card-quote'
 import { projectChatPlan, storedPlanReference } from './tool-card-plan'
-import type { z } from 'zod'
 import { boundaryCauseKind, captureBackendException, degradeBackend } from '@/lib/observability/degrade-backend'
 import { isBoundedJsonValue, type JsonValue } from '@/modules/common/bounded-json'
 import { getStatusPresentation } from '@/lib/ui/status-presentation'
@@ -17,13 +16,11 @@ import {
   callResultKindValues,
   callResultSchema,
   callMachineResultSchema,
-  type CallResult,
 } from '@/modules/capability-execution/call-contracts'
 import {
   toolQuoteInputSchema,
   type ToolQuoteResult,
 } from '@/modules/capability-execution/quote'
-import type { SuggestedNextAction } from '@/modules/market/suggested-next-action'
 import { exactAmountSchema, formatCurrencyAmount, formatDisplayAmount, formatDisplayPrice } from '@/modules/money/public'
 import {
   callNextAction,
@@ -32,8 +29,9 @@ import {
   MAX_EXECUTE_OUTPUT_PREVIEW_CHARS,
   projectCallResult,
   REFUSAL_SUMMARIES,
-  type CardChrome,
 } from './tool-card-call-result'
+import type { ChatSaveNeed, ToolCardProjection, ToolChoiceRow, ToolFact, ToolCardRecommendation } from './tool-card-types'
+export type { CallResultState, ChatSaveNeed, ToolCardProjection, ToolChoiceRow, ToolFact, ToolCardRecommendation } from './tool-card-types'
 import { toolCatalogSearchInputSchema, toolChoiceSearchOutputSchema, registryNextActionSchema, type RegistryNextAction } from '@/modules/registry/tool-choice-contracts'
 import type {
   OwnerMarketDemandFindResult,
@@ -46,24 +44,6 @@ import { CHAT_TOOL_IDS, CHAT_TOOL_NAME_MAP, type ChatToolId } from './tool-ids'
 export { CHAT_TOOL_IDS, CHAT_TOOL_NAME_MAP, CHAT_TOOL_TITLES, type ChatToolId } from './tool-ids'
 const { providerToCanonical } = CHAT_TOOL_NAME_MAP
 
-export type ToolChoiceRow = Readonly<{
-  toolRef: string
-  detailHref?: string
-  title: string
-  summary?: string
-  provider?: string
-  price?: string
-  priceValidUntil?: number
-  sourcePrice?: string
-  host?: string
-  resourcePath?: string
-  networkLabel?: string
-  readiness?: 'ready' | 'unverified' | 'unavailable'
-  access?: string
-  callable?: boolean
-  belowMatch?: boolean
-}>
-export type ToolCardRecommendation = Readonly<{ toolRef: string; by: string }>
 
 
 export function toolChoiceReadinessLabel(readiness: NonNullable<ToolChoiceRow['readiness']>): string {
@@ -71,10 +51,7 @@ export function toolChoiceReadinessLabel(readiness: NonNullable<ToolChoiceRow['r
     : readiness === 'unavailable' ? getStatusPresentation('unavailable').label : 'Unverified'
 }
 
-export type ToolFact = Readonly<{
-  label: string
-  value: string
-}>
+
 
 export const INSPECT_ACCOUNT_AVAILABLE_LABEL = 'Account available'
 export const INSPECT_AGENT_MAXIMUM_LABEL = 'Agent maximum'
@@ -83,8 +60,7 @@ const INSPECT_OWNER_FUNDING_FACT_LABELS = new Set<string>([
   INSPECT_AGENT_MAXIMUM_LABEL,
 ])
 
-export type CallResultState = CallResult['kind']
-export type ChatSaveNeed = Readonly<Pick<z.output<typeof toolCatalogSearchInputSchema>, 'query' | 'source' | 'filters'>>
+
 const storedSaveNeedSchema = toolCatalogSearchInputSchema.pick({ query: true, source: true, filters: true })
 export type ChatNeedActions = Readonly<{
   authenticated: boolean
@@ -110,52 +86,7 @@ export function parseChatQuoteInput(toolRef: string, draft: string): Record<stri
 }
 
 
-export type ToolCardProjection =
-  | (CardChrome & { kind: 'working' })
-  | (CardChrome & { kind: 'status'; state: 'refused' | 'error' | 'attention'; summary: string; planRef?: string; recoveryReason?: string; next?: RegistryNextAction; saveNeed?: ChatSaveNeed; funding?: { units: string; exponent: number } })
-  | (CardChrome & {
-      kind: 'choices'
-      state: 'complete'
-      choices: readonly ToolChoiceRow[]
-      toolRefs: readonly string[]
-      count?: number
-      contrasts?: readonly ToolFact[]
-      surface?: 'compare' | 'describe'
-      verdict?: 'match' | 'scoped'
-      coverage?: 'complete' | 'partial'
-      next?: RegistryNextAction
-      recommendation?: ToolCardRecommendation
-    })
-  | (CardChrome & {
-      kind: 'inspect'
-      state: 'complete'
-      facts: readonly ToolFact[]
-      toolRefs: readonly string[]
-    })
-  | (CardChrome & {
-      kind: 'execute'
-      state: CallResultState
-      toolRefs: readonly string[]
-      name?: string
-      callRef?: string
-      outputPreview?: string
-      outputTruncated?: boolean
-      facts: readonly ToolFact[]
-      paid?: string
-      receiptRef?: string
-      evidenceHash?: string
-      summary: string
-      nextAction?: string
-      retryable?: boolean
-      recoveryReason?: string
-      suggestedNextAction?: SuggestedNextAction
-    })
-  | (CardChrome & {
-      kind: 'clarify'
-      question: string
-      choices: readonly string[]
-      answer?: string
-    })
+
 
 function readAuthentication(value: unknown): PublicToolAuthentication | undefined {
   if (!isRecord(value) || typeof value.kind !== 'string') return undefined

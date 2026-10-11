@@ -3,7 +3,7 @@ import type { DatabaseReader, MutationCtx } from '../../../_generated/server'
 import { internal } from '../../../_generated/api'
 import { notificationWorkpool } from '../../../notificationWorkpool'
 import { assertAdmission } from '../../platform/rateLimit'
-import { resolveInteractiveAuthorityContext } from '../../../interactiveAuthority'
+import { resolveInteractiveAuthorityContext } from '../interactiveAuthority/factResolution'
 
 export type EmailStream = 'transactional' | 'alert' | 'lifecycle'
 
