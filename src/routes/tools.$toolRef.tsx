@@ -8,8 +8,8 @@ import { BRAND_NAME } from '@/content/brand-copy'
 import { degrade } from '@/lib/observability/degrade'
 import { readCanonicalBaseUrlServer } from '@/lib/server/canonical-url.functions'
 import { isPublicToolRef } from '@/modules/capability-supply/public'
-import { directoryProviderKey } from '@/modules/market/x402-directory-index'
 import { toolDisplayTitle } from '@/modules/market/tool-view-model'
+import { directoryProviderKey } from '@/modules/market/x402-directory-index'
 import {
   readDirectoryToolDetailRouteServer,
   readPublicToolDetailRouteServer,
