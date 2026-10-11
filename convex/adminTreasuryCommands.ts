@@ -2,8 +2,7 @@ import { v } from 'convex/values'
 import { mutation } from './_generated/server'
 import { adminCommandArgsValue, adminCommandReceiptValue } from './lib/adminConsole/commands/contracts'
 import { runAdminCommand } from './lib/adminConsole/commands/commandEnvelope'
-import { refused } from './lib/adminConsole/commands/commandEnvelopeSteps'
-import { paymentsAudienceSpec, paymentsPausedSpec, treasuryThresholdsSpec, treasuryCommandEnvironmentMatches } from './lib/adminConsole/actions/treasury'
+import { paymentsAudienceSpec, paymentsPausedSpec, treasuryThresholdsSpec } from './lib/adminConsole/actions/treasury'
 import { treasuryEnvironmentValue } from '@/modules/money/treasury'
 
 const pauseArgs = adminCommandArgsValue(
@@ -14,9 +13,7 @@ const pauseArgs = adminCommandArgsValue(
 export const setPaymentsPaused = mutation({
   args: pauseArgs.fields,
   returns: adminCommandReceiptValue(v.literal('set_payments_paused'), v.union(v.literal('payments_paused'), v.literal('payments_resumed')), v.string()),
-  handler: (ctx, args) => treasuryCommandEnvironmentMatches(args.input.environment)
-    ? runAdminCommand(ctx, args, paymentsPausedSpec(ctx, args))
-    : refused(args, 'environment_mismatch'),
+  handler: (ctx, args) => runAdminCommand(ctx, args, paymentsPausedSpec(ctx, args)),
 })
 
 const audienceArgs = adminCommandArgsValue(
@@ -27,9 +24,7 @@ const audienceArgs = adminCommandArgsValue(
 export const setPaymentsAudience = mutation({
   args: audienceArgs.fields,
   returns: adminCommandReceiptValue(v.literal('set_payments_audience'), v.literal('payments_audience_changed'), v.string()),
-  handler: (ctx, args) => treasuryCommandEnvironmentMatches(args.input.environment)
-    ? runAdminCommand(ctx, args, paymentsAudienceSpec(ctx, args))
-    : refused(args, 'environment_mismatch'),
+  handler: (ctx, args) => runAdminCommand(ctx, args, paymentsAudienceSpec(ctx, args)),
 })
 
 const thresholdsArgs = adminCommandArgsValue(
@@ -40,7 +35,5 @@ const thresholdsArgs = adminCommandArgsValue(
 export const changeThresholds = mutation({
   args: thresholdsArgs.fields,
   returns: adminCommandReceiptValue(v.literal('change_treasury_thresholds'), v.literal('treasury_thresholds_changed'), v.string()),
-  handler: (ctx, args) => treasuryCommandEnvironmentMatches(args.input.environment)
-    ? runAdminCommand(ctx, args, treasuryThresholdsSpec(ctx, args))
-    : refused(args, 'environment_mismatch'),
+  handler: (ctx, args) => runAdminCommand(ctx, args, treasuryThresholdsSpec(ctx, args)),
 })
