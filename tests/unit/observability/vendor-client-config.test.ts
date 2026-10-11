@@ -19,7 +19,7 @@ describe('telemetry configuration boundaries', () => {
     await vi.waitFor(() => expect(mocks.init).toHaveBeenCalled())
     expect(mocks.init).toHaveBeenCalledWith('test-project-key', expect.objectContaining({
       autocapture: false, disable_session_recording: true, capture_pageview: false,
-      capture_pageleave: false, persistence: 'sessionStorage',
+      capture_pageleave: false, persistence: 'localStorage+cookie',
     }))
   })
   it('honors the server disable switch despite a configured DSN', async () => {
