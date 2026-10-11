@@ -99,7 +99,7 @@
     "@rjsf/utils": "6.8.0",
     "@rjsf/validator-ajv8": "6.8.0",
     "@scalar/openapi-parser": "0.29.0",
-    "@sentry/node": "^10.63.0",
+    "@sentry/node": "^11.5.0",
     "@sentry/react": "^10.63.0",
     "@shadcn/react": "^0.3.0",
     "@sindresorhus/slugify": "^3.0.0",
