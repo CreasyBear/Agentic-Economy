@@ -2,8 +2,6 @@ import type { Doc } from '../../../_generated/dataModel'
 import type { MutationCtx } from '../../../_generated/server'
 import type { ClerkSecurityObservation } from '../../../../src/modules/security/account-security'
 
-const MACHINE_AGENT_CASCADE_CAP = 64
-
 export async function revokeMachineAgentsForCreator(
   ctx: Pick<MutationCtx, 'db'>,
   observation: ClerkSecurityObservation,
@@ -31,15 +29,13 @@ export async function revokeMachineAgentsForCreator(
 
   const matchedAgents: Doc<'agentAccessPrincipals'>[] = []
   for (const accountRef of accountRefs) {
-    if (matchedAgents.length >= MACHINE_AGENT_CASCADE_CAP) break
     const agents = await ctx.db.query('agentAccessPrincipals')
       .withIndex('by_ownerId_and_lifecycle', (index) => index
         .eq('ownerId', accountRef)
         .eq('lifecycle', 'active'))
       .collect()
     for (const agent of agents) {
-      if (matchedAgents.length >= MACHINE_AGENT_CASCADE_CAP) break
-      const ownerMatches = agent.ownerTokenIdentifier === observation.providerIdentifier
+        const ownerMatches = agent.ownerTokenIdentifier === observation.providerIdentifier
         || (agent.ownerTokenIdentifier === undefined && ownedAccountRefs.has(accountRef))
       if (!ownerMatches) continue
       matchedAgents.push(agent)

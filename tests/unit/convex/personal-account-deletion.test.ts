@@ -163,6 +163,26 @@ describe('personalAccount retirePersonalAccountForServer (W-09)', () => {
     expect(admission).toMatchObject({ lifecycle: 'revoked' })
   })
 
+  it('R7c: revokes every owned machine agent, however many', async () => {
+    process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN = serviceKey
+    const backend = createBackend()
+    await seedAuthority(backend)
+    await backend.run(async (ctx) => {
+      for (let i = 0; i < 70; i++) {
+        await ctx.db.insert('agentAccessPrincipals', {
+          principalId: `prn_bulk_${i}`, ownerId: ACCOUNT_REF, ownerTokenIdentifier: TOKEN_IDENTIFIER,
+          credentialId: `key_bulk_${i}`, applicationRef: 'agentic-economy', environment: 'sandbox',
+          scopes: ['market_tools:call'], authorityMode: 'read_only', grantGeneration: 1,
+          spendingPolicyDigest: 'sha256:bulk', lifecycle: 'active', expiresAt: 20_000, recordedAt: NOW, lastSeenAt: NOW,
+        })
+      }
+    })
+    await retire(backend, retireCommand(TOKEN_IDENTIFIER))
+    const rows = await backend.run(async (ctx) => await ctx.db.query('agentAccessPrincipals').collect())
+    expect(rows).toHaveLength(70)
+    expect(rows.every((row) => row.lifecycle === 'revoked')).toBe(true)
+  })
+
   it('R7b: closes the owned account, ends ownership, revokes owner-less agents, blocks members', async () => {
     process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN = serviceKey
     const backend = createBackend()
