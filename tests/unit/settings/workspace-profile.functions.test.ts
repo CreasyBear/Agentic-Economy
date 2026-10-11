@@ -73,7 +73,7 @@ describe('workspace consequence server producers', () => {
     vi.useFakeTimers()
     vi.setSystemTime(now)
     boundary.mutation.mockReset()
-    boundary.action.mockReset().mockResolvedValue({ kind: 'ok', balance: { currency: 'AUD', units: '0', exponent: 6 } })
+    boundary.action.mockReset().mockResolvedValue({ kind: 'ok', balance: { currency: 'AUD', units: '5', exponent: 6 }, purchasedBalance: { currency: 'AUD', units: '0', exponent: 6 } })
     boundary.auth.mockReset().mockResolvedValue({ isAuthenticated: true, userId: 'user_owner',
       has: vi.fn().mockReturnValue(true), factorVerificationAge: [1, 2],
       sessionClaims: { reverification_id: proof.reverificationId, iat: (now - 30_000) / 1_000 } })
