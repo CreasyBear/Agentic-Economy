@@ -15,7 +15,7 @@ const call = {
 const quote = {
   x402RequirementJson: JSON.stringify({
     endpoint: { url: 'https://seller.example/api', method: 'POST' },
-    requirement: { payTo: '0xabc', amountUnits: '1000' },
+    requirement: { payTo: '0xabc', amountUnits: '1000', asset: '0xUSDC', network: 'eip155:84532' },
   }),
 }
 const ctx = {
@@ -28,7 +28,10 @@ const ctx = {
   },
 } as unknown as MutationCtx
 
-const good = { payTo: '0xABC', amountUnits: '1000', providerEndpoint: 'https://seller.example/api' }
+const good = {
+  payTo: '0xABC', amountUnits: '1000', asset: '0xusdc', network: 'eip155:84532',
+  providerEndpoint: 'https://seller.example/api',
+}
 const run = (args: Record<string, unknown>) => authorizeProviderConsequenceX402RpcHandler(ctx, {
   ticketRef: 't', journalTokenDigest: 'tok', operation: 'prepare_authorization', args,
 })
@@ -41,6 +44,8 @@ describe('x402 prepare_authorization binding', () => {
     ['payee', { payTo: '0xevil' }],
     ['amount', { amountUnits: '1001' }],
     ['endpoint', { providerEndpoint: 'https://evil.example/api' }],
+    ['asset', { asset: '0xother' }],
+    ['network', { network: 'eip155:8453' }],
   ])('refuses a different %s', async (_name, override) => {
     expect((await run({ ...good, ...override })).kind).toBe('unavailable')
   })
