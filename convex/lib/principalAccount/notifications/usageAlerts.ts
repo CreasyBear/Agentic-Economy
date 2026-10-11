@@ -4,6 +4,7 @@ import type { Doc } from '../../../_generated/dataModel'
 import { internal } from '../../../_generated/api'
 import { notificationWorkpool } from '../../../notificationWorkpool'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { BUSINESS_TIME_ZONE,monthBoundsInZone } from '@/lib/ui/format-time'
 import { usageReportSummarySchema } from '@/lib/export/usage-report-summary'
 import { formatCurrencyAmount } from '@/modules/money/public'
 import { usageAlertEvidenceSchema } from '@/modules/principal-account/public'
@@ -13,7 +14,7 @@ import { enqueueEmail } from './enqueue'
 import { unsubscribeUrlFor } from './unsubscribe'
 const exact=/^(?:0|[1-9]\d*)$/u
 const MONTH_NAMES=['January','February','March','April','May','June','July','August','September','October','November','December']
-const monthAt=(at:number)=>new Date(at).toISOString().slice(0,7)
+const monthAt=(at:number)=>monthBoundsInZone(at,BUSINESS_TIME_ZONE).month
 
 export async function activeUsagePolicy(ctx:Pick<QueryCtx,'db'>,accountRef:string){
   const account=await ctx.db.query('accounts').withIndex('by_accountRef',q=>q.eq('accountRef',accountRef)).unique()
@@ -70,7 +71,7 @@ export async function enqueueMoneyUsageAlertsHandler(ctx:MutationCtx,args:{accou
 }
 export async function evaluateUsageMoneyAlertsHandler(ctx:ActionCtx,args:{accountRef:string;captureOperational?:boolean}):Promise<null>{
   if(!await ctx.runQuery(internal.notifications.hasCurrentUsageAlertConsent,{accountRef:args.accountRef}))return null
-  const now=new Date(),periodStartAt=Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),1),periodEndAt=Date.UTC(now.getUTCFullYear(),now.getUTCMonth()+1,1),month=now.toISOString().slice(0,7)
+  const {month,startAt:periodStartAt,endAt:periodEndAt}=monthBoundsInZone(Date.now(),BUSINESS_TIME_ZONE)
   if(args.captureOperational===true)await ctx.runMutation(internal.notifications.requestUsageAlertReport,{accountRef:args.accountRef})
   const credit=await ctx.runAction(internal.moneyAccountCreditBalance.read,{accountRef:args.accountRef})
   const spend=await ctx.runAction(internal.moneyFormance.readPeriodSpend,{accountRef:args.accountRef,periodStartAt,periodEndAt})
