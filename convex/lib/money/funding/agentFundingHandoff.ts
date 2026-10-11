@@ -105,8 +105,6 @@ export async function reserveAgentHandoffHandler(
   const admission = await admitAgentHandoff(ctx, args)
   const callerKey = args.idempotencyKey.trim()
   if (admission === null) return refused('billing_identity_missing')
-  const gate = await readFundingStartRefusal(ctx, args.environment, { admin: false })
-  if (gate !== null) return refused(gate)
   if (!POSITIVE_UNITS.test(args.principalAmountUnits)
     || callerKey.length < 1 || callerKey.length > 255
     || !Number.isSafeInteger(args.checkoutExpiresAt)) return refused('funding_amount_invalid')
@@ -131,6 +129,8 @@ export async function reserveAgentHandoffHandler(
       ? { kind: 'accepted', command: fundingCommandView(prior) }
       : refused('funding_idempotency_conflict')
   }
+  const gate = await readFundingStartRefusal(ctx, args.environment, { admin: false })
+  if (gate !== null) return refused(gate)
   const now = Date.now()
   if (args.checkoutExpiresAt < now + 30 * 60_000 || args.checkoutExpiresAt > now + 60 * 60_000 + 5_000) {
     return refused('funding_amount_invalid')

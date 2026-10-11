@@ -43,10 +43,6 @@ export async function reserveHandler(
     || !SHA256.test(args.expectedPolicyDigest)) return refused('funding_amount_invalid')
   const actor = await resolveBusinessActor(ctx)
   if (actor.kind !== 'authenticated_owner') return refused('billing_identity_missing')
-  const gate = await readFundingStartRefusal(ctx, args.environment, {
-    admin: await readCurrentActiveAdminMembership(ctx) !== undefined,
-  })
-  if (gate !== null) return refused(gate)
 
   const prior = await ctx.db.query('moneyFundingCommands')
     .withIndex('by_idempotencyKey', (builder) => builder.eq('idempotencyKey', args.idempotencyKey))
@@ -60,6 +56,10 @@ export async function reserveHandler(
       ? { kind: 'accepted', command: fundingCommandView(prior) }
       : refused('funding_idempotency_conflict')
   }
+  const gate = await readFundingStartRefusal(ctx, args.environment, {
+    admin: await readCurrentActiveAdminMembership(ctx) !== undefined,
+  })
+  if (gate !== null) return refused(gate)
   const now = Date.now()
   const policy = await readCommercialPolicyGate(ctx.db, {
     environment: args.environment,
