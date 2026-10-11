@@ -55,6 +55,9 @@ export async function signUnsubscribeToken(secret: string, payload: UnsubscribeP
   return `${body}.${toBase64Url(new Uint8Array(signature))}`
 }
 
+/** Links in emails sent before kid and exp existed still unsubscribe until this cutoff (Spam Act 2003, CAN-SPAM). Delete this branch after it. */
+const LEGACY_UNSUBSCRIBE_CUTOFF_MS = Date.UTC(2026, 11, 15)
+
 /** `crypto.subtle.verify` compares in constant time. Any malformed input returns null rather than throwing. */
 export async function verifyUnsubscribeToken(secret: string, token: string, now: number = Date.now()): Promise<UnsubscribePayload | null> {
   const [body, signature, extra] = token.split('.')
@@ -65,7 +68,8 @@ export async function verifyUnsubscribeToken(secret: string, token: string, now:
     const parsed: unknown = JSON.parse(decoder.decode(fromBase64Url(body)))
     if (typeof parsed !== 'object' || parsed === null) return null
     const { principalRef, accountRef, stream, kid, exp } = parsed as Record<string, unknown>
-    if (kid !== UNSUBSCRIBE_KID || typeof exp !== 'number' || exp <= now) return null
+    const legacy = kid === undefined && exp === undefined && now < LEGACY_UNSUBSCRIBE_CUTOFF_MS
+    if (!legacy && (kid !== UNSUBSCRIBE_KID || typeof exp !== 'number' || exp <= now)) return null
     if (typeof principalRef !== 'string' || typeof accountRef !== 'string') return null
     if (!UNSUBSCRIBABLE_STREAMS.some((allowed) => allowed === stream)) return null
     return { principalRef, accountRef, stream: stream as UnsubscribeStream }
