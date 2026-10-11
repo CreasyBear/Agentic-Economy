@@ -1,3 +1,4 @@
+import { CircuitOpenError, dependencyBreaker } from '@/lib/observability/circuit-breaker'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { normalizeSearchText, SEARCH_STOP_WORDS } from '@/modules/common/normalize-search-text'
 import {
@@ -168,16 +169,16 @@ export async function rankCompactDirectoryRows(
   ]))
   let decision
   try {
-    decision = await executeDecisionGateway({
+    decision = await dependencyBreaker.run('jev', () => executeDecisionGateway({
       state: {
         query: query.trim(),
         candidates: rows.map(row => ({ title: row.title, summary: row.summary, provider: row.provider })),
       },
       questions,
-    }, { ...options, purpose: 'discovery', disableSecondaryLlm: true })
+    }, { ...options, purpose: 'discovery', disableSecondaryLlm: true }))
   } catch (cause) {
-    if (!(cause instanceof JevUnavailableError)) throw cause
-    degradeBackend(cause, undefined, { site: 'rankCompactDirectoryRows', reason: 'source_unavailable' })
+    if (!(cause instanceof JevUnavailableError) && !(cause instanceof CircuitOpenError)) throw cause
+    if (!(cause instanceof CircuitOpenError)) degradeBackend(cause, undefined, { site: 'rankCompactDirectoryRows', reason: 'source_unavailable' })
     const matched = rows.filter(row => lexicalToolMatch(query, row.title, row.summary))
     return { verdict: matched.length > 0 ? 'matched' : 'noMatch', rows: matched }
   }
@@ -363,7 +364,7 @@ async function scoreToolSearch(
 
   let decision
   try {
-    decision = await executeDecisionGateway(
+    decision = await dependencyBreaker.run('jev', () => executeDecisionGateway(
       {
         state: {
           query: cleanQuery,
@@ -373,12 +374,14 @@ async function scoreToolSearch(
         questions,
       },
       { ...options, purpose: 'discovery', disableSecondaryLlm: true },
-    )
+    ))
   } catch (cause) {
-    if (!(cause instanceof JevUnavailableError)) throw cause
+    if (!(cause instanceof JevUnavailableError) && !(cause instanceof CircuitOpenError)) throw cause
     return {
       kind: 'original',
-      result: degradeBackend(cause, result, { site: 'rerankToolSearchResult', reason: 'source_unavailable' }),
+      result: cause instanceof CircuitOpenError
+        ? result
+        : degradeBackend(cause, result, { site: 'rerankToolSearchResult', reason: 'source_unavailable' }),
       reason: 'unavailable',
     }
   }

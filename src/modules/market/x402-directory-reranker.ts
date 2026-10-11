@@ -1,3 +1,4 @@
+import { CircuitOpenError, dependencyBreaker } from '@/lib/observability/circuit-breaker'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { callJevSystemOne, JevUnavailableError, type DecisionGatewayOptions, type JevQuestion } from '@/modules/decision-engine/public'
 import type { X402DirectoryContract, X402DirectoryPage } from './x402-directory'
@@ -60,10 +61,11 @@ export async function rerankX402DirectoryPage<P extends X402DirectoryPage>(
   // only the external inference boundary, not projection or sorting code.
   let decision
   try {
-    decision = await callJevSystemOne({ state, questions }, {
+    decision = await dependencyBreaker.run('jev', () => callJevSystemOne({ state, questions }, {
       ...options, purpose: 'discovery',
-    })
+    }))
   } catch (cause) {
+    if (cause instanceof CircuitOpenError) return page
     if (!(cause instanceof JevUnavailableError)) throw cause
     return degradeBackend(cause, page, { site: 'rerankX402DirectoryPage', reason: 'source_unavailable' })
   }

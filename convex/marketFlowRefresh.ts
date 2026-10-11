@@ -3,6 +3,7 @@
 import { generateJwt } from '@coinbase/cdp-sdk/auth'
 import { v } from 'convex/values'
 
+import { CircuitOpenError, dependencyBreaker } from '@/lib/observability/circuit-breaker'
 import { BASE_FACILITATOR_SET_DIGEST } from '@/modules/market/base-facilitator-set'
 import { buildFlowDaySql, buildFlowPayeeWindowSql, chunkRows, daysToIngest, flowPayeeWindow, parseFlowPayeeWindow, parseFlowSqlResult, shiftUtcDay, windowNeedsExpiry } from '@/modules/market/flow-tape'
 
@@ -113,9 +114,9 @@ export const lookupVolumes = action({
     const missing = payTos.filter(payTo => !hit.has(payTo))
     if (missing.length === 0) return positiveVolumes(cached)
     try {
-      const parsed = await runSql(buildFlowPayeeWindowSql(missing, Date.now()), result => parseFlowPayeeWindow(result, new Set(missing)))
+      const parsed = await dependencyBreaker.run('cdp-sql', () => runSql(buildFlowPayeeWindowSql(missing, Date.now()), result => parseFlowPayeeWindow(result, new Set(missing))))
       if (!parsed.ok) {
-        console.error('[market] payee volume lookup rejected', { reason: parsed.reason })
+        console.warn('[market] payee volume lookup rejected', { reason: parsed.reason })
         return positiveVolumes(cached)
       }
       const returned = new Set(parsed.rows.map(row => row.recipient))
@@ -126,7 +127,8 @@ export const lookupVolumes = action({
       await ctx.runMutation(internal.marketFlow.savePayeeVolumes, { rows: stored, windowEnd })
       return positiveVolumes([...cached, ...parsed.rows])
     } catch (cause) {
-      console.error('[market] payee volume lookup failed', { reason: failureMessage(cause) })
+      if (cause instanceof CircuitOpenError) return positiveVolumes(cached)
+      console.warn('[market] payee volume lookup failed', { reason: failureMessage(cause) })
       return positiveVolumes(cached)
     }
   },

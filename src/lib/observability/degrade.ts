@@ -1,4 +1,5 @@
 import { captureRouteException } from '@/lib/observability/capture-route-exception'
+import { countDegradedRoute } from '@/lib/observability/count-degraded'
 import type { DegradedReason } from '@/lib/errors'
 
 /**
@@ -11,6 +12,7 @@ export function degrade<T>(
   fallback: T,
   context: { site: string; reason: DegradedReason },
 ): T {
+  countDegradedRoute(context.site)
   captureRouteException(cause, { degraded: context.site, reason: context.reason }, 'warning')
   return fallback
 }

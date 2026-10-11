@@ -61,7 +61,8 @@ export function degradeBackend<T>(
   context: { site: string; reason: DegradedReason },
 ): T {
   try {
-    console.error('[ae.degraded]', JSON.stringify({
+    // Warn, not error: a handled fallback must not open Sentry issues via Convex log streaming.
+    console.warn('[ae.degraded]', JSON.stringify({
       operation: context.site,
       reason: context.reason,
       ...backendTags(),
