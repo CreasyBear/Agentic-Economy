@@ -83,4 +83,18 @@ describe('completed chat facts', () => {
     expect(answer).toContain('Review inputs')
     expect(answer).not.toMatch(/couldn't finish/i)
   })
+
+  it('escapes provider-authored Markdown in Call output', () => {
+    const answer = completedChatFacts(fromResult({
+      kind: 'completed', callRef: 'invocation:x:1', toolRef: `operation:v1:${'a'.repeat(64)}`,
+      output: { note: '![a](http://e)', t: '[x](https://evil.example)' }, evidenceHash: 'e',
+      usage: {
+        usageRef: 'u', observedAt: 1, chargeState: 'free_tier',
+        amount: { currency: 'USD', units: '0', exponent: 2 }, priceDigest: 'p',
+      },
+    }))
+    expect(answer).toContain('\\!\\[a\\]\\(http://e\\)')
+    expect(answer).not.toContain('](http')
+    expect(answer).not.toMatch(/(^|[^\\])\]\(/)
+  })
 })

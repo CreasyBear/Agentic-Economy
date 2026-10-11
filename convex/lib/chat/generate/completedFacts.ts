@@ -6,6 +6,10 @@ type CompletedStep = Readonly<{
   toolResults: readonly Readonly<{ toolName: string; output: unknown }>[]
 }>
 
+/** Provider-authored text must not become live Markdown links, images or HTML. */
+const escapeMarkdown = (text: string): string =>
+  text.replace(/\r?\n/g, ' ').replace(/[\\`*_[\]()<>!#|]/g, '\\$&')
+
 /** Only completed Tool outputs become answer facts; a tool call alone proves no result. */
 export function completedChatFacts(steps: readonly CompletedStep[]): string | null {
   const results = steps.flatMap(step => step.toolResults)
@@ -21,13 +25,13 @@ export function completedChatFacts(steps: readonly CompletedStep[]): string | nu
     if (card !== null) cards.push(card)
     if (card?.kind === 'execute') {
       const reference = card.callRef === undefined ? '' : ` CallRef: ${card.callRef}.`
-      const output = card.outputPreview === undefined ? '' : ` Returned output: ${JSON.stringify(card.outputPreview)}.`
-      const details = card.facts.map(fact => `${fact.label}: ${fact.value}`).join('; ')
-      facts.push(`**Call ${card.state}.**${reference} ${card.summary}${output}${details ? ` ${details}.` : ''}${card.state === 'reconciliation_required' ? ' Do not send another Call until this one is reconciled.' : ''}`)
+      const output = card.outputPreview === undefined ? '' : ` Returned output: ${escapeMarkdown(JSON.stringify(card.outputPreview))}.`
+      const details = card.facts.map(fact => `${escapeMarkdown(fact.label)}: ${escapeMarkdown(fact.value)}`).join('; ')
+      facts.push(`**Call ${card.state}.**${reference} ${escapeMarkdown(card.summary)}${output}${details ? ` ${details}.` : ''}${card.state === 'reconciliation_required' ? ' Do not send another Call until this one is reconciled.' : ''}`)
     } else if (card?.kind === 'inspect' && card.facts.length > 0) {
-      facts.push(`**Current Quote terms:** ${card.facts.map(fact => `${fact.label}: ${fact.value}`).join('; ')}.`)
+      facts.push(`**Current Quote terms:** ${card.facts.map(fact => `${escapeMarkdown(fact.label)}: ${escapeMarkdown(fact.value)}`).join('; ')}.`)
     } else if (card?.kind === 'status' && card.toolId === 'tool.quote') {
-      facts.push(`**Quote ${card.state}.** ${card.summary}`)
+      facts.push(`**Quote ${card.state}.** ${escapeMarkdown(card.summary)}`)
     }
   }
   const choices = projectChatChoiceActions(cards)
@@ -40,7 +44,7 @@ export function completedChatFacts(steps: readonly CompletedStep[]): string | nu
       : 'Open a Tool card to check its exact inputs and current terms.'
   const choiceAnswer = selected.length === 0 ? null
     : `**Tools to inspect:** ${selected.map(({ choice }) =>
-      `${choice.title}${choice.price === undefined ? '' : ` (${choice.price})`}${choice.readiness === undefined ? '' : ` — ${choice.readiness}`}`)
+      `${escapeMarkdown(choice.title)}${choice.price === undefined ? '' : ` (${escapeMarkdown(choice.price)})`}${choice.readiness === undefined ? '' : ` — ${escapeMarkdown(choice.readiness)}`}`)
       .join('; ')}. Next: ${next}`
   return facts.findLast(fact => fact.startsWith('**Call '))
     ?? facts.findLast(fact => fact.startsWith('**Quote '))
