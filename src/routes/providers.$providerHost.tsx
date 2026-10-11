@@ -18,7 +18,7 @@ export const Route = createFileRoute('/providers/$providerHost')({
     if (!parsed.success || parsed.data.provider !== params.providerHost) throw notFound()
     const catalogue = await readX402DirectoryCatalogueServer({ data: { provider: params.providerHost, sort: 'popular' } })
     if (catalogue.kind === 'ok' && catalogue.page.items.length === 0) throw notFound()
-    return { kind: 'found' as const, catalogue }
+    return { catalogue }
   },
   // Public browsing shares Market's short freshness window; Quote/Call authority is fetched separately.
   staleTime: 30_000,
@@ -31,7 +31,7 @@ export const Route = createFileRoute('/providers/$providerHost')({
 })
 
 function HostNotFound() {
-  return <AePublicPage><AePageState title="No listings for this host" description="We couldn’t find any listings for this host." action={<Link to="/market">Browse Tools</Link>} /></AePublicPage>
+  return <AePageState title="No listings for this host" description="We couldn’t find any listings for this host." action={<Link to="/market">Browse Tools</Link>} />
 }
 
 function HostPage() {
