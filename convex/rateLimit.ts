@@ -20,6 +20,7 @@ const internalRateLimitName = v.union(
   v.literal('oauth-device-poll'),
   v.literal('chat-submit'),
   v.literal('chat-anonymous'),
+  v.literal('chat-anonymous-global'),
   v.literal('dispute-open'),
 )
 
