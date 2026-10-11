@@ -1,6 +1,9 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { convexTestWithMarketComponents } from '../../../../tests/helpers/convex-fixtures'
+const enqueueAccountNotice = vi.hoisted(() => vi.fn())
+vi.mock('../../principalAccount/notifications/enqueue', () => ({ enqueueAccountNotice }))
+
 import { callFundingSource, journeyForFinalization } from './dispatchFinalize'
 
 const completed = { state: 'completed', result: { kind: 'completed', receipt: { receiptRef: 'r' } } } as never
@@ -27,6 +30,8 @@ describe('journeyForFinalization funding source', () => {
       expect(await events('activated')).toBeNull()
       await journeyForFinalization(ctx, call(), completed, 2)
       expect((await events('activated'))?.props).toEqual({ funding_source: 'real' })
+      expect(enqueueAccountNotice).toHaveBeenCalledTimes(1)
+      expect(enqueueAccountNotice).toHaveBeenCalledWith(ctx, { eventKind: 'first_call_done', accountRef: 'acct', sourceEventRef: 'c' })
     })
   })
 })

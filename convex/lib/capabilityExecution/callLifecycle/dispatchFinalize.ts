@@ -8,6 +8,7 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { isRecord } from '@/modules/common/is-record'
 import { recordInvocationRefused, recordMarketEvidenceFact } from '../../../marketEvidence'
 import { emitJourneyEvent } from '../../journey/events'
+import { enqueueAccountNotice } from '../../principalAccount/notifications/enqueue'
 import { materializePurchaseResolutionRecord } from './purchaseResolutionMaterialize'
 import { assertCallResultJson, canonicalCommandReadbackMatches, commandMatchesDispatch, persistedDispatchMatches, type OpenDispatchValue } from './callIdentity'
 import type { CallDispatchMutationResult, CallDispatchProjectionShape } from './contracts'
@@ -82,7 +83,8 @@ export async function journeyForFinalization(
 ): Promise<void> {
   if (projection.state !== 'completed') return
   const fundingSource = callFundingSource(row)
-  await emitJourneyEvent(ctx, row.ownerId, 'first_call', { props: { funding_source: fundingSource } })
+  const first = await emitJourneyEvent(ctx, row.ownerId, 'first_call', { props: { funding_source: fundingSource } })
+  if (first) await enqueueAccountNotice(ctx, { eventKind: 'first_call_done', accountRef: row.ownerId, sourceEventRef: row.callRef })
   const result = projection.result
   const receipt = result !== undefined && 'receipt' in result ? result.receipt : undefined
   if (receipt === undefined) return
