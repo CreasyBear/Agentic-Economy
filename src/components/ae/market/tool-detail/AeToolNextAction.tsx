@@ -42,7 +42,7 @@ export function AeToolNextAction({
 
         {nextAction.kind === 'navigate' ? (
           <a
-            href={nextAction.href ?? agentSetupHref(model.toolRef)}
+            href={nextAction.href ?? agentSetupHref()}
             className={cn(actionLinkClassName('primary', 'md'), 'min-h-touch w-full sm:w-auto sm:justify-self-start')}
           >
             {nextAction.label === 'Find Tool alternatives' ? 'Find Tool alternatives' : 'Connect an Agent'}
@@ -58,7 +58,7 @@ export function AeToolNextAction({
 
         {nextAction.label === 'request for Agent' ? (
           <a
-            href={agentSetupHref(model.toolRef)}
+            href={agentSetupHref()}
             className={cn(actionLinkClassName('ghost', 'md'), 'underline underline-offset-4', 'min-h-touch w-full sm:w-auto sm:justify-self-start')}
           >
             Need to connect an Agent?
@@ -82,7 +82,7 @@ export function AeToolNextAction({
       <CardContent className="grid gap-3">
         {nextAction.kind === 'navigate' ? (
           <a
-            href={nextAction.href ?? agentSetupHref(model.toolRef)}
+            href={nextAction.href ?? agentSetupHref()}
             className={cn(actionLinkClassName('primary', 'sm'), 'min-h-touch')}
           >
             {nextAction.label === 'Find Tool alternatives' ? 'Find Tool alternatives' : 'Connect an Agent'}
@@ -97,7 +97,7 @@ export function AeToolNextAction({
         ) : null}
         {nextAction.label === 'request for Agent' ? (
           <a
-            href={agentSetupHref(model.toolRef)}
+            href={agentSetupHref()}
             className={cn(actionLinkClassName('ghost', 'sm'), 'underline underline-offset-4', 'min-h-touch')}
           >
             Need to connect an Agent?
@@ -108,8 +108,8 @@ export function AeToolNextAction({
   )
 }
 
-function agentSetupHref(toolRef: string): string {
-  return `/agent-access?resumeTool=${encodeURIComponent(toolRef)}`
+function agentSetupHref(): string {
+  return '/for-agents'
 }
 
 function nextActionTitle(model: ToolInspectorModel): string {
