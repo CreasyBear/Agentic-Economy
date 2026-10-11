@@ -11,19 +11,17 @@ export default function AgentApproval({ siteUrl, agentName, expiresMinutes }: Ag
   const campaign = 'approval'
   return (
     <Layout
-      preview={`${agentName} is waiting for your approval to run a paid Task`}
+      preview={`Approve or decline within ${expiresMinutes} minutes.`}
       siteUrl={siteUrl}
       campaign={campaign}
-      reason="You get this because an Agent on your account needs your approval. This is required account mail."
+      reason="You get this because an agent on your account needs your approval. Required account mail cannot be turned off."
     >
+      {/* Structure from emailcn notification-default (see account-notice.tsx): heading, body, one button. */}
+      <Text className="ae-text" style={{ ...bodyText, fontSize: 22, fontWeight: 500, lineHeight: '28px' }}>{subject({ siteUrl, agentName, expiresMinutes })}</Text>
       <Text className="ae-text" style={bodyText}>
-        Your Agent &quot;{agentName}&quot; is waiting for your approval to run a paid Task.
-      </Text>
-      <Text className="ae-text" style={bodyText}>
-        Review and approve or decline. This request expires {expiresMinutes} minutes after it was made. If you do nothing, no money moves.
+        {agentName} is waiting for your approval to run a paid call. The request expires in {expiresMinutes} minutes. If you do nothing, no money moves.
       </Text>
       <CtaButton href={emailUrl(siteUrl, '/agent-access', { campaign, content: 'cta' })}>Review request</CtaButton>
     </Layout>
   )
 }
-
