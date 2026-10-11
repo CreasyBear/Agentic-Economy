@@ -10,7 +10,7 @@
       "upstreamPath": "registry/bases/react-email/components/marketing/headers/header-with-logo.tsx",
       "slug": "@emailcn/react-email/header-with-logo",
       "upstreamSha256": "21e94fe14063bc0dab39015a3910213a0b288d10708ed419903dbe7a55c111c8",
-      "sha256": "53c87f2db05584c1e74e7ed0fdd307fae141f9a9c53b202e852fe5faf5f8d5ba",
+      "sha256": "3bf1f88b9b0b3743204ca97f399c3990138c9981cd335bad9dc02107d6b3395a",
       "localRewrite": "imports \"react-email\" to \"@react-email/components\" (1.0.12) and \"@/components/email/*\" to \"./*\"",
       "propsUsed": "HeaderWithLogoSection: logoSrc, logoAlt, logoHref, text, variant=\"with-text\", alignment=\"left\", backgroundColor, pageBackgroundColor, textColor (src/emails/layout.tsx). Unused: HeaderWithLogo document wrapper, theme.",
       "tsNocheck": null,
@@ -25,7 +25,7 @@
       "sha256": "cef00fc6543086ceee71c3793ab07011fdc48dbac4bec2e62d67aaffb46baac2",
       "localRewrite": "none",
       "propsUsed": "emailAsset(\"maizzle-insignia.png\") only, evaluated as the header default logoSrc; layout always overrides it.",
-      "tsNocheck": "Upstream getIndexedAsset returns string | undefined (lines 354, 374) under noUncheckedIndexedAccess; fixing means editing vendored source, and our code never reaches those branches.",
+      "tsNocheck": "Upstream getIndexedAsset returns string | undefined (lines 354, 374) under noUncheckedIndexedAccess; fixing means editing vendored source, and our code never reaches those branches. Re-checked 2026-10-11: removing it still fails npm run typecheck with TS2345 at lines 354 and 374.",
       "permittedTypePatterns": []
     },
     {
@@ -65,6 +65,6 @@
       "permittedTypePatterns": []
     }
   ],
-  "notInstalled": "button, utility-footer, notification-default, onboarding-default, receipt-default, order-summary-table: each exports a full-document Html wrapper that cannot nest in our layout and takes emailcn's own theme. layout.tsx and the templates copy the structure and restyle it to aeconTheme, naming the slug in a comment (design doc 2.5, P15).",
+  "notInstalled": "button, utility-footer, notification-default, onboarding-default, receipt-default, order-summary-table: each exports a full-document Html wrapper that cannot nest in our layout and takes emailcn's own theme. layout.tsx and the templates copy the structure and restyle it to aeconTheme, naming the slug in a comment (design doc 2.5, P15). split-hero, navigation-footer, product-list: unused.",
   "permittedTypePatterns": []
 }

@@ -121,6 +121,8 @@ Source of truth: https://www.emailcn.run/llms.txt. Install is `npx shadcn@latest
 | Footer | `utility-footer` (structure copied, not vendored) | every email | restyled to the forest band (2.3) |
 | Authentication, Invitations, Newsletter | not installed | none | Clerk owns verification, sign-in and invite; no newsletter in scope |
 
+emailcn block exports are full `<Html>` documents, so templates use emailcn components (header, theme, font, assets) and follow the blocks' structure as the named reference.
+
 Only `header-with-logo` and its theme and asset dependencies are vendored (`upstream-manifest.json`, sha256 pinned by tests/imports). The other items export full-document `Html` wrappers that cannot nest in our layout, so templates copy their structure, restyle it to our theme and name the slug in a comment (P15). No gap is hand-rolled by default. Only if the vendored files show none fits does a template fall back to `Section`, `Row`, `Column` from `@react-email/components` 1.0.12 [REPO package.json:95], and then it records the named emailcn reference it copied from (P15).
 
 ---
