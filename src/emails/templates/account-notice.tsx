@@ -39,8 +39,6 @@ const need = (value: string | undefined) => {
   return value
 }
 
-/** Deletion grace period decided by Joel: 14 days, with a reminder 3 days before the account is deleted. */
-
 const NOTICES: Record<NoticeKind, Notice> = {
   funding_failed: {
     subject: ({ amount }) => (amount === undefined ? "Your top-up didn't go through" : `Your ${amount} top-up didn't go through`),
@@ -140,8 +138,8 @@ const NOTICES: Record<NoticeKind, Notice> = {
   },
   deletion_completed: {
     subject: () => 'Your aecon account was deleted',
-    preheader: () => 'Your data is gone.',
-    body: () => 'Your aecon account and its data were deleted, as you asked. Records we must keep by law, such as tax invoices, are held separately. Contact support@aecon.ai with any questions.',
+    preheader: () => 'Your account and data are deleted.',
+    body: () => 'Your aecon account and its data were deleted, as you asked. Contact support@aecon.ai with any questions.',
     label: '', path: '/', campaign: 'deletion_completed',
   },
   first_call_done: {

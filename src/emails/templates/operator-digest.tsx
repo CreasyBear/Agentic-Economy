@@ -8,8 +8,6 @@ import { emailUrl } from '../links'
 export type OperatorDigestProps = { siteUrl: string; date: string; lines: string[] }
 
 const SYDNEY = 'Australia/Sydney'
-/** Internal reason codes such as not_funded read as plain words. */
-const plain = (line: string) => line.replace(/\b[a-z]+(?:_[a-z]+)+\b/gu, (code) => code.replaceAll('_', ' '))
 
 export const subject = ({ date }: OperatorDigestProps) => `aecon stalled accounts, ${formatDate(date, SYDNEY)}`
 
@@ -29,7 +27,7 @@ export default function OperatorDigestEmail({ siteUrl, date: isoDate, lines }: O
       <Section style={{ margin: '0 0 8px' }}>
         {lines.map((line) => (
           <Row key={line}>
-            <Column className="ae-text" style={{ ...bodyText, margin: 0, padding: '8px 0', borderBottom: `1px solid ${EMAIL_COLORS.light.border}` }}>{plain(line)}</Column>
+            <Column className="ae-text" style={{ ...bodyText, margin: 0, padding: '8px 0', borderBottom: `1px solid ${EMAIL_COLORS.light.border}` }}>{line}</Column>
           </Row>
         ))}
       </Section>
