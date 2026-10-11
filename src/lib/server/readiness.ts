@@ -14,7 +14,7 @@ import { readDirectoryFreshnessField } from '@/modules/market/x402-directory-ind
 import { isMoneyRefusal } from '@/modules/money/public'
 import { readPlatformFundingConstraintsThroughSource, readPublicAvailabilityThroughSource } from '@/modules/money/server'
 import { isRecord } from '@/modules/common/is-record'
-import { PAYMENT_READINESS_CHECK_KEYS, PAYMENT_READINESS_GATING_KEYS, PAYMENT_READINESS_MAX_VALIDITY_MS, referenceRateFresh, type PaymentReadinessView } from '@/modules/money/payment-readiness'
+import { PAYMENT_READINESS_CHECK_KEYS, PAYMENT_READINESS_GATING_KEYS, PAYMENT_READINESS_MAX_VALIDITY_MS, referenceRateFresh, type PaymentReadinessServerView } from '@/modules/money/payment-readiness'
 import { ALPHA_X402_PAYEE_SCREENING_POLICY } from '@/modules/money/x402-spend-admission'
 import { callPublicSourceQuery, createConvexServerFunctionAssertion, sourceQuery, type ConvexServerFunctionAssertion } from './convex-source'
 
@@ -22,10 +22,10 @@ const DEFAULT_PROBE_TIMEOUT_MS = 2_000
 const MAX_PROBE_TIMEOUT_MS = 5_000
 const PAYMENT_READINESS_OPERATION = 'moneyReadiness:readForServer'
 const PAYMENT_READINESS_SCOPE = 'money_readiness:read'
-const paymentReadinessQuery = sourceQuery<{ environment: PaymentEnvironment; serviceAuth: ConvexServerFunctionAssertion }, PaymentReadinessView>(PAYMENT_READINESS_OPERATION)
+const paymentReadinessQuery = sourceQuery<{ environment: PaymentEnvironment; serviceAuth: ConvexServerFunctionAssertion }, PaymentReadinessServerView>(PAYMENT_READINESS_OPERATION)
 
 type ReadinessCheck = Readonly<{
-  status: 'ready' | 'failed'
+  status: 'ready' | 'failed' | 'disabled'
   code?: string
 }>
 
@@ -212,9 +212,11 @@ export async function readServerReadiness(
   // Commercial reads can finish after the query. Authority is still evaluated
   // at response completion, on one clock; a previously green response cannot extend expiry.
   const now = Date.now()
+  // The admin audience switch closed on purpose is not a dependency failure: report it, do not fail readiness.
   const payments: ReadinessCheck | undefined = production
-    ? freshPaymentReadiness(paymentView, now, env)
-      ? { status: 'ready' } : { status: 'failed', code: 'payments_unavailable' }
+    ? isRecord(paymentView) && paymentView.paymentsDisabled === true ? { status: 'disabled' }
+      : freshPaymentReadiness(paymentView, now, env)
+        ? { status: 'ready' } : { status: 'failed', code: 'payments_unavailable' }
     : undefined
   // Only an observed rate can be stale; an unreadable view already fails the payments gate.
   const observedRate = isRecord(paymentView) && isRecord(paymentView.checks) ? paymentView.checks.reference_rate : undefined
@@ -252,10 +254,10 @@ export async function readServerReadiness(
  * An observed stale reference rate degrades quoting (quotes refuse without it) and so sellable.
  */
 function gateSellable(
-  commercial: CommercialReadiness, payments: 'ready' | 'failed' | undefined, rateStale = false,
+  commercial: CommercialReadiness, payments: ReadinessCheck['status'] | undefined, rateStale = false,
 ): CommercialReadiness {
   if (rateStale) return { ...commercial, quoting: 'unavailable', sellable: false }
-  return payments === 'failed' ? { ...commercial, sellable: false } : commercial
+  return payments === 'failed' || payments === 'disabled' ? { ...commercial, sellable: false } : commercial
 }
 
 /**
@@ -264,7 +266,7 @@ function gateSellable(
  * Invariant: no Clerk session, provider effect, raw error or detailed public code.
  * On violation: undefined; the aggregate gate returns only payments_unavailable.
  */
-async function readBackendPaymentReadiness(env: StringEnvironment, convexUrl: string, fetchImpl: typeof fetch, timeoutMs?: number): Promise<PaymentReadinessView | undefined> {
+async function readBackendPaymentReadiness(env: StringEnvironment, convexUrl: string, fetchImpl: typeof fetch, timeoutMs?: number): Promise<PaymentReadinessServerView | undefined> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), boundedProbeTimeout(timeoutMs))
   try {

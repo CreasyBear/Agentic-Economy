@@ -1,4 +1,4 @@
-import { ErrorBoundary } from '@sentry/react'
+import { AeObservabilityErrorBoundary } from '@/components/ae/feedback/AeObservabilityErrorBoundary'
 import { usePaginatedQuery, useQuery } from 'convex/react'
 import { useEffect, useState } from 'react'
 import { ArrowUpRightIcon, RefreshCwIcon } from 'lucide-react'
@@ -29,11 +29,11 @@ type PurchaseTableRow = AdminPurchaseRow & Readonly<{ purchase: string; account:
 
 export function PurchaseActivity({ search, compact = false }: PurchaseActivityProps) {
   return (
-    <ErrorBoundary fallback={
+    <AeObservabilityErrorBoundary fallback={
       <div className="ae-arc"><Alert title="Purchase activity unavailable" tone="danger">The source could not provide a verified read. Reload this page to try again.</Alert></div>
     }>
       <PurchaseActivityQuery search={search} compact={compact} />
-    </ErrorBoundary>
+    </AeObservabilityErrorBoundary>
   )
 }
 

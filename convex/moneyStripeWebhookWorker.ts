@@ -3,7 +3,7 @@
 import { v, type Infer } from 'convex/values'
 
 import { internal } from './_generated/api'
-import { action, internalAction } from './_generated/server'
+import { action, internalAction, type ActionCtx } from './_generated/server'
 import { applyVerifiedEventFromInboxResult } from './lib/money/funding/formanceEvent'
 import { fulfillReturnHandler } from './lib/money/funding/returnFulfillment'
 import { stripeWebhookWorkResultValue } from './moneyStripeWebhookValues'
@@ -20,11 +20,29 @@ import {
 
 type WorkResult = Infer<typeof stripeWebhookWorkResultValue>
 
-function retryOrReconcile(refusal: Readonly<{ code: string; retryable: boolean }>): WorkResult {
-  if (refusal.retryable || refusal.code === 'stripe_setup_required') {
-    throw new Error(`stripe_webhook_retryable:${refusal.code}`)
+// Same schedule the workpool used when this threw: 13 attempts, 60s doubling.
+const RETRY_MAX_ATTEMPTS = 13
+const RETRY_INITIAL_BACKOFF_MS = 60_000
+
+/** Retryable refusals are expected state: schedule the next attempt and return it, never throw. */
+async function retryOrReconcile(
+  ctx: ActionCtx,
+  stripeEventId: string,
+  attempt: number,
+  refusal: Readonly<{ code: string; retryable: boolean }>,
+): Promise<WorkResult> {
+  if (!refusal.retryable && refusal.code !== 'stripe_setup_required') {
+    return { kind: 'reconciliation_required', code: refusal.code }
   }
-  return { kind: 'reconciliation_required', code: refusal.code }
+  if (attempt + 1 >= RETRY_MAX_ATTEMPTS) {
+    return { kind: 'reconciliation_required', code: `stripe_webhook_retries_exhausted:${refusal.code}` }
+  }
+  await ctx.scheduler.runAfter(
+    RETRY_INITIAL_BACKOFF_MS * 2 ** attempt,
+    internal.moneyStripeWebhookInbox.requeue,
+    { stripeEventId, attempt: attempt + 1 },
+  )
+  return { kind: 'retry_scheduled' }
 }
 
 export const fulfillReturn = action({
@@ -34,10 +52,13 @@ export const fulfillReturn = action({
 })
 
 export const process = internalAction({
-  args: { stripeEventId: v.string() },
+  args: { stripeEventId: v.string(), attempt: v.optional(v.number()) },
   returns: stripeWebhookWorkResultValue,
   handler: async (ctx, args): Promise<WorkResult> => {
-    const work = await ctx.runQuery(internal.moneyStripeWebhookInbox.readForProcessing, args)
+    const attempt = args.attempt ?? 0
+    const retry = (refusal: Readonly<{ code: string; retryable: boolean }>) =>
+      retryOrReconcile(ctx, args.stripeEventId, attempt, refusal)
+    const work = await ctx.runQuery(internal.moneyStripeWebhookInbox.readForProcessing, { stripeEventId: args.stripeEventId })
     if (work === null) return { kind: 'reconciliation_required', code: 'stripe_webhook_inbox_missing' }
     if (work.state === 'applied' || work.state === 'ignored') {
       return { kind: 'accepted', status: 'replayed' }
@@ -55,7 +76,7 @@ export const process = internalAction({
       : await ctx.runQuery(internal.moneyAccountFunding.readWebhookCommandForWorker, {
           commandRef: event.commandRef, externalRef: event.sessionId,
         })
-    if (durable.kind === 'refused') return retryOrReconcile(durable)
+    if (durable.kind === 'refused') return retry(durable)
     // The signature-verified dispute event is the evidence (Stripe dispute webhooks); no readback.
     if (event.kind === 'dispute') {
       const result = await ctx.runAction(internal.moneyAccountFundingFormance.applyVerifiedEventFromInbox, {
@@ -63,12 +84,12 @@ export const process = internalAction({
         operationKey: 'moneyStripeWebhookInbox:process',
         correlationId: event.stripeEventId,
       })
-      return result.kind === 'refused' ? retryOrReconcile(result) : result
+      return result.kind === 'refused' ? retry(result) : result
     }
     const config = readStripeMoneyReadbackProviderConfig(globalThis.process.env)
-    if (isMoneyRefusal(config)) return retryOrReconcile(config)
+    if (isMoneyRefusal(config)) return retry(config)
     const providerContext = resolveStripeMoneyProviderContext({ config })
-    if (isMoneyRefusal(providerContext)) return retryOrReconcile(providerContext)
+    if (isMoneyRefusal(providerContext)) return retry(providerContext)
     const provider = createStripeMoneyProvider({ config, client: providerContext.client })
 
     if (event.kind === 'refund') {
@@ -77,14 +98,14 @@ export const process = internalAction({
         config,
         event.refundId,
       )
-      if (isMoneyRefusal(refundReadback)) return retryOrReconcile(refundReadback)
+      if (isMoneyRefusal(refundReadback)) return retry(refundReadback)
       const result = await ctx.runAction(internal.moneyAccountFundingFormance.applyVerifiedEventFromInbox, {
         event,
         refundReadback,
         operationKey: 'moneyStripeWebhookInbox:process',
         correlationId: event.stripeEventId,
       })
-      return result.kind === 'refused' ? retryOrReconcile(result) : result
+      return result.kind === 'refused' ? retry(result) : result
     }
 
     const command = durable.command
@@ -104,7 +125,7 @@ export const process = internalAction({
       ...(command.checkoutExpiresAt === undefined ? {} : { checkoutExpiresAt: command.checkoutExpiresAt }),
       externalRef: event.sessionId,
     })
-    if (isMoneyRefusal(payment)) return retryOrReconcile(payment)
+    if (isMoneyRefusal(payment)) return retry(payment)
     const evidence = payment.evidence
     const result = await ctx.runAction(internal.moneyAccountFundingFormance.applyVerifiedEventFromInbox, {
       event,
@@ -127,6 +148,6 @@ export const process = internalAction({
       operationKey: 'moneyStripeWebhookInbox:process',
       correlationId: event.stripeEventId,
     })
-    return result.kind === 'refused' ? retryOrReconcile(result) : result
+    return result.kind === 'refused' ? retry(result) : result
   },
 })

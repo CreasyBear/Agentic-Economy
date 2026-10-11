@@ -1,3 +1,4 @@
+import { loadSentryClient } from '@/lib/observability/load-sentry-client'
 import { createClientOnlyFn } from '@tanstack/react-start'
 import type { AnyRouter } from '@tanstack/react-router'
 import { boundaryCauseKind, degradeBackend } from '@/lib/observability/degrade-backend'
@@ -6,6 +7,8 @@ import {
   isTelemetryAllowedForCurrentRoute,
   securePrivateRecordLocation,
 } from '@/lib/observability/private-route-safety'
+
+import { promptConvexSkewReload } from '@/lib/observability/stale-chunk-reload'
 
 let initialized = false
 
@@ -27,11 +30,14 @@ export const bootClientObservability = createClientOnlyFn((router: AnyRouter) =>
   }
 
   initialized = true
+  window.addEventListener('unhandledrejection', (event) => {
+    promptConvexSkewReload(event.reason)
+  })
   const config = readObservabilityClientConfig()
   if (!config.enabled) return
 
   void Promise.all([
-    config.sentryDsn === undefined ? undefined : import('@/lib/observability/sentry.client').then(({ initSentryClient }) => initSentryClient(router)),
+    config.sentryDsn === undefined ? undefined : loadSentryClient().then(({ initSentryClient }) => initSentryClient(router)),
     config.posthogKey === undefined ? undefined : import('@/lib/observability/posthog-browser').then(({ initPostHogClient }) => initPostHogClient(router)),
   ]).catch((cause: unknown) => {
     degradeBackend(boundaryCauseKind(cause), undefined, { site: 'bootClientObservability.init', reason: 'source_unavailable' })

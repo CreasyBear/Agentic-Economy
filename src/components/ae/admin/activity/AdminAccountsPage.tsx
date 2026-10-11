@@ -1,4 +1,4 @@
-import { ErrorBoundary } from '@sentry/react'
+import { AeObservabilityErrorBoundary } from '@/components/ae/feedback/AeObservabilityErrorBoundary'
 import { usePaginatedQuery, useQuery } from 'convex/react'
 import { useEffect, useState } from 'react'
 
@@ -25,12 +25,12 @@ export function AdminAccountsPage({ search, rejected, onSearchChange }: AccountS
       currentPath="/admin/accounts"
     >
       <AdminSearchNotice rejected={rejected} />
-      <ErrorBoundary fallback={
+      <AeObservabilityErrorBoundary fallback={
         <div className="ae-arc"><Alert title="Accounts unavailable" tone="danger">The source could not provide a verified read. Reload this page to try again.</Alert></div>
       }>
         <AccountsList search={search} onSearchChange={onSearchChange} />
         <AdminTrialAccess />
-      </ErrorBoundary>
+      </AeObservabilityErrorBoundary>
     </AeOperatorPage>
   )
 }

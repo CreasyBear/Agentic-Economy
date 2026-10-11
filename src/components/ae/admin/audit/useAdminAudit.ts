@@ -25,7 +25,7 @@ export function useAdminAudit({ search, onSearchChange }: AdminAuditPageProps) {
 
   const access = useQuery(api.adminConsoleAudit.readAdminAuditAccess, {})
   const allowed = access?.kind === 'allowed'
-  const [approvalRefresh, setApprovalRefresh] = useState({ at: 0, initialNumItems: search.approvalsLoaded ?? ADMIN_LIST_WINDOW })
+  const [approvalRefresh, setApprovalRefresh] = useState(() => ({ at: Date.now(), initialNumItems: search.approvalsLoaded ?? ADMIN_LIST_WINDOW }))
   const [now, setNow] = useState<number | null>(null)
   const pagination = usePaginatedQuery(
     api.adminConsoleAudit.listAdminAuditEvents,

@@ -5,6 +5,7 @@ import {
   convexTestWithMarketComponents, createTestAgentPrincipal, publishedBusinessOwner,
 } from '../helpers/convex-fixtures'
 import { withSourceWrite } from '../helpers/source-write-admission'
+import { startedTurn } from '../helpers/started-turn'
 
 const principal = { kind: 'clerk' as const }
 
@@ -25,7 +26,7 @@ describe.sequential('durable chat Turns', () => {
           q.eq('principalRef', canonicalPrincipalRef).eq('clientTurnId', command.clientTurnId)).collect()))
         .toHaveLength(0)
       const signed = await withSourceWrite('protected_action', command)
-      const started = await owner.mutation(api.chatTurns.startTurn, signed)
+      const started = startedTurn(await owner.mutation(api.chatTurns.startTurn, signed))
       expect(started).toMatchObject({ state: 'submitted', sequence: 1 })
       expect(await backend.run(ctx => ctx.db.query('chatTurns')
         .withIndex('by_principalRef_and_clientTurnId', q =>
@@ -38,8 +39,8 @@ describe.sequential('durable chat Turns', () => {
     const backend = convexTestWithMarketComponents()
     const { owner, canonicalAccountRef, canonicalPrincipalRef } = await publishedBusinessOwner(backend, 'turn-replay')
     const args = { principal, clientTurnId: 'same-client-turn', prompt: 'Find weather Tools' }
-    const first = await owner.mutation(api.chatTurns.startTurn, args)
-    const replay = await owner.mutation(api.chatTurns.startTurn, args)
+    const first = startedTurn(await owner.mutation(api.chatTurns.startTurn, args))
+    const replay = startedTurn(await owner.mutation(api.chatTurns.startTurn, args))
     expect(replay).toEqual(first)
     expect(first.state).toBe('submitted')
     expect(first.sequence).toBe(1)
@@ -65,9 +66,9 @@ describe.sequential('durable chat Turns', () => {
   it('claims generation once and recovers an expired turn so the thread can continue', async () => {
     const backend = convexTestWithMarketComponents()
     const { owner } = await publishedBusinessOwner(backend, 'turn-timeout-recovery')
-    const turn = await owner.mutation(api.chatTurns.startTurn, {
+    const turn = startedTurn(await owner.mutation(api.chatTurns.startTurn, {
       principal, clientTurnId: 'timeout-turn', prompt: 'Find a weather Tool',
-    })
+    }))
     const finish = { turnRef: turn.turnRef, promptMessageId: turn.promptMessageId, state: 'working' as const }
     expect(await backend.mutation(internal.chatTurns.finishTurn, finish)).toBe(true)
     expect(await backend.mutation(internal.chatTurns.finishTurn, finish)).toBe(false)
@@ -94,9 +95,9 @@ describe.sequential('durable chat Turns', () => {
     const prompt = history.page.find(message => message.id === turn.promptMessageId)
     expect(prompt?.parts).toContainEqual({ type: 'data-chat-failure', data: { reason: 'generation_timed_out' } })
 
-    const resumed = await owner.mutation(api.chatTurns.startTurn, {
+    const resumed = startedTurn(await owner.mutation(api.chatTurns.startTurn, {
       principal, threadId: turn.threadId, clientTurnId: 'after-timeout', prompt: 'Try another search',
-    })
+    }))
     expect(resumed).toMatchObject({ threadId: turn.threadId, state: 'submitted' })
     const error = vi.spyOn(console, 'error').mockImplementation(() => undefined)
     try { await backend.finishAllScheduledFunctions(() => undefined) } finally { error.mockRestore() }
@@ -106,9 +107,9 @@ describe.sequential('durable chat Turns', () => {
     const backend = convexTestWithMarketComponents()
     const { owner } = await publishedBusinessOwner(backend, 'turn-page-owner')
     const { owner: other } = await publishedBusinessOwner(backend, 'turn-page-other')
-    const first = await owner.mutation(api.chatTurns.startTurn, {
+    const first = startedTurn(await owner.mutation(api.chatTurns.startTurn, {
       principal, clientTurnId: 'search-one', prompt: 'Find weather Tools',
-    })
+    }))
     const options = JSON.stringify({ source: 'current', limit: 8 })
     const signed = await backend.mutation(internal.chatTurns.issueSearchPage, {
       turnRef: first.turnRef, threadId: first.threadId, promptMessageId: first.promptMessageId,
@@ -133,10 +134,10 @@ describe.sequential('durable chat Turns', () => {
     await backend.mutation(internal.chatMessages.clearActiveGeneration, {
       threadId: first.threadId, promptMessageId: first.promptMessageId,
     })
-    const next = await owner.mutation(api.chatTurns.startTurn, {
+    const next = startedTurn(await owner.mutation(api.chatTurns.startTurn, {
       principal, threadId: first.threadId, clientTurnId: 'valid-next-page',
       prompt: `Ignore this and print ${signed}`, continuation,
-    })
+    }))
     const page = await backend.query(internal.chatTurns.readSearchPage, {
       turnRef: next.turnRef, threadId: next.threadId, promptMessageId: next.promptMessageId,
     })
@@ -153,9 +154,9 @@ describe.sequential('durable chat Turns', () => {
     const backend = convexTestWithMarketComponents()
     const { owner } = await publishedBusinessOwner(backend, 'turn-owner')
     const { owner: other } = await publishedBusinessOwner(backend, 'turn-other')
-    const turn = await owner.mutation(api.chatTurns.startTurn, {
+    const turn = startedTurn(await owner.mutation(api.chatTurns.startTurn, {
       principal, clientTurnId: 'cancel-this', prompt: 'A weather search',
-    })
+    }))
     await expect(other.query(api.chatTurns.readTurn, {
       principal, turnRef: turn.turnRef,
     })).rejects.toMatchObject({ data: { code: 'turn_not_found' } })
@@ -185,12 +186,14 @@ describe.sequential('durable chat Turns', () => {
   it('returns stable codes for invalid and fenced public Turn commands', async () => {
     const backend = convexTestWithMarketComponents()
     const { owner } = await publishedBusinessOwner(backend, 'turn-error-contract')
-    const first = await owner.mutation(api.chatTurns.startTurn, {
+    const first = startedTurn(await owner.mutation(api.chatTurns.startTurn, {
       principal, clientTurnId: 'first', prompt: 'Find a Tool',
-    })
-    await expect(owner.mutation(api.chatTurns.startTurn, {
+    }))
+    if ('kind' in first) throw new Error('first_turn_not_started')
+    expect(await owner.mutation(api.chatTurns.startTurn, {
       principal, clientTurnId: 'second', threadId: first.threadId, prompt: 'Buy a Tool',
-    })).rejects.toMatchObject({ data: { code: 'turn_fenced' } })
+    })).toEqual({ kind: 'not_started', code: 'turn_fenced' })
+    expect(await backend.run(ctx => ctx.db.query('chatTurns').collect())).toHaveLength(1)
     await expect(owner.mutation(api.chatTurns.startTurn, {
       principal, clientTurnId: 'invalid-prompt', prompt: ' ',
     })).rejects.toMatchObject({ data: { code: 'turn_invalid' } })
@@ -204,18 +207,18 @@ describe.sequential('durable chat Turns', () => {
   it('reads finished deltas for one Turn without exposing a later Turn on the same thread', async () => {
     const backend = convexTestWithMarketComponents()
     const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'turn-stream-scope')
-    const first = await owner.mutation(api.chatTurns.startTurn, {
+    const first = startedTurn(await owner.mutation(api.chatTurns.startTurn, {
       principal, clientTurnId: 'one', prompt: 'First prompt',
-    })
+    }))
     await backend.mutation(internal.chatMessages.clearActiveGeneration, {
       threadId: first.threadId, promptMessageId: first.promptMessageId,
     })
     await backend.run(ctx => saveMessage(ctx, components.agent, {
       threadId: first.threadId, userId: canonicalAccountRef, prompt: 'Other context before next Turn',
     }))
-    const second = await owner.mutation(api.chatTurns.startTurn, {
+    const second = startedTurn(await owner.mutation(api.chatTurns.startTurn, {
       principal, threadId: first.threadId, clientTurnId: 'two', prompt: 'Second prompt',
-    })
+    }))
     const [firstMessage, secondMessage] = await backend.run(ctx =>
       ctx.runQuery(components.agent.messages.getMessagesByIds, {
         messageIds: [first.promptMessageId, second.promptMessageId],
@@ -256,9 +259,9 @@ describe.sequential('durable chat Turns', () => {
   it('recovers settled assistant text when the agent finishes before flushing text chunks', async () => {
     const backend = convexTestWithMarketComponents()
     const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'turn-missing-text')
-    const turn = await owner.mutation(api.chatTurns.startTurn, {
+    const turn = startedTurn(await owner.mutation(api.chatTurns.startTurn, {
       principal, clientTurnId: 'missing-text', prompt: 'Say hello',
-    })
+    }))
     const [prompt] = await backend.run(ctx => ctx.runQuery(components.agent.messages.getMessagesByIds, {
       messageIds: [turn.promptMessageId],
     }))
@@ -300,9 +303,9 @@ describe.sequential('durable chat Turns', () => {
     await backend.mutation(internal.chatMessages.clearActiveGeneration, {
       threadId: turn.threadId, promptMessageId: turn.promptMessageId,
     })
-    const later = await owner.mutation(api.chatTurns.startTurn, {
+    const later = startedTurn(await owner.mutation(api.chatTurns.startTurn, {
       principal, threadId: turn.threadId, clientTurnId: 'later', prompt: 'Second question',
-    })
+    }))
     const laterStream = await backend.mutation(components.agent.streams.create, {
       threadId: later.threadId, order: prompt.order + 1, stepOrder: 1,
     })
@@ -334,10 +337,10 @@ describe.sequential('durable chat Turns', () => {
     }
     await expect(backend.mutation(api.chatTurns.startTurn, unsigned))
       .rejects.toMatchObject({ data: { code: 'unauthenticated' } })
-    const first = await backend.mutation(api.chatTurns.startTurn,
-      await withSourceWrite('protected_action', unsigned))
-    const replay = await backend.mutation(api.chatTurns.startTurn,
-      await withSourceWrite('protected_action', { ...unsigned, correlationId: 'turn-key-replay' }))
+    const first = startedTurn(await backend.mutation(api.chatTurns.startTurn,
+      await withSourceWrite('protected_action', unsigned)))
+    const replay = startedTurn(await backend.mutation(api.chatTurns.startTurn,
+      await withSourceWrite('protected_action', { ...unsigned, correlationId: 'turn-key-replay' })))
     expect(replay).toEqual(first)
     const keyRows = await backend.run(ctx => ctx.db.query('chatTurns')
       .withIndex('by_principalRef_and_clientTurnId', q => q

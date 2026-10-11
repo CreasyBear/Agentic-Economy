@@ -108,7 +108,7 @@ export async function listOwnerInvoiceHistoryHandler(
   args: { paginationOpts: Infer<typeof paginationOptsValidator> },
 ): Promise<Infer<typeof listOwnerInvoiceHistoryResult>> {
   const identity = await ctx.auth.getUserIdentity()
-  if (identity === null) throw new InteractiveAuthorityError('identity_invalid')
+  if (identity === null) return { page: [], isDone: true, continueCursor: '' }
   const { canonicalAccountRef } = await requireOwnerAccountContextForInvoiceHistory(ctx.db, identity)
   if (!Number.isSafeInteger(args.paginationOpts.numItems)
     || args.paginationOpts.numItems < 1 || args.paginationOpts.numItems > 50) {

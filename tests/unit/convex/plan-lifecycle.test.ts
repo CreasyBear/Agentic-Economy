@@ -7,6 +7,7 @@ import { planCallChanged } from '../../../convex/lib/capabilityExecution/plans/c
 import { convexTestWithMarketComponents, convexTestWithWorkers, preloadWorkflowComponentModules } from '../../helpers/convex-fixtures'
 import { publishCurrentTool, seedAgent, seedCommercialPolicies, validCustodyEnvironment } from '../../helpers/quote-fixtures'
 import { withSourceWrite } from '../../helpers/source-write-admission'
+import { startedTurn } from '../../helpers/started-turn'
 
 const providerFetch = vi.hoisted(() => vi.fn<typeof UndiciFetch>())
 vi.mock('undici', async (original) => ({ ...await original<Record<string, unknown>>(), fetch: providerFetch }))
@@ -122,10 +123,10 @@ describe('Plan lifecycle through persisted authority and ordinary Calls', () => 
       if (grant === null) throw new Error('missing_fixture_grant')
       await ctx.db.patch(grant._id, { resourceRefs: ['*', f.tool.toolRef] })
     })
-    const turn = await f.backend.mutation(api.chatTurns.startTurn, await withSourceWrite('protected_action', {
+    const turn = startedTurn(await f.backend.mutation(api.chatTurns.startTurn, await withSourceWrite('protected_action', {
       principal: { kind: 'agent_key' as const, ...f.agent.principal }, clientTurnId: 'plan-chat-turn', prompt: 'Run this Plan',
       operationKey: 'plan-chat-turn', correlationId: 'plan-chat-turn',
-    }))
+    })))
     expect(await f.backend.mutation(internal.chatTurns.finishTurn, { turnRef: turn.turnRef, promptMessageId: turn.promptMessageId, state: 'working' })).toBe(true)
     const authority = { kind: 'agent_key' as const, turnRef: turn.turnRef, credentialLocator: f.agent.principal.credentialId,
       applicationRef: f.agent.principal.applicationRef, environment: f.agent.principal.environment,

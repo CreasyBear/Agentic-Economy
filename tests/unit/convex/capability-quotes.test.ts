@@ -38,6 +38,7 @@ import {
   type QuotePrincipal,
   formanceSnapshot,
 } from '../../helpers/quote-fixtures'
+import { startedTurn } from '../../helpers/started-turn'
 
 // Custody changes invalidate readiness, so these treasury scenarios publish fresh
 // evidence only after entering the configuration each test is exercising.
@@ -226,10 +227,10 @@ describe('trusted chat Quote cancellation fence', () => {
     const input = { request: 'Perth' }
     const subjects = await prepareSubjects(backend, agent, fixture.toolRef, input, suffix)
     const principal = { kind: 'agent_key' as const, ...agent.principal }
-    const turn = await backend.mutation(api.chatTurns.startTurn, await withSourceWrite('protected_action', {
+    const turn = startedTurn(await backend.mutation(api.chatTurns.startTurn, await withSourceWrite('protected_action', {
       principal, clientTurnId: suffix, prompt: 'Quote a Tool',
       operationKey: `turn:start:${suffix}`, correlationId: `turn:start:${suffix}`,
-    }))
+    })))
     expect(await backend.mutation(internal.chatTurns.finishTurn, {
       turnRef: turn.turnRef, promptMessageId: turn.promptMessageId, state: 'working',
     })).toBe(true)
@@ -287,10 +288,10 @@ describe('trusted chat Quote cancellation fence', () => {
       const input = { request: 'Perth' }
       const subjects = await prepareSubjects(backend, agent, fixture.toolRef, input, suffix)
       const principal = { kind: 'agent_key' as const, ...agent.principal }
-      const turn = await backend.mutation(api.chatTurns.startTurn, await withSourceWrite('protected_action', {
+      const turn = startedTurn(await backend.mutation(api.chatTurns.startTurn, await withSourceWrite('protected_action', {
         principal, clientTurnId: suffix, prompt: 'Quote a Tool',
         operationKey: `turn:start:${suffix}`, correlationId: `turn:start:${suffix}`,
-      }))
+      })))
       expect(await backend.mutation(internal.chatTurns.finishTurn, {
         turnRef: turn.turnRef, promptMessageId: turn.promptMessageId, state: 'working',
       })).toBe(true)
@@ -308,10 +309,10 @@ describe('trusted chat Quote cancellation fence', () => {
         if (thread === null) throw new Error('thread_missing')
         await ctx.db.patch(thread._id, { activeStartedAt: Date.now() - ACTIVE_CHAT_GENERATION_MS - 1 })
       })
-      const next = await backend.mutation(api.chatTurns.startTurn, await withSourceWrite('protected_action', {
+      const next = startedTurn(await backend.mutation(api.chatTurns.startTurn, await withSourceWrite('protected_action', {
         principal, threadId: turn.threadId, clientTurnId: `next-${suffix}`, prompt: 'New Quote intent',
         operationKey: `turn:next:${suffix}`, correlationId: `turn:next:${suffix}`,
-      }))
+      })))
       expect(next.promptMessageId).not.toBe(turn.promptMessageId)
       expect(await backend.run(ctx => ctx.db.query('chatTurns')
         .withIndex('by_turnRef', q => q.eq('turnRef', turn.turnRef)).unique()))
@@ -351,10 +352,10 @@ describe('trusted chat Quote cancellation fence', () => {
     const input = { request: 'Perth' }
     const subjects = await prepareSubjects(backend, agent, fixture.toolRef, input, suffix)
     const principal: QuotePrincipal & { kind: 'agent_key' } = { kind: 'agent_key', ...agent.principal }
-    const turn = await backend.mutation(api.chatTurns.startTurn, await withSourceWrite('protected_action', {
+    const turn = startedTurn(await backend.mutation(api.chatTurns.startTurn, await withSourceWrite('protected_action', {
       principal, clientTurnId: suffix, prompt: 'Quote a Tool',
       operationKey: `turn:start:${suffix}`, correlationId: `turn:start:${suffix}`,
-    }))
+    })))
     expect(await backend.mutation(internal.chatTurns.finishTurn, {
       turnRef: turn.turnRef, promptMessageId: turn.promptMessageId, state: 'working',
     })).toBe(true)

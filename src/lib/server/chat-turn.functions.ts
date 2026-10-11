@@ -23,12 +23,12 @@ type StartResult = Readonly<{
   state: 'submitted' | 'working' | 'input-required' | 'auth-required' | 'completed' | 'failed' | 'canceled' | 'rejected'
   deadlineAt?: number
 }>
-type StartRefusal = Readonly<{ kind: 'not_started'; code: 'unauthenticated' | 'source_unavailable' }>
+type StartRefusal = Readonly<{ kind: 'not_started'; code: 'unauthenticated' | 'source_unavailable' | 'turn_fenced' }>
 
 const startTurn = sourceMutation<StartInput & {
   principal: { kind: 'clerk' }; operationKey: string; correlationId: string
   sourceWrite?: SourceWriteAdmission; sourceWriteRequest?: SourceWriteAdmissionRequest
-}, StartResult>('chatTurns:startTurn')
+}, StartResult | StartRefusal>('chatTurns:startTurn')
 
 /** A browser start enters the same full-manifest and source-write boundary as HTTP starts. */
 export const startOwnerChatTurnServer = createServerFn({ method: 'POST' })

@@ -1,4 +1,4 @@
-import { ErrorBoundary } from '@sentry/react'
+import { AeObservabilityErrorBoundary } from '@/components/ae/feedback/AeObservabilityErrorBoundary'
 import { Link } from '@tanstack/react-router'
 
 import { AeOperatorPage } from '@/components/ae/layout/AeOperatorPage'
@@ -39,33 +39,33 @@ export function AdminOverviewPage() {
           <ConfigurationBanner readiness={data.paymentReadiness} compact />
           <PurchasesNeedingAttention attention={data.attention} />
           <div className="grid min-w-0 items-start gap-section xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-            <ErrorBoundary fallback={
+            <AeObservabilityErrorBoundary fallback={
               <AeSection title="Marketplace activity">
                 <p role="status">{ADMIN_OVERVIEW_COPY.metricsUnavailable}</p>
                 <Link to="/admin/metrics" className={`arc-market ${actionLinkClassName('secondary', 'md')}`}>Open Metrics</Link>
               </AeSection>
             }>
               <OverviewMarketplaceActivity />
-            </ErrorBoundary>
+            </AeObservabilityErrorBoundary>
             <FounderDestinations />
           </div>
           <PurchaseActivity search={{ range: 'today' }} compact />
-          <ErrorBoundary fallback={
+          <AeObservabilityErrorBoundary fallback={
             <AeSection title={ADMIN_OVERVIEW_COPY.exceptionsTitle}>
               <p role="status">{ADMIN_OVERVIEW_COPY.exceptionsUnavailable}</p>
               <Link to="/admin/exceptions" className={`arc-market ${actionLinkClassName('secondary', 'md')}`}>Open queues</Link>
             </AeSection>
           }>
             <OverviewExceptionsContainer />
-          </ErrorBoundary>
-          <ErrorBoundary fallback={({ resetError }) => (
+          </AeObservabilityErrorBoundary>
+          <AeObservabilityErrorBoundary fallback={({ resetError }) => (
             <AeSection title="Alpha learning">
               <p role="status">Learning signals are unavailable.</p>
               <Button type="button" variant="secondary" onClick={resetError}>Retry learning signals</Button>
             </AeSection>
           )}>
             <AlphaLearning />
-          </ErrorBoundary>
+          </AeObservabilityErrorBoundary>
           <div className="ae-arc min-w-0">
             <Accordion defaultOpen={-1} items={[
               { title: 'Find an exact record', content: (

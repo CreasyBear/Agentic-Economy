@@ -165,7 +165,8 @@ export async function reserveAndStartTurn(
   ctx: MutationCtx,
   input: Readonly<{ actor: TurnActor; threadId: string | undefined; prompt: string; clientTurnId: string;
     searchContinuation?: { query: string; cursor: string; inputJson: string } }>,
-): Promise<{ threadId: string; turnRef: string; promptMessageId: string; state: Doc<'chatTurns'>['state']; sequence: number; deadlineAt?: number }> {
+): Promise<{ threadId: string; turnRef: string; promptMessageId: string; state: Doc<'chatTurns'>['state']; sequence: number; deadlineAt?: number }
+  | { kind: 'not_started'; code: 'turn_fenced' }> {
   const prompt = normalizedTurnPrompt(input.prompt)
   if (input.clientTurnId.trim().length === 0 || input.clientTurnId.length > 200) throw new Error('invalid_input')
   const materialDigest = canonicalDigest({
@@ -195,6 +196,13 @@ export async function reserveAndStartTurn(
       ...(previous.deadlineAt === undefined ? {} : { deadlineAt: previous.deadlineAt }),
     }
   }
+  // Checked before any write or rate-limit spend: a returned result commits, so a busy thread must leave nothing behind.
+  const existingRow = input.threadId === undefined ? undefined : await readPrincipalChatThread(
+    ctx, input.threadId, input.actor.accountRef, input.actor.kind, input.actor.principalRef,
+  )
+  if (existingRow !== undefined && isChatThreadBusy(existingRow, Date.now())) {
+    return { kind: 'not_started', code: 'turn_fenced' }
+  }
   const admission = await assertAdmission(ctx, {
     name: 'chat-submit',
     key: input.actor.accountRef,
@@ -215,7 +223,7 @@ export async function reserveAndStartTurn(
     state: 'submitted', modelCostTrackingVersion: 1, createdAt: now, updatedAt: now,
   })
   let row: Doc<'chatThreads'>
-  if (input.threadId === undefined) {
+  if (existingRow === undefined) {
     const threadId = await createThread(ctx, components.agent, {
       userId: input.actor.accountRef, title: DEFAULT_CHAT_TITLE,
     })
@@ -228,11 +236,8 @@ export async function reserveAndStartTurn(
     if (created === null) throw new Error('chat_thread_create_failed')
     row = created
   } else {
-    row = await readPrincipalChatThread(
-      ctx, input.threadId, input.actor.accountRef, input.actor.kind, input.actor.principalRef,
-    )
+    row = existingRow
   }
-  if (isChatThreadBusy(row, now)) throw new Error('thread_busy')
   const latest = await ctx.db.query('chatTurns')
     .withIndex('by_threadId_and_sequence', (q) => q.eq('threadId', row.threadId))
     .order('desc').first()

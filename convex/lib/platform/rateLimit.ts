@@ -14,11 +14,27 @@ export type ConsequentialRateAdmission =
 
 const rateLimiter = new RateLimiter(components.rateLimiter, RATE_LIMIT_POLICY)
 
+const OCC_PATTERN = /changed while this (mutation|function) was being run|OptimisticConcurrencyControl/i
+const OCC_RETRY_AFTER_MS = 250
+
+// Hot per-principal buckets can exhaust Convex's built-in OCC retries. That is
+// contention, not a denied limit or an outage: answer with a typed retryAfter.
+export async function limitOrRetryAfter(limit: () => Promise<RateLimitReturns>): Promise<RateLimitReturns> {
+  try {
+    return await limit()
+  } catch (cause) {
+    if (cause instanceof Error && OCC_PATTERN.test(cause.message)) {
+      return { ok: false, retryAfter: OCC_RETRY_AFTER_MS }
+    }
+    throw cause
+  }
+}
+
 export async function assertAdmission(
   ctx: RunMutationCtx,
   input: Readonly<{ name: RateLimitName; key: string }>,
 ): Promise<RateLimitReturns> {
-  return await rateLimiter.limit(ctx, input.name, { key: input.key })
+  return await limitOrRetryAfter(() => rateLimiter.limit(ctx, input.name, { key: input.key }))
 }
 
 export async function assertAgentAccessRateAdmission(
@@ -32,7 +48,7 @@ export async function assertAgentAccessRateAdmission(
   // Rate state belongs to the Agent. Credential rotation must not create a
   // fresh bucket, while the hour/minute token-bucket attempts stay separate.
   const key = `agent-access:${input.principalRef}`
-  const hour = await rateLimiter.limit(ctx, 'agent-access-hour', {
+  const hour = await limitOrRetryAfter(() => rateLimiter.limit(ctx, 'agent-access-hour', {
     key,
     config: {
       kind: 'token bucket',
@@ -40,9 +56,9 @@ export async function assertAgentAccessRateAdmission(
       period: HOUR,
       capacity: Math.min(input.maximumCallsPerHour, 300),
     },
-  })
+  }))
   if (!hour.ok) return hour
-  return await rateLimiter.limit(ctx, 'agent-access-minute', {
+  return await limitOrRetryAfter(() => rateLimiter.limit(ctx, 'agent-access-minute', {
     key,
     config: {
       kind: 'token bucket',
@@ -50,25 +66,25 @@ export async function assertAgentAccessRateAdmission(
       period: MINUTE,
       capacity: Math.min(input.maximumCallsPerMinute, 60),
     },
-  })
+  }))
 }
 
 export async function assertAuthorityCredentialChangeAdmission(
   ctx: RunMutationCtx,
   activeAccountRef: string,
 ): Promise<RateLimitReturns> {
-  return await rateLimiter.limit(ctx, 'authority-credential-change', {
+  return await limitOrRetryAfter(() => rateLimiter.limit(ctx, 'authority-credential-change', {
     key: `account:${activeAccountRef}`,
-  })
+  }))
 }
 
 export async function assertPayoutTransferAdmission(
   ctx: RunMutationCtx,
   activeAccountRef: string,
 ): Promise<RateLimitReturns> {
-  return await rateLimiter.limit(ctx, 'payout-transfer', {
+  return await limitOrRetryAfter(() => rateLimiter.limit(ctx, 'payout-transfer', {
     key: `account:${activeAccountRef}`,
-  })
+  }))
 }
 
 export async function admitAuthorityCredentialChangeRate(

@@ -6,7 +6,7 @@ import {
   serializeToolCard,
   type ToolCardProjection,
 } from '@/modules/chat/tool-card'
-import { captureRouteException } from '@/lib/observability/capture-route-exception'
+import { addClientBreadcrumb } from '@/lib/observability/add-client-breadcrumb'
 import { projectComparison, projectOptionsFromCard, projectSourcesFromCards, projectWorkFromCards } from './generative/generative.view-model'
 import type { ComparisonTableView, FollowUpsView, OptionsGridView, SourcesInlineView, WorkDisclosureView } from './generative/generative.contracts'
 import type { RegistryNextAction } from '@/modules/registry/tool-choice-contracts'
@@ -95,9 +95,9 @@ export async function fetchAnonymousChat(
   try {
     const body = await response.clone().json() as unknown
     if (isRecord(body) && typeof body.code === 'string') code = body.code
-  } catch (cause) {
-    // The status and request reference still provide a truthful recovery path.
-    captureRouteException(cause, { site: 'fetchAnonymousChat' }, 'warning')
+  } catch {
+    // A non-JSON upstream body is expected (proxy/edge pages); status and request reference still give a truthful recovery path.
+    addClientBreadcrumb('anonymous chat response body was not JSON', { status: String(response.status) })
   }
   throw new AnonymousChatResponseError(
     code,

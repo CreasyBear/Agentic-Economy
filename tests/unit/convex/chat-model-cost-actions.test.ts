@@ -6,6 +6,7 @@ vi.mock('undici', () => ({ fetch: external.fetch,
 import { readOpenRouterGenerationCost } from '../../../convex/lib/chat/turns/modelCostActions'
 import { api, internal } from '../../../convex/_generated/api'
 import { convexTestWithMarketComponents, publishedBusinessOwner } from '../../helpers/convex-fixtures'
+import { startedTurn } from '../../helpers/started-turn'
 
 beforeEach(() => vi.clearAllMocks())
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); vi.clearAllTimers(); vi.useRealTimers() })
@@ -20,9 +21,9 @@ describe('OpenRouter generation-cost metadata', () => {
     vi.stubEnv('OPENROUTER_API_KEY', input.apiKey)
     const backend = convexTestWithMarketComponents()
     const { owner } = await publishedBusinessOwner(backend, 'generation-cost-owner')
-    const turn = await owner.mutation(api.chatTurns.startTurn, {
+    const turn = startedTurn(await owner.mutation(api.chatTurns.startTurn, {
       principal: { kind: 'clerk' }, clientTurnId: 'metadata-cost', prompt: 'A fixture prompt',
-    })
+    }))
     const binding = { turnRef: turn.turnRef, threadId: turn.threadId, promptMessageId: turn.promptMessageId }
     await backend.mutation(internal.chatModelCost.begin, { ...binding,
       requestRef: 'request:metadata', source: 'openrouter', purpose: 'initial', requestedModel: 'requested/model' })

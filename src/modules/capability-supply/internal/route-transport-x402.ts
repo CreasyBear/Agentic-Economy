@@ -88,7 +88,7 @@ export type X402RouteTransportRuntime = RouteTransportRuntime &
     beforeX402PaymentAuthorizationRead?: () => Promise<boolean>
     markX402PaymentPossiblySubmitted: (
       event: X402PaymentAttemptEvent,
-    ) => Promise<void> | void
+    ) => Promise<void | false> | void | false
   }>
 
 export type X402Configuration = import('./transport-adapters').X402FetchTransportConfiguration

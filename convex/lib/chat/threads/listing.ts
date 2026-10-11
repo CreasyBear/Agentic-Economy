@@ -37,6 +37,13 @@ export type ChatThreadSummary = Readonly<{
   busy: boolean
 }>
 
+/** Signed out is an expected state for reads: callers return an empty result instead of throwing. */
+export async function isChatSignedOut(ctx: Pick<QueryCtx, 'auth'>): Promise<boolean> {
+  return await ctx.auth.getUserIdentity() === null
+}
+
+export const EMPTY_CHAT_PAGE = { page: [] as never[], isDone: true, continueCursor: '' }
+
 export async function requireChatOwner(
   ctx: Pick<QueryCtx, 'auth' | 'db'>,
 ): Promise<Owner> {

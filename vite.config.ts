@@ -20,6 +20,13 @@ const sentryPluginEnabled =
   sentryProject !== undefined;
 
 export default defineConfig({
+  // Browser cannot read VERCEL_* at runtime; bake release and env at build time.
+  define: {
+    "import.meta.env.VITE_SENTRY_RELEASE": JSON.stringify(sentryRelease ?? ""),
+    "import.meta.env.VITE_SENTRY_ENVIRONMENT": JSON.stringify(
+      process.env.SENTRY_ENVIRONMENT?.trim() ?? process.env.VERCEL_ENV?.trim() ?? "",
+    ),
+  },
   server: {
     port: 3000,
     allowedHosts: ["jc-mbp.tail4d4766.ts.net"],

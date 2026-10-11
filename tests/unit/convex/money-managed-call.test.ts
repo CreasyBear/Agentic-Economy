@@ -1844,6 +1844,30 @@ describe('financial environment cutover', () => {
     expect(await fundingRows(backend, commandRef)).toEqual(before)
   })
 
+  it('returns retry_scheduled and schedules a requeue when the funding command is not yet visible, never throwing', async () => {
+    const { backend, commandRef, args } = await fundingFixture()
+    await backend.mutation(api.moneyStripeWebhookInbox.ingest, await withSourceWrite('billing', {
+      destination: 'snapshot', event: args.event, operationKey: 'pending:ingest', correlationId: args.event.stripeEventId,
+    }))
+    await backend.run(async ctx => {
+      const row = await ctx.db.query('moneyFundingCommands').withIndex('by_commandRef', q => q.eq('commandRef', commandRef)).unique()
+      if (row === null) throw new Error('fixture_missing')
+      await ctx.db.delete(row._id)
+    })
+    const result = await backend.action(internal.moneyStripeWebhookWorker.process, { stripeEventId: args.event.stripeEventId })
+    expect(result).toEqual({ kind: 'retry_scheduled' })
+    const scheduled = await backend.run(async ctx => ctx.db.system.query('_scheduled_functions').collect())
+    expect(scheduled.map(row => row.name)).toContain('moneyStripeWebhookInbox:requeue')
+    const inbox = await backend.run(async ctx => ctx.db.query('moneyStripeWebhookInbox').unique())
+    if (inbox?.workId === undefined) throw new Error('work_not_queued')
+    await backend.mutation(internal.moneyStripeWebhookInbox.complete, { workId: inbox.workId as WorkId,
+      context: { stripeEventId: args.event.stripeEventId }, result: { kind: 'success', returnValue: result } })
+    expect(await backend.query(internal.moneyStripeWebhookInbox.readForProcessing, { stripeEventId: args.event.stripeEventId }))
+      .toMatchObject({ state: 'queued' })
+    const exhausted = await backend.action(internal.moneyStripeWebhookWorker.process, { stripeEventId: args.event.stripeEventId, attempt: 12 })
+    expect(exhausted).toEqual({ kind: 'reconciliation_required', code: 'stripe_webhook_retries_exhausted:funding_pending' })
+  })
+
   it('refuses checkout/refund preparation, finalization and unknown marking after cutover without financial writes', async () => {
     const { backend, commandRef, args } = await fundingFixture()
     const refund = refundEvent({ stripeEventId: 'evt_cutover_refund', refundId: 're_cutover',

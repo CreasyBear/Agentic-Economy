@@ -4,6 +4,7 @@ import { ACTIVE_CHAT_GENERATION_MS } from '../../convex/chatThreads'
 import { buildDevelopmentPublishedToolEvidence } from '../unit/capability-supply/fixtures/development-published-tool-evidence'
 import { convexTestWithMarketComponents, createTestAgentPrincipal, ownerAdmin } from '../helpers/convex-fixtures'
 import { withSourceWrite } from '../helpers/source-write-admission'
+import { startedTurn } from '../helpers/started-turn'
 
 const toolRef = `operation:v1:${'a'.repeat(64)}`
 const callRef = `operation-invocation:v1:${'b'.repeat(64)}`
@@ -19,10 +20,10 @@ async function setup(suffix: string) {
   const backend = convexTestWithMarketComponents()
   const { principal: key, grantRef } = await createTestAgentPrincipal(backend, suffix)
   const principal = { kind: 'agent_key' as const, ...key }
-  const turn = await backend.mutation(api.chatTurns.startTurn, await withSourceWrite('protected_action', {
+  const turn = startedTurn(await backend.mutation(api.chatTurns.startTurn, await withSourceWrite('protected_action', {
     principal, clientTurnId: `call-${suffix}`, prompt: 'Run a Tool',
     operationKey: 'chat-turn.start', correlationId: `start-${suffix}`,
-  }))
+  })))
   expect(await backend.mutation(internal.chatTurns.finishTurn, {
     turnRef: turn.turnRef, promptMessageId: turn.promptMessageId, state: 'working',
   })).toBe(true)
@@ -290,10 +291,10 @@ describe('atomic key Turn Call reservation fence', () => {
         if (thread === null) throw new Error('thread_missing')
         await ctx.db.patch(thread._id, { activeStartedAt: Date.now() - ACTIVE_CHAT_GENERATION_MS - 1 })
       })
-      const next = await backend.mutation(api.chatTurns.startTurn, await withSourceWrite('protected_action', {
+      const next = startedTurn(await backend.mutation(api.chatTurns.startTurn, await withSourceWrite('protected_action', {
         principal, threadId, clientTurnId: `next-${order}`, prompt: 'A newer request',
         operationKey: 'chat-turn.start', correlationId: `next-${order}`,
-      }))
+      })))
       expect(await backend.mutation(internal.chatTurns.finishTurn, {
         turnRef: next.turnRef, promptMessageId: next.promptMessageId, state: 'working',
       })).toBe(true)

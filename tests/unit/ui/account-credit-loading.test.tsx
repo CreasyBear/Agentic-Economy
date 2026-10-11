@@ -67,3 +67,12 @@ it('keeps the edited amount and exact known quote visible through a constraints 
   expect(screen.queryByRole('status', { name: 'Loading funding amounts' })).toBeNull()
   expect(begin).not.toHaveBeenCalled()
 })
+
+it('shows a typed error, not a thrown TypeError, when begin returns a malformed result', async () => {
+  const begin = vi.fn().mockResolvedValue(undefined)
+  render(<AeAccountFundingPanel port={{ begin, read: vi.fn() }} constraints={constraints} />)
+  fireEvent.change(screen.getByLabelText(/other amount/i), { target: { value: '10.00' } })
+  fireEvent.click(screen.getByRole('button', { name: /pay A\$11\.55 and add A\$10\.00/i }))
+  expect(await screen.findByText(/unreadable response/i)).toBeTruthy()
+  expect(begin).toHaveBeenCalledTimes(1)
+})

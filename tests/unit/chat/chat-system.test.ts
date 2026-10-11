@@ -18,6 +18,10 @@ import { toTransportMessages } from '@/components/ae/chat/chat-session/anonymous
 import { formatDetailRequest, parseDetailRequest } from '@/modules/chat/run-request'
 import { projectChatChoiceActions } from '@/modules/chat/tool-card-actions'
 
+const observed = vi.hoisted(() => ({ breadcrumb: vi.fn(), capture: vi.fn() }))
+vi.mock('@/lib/observability/add-client-breadcrumb', () => ({ addClientBreadcrumb: observed.breadcrumb }))
+vi.mock('@/lib/observability/capture-route-exception', () => ({ captureRouteException: observed.capture }))
+
 const toolRef = `operation:v1:${'a'.repeat(64)}`
 const quoteRef = `operation-commitment:v1:${'f'.repeat(64)}`
 
@@ -75,6 +79,17 @@ describe('anonymous chat recovery', () => {
       reference: 'chat-request-7',
       browseMarket: true,
     })
+  })
+
+  it('treats a non-JSON upstream body as a breadcrumb, not an exception', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('<html>bad gateway</html>', {
+      status: 502, headers: { 'x-ae-request-id': 'chat-html-502' },
+    })))
+    const caught = await fetchAnonymousChat('/api/chat/anonymous').catch(error => error)
+    expect(caught).toMatchObject({ name: 'AnonymousChatResponseError' })
+    expect(projectChatFailure(caught)).toMatchObject({ reason: 'chat_unavailable', reference: 'chat-html-502' })
+    expect(observed.breadcrumb).toHaveBeenCalledWith('anonymous chat response body was not JSON', { status: '502' })
+    expect(observed.capture).not.toHaveBeenCalled()
   })
 
   it('makes an empty upstream 404 a recoverable chat failure', async () => {

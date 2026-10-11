@@ -34,7 +34,7 @@ export async function handleReadyRequest(
           {
             status: 'ready',
             checks: { config: 'ready', convex: 'ready',
-              ...(readiness.checks.payments === undefined ? {} : { payments: 'ready' }) },
+              ...(readiness.checks.payments === undefined ? {} : { payments: readiness.checks.payments.status }) },
             commercial: readiness.commercial,
             deployment: readiness.deployment,
           },
@@ -62,6 +62,6 @@ export async function handleReadyRequest(
 function projectChecks(checks: ServerReadinessResult['checks']): Record<string, unknown> {
   return Object.fromEntries(Object.entries(checks).map(([name, check]) => [
     name,
-    check.status === 'ready' ? 'ready' : { status: 'failed', code: check.code ?? 'check_failed' },
+    check.status !== 'failed' ? check.status : { status: 'failed', code: check.code ?? 'check_failed' },
   ]))
 }

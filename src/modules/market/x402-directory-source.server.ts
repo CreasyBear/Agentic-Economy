@@ -1,3 +1,4 @@
+import { CircuitOpenError, dependencyBreaker } from '@/lib/observability/circuit-breaker'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { listX402DiscoveryResources, searchX402Resources } from '@coinbase/cdp-sdk'
 import Decimal from 'decimal.js'
@@ -36,16 +37,16 @@ export async function readX402DirectoryRawPage(input: X402DirectoryInput): Promi
     if (searching) {
       // These filters apply to the upstream catalogue, never just this page.
       // urlSubstring is a directory URL filter, not verified Provider ownership.
-      const result = await searchX402Resources({
+      const result = await dependencyBreaker.run('x402-directory', () => searchX402Resources({
         ...(normalized.query.length === 0 ? {} : { query: normalized.query }),
         network: networkKey,
         ...(provider === undefined ? {} : { urlSubstring: `://${provider}/` }),
         ...(maxUsdPrice === undefined ? {} : { maxUsdPrice: new Decimal(maxUsdPrice).toFixed() }),
         limit: PAGE_SIZE,
-      })
+      }))
       return { kind: 'ok', items: result.resources.filter(item => hasNetwork(item, networkKey)), offset: 0, limit: PAGE_SIZE, partialResults: result.partialResults, mode: 'search', appliedFilters }
     }
-    const result = await listX402DiscoveryResources({ limit: PAGE_SIZE, offset })
+    const result = await dependencyBreaker.run('x402-directory', () => listX402DiscoveryResources({ limit: PAGE_SIZE, offset }))
     const position = result.pagination.offset ?? offset
     const limit = result.pagination.limit ?? PAGE_SIZE
     const total = result.pagination.total
@@ -58,6 +59,7 @@ export async function readX402DirectoryRawPage(input: X402DirectoryInput): Promi
       ...(position > 0 ? { previousOffset: Math.max(0, position - limit) } : {}),
     }
   } catch (cause) {
+    if (cause instanceof CircuitOpenError) return { kind: 'unavailable', reason: 'source_unavailable' }
     return degradeBackend(cause, { kind: 'unavailable', reason: 'source_unavailable' } as const, { site: 'readX402DirectoryRawPage', reason: 'source_unavailable' })
   }
 }

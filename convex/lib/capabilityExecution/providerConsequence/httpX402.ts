@@ -25,6 +25,7 @@ type X402OperationResult =
   | Infer<typeof prepareX402PaymentAuthorizationReturns>
   | Infer<typeof readX402PaymentAuthorizationReturns>
   | Infer<typeof readX402PaymentAuthorizationByDigestReturns>
+  | { kind: 'attribution_mismatch' }
   | null
 
 async function runX402Operation(

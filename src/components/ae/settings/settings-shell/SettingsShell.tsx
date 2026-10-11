@@ -42,8 +42,8 @@ export function SettingsShell({ pathname, children }: SettingsShellProps) {
     return () => { observer.disconnect(); cancelAnimationFrame(frame) }
   }, [pathname, title])
   return <AeOperatorPage operatorRole="owner" title={title} description="" currentPath={pathname} contentOwnsHeading>
-    <div ref={contentRef} className="arc-market mx-auto w-full max-w-4xl space-y-8" data-reui-block="profile-2">
-      <div className="min-w-0 space-y-3">
+    <div ref={contentRef} className="arc-market mx-auto w-full max-w-4xl flex flex-col gap-8" data-reui-block="profile-2">
+      <div className="min-w-0 flex flex-col gap-3">
         <nav aria-label="Settings groups" className="min-w-0 border-b">
           <SettingsScrollView><ul className="flex w-max min-w-full gap-6">
             {settingsNavigation.map(group => <li key={group.label}>

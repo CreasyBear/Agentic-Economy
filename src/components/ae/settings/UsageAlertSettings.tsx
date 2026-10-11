@@ -56,7 +56,7 @@ export function UsageAlertSettings({ policy, disabled, onUpdate, revision }: {
       <SettingsRow label="Monthly ceiling warning (%)" description="Alert at this share of your enabled spending ceiling.">
         <Input aria-label="Monthly ceiling warning percent" aria-invalid={!valid(draft.spend, 100)} inputMode="numeric" value={draft.spend} disabled={disabled} onChange={event => { setDraft({ ...draft, spend: event.target.value }); setOutcome('idle') }} />
       </SettingsRow>
-      <div className="space-y-4 px-5 py-4">
+      <div className="flex flex-col gap-4 px-5 py-4">
         <p className="text-sm"><strong>{policy?.enabled === true ? 'Enabled' : 'Disabled'}</strong> · Saving and enabling records your consent. A change of workspace owner requires renewed consent.</p>
         <details className="text-sm text-muted-foreground">
           <summary className="min-h-11 cursor-pointer content-center font-medium">When alerts are evaluated</summary>
