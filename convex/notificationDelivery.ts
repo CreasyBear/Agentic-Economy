@@ -5,6 +5,7 @@ import { v, type Infer } from 'convex/values'
 
 import { degradeBackend } from '../src/lib/observability/degrade-backend'
 import { subject as operatorDigestSubject } from '../src/emails/templates/operator-digest'
+import { EmailPropMissingError } from '../src/emails/templates/account-notice'
 import { renderEmail, type EmailInput } from '../src/emails/render'
 import { internal } from './_generated/api'
 import { internalAction } from './_generated/server'
@@ -53,7 +54,19 @@ export const sendDeliveryEmail = internalAction({
     })
     if (suppressed !== null) return { outcome: 'suppressed', code: suppressed }
 
-    const rendered = await renderEmail(context.email as EmailInput)
+    // From A$1,000 the invoice names the buyer; without an ABN or legal name that is the Clerk name and the account email (design doc 6.1). Below it nothing is added.
+    const props = context.email.eventKind === 'funding_receipt' ? context.email.props as { totalUnits: string; exponent: number; buyerName?: string } : undefined
+    const needsBuyer = props !== undefined && BigInt(props.totalUnits) >= 1000n * 10n ** BigInt(props.exponent)
+    const accountName = [user.firstName, user.lastName].filter(Boolean).join(' ')
+    const email = props !== undefined && needsBuyer
+      ? { ...context.email, props: { ...props, buyerEmail: primaryEmail.emailAddress, ...(props.buyerName === undefined && accountName !== '' ? { buyerName: accountName } : {}) } }
+      : context.email
+    // A missing required prop means the email must not exist: skip with a reason instead of retrying or printing a placeholder.
+    const rendered = await renderEmail(email as EmailInput).catch((error: unknown) => {
+      if (error instanceof EmailPropMissingError) return null
+      throw error
+    })
+    if (rendered === null) return { outcome: 'suppressed', code: 'email_prop_missing' }
     // Only alert and lifecycle props carry an unsubscribe target; required mail has none.
     const unsubscribeUrl = (context.email.props as { unsubscribeUrl?: string }).unsubscribeUrl
     return await postResendEmail({

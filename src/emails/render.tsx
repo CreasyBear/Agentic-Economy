@@ -1,8 +1,9 @@
-import { render } from '@react-email/render'
+import { plainTextSelectors, render } from '@react-email/render'
 import type { ReactElement } from 'react'
 
 import AccountNotice, { subject as noticeSubject, type NoticeKind, type NoticeProps } from './templates/account-notice'
 import AgentApproval, { subject as approvalSubject, type AgentApprovalProps } from './templates/agent-approval'
+import FundingReceipt, { subject as fundingSubject, type FundingReceiptProps } from './templates/funding-receipt'
 import OperatorDigest, { subject as digestSubject, type OperatorDigestProps } from './templates/operator-digest'
 import StalledStepEmail, { subject as stalledSubject, type StalledStep, type StalledStepProps } from './templates/stalled-step'
 import StatementReady, { subject as statementSubject, type StatementReadyProps } from './templates/statement-ready'
@@ -14,6 +15,7 @@ export type EmailInput =
   | { eventKind: 'stalled_not_funded' | 'stalled_no_agent' | 'stalled_never_called'; props: StalledStepProps }
   | { eventKind: UsageAlertKind; props: UsageAlertProps }
   | { eventKind: 'invoice_ready'; props: StatementReadyProps }
+  | { eventKind: 'funding_receipt'; props: FundingReceiptProps }
   | { eventKind: 'operator_digest'; props: OperatorDigestProps }
   | { eventKind: NoticeKind; props: NoticeProps }
 
@@ -45,6 +47,7 @@ function build(input: EmailInput): { element: ReactElement; subject: string } {
     case 'operator_digest':
       return { element: <OperatorDigest {...input.props} />, subject: digestSubject(input.props) }
     case 'funding_receipt':
+      return { element: <FundingReceipt {...input.props} />, subject: fundingSubject(input.props) }
     case 'funding_failed':
     case 'task_refunded':
     case 'task_stuck':
@@ -60,13 +63,36 @@ function build(input: EmailInput): { element: ReactElement; subject: string } {
     case 'welcome':
     case 'provider_live':
     case 'provider_offboarded':
+    case 'deletion_requested':
+    case 'deletion_completed':
+    case 'first_call_done':
+    case 'week_one_wrap':
+    case 'auto_topup_failed':
+    case 'card_changed':
+    case 'first_call_failed':
+    case 'deletion_cancelled':
+    case 'deletion_final_reminder':
       return { element: <AccountNotice kind={input.eventKind} {...input.props} />, subject: noticeSubject(input.eventKind, input.props) }
   }
+}
+
+/** html-to-text strips "mailto:" from anchors; keep the href so the text part mirrors every HTML link. */
+const PLAIN_TEXT_OPTIONS = {
+  selectors: [
+    ...plainTextSelectors,
+    { selector: 'a[href^="mailto:"]', format: 'mailtoLink' },
+  ],
+  formatters: {
+    mailtoLink: (elem: { children: unknown; attribs?: { href?: string } }, walk: (nodes: unknown, builder: unknown) => void, builder: { addInline: (text: string) => void }) => {
+      walk(elem.children, builder)
+      builder.addInline(` [${elem.attribs?.href ?? ''}]`)
+    },
+  },
 }
 
 /** One render for the HTML part and one for the plain-text part, so the two never drift from the same element. */
 export async function renderEmail(input: EmailInput): Promise<RenderedEmail> {
   const { element, subject } = build(input)
-  const [html, text] = await Promise.all([render(element), render(element, { plainText: true })])
+  const [html, text] = await Promise.all([render(element), render(element, { plainText: true, htmlToTextOptions: PLAIN_TEXT_OPTIONS })])
   return { subject, html, text }
 }

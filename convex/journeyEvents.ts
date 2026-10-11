@@ -17,7 +17,7 @@ const forwardingConfigured = () => !isProductAnalyticsDisabled(analyticsEnv())
   && readObservabilityServerConfig(analyticsEnv()).posthogKey !== undefined
 
 /** PostHog sees a one-way digest of the account, never the raw ref (same scheme as refusal events). */
-const journeyDistinctId = (accountRef: string) => canonicalDigest({ format: 'ae.journey:v1', value: accountRef })
+export const journeyDistinctId = (accountRef: string) => canonicalDigest({ format: 'ae.journey:v1', value: accountRef })
 
 /** PostHog rejects non-UUID `uuid`s; derive a stable v5-shaped UUID from the row id so a re-send dedupes. */
 async function eventUuid(eventId: string): Promise<string> {

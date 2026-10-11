@@ -130,6 +130,14 @@ function redactedObservationFromVerifiedEvent(input: Readonly<{
     }
   }
 
+  let primaryEmailDigest: string | undefined
+  if (input.event.type === 'user.updated' && Array.isArray(data.email_addresses)) {
+    const primary = data.email_addresses.find((row: unknown) => isRecord(row) && row.id === data.primary_email_address_id)
+    if (isRecord(primary) && typeof primary.email_address === 'string' && primary.email_address.length > 0) {
+      primaryEmailDigest = canonicalDigest({ contract: 'ae.clerk-primary-email:v1', email: primary.email_address.trim().toLowerCase() })
+    }
+  }
+
   return {
     kind: 'accepted',
     command: {
@@ -145,6 +153,7 @@ function redactedObservationFromVerifiedEvent(input: Readonly<{
       observedAt: observedAtMs,
       securityAction,
       ...(profileDisplayName === undefined ? {} : { profileDisplayName }),
+      ...(primaryEmailDigest === undefined ? {} : { primaryEmailDigest }),
     },
   }
 }

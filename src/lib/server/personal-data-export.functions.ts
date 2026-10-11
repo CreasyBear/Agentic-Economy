@@ -2,6 +2,7 @@ import { degrade } from '@/lib/observability/degrade'
 import {
   ConvexSourceError,
   createAuthenticatedSourceTransport,
+  sourceMutation,
   sourceQuery,
   type ConvexSourceTransport,
 } from '@/lib/server/convex-source'
@@ -61,6 +62,8 @@ const invoicesQuery = sourceQuery<Readonly<{
   paginationOpts: Readonly<{ numItems: number; cursor: string | null }>
 }>, SourcePage<PersonalDataInvoiceSummary>>('moneyAccountFunding:listOwnerInvoiceHistory')
 
+const dataExportRequestedMutation = sourceMutation<Record<string, never>, null>('notifications:recordDataExportRequested')
+
 const EXCLUDED_REASON = 'The existing per-account read was unavailable during this export.'
 
 export async function readPersonalDataExportThroughSource(): Promise<PersonalDataExport> {
@@ -91,6 +94,8 @@ export async function handlePersonalDataExportRequest(head = false): Promise<Res
   try {
     const data = await readPersonalDataExportThroughSource()
     const date = data.exportedAt.slice(0, 10)
+    // The notice never blocks or fails the download.
+    if (!head) await createAuthenticatedSourceTransport().then((source) => source.mutation(dataExportRequestedMutation, {})).catch(() => undefined)
     const headers = {
       'Cache-Control': 'private, no-store',
       'Content-Disposition': `attachment; filename="agentic-economy-data-${date}.json"`,

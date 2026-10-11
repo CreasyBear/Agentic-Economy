@@ -1,13 +1,18 @@
-import { Text } from '@react-email/components'
+import { Column, Row, Section, Text } from '@react-email/components'
 
+import { EMAIL_COLORS } from '../brand'
 import { bodyText, CtaButton, Layout } from '../layout'
+import { formatDate } from '../../lib/ui/format-time'
 import { emailUrl } from '../links'
 
 export type OperatorDigestProps = { siteUrl: string; date: string; lines: string[] }
 
-export const subject = ({ date }: OperatorDigestProps) => `aecon stalled accounts, ${date}`
+const SYDNEY = 'Australia/Sydney'
 
-export default function OperatorDigestEmail({ siteUrl, date, lines }: OperatorDigestProps) {
+export const subject = ({ date }: OperatorDigestProps) => `aecon stalled accounts, ${formatDate(date, SYDNEY)}`
+
+export default function OperatorDigestEmail({ siteUrl, date: isoDate, lines }: OperatorDigestProps) {
+  const date = formatDate(isoDate, SYDNEY)
   const campaign = 'operator_digest'
   return (
     <Layout
@@ -17,9 +22,16 @@ export default function OperatorDigestEmail({ siteUrl, date, lines }: OperatorDi
       reason="You get this because you are on the operator list. Operator mail has no settings link."
       showSettings={false}
     >
-      {lines.map((line) => <Text key={line} className="ae-text" style={bodyText}>{line}</Text>)}
+      {/* Structure from emailcn notification-default (see account-notice.tsx): heading, body, one button; the list is a row per line. */}
+      <Text className="ae-text" style={{ ...bodyText, fontSize: 22, fontWeight: 500, lineHeight: '28px' }}>Stalled accounts, {date}</Text>
+      <Section style={{ margin: '0 0 8px' }}>
+        {lines.map((line) => (
+          <Row key={line}>
+            <Column className="ae-text" style={{ ...bodyText, margin: 0, padding: '8px 0', borderBottom: `1px solid ${EMAIL_COLORS.light.border}` }}>{line}</Column>
+          </Row>
+        ))}
+      </Section>
       <CtaButton href={emailUrl(siteUrl, '/admin', { campaign, content: 'console' })}>Open console</CtaButton>
     </Layout>
   )
 }
-

@@ -19,9 +19,9 @@ const INPUTS: Array<[string, EmailInput]> = [
   ['spend cap warning', { eventKind: 'spend_cap_warning', props: { siteUrl: SITE, body: 'Spend has reached 80% of your cap.', observedAt: '2026-10-10T00:00:00.000Z', unsubscribeUrl: UNSUBSCRIBE } }],
   ['spend cap exceeded', { eventKind: 'spend_cap_exceeded', props: { siteUrl: SITE, body: 'Spend has passed your cap.', observedAt: '2026-10-10T00:00:00.000Z', unsubscribeUrl: UNSUBSCRIBE } }],
   ['call failure spike', { eventKind: 'call_failure_spike', props: { siteUrl: SITE, body: 'Tool calls are failing more often than usual.', observedAt: '2026-10-10T00:00:00.000Z', unsubscribeUrl: UNSUBSCRIBE } }],
-  ['statement', { eventKind: 'invoice_ready', props: { siteUrl: SITE, periodLabel: 'October 2026' } }],
+  ['statement', { eventKind: 'invoice_ready', props: { siteUrl: SITE, periodLabel: 'October 2026', rows: [{ id: 'c1', total: { currency: 'AUD', units: '42', exponent: 2 } }], total: { currency: 'AUD', units: '42', exponent: 2 } } }],
   ['operator digest', { eventKind: 'operator_digest', props: { siteUrl: SITE, date: '2026-10-11', lines: ['2 stalled accounts', 'No exceptions'] } }],
-  ['funding receipt', { eventKind: 'funding_receipt', props: { siteUrl: SITE, amount: 'A$20.00' } }],
+  ['funding receipt', { eventKind: 'funding_receipt', props: { siteUrl: SITE, principalUnits: '2000', serviceFeeUnits: '100', taxUnits: '100', totalUnits: '2200' } }],
   ['funding failed', { eventKind: 'funding_failed', props: { siteUrl: SITE } }],
   ['task refunded', { eventKind: 'task_refunded', props: { siteUrl: SITE, amount: 'A$0.42', taskRef: 'call:abc123' } }],
   ['task stuck', { eventKind: 'task_stuck', props: { siteUrl: SITE } }],
@@ -77,7 +77,7 @@ describe('renderEmail', () => {
     expect(email.html).toContain('#E8E4DA')
     expect(email.html).toContain('#141414')
     expect(email.html).toContain('#24543D')
-    expect(email.html).toContain('Manrope, Arial, Helvetica')
+    expect(email.html).toContain('Manrope, -apple-system')
     expect(email.html.match(/background-color:#24543D/giu)?.length ?? 0).toBeGreaterThanOrEqual(1)
   })
 
@@ -111,8 +111,8 @@ describe('renderEmail', () => {
 
   it('links the statement to the statement page with plain sentence-case copy', async () => {
     const email = await renderEmail(byName('statement'))
-    expect(email.subject).toBe('Your October 2026 statement is ready')
-    expect(email.text).toContain('Download statement')
+    expect(email.subject).toBe('Your aecon statement for October 2026')
+    expect(email.text).toContain('View statement')
     expect(email.text).not.toMatch(/tax invoice/iu)
   })
 })
@@ -120,15 +120,24 @@ describe('renderEmail', () => {
 describe('phase 2 notices', () => {
   it('states a funding receipt amount as added to Credit, with fees and tax kept out of it', async () => {
     const email = await renderEmail(byName('funding receipt'))
-    expect(email.subject).toBe('Receipt: A$20.00 added as Credit')
-    expect(email.text).toContain('Stripe fees and tax are not part of this amount')
+    expect(email.subject).toBe('Tax invoice for your A$22.00 aecon top-up')
+    expect(email.text).toContain('Credit amount')
     expect(email.text).not.toMatch(/unsubscribe/iu)
+  })
+
+  it('renders the withheld-invoice variant as a plain receipt with no GST line or invoice wording', async () => {
+    const base = byName('funding receipt')
+    const email = await renderEmail({ ...base, props: { ...base.props, plain: 1 } } as typeof base)
+    expect(email.subject).toBe('Receipt for your A$22.00 aecon top-up')
+    expect(email.text).toContain('Receipt')
+    expect(email.text).toContain('Credit amount')
+    expect(email.text).not.toMatch(/gst|tax invoice/iu)
   })
 
   it('names the refunded amount, that it went back to Credit and not the card, and the Task id', async () => {
     const email = await renderEmail(byName('task refunded'))
-    expect(email.subject).toBe('Refunded: a Task did not complete')
-    expect(email.text).toContain('A$0.42 went back to your Credit, not your card')
+    expect(email.subject).toBe('Refunded A$0.42 for a failed call')
+    expect(email.text).toContain('A$0.42 went back to your aecon credit, not your card')
     expect(email.text).toContain('call:abc123')
   })
 
@@ -143,21 +152,21 @@ describe('phase 2 notices', () => {
 describe('phase 3 notices', () => {
   it('welcomes a new owner to set up the account, with no feature pitch and no unsubscribe', async () => {
     const email = await renderEmail(byName('welcome'))
-    expect(email.subject).toBe('Welcome to aecon')
-    expect(email.text).toContain('Set up your account')
+    expect(email.subject).toBe('Welcome to aecon. Add credit to start')
+    expect(email.text).toContain('Add credit')
     expect(email.text).not.toMatch(/unsubscribe/iu)
   })
 
   it('tells a Provider the Tool is live with a link to its operations page', async () => {
     const email = await renderEmail(byName('provider live'))
-    expect(email.subject).toBe('Your Tool is live')
+    expect(email.subject).toBe('Your service is live on aecon')
     expect(hrefsOf(email.html).some((href) => href.includes('/owner/operations/tool%3Aabc123'))).toBe(true)
     expect(email.text).not.toMatch(/unsubscribe/iu)
   })
 
   it('confirms a Provider account is closed as required mail', async () => {
     const email = await renderEmail(byName('provider offboarded'))
-    expect(email.subject).toBe('Your Provider account is closed')
+    expect(email.subject).toBe('Your service was removed from aecon')
     expect(email.text).not.toMatch(/unsubscribe/iu)
   })
 })

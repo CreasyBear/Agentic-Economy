@@ -912,7 +912,6 @@ describe('stalled step notification deliveries', () => {
   it('builds a stalled email with a footer unsubscribe link and the RFC 8058 target', async () => {
     vi.stubEnv('AE_STALLED_EMAILS_ENABLED', 'true')
     vi.stubEnv('AE_SITE_URL', 'https://ae.example.test')
-    vi.stubEnv('CONVEX_SITE_URL', 'https://convex.example.test/')
     vi.stubEnv('EMAIL_UNSUBSCRIBE_SECRET', UNSUBSCRIBE_SECRET)
     const backend = await createNotificationBackend()
     await seedStalledOwner(backend, true)
@@ -921,7 +920,7 @@ describe('stalled step notification deliveries', () => {
     if (delivery === undefined) throw new Error('delivery_missing')
 
     const context = await backend.query(internal.notifications.readNotificationContext, { deliveryId: delivery._id })
-    const unsubscribeUrl = `https://convex.example.test/notifications/unsubscribe?t=${encodeURIComponent(await signedToken('lifecycle'))}`
+    const unsubscribeUrl = `https://ae.example.test/api/unsubscribe?t=${encodeURIComponent(await signedToken('lifecycle'))}`
     expect(context).toMatchObject({
       kind: 'ready',
       stream: 'lifecycle',
@@ -1278,6 +1277,7 @@ describe('phase 3 email gate', () => {
   it('reads a phase 3 welcome back as a ready required notice for the active owner at send time', async () => {
     vi.stubEnv('AE_EMAIL_PHASE3_ENABLED', 'true')
     vi.stubEnv('AE_SITE_URL', 'https://app.aecon.test')
+    vi.stubEnv('EMAIL_UNSUBSCRIBE_SECRET', UNSUBSCRIBE_SECRET)
     const backend = await createNotificationBackend()
     await seedAuthority(backend)
     await enqueuePhase3(backend, 'welcome')
@@ -1289,6 +1289,47 @@ describe('phase 3 email gate', () => {
       kind: 'ready',
       email: { eventKind: 'welcome', props: { siteUrl: 'https://app.aecon.test' } },
     })
+    const context = await backend.run((ctx) => ctx.runQuery(internal.notifications.readNotificationContext, { deliveryId: row!._id }))
+    expect(context).toMatchObject({ stream: 'transactional' })
+    expect(JSON.stringify(context)).not.toContain('unsubscribeUrl')
+  })
+
+  const lifecycleRow = (backend: InteractiveAuthorityBackend, eventKind: 'first_call_done' | 'stalled_never_called') =>
+    backend.run((ctx) => ctx.db.insert('notificationDeliveries', {
+      deliveryRef: `notification:${eventKind}`, recipientPrincipalRef: PRINCIPAL_REF, accountRef: ACCOUNT_REF, eventKind,
+      stream: 'lifecycle', required: false, sourceEventRef: ACCOUNT_REF, consentBasis: 'express', state: 'pending', createdAt: Date.now(), updatedAt: Date.now(),
+    }))
+  const readContext = (backend: InteractiveAuthorityBackend, deliveryId: Id<'notificationDeliveries'>) =>
+    backend.run((ctx) => ctx.runQuery(internal.notifications.readNotificationContext, { deliveryId }))
+
+  it('skips lifecycle mail for a paused account (recipient check requires an active account; no pending-deletion state exists yet)', async () => {
+    vi.stubEnv('AE_SITE_URL', 'https://app.aecon.test')
+    vi.stubEnv('EMAIL_UNSUBSCRIBE_SECRET', UNSUBSCRIBE_SECRET)
+    const backend = await createNotificationBackend()
+    await seedAuthority(backend)
+    const id = await lifecycleRow(backend, 'first_call_done')
+    await expect(readContext(backend, id)).resolves.toMatchObject({ kind: 'ready' })
+    await backend.run(async (ctx) => {
+      const account = await ctx.db.query('accounts').first()
+      await ctx.db.patch(account!._id, { lifecycle: 'suspended' })
+    })
+    await expect(readContext(backend, id)).resolves.toMatchObject({ kind: 'skip' })
+  })
+
+  it('exits the never-called nudge once first_call_failed was sent to the account', async () => {
+    vi.stubEnv('AE_SITE_URL', 'https://app.aecon.test')
+    vi.stubEnv('EMAIL_UNSUBSCRIBE_SECRET', UNSUBSCRIBE_SECRET)
+    const backend = await createNotificationBackend()
+    await seedAuthority(backend)
+    await updatePreferences(backend, updatePayload({ correlationRef: correlationRef('never-called-pref'), idempotencyRef: idempotencyRef('never-called-pref') }))
+    await backend.run((ctx) => ctx.db.query('userNotificationPreferences').first().then((row) => ctx.db.patch(row!._id, { stalledStepEmails: true })))
+    const id = await lifecycleRow(backend, 'stalled_never_called')
+    await expect(readContext(backend, id)).resolves.toMatchObject({ kind: 'ready' })
+    await backend.run((ctx) => ctx.db.insert('notificationDeliveries', {
+      deliveryRef: 'notification:first_call_failed', recipientPrincipalRef: PRINCIPAL_REF, accountRef: ACCOUNT_REF, eventKind: 'first_call_failed',
+      stream: 'lifecycle', required: false, sourceEventRef: 'call:1', consentBasis: 'express', state: 'sent', createdAt: Date.now(), updatedAt: Date.now(),
+    }))
+    await expect(readContext(backend, id)).resolves.toEqual({ kind: 'skip', code: 'first_call_failed_sent' })
   })
 
   it('keeps phase 2 mail gated by its own switch, not the phase 3 one', async () => {

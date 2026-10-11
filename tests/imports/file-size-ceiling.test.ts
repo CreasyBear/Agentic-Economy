@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
+import emailcn from '../../src/emails/vendor/emailcn/upstream-manifest.json'
 import reui from '../../src/components/reui/upstream-manifest.json'
 import { relative, sep } from 'node:path'
 
@@ -22,6 +23,13 @@ describe('file size ceiling', () => {
       'src/components/reui/data-grid/data-grid-table.tsx',
       'src/components/reui/data-grid/data-grid.tsx',
     ])
+  })
+  it('pins the vendored emailcn source', () => {
+    for (const entry of emailcn.files) {
+      expect(entry.path).toMatch(/^src\/emails\/vendor\/emailcn\//)
+      expect(createHash('sha256').update(readFileSync(entry.path)).digest('hex'), entry.path).toBe(entry.sha256)
+      expect(entry.upstreamSha256).toMatch(/^[a-f0-9]{64}$/)
+    }
   })
   it('keeps maintained source files at or under 1,000 lines', () => {
     const offenders = findFiles([

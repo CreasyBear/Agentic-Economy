@@ -1,4 +1,5 @@
 import { planNodeValue, readNodeMaterial } from '../plans/nodeMaterial'
+import { dayBucketSourceRef, enqueueAccountNotice } from '../../principalAccount/notifications/enqueue'
 import { v, type Infer } from 'convex/values'
 
 import { degradeBackend } from '@/lib/observability/degrade-backend'
@@ -209,6 +210,12 @@ export async function issueQuoteHandler(
 
   const balanceUnits = args.formance.accountAvailableUnits
   if (parentPlan === undefined && BigInt(balanceUnits) < BigInt(pricing.price.units)) {
+    if (BigInt(balanceUnits) <= 0n) {
+      await enqueueAccountNotice(ctx, {
+        eventKind: 'credit_exhausted', accountRef: authority.principal.ownerId,
+        sourceEventRef: dayBucketSourceRef(authority.principal.ownerId, now),
+      })
+    }
     return quoteRefusal(quoteFundingContinuation(args, {
       balanceUnits,
       priceUnits: pricing.price.units,
