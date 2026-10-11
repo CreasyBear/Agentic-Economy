@@ -714,6 +714,24 @@ describe('Customer Request OAuth HTTP adapter', () => {
     })
   })
 
+  it('shares one IP-only aggregate budget across rotated client_id values', async () => {
+    const used = new Map<string, number>()
+    const rateLimit = async ({ keySuffix = '' }: { keySuffix?: string }) => {
+      const n = (used.get(keySuffix) ?? 0) + 1
+      used.set(keySuffix, n)
+      return keySuffix === 'oauth-aggregate' && n > 100 ? { ok: false as const, retryAfter: 1_000 } : { ok: true as const }
+    }
+    let limited = 0
+    for (let i = 0; i < 200; i++) {
+      const response = await handleDeviceAuthorizationPost(formRequest('http://localhost/oauth/device_authorization', {
+        client_id: `rotated-${i}`,
+        scope: 'market_tools:call customer_requests:read_only',
+      }), { store: storeFixture(), now: () => 1_000, rateLimit })
+      if (response.status === 429) limited++
+    }
+    expect(limited).toBe(100)
+  })
+
   it('uses the configured canonical base URL for OAuth verification redirects instead of the request host', async () => {
     vi.stubEnv('AE_CANONICAL_BASE_URL', 'https://canonical.agentic.test/')
     try {

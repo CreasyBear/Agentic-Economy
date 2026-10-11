@@ -152,7 +152,9 @@ export async function oauthAdmissionResponse(
     ? (options.devicePollRateLimit ?? options.rateLimit)
     : options.rateLimit
   if (rateLimit === undefined) return undefined
-  const admission = await rateLimit({ request, keySuffix })
+  // Caller-independent IP-only bucket first: rotated client_id/device_code values share one per-IP budget.
+  let admission = await rateLimit({ request, keySuffix: 'oauth-aggregate' })
+  if (admission.ok) admission = await rateLimit({ request, keySuffix })
   if (admission.ok) return undefined
   return oauthError('rate_limited', 429, {
     'Retry-After': String(Math.max(1, Math.ceil(admission.retryAfter / 1_000))),
