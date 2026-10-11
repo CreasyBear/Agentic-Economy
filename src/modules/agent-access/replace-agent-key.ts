@@ -90,9 +90,11 @@ export async function replaceAgentAccessKey(deps: ReplaceAgentKeyDeps): Promise<
     await deps.api.revoke?.({ apiKeyId: issued.keyId, revocationReason: 'Replacement could not be promoted.' })
     return { kind: 'error', code: 'issuance_unavailable', retryable: true }
   }
-  await deps.completeLifecycle({
+  const completion = await deps.completeLifecycle({
     kind: 'completed', principalRef: agent.principalRef, correlationRef: deps.correlationRef,
     providerTargets: [{ credentialRef: prepared.predecessorCredentialRef, providerCredentialId: promoted.providerCredentialId }],
   })
+  // A partial result means the predecessor key may still be live at the provider; the caller retries.
+  if (completion.kind !== 'completed' && completion.kind !== 'replayed') return { kind: 'error', code: 'issuance_unavailable', retryable: true }
   return issued
 }
