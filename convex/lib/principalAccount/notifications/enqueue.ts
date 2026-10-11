@@ -20,16 +20,16 @@ const PHASE2_KINDS = new Set<Doc<'notificationDeliveries'>['eventKind']>([
   'funding_receipt', 'funding_failed', 'task_refunded', 'task_stuck', 'credit_exhausted',
   'key_issued', 'key_revoked', 'account_paused', 'account_restored', 'role_changed',
   'team_membership_changed', 'email_changed', 'data_request_received',
-  'deletion_requested', 'deletion_completed', 'auto_topup_failed', 'card_changed', 'deletion_cancelled', 'deletion_final_reminder',
+  'deletion_requested', 'deletion_completed', 'auto_topup_failed', 'card_changed', 'deletion_final_reminder',
 ])
 const phase2Enabled = () => process.env.AE_EMAIL_PHASE2_ENABLED?.trim() === 'true'
 
 /** Account notices wired by T13. Each has its own off switch, AE_EMAIL_KIND_<KIND>_ENABLED, which must be exactly 'true' and is off by default. */
 export const ACCOUNT_STATE_KINDS = new Set<Doc<'notificationDeliveries'>['eventKind']>([
   'funding_failed', 'task_stuck', 'credit_exhausted', 'key_issued', 'key_revoked',
-  'account_paused', 'account_restored', 'role_changed', 'email_changed', 'data_request_received',
+  'account_paused', 'account_restored', 'role_changed', 'team_membership_changed', 'email_changed', 'data_request_received',
   'deletion_requested', 'deletion_completed', 'first_call_done', 'week_one_wrap', 'auto_topup_failed',
-  'card_changed', 'first_call_failed', 'deletion_cancelled', 'deletion_final_reminder',
+  'card_changed', 'first_call_failed', 'deletion_final_reminder',
 ])
 const kindEnabled = (kind: Doc<'notificationDeliveries'>['eventKind']) =>
   !ACCOUNT_STATE_KINDS.has(kind) || process.env[`AE_EMAIL_KIND_${kind.toUpperCase()}_ENABLED`]?.trim() === 'true'
@@ -41,7 +41,7 @@ const DAY_MS = 24 * 60 * 60 * 1000
 export const dayBucketSourceRef = (accountRef: string, now: number) => `${accountRef}:${Math.floor(now / DAY_MS)}`
 
 /** Phase 3 lifecycle and provider notices stay dark until AE_EMAIL_PHASE3_ENABLED=true. Payouts, the weekly summary and exception alerts are not wired yet. */
-export const PHASE3_KINDS = new Set<Doc<'notificationDeliveries'>['eventKind']>(['welcome', 'provider_live', 'provider_offboarded', 'first_call_done', 'week_one_wrap', 'first_call_failed'])
+export const PHASE3_KINDS = new Set<Doc<'notificationDeliveries'>['eventKind']>(['welcome', 'provider_live', 'provider_offboarded', 'provider_offboarding_blocked', 'first_call_done', 'week_one_wrap', 'first_call_failed'])
 const phase3Enabled = () => process.env.AE_EMAIL_PHASE3_ENABLED?.trim() === 'true'
 
 /** The owner of an active account, or null. Account and money mail go to the owner. */

@@ -390,6 +390,9 @@ describe('Stripe money provider adapter', () => {
     const failed = signedEvent('checkout.session.async_payment_failed', { payment_status: 'unpaid' })
     expect(mapStripeMoneyWebhookEvent({ event: new Stripe(config.secretKey).webhooks.constructEvent(failed.rawBody, failed.signature, config.webhookSecret!), config, rawBody: failed.rawBody })).toMatchObject({ kind: 'checkout', status: 'failed', observedAt: 1_700_000_000_000 })
 
+    const expired = signedEvent('checkout.session.expired', { status: 'expired', payment_status: 'unpaid' })
+    expect(mapStripeMoneyWebhookEvent({ event: new Stripe(config.secretKey).webhooks.constructEvent(expired.rawBody, expired.signature, config.webhookSecret!), config, rawBody: expired.rawBody })).toMatchObject({ kind: 'checkout', status: 'failed', eventType: 'checkout.session.expired' })
+
     const v2AccountPayload = JSON.stringify({
       id: 'evt_v2_account_updated',
       object: 'v2.core.event',

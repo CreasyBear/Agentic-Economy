@@ -36,6 +36,7 @@ const INPUTS: Array<[string, EmailInput]> = [
   ['data request', { eventKind: 'data_request_received', props: { siteUrl: SITE } }],
   ['welcome', { eventKind: 'welcome', props: { siteUrl: SITE } }],
   ['provider live', { eventKind: 'provider_live', props: { siteUrl: SITE, toolRef: 'tool:abc123' } }],
+  ['provider offboarding blocked', { eventKind: 'provider_offboarding_blocked', props: { siteUrl: SITE } }],
   ['provider offboarded', { eventKind: 'provider_offboarded', props: { siteUrl: SITE } }],
 ]
 

@@ -72,6 +72,7 @@ export const checkoutEventArg = v.object({
     v.literal('checkout.session.completed'),
     v.literal('checkout.session.async_payment_succeeded'),
     v.literal('checkout.session.async_payment_failed'),
+    v.literal('checkout.session.expired'),
   ),
   externalRef: identifier,
   sessionId: identifier,

@@ -8,6 +8,7 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { isRecord } from '@/modules/common/is-record'
 import { recordInvocationRefused, recordMarketEvidenceFact } from '../../../marketEvidence'
 import { emitJourneyEvent } from '../../journey/events'
+import { enqueueAccountNotice } from '../../principalAccount/notifications/enqueue'
 import { materializePurchaseResolutionRecord } from './purchaseResolutionMaterialize'
 import { assertCallResultJson, canonicalCommandReadbackMatches, commandMatchesDispatch, persistedDispatchMatches, type OpenDispatchValue } from './callIdentity'
 import type { CallDispatchMutationResult, CallDispatchProjectionShape } from './contracts'
@@ -62,17 +63,43 @@ async function terminalFinalizationResult(
 
 const WEEK_MS = 7 * 24 * 3600_000
 
-/** first_call fires on the first completed Call. activated fires on the first completed Call that
- * carries a receipt. retained_w1 is week-1 retention: a receipted Call 7 to 14 days after activation.
+type FundingSource = 'real' | 'trial' | 'sandbox'
+
+/** Production Calls covered wholly by promotional (trial) credit are 'trial'; any purchased units make it 'real'. */
+export function callFundingSource(row: Pick<CallRow, 'environment' | 'promotionalCreditAllocation'>): FundingSource {
+  if (row.environment !== 'production') return 'sandbox'
+  const allocation = row.promotionalCreditAllocation
+  return allocation !== undefined && BigInt(allocation.purchasedUnits) === 0n ? 'trial' : 'real'
+}
+
+/** The first refused Call after agent_connected and before any first_call sends one first_call_failed notice per account. */
+async function noticeFirstCallFailed(ctx: MutationCtx, accountRef: string, callRef: string): Promise<void> {
+  const event = (name: 'agent_connected' | 'first_call') => ctx.db.query('journeyEvents')
+    .withIndex('by_accountRef_and_name', q => q.eq('accountRef', accountRef).eq('name', name)).first()
+  if (await event('agent_connected') === null || await event('first_call') !== null) return
+  const prior = await ctx.db.query('notificationDeliveries')
+    .withIndex('by_accountRef_and_createdAt', q => q.eq('accountRef', accountRef))
+    .filter(q => q.eq(q.field('eventKind'), 'first_call_failed')).first()
+  if (prior === null) await enqueueAccountNotice(ctx, { eventKind: 'first_call_failed', accountRef, sourceEventRef: callRef })
+}
+
+/** first_call fires on the first completed Call and carries its funding_source. activated fires on the first
+ * completed Call with a receipt paid from real credit (trial and sandbox Calls never activate). retained_w1 is week-1 retention: a receipted Call 7 to 14 days after activation.
  * Each is idempotent per account. */
 export async function journeyForFinalization(
   ctx: MutationCtx,
-  row: Pick<CallRow, 'callRef' | 'ownerId'>,
+  row: Pick<CallRow, 'callRef' | 'ownerId' | 'environment' | 'promotionalCreditAllocation'>,
   projection: Pick<CallDispatchProjectionShape, 'state' | 'result'>,
   finalizedAt: number,
 ): Promise<void> {
+  if (projection.state === 'refused') {
+    await noticeFirstCallFailed(ctx, row.ownerId, row.callRef)
+    return
+  }
   if (projection.state !== 'completed') return
-  await emitJourneyEvent(ctx, row.ownerId, 'first_call')
+  const fundingSource = callFundingSource(row)
+  const first = await emitJourneyEvent(ctx, row.ownerId, 'first_call', { props: { funding_source: fundingSource } })
+  if (first) await enqueueAccountNotice(ctx, { eventKind: 'first_call_done', accountRef: row.ownerId, sourceEventRef: row.callRef })
   const result = projection.result
   const receipt = result !== undefined && 'receipt' in result ? result.receipt : undefined
   if (receipt === undefined) return
@@ -80,7 +107,9 @@ export async function journeyForFinalization(
     .withIndex('by_eventKey', q => q.eq('eventKey', `${row.ownerId}:activated`))
     .unique()
   if (activated === null) {
-    await emitJourneyEvent(ctx, row.ownerId, 'activated')
+    if (fundingSource === 'real') await emitJourneyEvent(ctx, row.ownerId, 'activated', {
+      props: { funding_source: fundingSource },
+    })
     return
   }
   const sinceActivated = finalizedAt - activated.createdAt

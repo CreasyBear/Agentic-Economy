@@ -23,7 +23,8 @@ import { refundMaterial } from "./stripe-refund-evidence";
 type CheckoutWebhookEventType =
   | "checkout.session.completed"
   | "checkout.session.async_payment_succeeded"
-  | "checkout.session.async_payment_failed";
+  | "checkout.session.async_payment_failed"
+  | "checkout.session.expired";
 
 type StripeV2AccountEventType = StripeAccountUpdatedWebhookEvent["eventType"];
 type StripeV2AccountEventNotification = Extract<
@@ -54,7 +55,8 @@ export function mapStripeMoneyWebhookEvent(
     case "checkout.session.completed":
     case "checkout.session.async_payment_succeeded":
     case "checkout.session.async_payment_failed":
-      return mapCheckoutSessionWebhookEvent(event, input.config);
+    case "checkout.session.expired":
+      return mapCheckoutSessionWebhookEvent(event, input.config, event.data.object);
     case "refund.created":
     case "refund.updated":
     case "refund.failed":
@@ -153,8 +155,8 @@ export async function verifyStripeMoneyWebhook(
 function mapCheckoutSessionWebhookEvent(
   event: Extract<Stripe.Event, { type: CheckoutWebhookEventType }>,
   config: StripeMoneyProviderConfig,
+  session: Stripe.Checkout.Session,
 ): StripeMoneyWebhookEvent | MoneyRefusal {
-  const session = event.data.object;
   const material = readCheckoutSessionMaterial(session, config);
   if (isMoneyRefusal(material)) return material;
   const commandRef =
@@ -205,6 +207,7 @@ function checkoutWebhookStatus(
 ): "failed" | "processing" | "paid" {
   switch (eventType) {
     case "checkout.session.async_payment_failed":
+    case "checkout.session.expired":
       return "failed";
     case "checkout.session.completed":
       return session.payment_status !== "paid" ? "processing" : "paid";

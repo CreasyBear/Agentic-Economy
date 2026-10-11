@@ -165,7 +165,7 @@ describe('journey events (convex)', () => {
 
   it('emits one activated for a completed receipted call finalized twice', async () => {
     const backend = convexTestWithWorkers()
-    const row = { callRef: 'call:a', ownerId: ACCOUNT }
+    const row = { callRef: 'call:a', ownerId: ACCOUNT, environment: 'production' as const }
     const projection = { state: 'completed', result: { kind: 'completed', receipt: { commercialModel: 'account_aud' } } } as never
     await backend.run(ctx => journeyForFinalization(ctx, row, projection, Date.now()))
     await backend.run(ctx => journeyForFinalization(ctx, row, projection, Date.now()))
@@ -177,7 +177,7 @@ describe('journey events (convex)', () => {
 
   it('emits first_call only for a completed call, receipted or not', async () => {
     const backend = convexTestWithWorkers()
-    const row = { callRef: 'call:f', ownerId: ACCOUNT }
+    const row = { callRef: 'call:f', ownerId: ACCOUNT, environment: 'production' as const }
     await backend.run(ctx => journeyForFinalization(ctx, row, { state: 'refused' } as never, Date.now()))
     expect(await backend.run(ctx => ctx.db.query('journeyEvents').collect())).toHaveLength(0)
     await backend.run(ctx => journeyForFinalization(ctx, row, { state: 'completed', result: { kind: 'completed' } } as never, Date.now()))
@@ -210,8 +210,8 @@ describe('journey events (convex)', () => {
       })
     })
     const projection = { state: 'completed', result: { kind: 'completed', receipt: { commercialModel: 'account_aud' } } } as never
-    await backend.run(ctx => journeyForFinalization(ctx, { callRef: 'call:b', ownerId: ACCOUNT }, projection, Date.now()))
-    await backend.run(ctx => journeyForFinalization(ctx, { callRef: 'call:b', ownerId: ACCOUNT }, projection, Date.now()))
+    await backend.run(ctx => journeyForFinalization(ctx, { callRef: 'call:b', ownerId: ACCOUNT, environment: 'production' as const }, projection, Date.now()))
+    await backend.run(ctx => journeyForFinalization(ctx, { callRef: 'call:b', ownerId: ACCOUNT, environment: 'production' as const }, projection, Date.now()))
     const rows = await backend.run(ctx => ctx.db.query('journeyEvents').collect())
     expect(rows.filter(event => event.name === 'retained_w1')).toHaveLength(expected)
     expect(rows.filter(event => event.name === 'activated')).toHaveLength(1)

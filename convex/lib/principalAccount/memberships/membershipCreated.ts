@@ -3,6 +3,7 @@ import { generateMembershipRef } from '../../../../src/modules/principal-account
 import { CLERK_USER_PROVIDER_NAMESPACE } from '../interactiveAuthority/constants'
 import { RECORD_OPERATION, RECORD_SCOPE, auditEventIdFromDeliveryRefHash, recordCommandDigest, resolveOrgBindings, validateRecordCommand, verifyRecordServiceAuth } from './auth'
 import { recordOrganizationMembershipCreatedAudit } from './audit'
+import { enqueueAccountNotice } from '../notifications/enqueue'
 import { CLERK_ORG_MEMBERSHIP_ACTOR_REF, WorkspaceMembershipError, type RecordArgs, type RecordResult } from './contracts'
 
 export const recordOrganizationMembershipCreatedForServerHandler = async (ctx: MutationCtx, args: RecordArgs): Promise<RecordResult> => {
@@ -127,6 +128,10 @@ export const recordOrganizationMembershipCreatedForServerHandler = async (ctx: M
       observedAt: command.observedAt,
       commandDigest,
       createdAt: now,
+    })
+    await enqueueAccountNotice(ctx, {
+      eventKind: 'team_membership_changed', accountRef: account.accountRef,
+      sourceEventRef: command.deliveryRefHash,
     })
     return { kind: 'accepted', status: 'applied' }
 }

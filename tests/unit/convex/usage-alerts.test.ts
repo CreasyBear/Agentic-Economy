@@ -1,7 +1,7 @@
 import {afterEach,describe,expect,it,vi} from 'vitest'
 import {api,internal,components} from '../../../convex/_generated/api'
 import {convexTestWithWorkers,publishedBusinessOwner} from '../../helpers/convex-fixtures'
-import {enqueueReportUsageAlerts,enqueueDocumentUsageAlert} from '../../../convex/lib/principalAccount/notifications/usageAlerts'
+import {enqueueReportUsageAlerts,enqueueDocumentUsageAlert,enqueueMoneyAlertEvaluation} from '../../../convex/lib/principalAccount/notifications/usageAlerts'
 import {emptyUsageReportSummary} from '@/lib/export/usage-report-summary'
 import {canonicalDigest} from '@/modules/common/canonical-digest'
 const now=Date.UTC(2026,9,4,12),digest=canonicalDigest('source'),policy={enabled:true,failurePercent:20,minimumCalls:20,spendWarningPercent:80}
@@ -40,6 +40,12 @@ describe('owner policy-bound durable usage alerts',()=>{
     await f.backend.mutation(internal.notifications.completeDelivery,{workId:row.workId as never,context:{deliveryId:row._id},result:{kind:'success',returnValue:{outcome:'sent',vendorMessageId:'fixture-only'}}})
     await f.backend.mutation(internal.notifications.completeDelivery,{workId:row.workId as never,context:{deliveryId:row._id},result:{kind:'failed',error:'late failure'}})
     expect((await rows(f))[0]).toMatchObject({state:'sent',vendorMessageId:'fixture-only'})
+  })
+  it('re-evaluation after a funding top-up is consent-gated and a repeated low-credit observation stays deduplicated',async()=>{
+    const f=await fixture();await f.backend.run(ctx=>enqueueMoneyAlertEvaluation(ctx,f.owner.canonicalAccountRef));expect(await rows(f)).toHaveLength(0)
+    await f.configure();await f.backend.run(ctx=>enqueueMoneyAlertEvaluation(ctx,f.owner.canonicalAccountRef))
+    const args={accountRef:f.owner.canonicalAccountRef,observedAt:now,month:'2026-10',availableCreditUnits:'100'}
+    await f.backend.mutation(internal.notifications.enqueueMoneyUsageAlerts,args);await f.backend.mutation(internal.notifications.enqueueMoneyUsageAlerts,args);expect(await rows(f)).toHaveLength(1)
   })
   it('keeps idempotent policy history immutable even after a later change and rejects changed intent',async()=>{
     const f=await fixture();await f.configure();await f.configure(false,1)

@@ -1,5 +1,8 @@
-import { internalQuery, mutation, query } from './_generated/server'
+import { v } from 'convex/values'
+import { internalMutation, internalQuery, mutation, query } from './_generated/server'
 import {
+  deletionNoticeArgs,
+  sendDeletionNoticeHandler,
   retirePersonalAccountForServerArgs,
   retirePersonalAccountForServerHandler,
   retirePersonalAccountForServerResult,
@@ -19,6 +22,12 @@ export const retirePersonalAccountForServer = mutation({
   args: retirePersonalAccountForServerArgs.fields,
   returns: retirePersonalAccountForServerResult,
   handler: retirePersonalAccountForServerHandler,
+})
+
+export const sendDeletionNotice = internalMutation({
+  args: deletionNoticeArgs,
+  returns: v.null(),
+  handler: sendDeletionNoticeHandler,
 })
 
 export const readDeletionEligibility = internalQuery({

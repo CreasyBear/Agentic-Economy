@@ -5,6 +5,7 @@ import { emitFundingJourneyEvent } from '../../journey/events'
 import type { MutationCtx } from '../../../_generated/server'
 import { internal } from '../../../_generated/api'
 import { enqueueAccountNotice } from '../../principalAccount/notifications/enqueue'
+import { enqueueMoneyAlertEvaluation } from '../../principalAccount/notifications/usageAlerts'
 import {
   AUD_EXPONENT,
   compareExactAmounts,
@@ -186,6 +187,7 @@ export async function prepareFundingSettlementEvent(
         updatedAt: event.observedAt,
       })
     } else {
+      const expired = event.eventType === 'checkout.session.expired'
       recordFundingTerminal(command.state, 'failed')
       await ctx.db.patch(command._id, {
         state: 'failed',
@@ -196,10 +198,11 @@ export async function prepareFundingSettlementEvent(
         ...(args.readback.paymentStatus === undefined ? {} : {
           providerPaymentStatus: args.readback.paymentStatus,
         }),
-        terminalReason: 'async_payment_failed',
+        terminalReason: expired ? 'expired' : 'async_payment_failed',
         updatedAt: event.observedAt,
       })
-      await enqueueAccountNotice(ctx, {
+      // Expiry is not a failure the owner needs mail about.
+      if (!expired) await enqueueAccountNotice(ctx, {
         eventKind: 'funding_failed', accountRef: command.accountRef,
         sourceEventRef: command.commandRef, recipientPrincipalRef: command.actorPrincipalRef,
       })
@@ -294,7 +297,9 @@ export async function finalizeFundingEventHandler(
     appliedRef: args.formanceTransactionRef,
     appliedAt: args.event.observedAt,
   })
-  await emitFundingJourneyEvent(ctx, command.accountRef, command.commandRef)
+  await emitFundingJourneyEvent(ctx, command.accountRef, command.commandRef, 'stripe')
+  // Re-evaluate balance after top-up; consent gate and sourceEventRef dedupe live in usageAlerts.
+  await enqueueMoneyAlertEvaluation(ctx, command.accountRef)
   return {
     kind: 'accepted',
     status: 'applied',

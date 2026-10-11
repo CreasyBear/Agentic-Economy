@@ -42,3 +42,12 @@ describe('format-time', () => {
     expect(formatDateInputValue(Date.UTC(2026, 6, 1, 20), 'Australia/Perth')).toBe('2026-07-02')
   })
 })
+
+describe('monthBoundsInZone', () => {
+  it('uses Perth month boundaries, not UTC', async () => {
+    const { monthBoundsInZone } = await import('@/lib/ui/format-time')
+    // 2026-06-30T17:00Z is 1 Jul 01:00 in Perth (UTC+8)
+    expect(monthBoundsInZone(Date.UTC(2026, 5, 30, 17), 'Australia/Perth')).toEqual({ month: '2026-07', startAt: Date.UTC(2026, 5, 30, 16), endAt: Date.UTC(2026, 6, 31, 16) })
+    expect(monthBoundsInZone(Date.UTC(2026, 11, 15), 'Australia/Perth').endAt).toBe(Date.UTC(2026, 11, 31, 16))
+  })
+})

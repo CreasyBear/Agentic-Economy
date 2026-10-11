@@ -779,6 +779,18 @@ describe('direct Quote handlers', () => {
       retryable: true,
     })
 
+    const shortRefusal = await backend.mutation(internal.capabilityQuotes.issueQuote, {
+      operationKey: `test:quote:short:${suffix}`,
+      correlationId: `test:quote:short:${suffix}`,
+      principal: agent.principal,
+      toolRef: fixture.toolRef,
+      input,
+      formance: formanceSnapshot(subjects, { accountAvailableUnits: '1' }),
+    })
+    expect(shortRefusal).toMatchObject({ kind: 'refused', code: 'insufficient_balance' })
+    const exhausted = await backend.run((ctx) => ctx.db.query('notificationDeliveries').collect())
+    expect(exhausted.filter((row) => row.eventKind === 'credit_exhausted')).toHaveLength(1)
+
     const fundingRefusal = await backend.mutation(internal.capabilityQuotes.issueQuote, {
       operationKey: `test:quote:funding:${suffix}`,
       correlationId: `test:quote:funding:${suffix}`,

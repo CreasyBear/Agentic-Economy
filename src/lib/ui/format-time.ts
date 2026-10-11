@@ -122,3 +122,23 @@ export function formatRelativeTime(value: TimeValue, now: number = Date.now()): 
   }
   return relativeFormatter.format(Math.round(diffMs / 60_000), 'minute')
 }
+
+/** Business locale for month boundaries (caps, alerts) until Joel says otherwise. */
+export const BUSINESS_TIME_ZONE = 'Australia/Perth'
+
+/** Calendar month containing `value` in `timeZone`: "2026-07" plus its start and end instants. */
+export function monthBoundsInZone(value: TimeValue, timeZone: string): { month: string; startAt: number; endAt: number } {
+  const month = formatDateInputValue(value, timeZone).slice(0, 7)
+  const localMidnight = (key: string) => {
+    const [year, monthIndex] = key.split('-').map(Number) as [number, number]
+    const wall = Date.UTC(year, monthIndex - 1, 1)
+    let instant = wall
+    for (let pass = 0; pass < 2; pass += 1) {
+      instant = wall - (Date.parse(`${formatDateInputValue(instant, timeZone)}T00:00:00Z`) + msSinceMidnight(instant, timeZone) - instant)
+    }
+    return instant
+  }
+  const [year, monthIndex] = month.split('-').map(Number) as [number, number]
+  const next = monthIndex === 12 ? `${year + 1}-01` : `${year}-${String(monthIndex + 1).padStart(2, '0')}`
+  return { month, startAt: localMidnight(month), endAt: localMidnight(next) }
+}
