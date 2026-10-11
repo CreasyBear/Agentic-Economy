@@ -26,7 +26,7 @@ describe('provider offboarding verification failure notice', () => {
     await backend.run((ctx) => verifyCompletionHandler(ctx, { caseRef: 'provider-offboarding:notice' }))
     await backend.run((ctx) => verifyCompletionHandler(ctx, { caseRef: 'provider-offboarding:notice' }))
     const rows = await backend.run((ctx) => ctx.db.query('notificationDeliveries').collect())
-    expect(rows).toEqual([expect.objectContaining({ eventKind: 'provider_offboarded', sourceEventRef: 'provider-offboarding:notice:failed:retention_policy_unbound' })])
+    expect(rows).toEqual([expect.objectContaining({ eventKind: 'provider_offboarding_blocked', sourceEventRef: 'provider-offboarding:notice:failed:retention_policy_unbound' })])
   })
 
   it('stays suppressed while the phase 3 gate is off', async () => {

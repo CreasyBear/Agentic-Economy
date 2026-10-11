@@ -103,7 +103,7 @@ async function blockAndNotify(ctx: MutationCtx, row: Parameters<typeof block>[1]
   const owner = business === null ? null : await activeOwnerPrincipalRef(ctx.db, business.owningAccountRef)
   if (business !== null && owner !== null) {
     await enqueueEmail(ctx, {
-      eventKind: 'provider_offboarded', stream: 'transactional', recipientPrincipalRef: owner,
+      eventKind: 'provider_offboarding_blocked', stream: 'transactional', recipientPrincipalRef: owner,
       accountRef: business.owningAccountRef, sourceEventRef: `${row.caseRef}:failed:${blocker}`,
     })
   }

@@ -63,6 +63,7 @@ function build(input: EmailInput): { element: ReactElement; subject: string } {
     case 'welcome':
     case 'provider_live':
     case 'provider_offboarded':
+    case 'provider_offboarding_blocked':
     case 'deletion_requested':
     case 'deletion_completed':
     case 'first_call_done':

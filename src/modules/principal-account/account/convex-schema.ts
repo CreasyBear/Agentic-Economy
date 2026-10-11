@@ -149,6 +149,7 @@ export const notificationEventKindValue = v.union(
   v.literal('provider_payout_failed'),
   v.literal('provider_weekly'),
   v.literal('provider_offboarded'),
+  v.literal('provider_offboarding_blocked'),
   v.literal('deletion_requested'),
   v.literal('deletion_completed'),
   v.literal('first_call_done'),

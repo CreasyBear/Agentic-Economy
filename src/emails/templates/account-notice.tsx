@@ -10,7 +10,7 @@ export type NoticeKind =
   | 'funding_failed' | 'task_refunded' | 'task_stuck' | 'credit_exhausted'
   | 'key_issued' | 'key_revoked' | 'account_paused' | 'account_restored'
   | 'role_changed' | 'team_membership_changed' | 'email_changed' | 'data_request_received'
-  | 'welcome' | 'provider_live' | 'provider_offboarded'
+  | 'welcome' | 'provider_live' | 'provider_offboarded' | 'provider_offboarding_blocked'
   | 'deletion_requested' | 'deletion_completed' | 'first_call_done' | 'week_one_wrap' | 'auto_topup_failed'
   | 'card_changed' | 'first_call_failed' | 'deletion_final_reminder'
 
@@ -123,6 +123,12 @@ const NOTICES: Record<NoticeKind, Notice> = {
     preheader: () => 'Your final statement is ready.',
     body: () => 'Your provider account is closed and your services are no longer listed. Your final statement is available in receipts.',
     label: 'View details', path: '/owner/settings/receipts', campaign: 'provider_offboarded',
+  },
+  provider_offboarding_blocked: {
+    subject: () => "Closing your aecon provider account is on hold",
+    preheader: () => 'Your services stay as they are until it is resolved.',
+    body: () => 'We could not finish closing your provider account because a check did not pass. Nothing has been closed yet. Contact support@aecon.ai and we will help clear it.',
+    label: 'Contact support', path: '/owner/settings/account/security', campaign: 'provider_offboarding_blocked',
   },
   data_request_received: {
     subject: () => 'Your aecon data export was downloaded',

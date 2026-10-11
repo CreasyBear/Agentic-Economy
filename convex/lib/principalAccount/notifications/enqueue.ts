@@ -41,7 +41,7 @@ const DAY_MS = 24 * 60 * 60 * 1000
 export const dayBucketSourceRef = (accountRef: string, now: number) => `${accountRef}:${Math.floor(now / DAY_MS)}`
 
 /** Phase 3 lifecycle and provider notices stay dark until AE_EMAIL_PHASE3_ENABLED=true. Payouts, the weekly summary and exception alerts are not wired yet. */
-export const PHASE3_KINDS = new Set<Doc<'notificationDeliveries'>['eventKind']>(['welcome', 'provider_live', 'provider_offboarded', 'first_call_done', 'week_one_wrap', 'first_call_failed'])
+export const PHASE3_KINDS = new Set<Doc<'notificationDeliveries'>['eventKind']>(['welcome', 'provider_live', 'provider_offboarded', 'provider_offboarding_blocked', 'first_call_done', 'week_one_wrap', 'first_call_failed'])
 const phase3Enabled = () => process.env.AE_EMAIL_PHASE3_ENABLED?.trim() === 'true'
 
 /** The owner of an active account, or null. Account and money mail go to the owner. */
