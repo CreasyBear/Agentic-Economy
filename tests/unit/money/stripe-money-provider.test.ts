@@ -390,6 +390,21 @@ describe('Stripe money provider adapter', () => {
     const failed = signedEvent('checkout.session.async_payment_failed', { payment_status: 'unpaid' })
     expect(mapStripeMoneyWebhookEvent({ event: new Stripe(config.secretKey).webhooks.constructEvent(failed.rawBody, failed.signature, config.webhookSecret!), config, rawBody: failed.rawBody })).toMatchObject({ kind: 'checkout', status: 'failed', observedAt: 1_700_000_000_000 })
 
+    const piPayload = JSON.stringify({
+      id: 'evt_pi_failed', object: 'event', api_version: Stripe.API_VERSION, created: 1_700_000_000, livemode: false,
+      pending_webhooks: 1, request: null, type: 'payment_intent.payment_failed',
+      data: { object: { id: 'pi_test_1', object: 'payment_intent' } },
+    })
+    const piSignature = new Stripe(config.secretKey).webhooks.generateTestHeaderString({ payload: piPayload, secret: config.webhookSecret!, timestamp: Math.floor(Date.now() / 1000) })
+    const list = vi.fn().mockResolvedValue({ data: [hostedCheckoutSession({ payment_status: 'unpaid' })] })
+    const piClient = { webhooks: new Stripe(config.secretKey).webhooks, checkout: { sessions: { list } } } as unknown as Stripe
+    await expect(verifyStripeMoneyWebhook({ rawBody: piPayload, signature: piSignature, config, client: piClient })).resolves.toMatchObject({
+      kind: 'checkout', status: 'failed', eventType: 'payment_intent.payment_failed', commandRef: request.commandRef,
+    })
+    expect(list).toHaveBeenCalledWith({ payment_intent: 'pi_test_1', limit: 1 })
+    list.mockResolvedValue({ data: [] })
+    await expect(verifyStripeMoneyWebhook({ rawBody: piPayload, signature: piSignature, config, client: piClient })).resolves.toMatchObject({ kind: 'refused', code: 'payment_binding_invalid' })
+
     const v2AccountPayload = JSON.stringify({
       id: 'evt_v2_account_updated',
       object: 'v2.core.event',

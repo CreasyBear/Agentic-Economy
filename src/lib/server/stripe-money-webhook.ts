@@ -23,7 +23,8 @@ import { refundMaterial } from "./stripe-refund-evidence";
 type CheckoutWebhookEventType =
   | "checkout.session.completed"
   | "checkout.session.async_payment_succeeded"
-  | "checkout.session.async_payment_failed";
+  | "checkout.session.async_payment_failed"
+  | "payment_intent.payment_failed";
 
 type StripeV2AccountEventType = StripeAccountUpdatedWebhookEvent["eventType"];
 type StripeV2AccountEventNotification = Extract<
@@ -54,7 +55,7 @@ export function mapStripeMoneyWebhookEvent(
     case "checkout.session.completed":
     case "checkout.session.async_payment_succeeded":
     case "checkout.session.async_payment_failed":
-      return mapCheckoutSessionWebhookEvent(event, input.config);
+      return mapCheckoutSessionWebhookEvent(event, input.config, event.data.object);
     case "refund.created":
     case "refund.updated":
     case "refund.failed":
@@ -137,6 +138,16 @@ export async function verifyStripeMoneyWebhook(
       input.signature,
       context.config.webhookSecret,
     );
+    if (event.type === "payment_intent.payment_failed") {
+      // The pipeline binds by checkout session, so resolve the session this intent paid for.
+      const sessions = await context.client.checkout.sessions.list({
+        payment_intent: event.data.object.id,
+        limit: 1,
+      });
+      const session = sessions.data[0];
+      if (session === undefined) return refusal("payment_binding_invalid", false);
+      return mapCheckoutSessionWebhookEvent(event, context.config, session);
+    }
     return mapStripeMoneyWebhookEvent({
       event,
       config: context.config,
@@ -153,8 +164,8 @@ export async function verifyStripeMoneyWebhook(
 function mapCheckoutSessionWebhookEvent(
   event: Extract<Stripe.Event, { type: CheckoutWebhookEventType }>,
   config: StripeMoneyProviderConfig,
+  session: Stripe.Checkout.Session,
 ): StripeMoneyWebhookEvent | MoneyRefusal {
-  const session = event.data.object;
   const material = readCheckoutSessionMaterial(session, config);
   if (isMoneyRefusal(material)) return material;
   const commandRef =
@@ -205,6 +216,7 @@ function checkoutWebhookStatus(
 ): "failed" | "processing" | "paid" {
   switch (eventType) {
     case "checkout.session.async_payment_failed":
+    case "payment_intent.payment_failed":
       return "failed";
     case "checkout.session.completed":
       return session.payment_status !== "paid" ? "processing" : "paid";
