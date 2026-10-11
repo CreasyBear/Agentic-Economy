@@ -9,7 +9,6 @@ import { readServerReadiness } from '@/lib/server/readiness'
 import { readRequestCorrelationId } from '@/lib/server/request-correlation'
 import { formatTimestamp } from '@/lib/ui/format-time'
 import { buildSiteDiscoveryManifest, SiteDiscoveryManifestSchemaVersion } from '@/modules/discovery/public'
-import { readPublicAvailabilityThroughSource } from '@/modules/money/server'
 import { readCatalogueFreshness } from '@/modules/market/x402-directory-index.server'
 
 /**
@@ -101,8 +100,8 @@ async function probeCatalogue(now: number): Promise<ProbeAssessment> {
 
 /** A closed paid-calls switch is expected pre-launch, so both values report operational. */
 async function probePayments(): Promise<ProbeAssessment> {
-  const { paidCalls } = await readPublicAvailabilityThroughSource()
-  return { state: 'operational', detail: availabilityStatement(paidCalls) }
+  const { commercial } = await readServerReadiness()
+  return { state: 'operational', detail: availabilityStatement(commercial.paidCalls) }
 }
 
 function unreachableDetail(id: ProbeId): string {

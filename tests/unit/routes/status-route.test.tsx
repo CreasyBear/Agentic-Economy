@@ -108,8 +108,8 @@ describe('readStatusProbesServer', () => {
 
   it('reports every probe operational when every reader is healthy', async () => {
     const result = await readStatusProbesServer()
-    expect(result.checks).toHaveLength(5)
-    expect(result.checks.map((check) => check.id)).toEqual(['site', 'market', 'discovery', 'release', 'catalogue'])
+    expect(result.checks).toHaveLength(6)
+    expect(result.checks.map((check) => check.id)).toEqual(['site', 'market', 'discovery', 'release', 'catalogue', 'payments'])
     for (const check of result.checks) {
       expect(check.state).toBe('operational')
       expect(check.requestRef).toBeUndefined()
@@ -185,12 +185,13 @@ describe('/status route', () => {
         { id: 'discovery', state: 'operational', detail: 'Agents can discover the current AE interfaces.' },
         { id: 'release', state: 'operational', detail: 'Deployment identity is available.' },
         { id: 'catalogue', state: 'operational', detail: 'The Tool catalogue was refreshed within the last 36 hours.' },
+        { id: 'payments', state: 'operational', detail: 'Paid calls are not open yet.' },
       ],
     })
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('All systems operational')
     expect(screen.getAllByText(/^Last checked /).length).toBeGreaterThan(0)
-    expect(screen.getAllByText('Operational')).toHaveLength(5)
-    expect(screen.getByRole('status').textContent).toBe(`Status checked. All 5 systems are operational. Last checked ${checkedAt}.`)
+    expect(screen.getAllByText('Operational')).toHaveLength(6)
+    expect(screen.getByRole('status').textContent).toBe(`Status checked. All 6 systems are operational. Last checked ${checkedAt}.`)
     expect(screen.getByRole('button', { name: 'Refresh status' })).toBeTruthy()
   })
 
@@ -203,12 +204,13 @@ describe('/status route', () => {
         { id: 'discovery', state: 'operational', detail: 'Agents can discover the current AE interfaces.' },
         { id: 'release', state: 'operational', detail: 'Deployment identity is available.' },
         { id: 'catalogue', state: 'operational', detail: 'The Tool catalogue was refreshed within the last 36 hours.' },
+        { id: 'payments', state: 'operational', detail: 'Paid calls are not open yet.' },
       ],
     })
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Some systems are degraded.')
     expect(screen.getByText('Degraded')).toBeTruthy()
     expect(screen.getByText(
-      `Status checked. 1 of 5 systems needs attention: Tool API. Last checked ${checkedAt}.`,
+      `Status checked. 1 of 6 systems needs attention: Tool API. Last checked ${checkedAt}.`,
     ).getAttribute('role')).toBe('status')
     expect(screen.getByText('Request reference').textContent).toBe('Request reference')
     expect(screen.getByText('corr_status_01').tagName).toBe('CODE')
@@ -225,6 +227,7 @@ describe('/status route', () => {
         { id: 'discovery', state: 'degraded', detail: 'Machine discovery could not be reached. Agent setup may fail.', requestRef: 'corr_status_02' },
         { id: 'release', state: 'operational', detail: 'Deployment identity is available.' },
         { id: 'catalogue', state: 'operational', detail: 'The Tool catalogue was refreshed within the last 36 hours.' },
+        { id: 'payments', state: 'operational', detail: 'Paid calls are not open yet.' },
       ],
     })
     const region = screen.getByRole('region', { name: 'Retry after the affected system recovers' })
@@ -240,6 +243,7 @@ describe('/status route', () => {
         { id: 'discovery', state: 'operational', detail: 'Agents can discover the current AE interfaces.' },
         { id: 'release', state: 'operational', detail: 'Deployment identity is available.' },
         { id: 'catalogue', state: 'operational', detail: 'The Tool catalogue was refreshed within the last 36 hours.' },
+        { id: 'payments', state: 'operational', detail: 'Paid calls are not open yet.' },
       ],
     })
     const writeText = vi.fn().mockResolvedValue(undefined)
@@ -259,6 +263,7 @@ describe('/status route', () => {
         { id: 'discovery', state: 'operational', detail: 'Agents can discover the current AE interfaces.' },
         { id: 'release', state: 'operational', detail: 'Deployment identity is available.' },
         { id: 'catalogue', state: 'operational', detail: 'The Tool catalogue was refreshed within the last 36 hours.' },
+        { id: 'payments', state: 'operational', detail: 'Paid calls are not open yet.' },
       ],
     })
 
