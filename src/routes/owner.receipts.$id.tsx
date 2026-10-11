@@ -10,14 +10,6 @@ const documentRefPattern = /^[\w.:-]{1,500}$/u
 
 /** The link in funding emails. The ledger document stays the source: this route only resolves its stored render, so the link never expires and the page is always the issued tax invoice or receipt. */
 export const Route = createFileRoute('/owner/receipts/$id')({
-  head: () => ({
-    meta: [
-      { title: 'Receipt | Agentic Economy' },
-      { name: 'robots', content: 'noindex, noarchive' },
-      { name: 'referrer', content: 'no-referrer' },
-    ],
-  }),
-  headers: () => ({ 'Cache-Control': 'private, no-store', 'Referrer-Policy': 'no-referrer' }),
   loader: async ({ params }) => {
     if (!documentRefPattern.test(params.id)) return { found: false as const }
     const data = { documentRef: params.id }
@@ -26,6 +18,14 @@ export const Route = createFileRoute('/owner/receipts/$id')({
     if (url === null) return { found: false as const }
     throw redirect({ href: url })
   },
+  head: () => ({
+    meta: [
+      { title: 'Receipt | Agentic Economy' },
+      { name: 'robots', content: 'noindex, noarchive' },
+      { name: 'referrer', content: 'no-referrer' },
+    ],
+  }),
+  headers: () => ({ 'Cache-Control': 'private, no-store', 'Referrer-Policy': 'no-referrer' }),
   component: ReceiptUnavailable,
 })
 
