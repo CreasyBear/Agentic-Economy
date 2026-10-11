@@ -9,7 +9,7 @@ import { readServerReadiness } from '@/lib/server/readiness'
 import { readRequestCorrelationId } from '@/lib/server/request-correlation'
 import { formatTimestamp } from '@/lib/ui/format-time'
 import { buildSiteDiscoveryManifest, SiteDiscoveryManifestSchemaVersion } from '@/modules/discovery/public'
-import { readPublicAvailabilityThroughSource } from '@/modules/money/internal/account-funding-http'
+import { readPublicAvailabilityThroughSource } from '@/modules/money/server'
 import { readCatalogueFreshness } from '@/modules/market/x402-directory-index.server'
 
 /**
