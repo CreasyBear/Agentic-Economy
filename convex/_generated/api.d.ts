@@ -565,6 +565,7 @@ import type * as lib_money_funding_ownerRead from "../lib/money/funding/ownerRea
 import type * as lib_money_funding_ownerReserve from "../lib/money/funding/ownerReserve.js";
 import type * as lib_money_funding_prepareVerifiedEvent from "../lib/money/funding/prepareVerifiedEvent.js";
 import type * as lib_money_funding_returnFulfillment from "../lib/money/funding/returnFulfillment.js";
+import type * as lib_money_funding_stripeDisputePipeline from "../lib/money/funding/stripeDisputePipeline.js";
 import type * as lib_money_funding_stripeEventDocuments from "../lib/money/funding/stripeEventDocuments.js";
 import type * as lib_money_funding_stripeEventPipeline from "../lib/money/funding/stripeEventPipeline.js";
 import type * as lib_money_funding_stripeRefundPipeline from "../lib/money/funding/stripeRefundPipeline.js";
@@ -1393,6 +1394,7 @@ declare const fullApi: ApiFromModules<{
   "lib/money/funding/ownerReserve": typeof lib_money_funding_ownerReserve;
   "lib/money/funding/prepareVerifiedEvent": typeof lib_money_funding_prepareVerifiedEvent;
   "lib/money/funding/returnFulfillment": typeof lib_money_funding_returnFulfillment;
+  "lib/money/funding/stripeDisputePipeline": typeof lib_money_funding_stripeDisputePipeline;
   "lib/money/funding/stripeEventDocuments": typeof lib_money_funding_stripeEventDocuments;
   "lib/money/funding/stripeEventPipeline": typeof lib_money_funding_stripeEventPipeline;
   "lib/money/funding/stripeRefundPipeline": typeof lib_money_funding_stripeRefundPipeline;
