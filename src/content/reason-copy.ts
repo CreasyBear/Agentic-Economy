@@ -32,7 +32,7 @@ type MarketRequestRefusalCode = Extract<MarketRequestCreateResult, { kind: 'refu
 const TYPED_REASON_COPY = {
   payments_not_ready: 'Paid Tool purchases are temporarily unavailable. You can keep searching and comparing Tools.',
   payments_paused: 'Paid Tool purchases are temporarily paused. You can keep searching and comparing Tools.',
-  payments_admins_only: 'Paid Tool purchases are currently available to Admins only. You can keep searching and comparing Tools.',
+  payments_admins_only: 'Paid calls open soon. Alpha users have trial credit. You can keep searching and comparing Tools.',
   // Call refusals (`callRefusalCodeValues`, `call-contracts.ts`) and the Call
   // status subset (`callStatusRefusalCodeValues`, `call-recovery-contracts.ts`,
   // a literal subset of the same codes).

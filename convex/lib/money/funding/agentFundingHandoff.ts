@@ -1,4 +1,5 @@
 import { assertFinancialEnvironment, financialEnvironmentMatches } from '../formance/contracts'
+import { readFundingStartRefusal } from '../treasury/paymentAdmission'
 import { v, type Infer } from 'convex/values'
 
 import type { Doc } from '../../../_generated/dataModel'
@@ -104,6 +105,8 @@ export async function reserveAgentHandoffHandler(
   const admission = await admitAgentHandoff(ctx, args)
   const callerKey = args.idempotencyKey.trim()
   if (admission === null) return refused('billing_identity_missing')
+  const gate = await readFundingStartRefusal(ctx, args.environment, { admin: false })
+  if (gate !== null) return refused(gate)
   if (!POSITIVE_UNITS.test(args.principalAmountUnits)
     || callerKey.length < 1 || callerKey.length > 255
     || !Number.isSafeInteger(args.checkoutExpiresAt)) return refused('funding_amount_invalid')

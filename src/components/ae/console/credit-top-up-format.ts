@@ -36,6 +36,9 @@ export function topUpErrorCopy(result: MoneyRefusal | AccountFundingOutcomeUnkno
   if (result.code === 'stripe_setup_required') {
     return `Account funding is unavailable right now. ${FINANCIAL_NO_PAYMENT} Try again later.`
   }
+  if (result.code === 'payments_admins_only' || result.code === 'payments_paused' || result.code === 'payments_not_ready') {
+    return `Paid calls open soon. ${FINANCIAL_UNCHANGED}`
+  }
   if (result.code === 'billing_identity_missing' || result.code === 'billing_identity_mismatch') {
     return `Your signed-in Account could not be confirmed. ${FINANCIAL_NO_PAYMENT} Refresh this page and sign in again.`
   }

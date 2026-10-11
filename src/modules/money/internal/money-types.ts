@@ -68,6 +68,9 @@ export type MoneyRefusalCode =
   | 'budget_monthly_limit_exceeded'
   | 'budget_concurrency_exhausted'
   | 'budget_reconciliation_required'
+  | 'payments_paused'
+  | 'payments_admins_only'
+  | 'payments_not_ready'
 
 export type ChargeState =
   | 'free_tier'

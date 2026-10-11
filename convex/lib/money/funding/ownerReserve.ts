@@ -1,7 +1,8 @@
 import { financialEnvironmentMatches } from '../formance/contracts'
 
 import type { MutationCtx } from '../../../_generated/server'
-import { resolveBusinessActor } from '../../../authz'
+import { readCurrentActiveAdminMembership, resolveBusinessActor } from '../../../authz'
+import { readFundingStartRefusal } from '../treasury/paymentAdmission'
 import { admitInteractiveOwnerConsequence } from '../../authority/consequence/owner'
 import { readCommercialPolicyGate } from '../../../moneyCommercialPolicy'
 import { resolveAndBindLegalCustomer } from '../legalCustomer/binding'
@@ -42,6 +43,10 @@ export async function reserveHandler(
     || !SHA256.test(args.expectedPolicyDigest)) return refused('funding_amount_invalid')
   const actor = await resolveBusinessActor(ctx)
   if (actor.kind !== 'authenticated_owner') return refused('billing_identity_missing')
+  const gate = await readFundingStartRefusal(ctx, args.environment, {
+    admin: await readCurrentActiveAdminMembership(ctx) !== undefined,
+  })
+  if (gate !== null) return refused(gate)
 
   const prior = await ctx.db.query('moneyFundingCommands')
     .withIndex('by_idempotencyKey', (builder) => builder.eq('idempotencyKey', args.idempotencyKey))
