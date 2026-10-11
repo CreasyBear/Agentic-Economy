@@ -30,10 +30,14 @@ describe('browser telemetry initialization boundaries', () => {
     captureClientProductEvent('ae_product_journey', { action: 'market_viewed' })
     await vi.waitFor(() => expect(fixture.sdk.init).toHaveBeenCalledOnce())
     const options = fixture.sdk.init.mock.calls[0]?.[1]
-    expect(options).toMatchObject({ autocapture: false, disable_session_recording: true, capture_pageview: false, persistence: 'sessionStorage' })
+    expect(options).toMatchObject({ autocapture: false, disable_session_recording: true, capture_pageview: false, persistence: 'localStorage+cookie', cross_subdomain_cookie: true })
+    expect(fixture.sdk.identify).not.toHaveBeenCalled()
     expect(options.before_send({ event: 'ae_product_journey', properties: {
       $current_url: 'https://app.aecon.ai/market?query=private-brief', prompt: 'private task', action: 'market_viewed',
     } })).toEqual({ event: 'ae_product_journey', properties: { $current_url: '/market', action: 'market_viewed' } })
+    expect(options.before_send({ event: '$pageview', properties: { utm_source: 'x', gclid: 'abc', $initial_utm_campaign: 'launch', $initial_referring_domain: 'google.com' },
+      $set_once: { $initial_utm_source: 'x', $initial_referring_domain: 'google.com' } })).toEqual({ event: '$pageview', properties: { utm_source: 'x', gclid: 'abc', $initial_utm_campaign: 'launch', $initial_referring_domain: 'google.com' },
+      $set_once: { $initial_utm_source: 'x', $initial_referring_domain: 'google.com' } })
     expect(options.before_send({ event: '$autocapture', properties: {} })).toBeNull()
   })
 

@@ -3,7 +3,6 @@ import type { PostHog } from 'posthog-js'
 
 import { readObservabilityClientConfig } from '@/lib/observability/config'
 import { buildFunnelEventProperties, type FunnelCaptureInput } from '@/lib/observability/funnel-event-props'
-import { getOrCreatePseudonymousSessionId } from '@/lib/observability/funnel-attribution'
 import { protectPostHogEvent } from './posthog-event-safety'
 import {
   isTelemetryAllowedForCurrentRoute,
@@ -88,7 +87,8 @@ function ensurePostHogClient(router?: AnyRouter): Promise<boolean> {
         capture_pageview: false,
         capture_pageleave: false,
         autocapture: false,
-        persistence: 'sessionStorage',
+        persistence: 'localStorage+cookie',
+        cross_subdomain_cookie: true,
         disable_session_recording: true,
         before_send: protectPostHogEvent,
         loaded: (ph) => {
@@ -98,7 +98,6 @@ function ensurePostHogClient(router?: AnyRouter): Promise<boolean> {
           })
         },
       })
-      posthog.identify(getOrCreatePseudonymousSessionId())
       registerPostHogPageviews(posthog, router)
       posthogClient = posthog
       initialized = true
