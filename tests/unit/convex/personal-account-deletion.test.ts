@@ -352,7 +352,7 @@ describe('personalAccount exportUserData (W-09)', () => {
           targetType: 'session',
           targetRef: `session:${id}`,
           afterState: 'created',
-          sourceSystem: 'test',
+          sourceSystem: 'clerk_observed',
           activeAccountRef: ACCOUNT_REF,
           idempotencyKey: `export:${id}`,
           correlationId: `correlation:${id}`,
