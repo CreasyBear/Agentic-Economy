@@ -1,7 +1,8 @@
 import { spawn } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import * as lockfile from 'proper-lockfile'
 import { afterEach, describe, expect, it } from 'vitest'
 
 const dirs: string[] = []
@@ -13,14 +14,20 @@ function run(dir: string, i: number): Promise<number | null> {
     spawn('npx', ['tsx', '-e', code], { env: { ...process.env, AE_CONFIG_DIR: dir }, stdio: 'ignore' }).on('exit', resolve)
   })
 }
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 describe('ae config lock', () => {
-  it('keeps every key from concurrent mutations', async () => {
+  it('waits for a held lock, then both mutations survive', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'ae-cfg-'))
     dirs.push(dir)
-    const codes = await Promise.all([0, 1, 2, 3, 4, 5].map((i) => run(dir, i)))
-    expect(codes).toEqual([0, 0, 0, 0, 0, 0])
+    const release = await lockfile.lock(dir, { realpath: false })
+    const first = run(dir, 0)
+    await sleep(4000)
+    expect(existsSync(join(dir, 'config.json'))).toBe(false)
+    await release()
+    expect(await first).toBe(0)
+    expect(await Promise.all([run(dir, 1), run(dir, 2)])).toEqual([0, 0])
     const ids = JSON.parse(readFileSync(join(dir, 'config.json'), 'utf8')).lastThreadIds
-    expect(Object.keys(ids)).toHaveLength(6)
+    expect(Object.keys(ids)).toHaveLength(3)
   }, 60_000)
 })
