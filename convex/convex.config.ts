@@ -40,6 +40,7 @@ const app = defineApp({
     AE_EMAIL_PHASE3_ENABLED: v.optional(v.union(v.literal('true'), v.literal('false'))),
     RESEND_WEBHOOK_SECRET: v.optional(v.string()),
     EMAIL_UNSUBSCRIBE_SECRET: v.optional(v.string()),
+    EMAIL_SUPPRESSION_HASH_SECRET: v.optional(v.string()),
     POSTHOG_KEY: v.optional(v.string()),
     POSTHOG_HOST: v.optional(v.string()),
     CLERK_SECRET_KEY: v.optional(v.string()),

@@ -148,7 +148,7 @@ export const agentAccessOAuthTables = {
     tokenEndpointAuthMethod: v.literal('none'),
     createdAt: v.number(),
     lastUsedAt: v.optional(v.number()),
-  }).index('by_clientId', ['clientId']),
+  }).index('by_clientId', ['clientId']).index('by_lastUsedAt_and_createdAt', ['lastUsedAt', 'createdAt']),
 
   agentAccessOAuthRefreshFamilies: defineTable({
     familyRef: v.string(),

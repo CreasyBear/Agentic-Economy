@@ -28,4 +28,11 @@ describe('serializeCause redaction', () => {
     expect(out).toContain('error_code=42')
     expect(out).toContain('status code')
   })
+
+  it('redacts the code= value of a bare callback path', () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    captureBackendException('GET /cb?code=abc123&state=x')
+    const out = spy.mock.calls.map((c) => c.join(' ')).join('\n')
+    expect(out).not.toContain('abc123')
+  })
 })

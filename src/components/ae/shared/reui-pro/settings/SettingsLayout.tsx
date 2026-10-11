@@ -13,7 +13,7 @@ import { Field, FieldContent, FieldDescription, FieldGroup } from '@/components/
  */
 export function SettingsScrollView({ children }: { children: ReactNode }) {
   return <ScrollArea.Root className="min-w-0">
-    <ScrollArea.Viewport className="w-full rounded-[inherit] outline-none focus-visible:ring-2 focus-visible:ring-ring">
+    <ScrollArea.Viewport className="w-full rounded-none outline-none focus-visible:ring-2 focus-visible:ring-ring">
       <ScrollArea.Content>{children}</ScrollArea.Content>
     </ScrollArea.Viewport>
     <ScrollArea.Scrollbar orientation="horizontal" className="flex h-2.5 touch-none flex-col border-t border-t-transparent p-px transition-colors select-none">
@@ -26,15 +26,15 @@ export function SettingsScrollView({ children }: { children: ReactNode }) {
 export function ProfileSettingsPage({ title, description, action, children, headingRef }: {
   title: string; description: string; action?: ReactNode; children: ReactNode; headingRef?: Ref<HTMLHeadingElement>
 }) {
-  return <section className="min-w-0 space-y-8">
+  return <section className="min-w-0 flex flex-col gap-8">
     <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-      <div className="min-w-0 space-y-1">
+      <div className="min-w-0 flex flex-col gap-1">
         <h1 ref={headingRef} tabIndex={headingRef === undefined ? undefined : -1} className="text-2xl font-medium tracking-tight">{title}</h1>
         <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">{description}</p>
       </div>
       {action ? <div className="shrink-0">{action}</div> : null}
     </header>
-    <div className="min-w-0 space-y-10">{children}</div>
+    <div className="min-w-0 flex flex-col gap-10">{children}</div>
   </section>
 }
 
@@ -43,7 +43,7 @@ export function ProfileSettingsSection({ title, description, children }: {
 }) {
   const id = useId()
   return <section aria-labelledby={id} className="flex min-w-0 flex-col gap-5">
-    <header className="min-w-0 space-y-1">
+    <header className="min-w-0 flex flex-col gap-1">
       <h2 id={id} className="text-lg font-medium tracking-tight">{title}</h2>
       {description ? <p className="text-sm leading-relaxed text-muted-foreground">{description}</p> : null}
     </header>

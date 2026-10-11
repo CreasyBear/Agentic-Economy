@@ -6,9 +6,9 @@ type CompletedStep = Readonly<{
   toolResults: readonly Readonly<{ toolName: string; output: unknown }>[]
 }>
 
-/** Provider-authored text must not become live Markdown links, images or HTML. */
+/** Provider-authored text must not become live Markdown links, images, HTML or bare-URL autolinks (':' and '@' break scheme and email autolinks, the dot after www breaks the www form). */
 const escapeMarkdown = (text: string): string =>
-  text.replace(/\r?\n/g, ' ').replace(/[\\`*_[\]()<>!#|]/g, '\\$&')
+  text.replace(/\r?\n/g, ' ').replace(/[\\`*_[\]()<>!#|:@]/g, '\\$&').replace(/www\./gi, (match) => `${match.slice(0, 3)}\\.`)
 
 /** Only completed Tool outputs become answer facts; a tool call alone proves no result. */
 export function completedChatFacts(steps: readonly CompletedStep[]): string | null {

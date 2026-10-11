@@ -24,7 +24,7 @@ export function AeProviderSetupWizard({ steps, activeStep, completedSteps, progr
       const id = steps[next - 1]?.id
       const completed = completedSteps.find(step => step.id === id)
       if (completed !== undefined && !completed.disabled && !busy) completed.onEdit()
-    }} className="w-full space-y-4">
+    }} className="w-full flex flex-col gap-4">
       <CardHeader className="grid gap-4">
         {heading}
         <StepperNav aria-label={progressLabel} className="flex-wrap gap-y-3">

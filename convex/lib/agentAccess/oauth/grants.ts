@@ -105,13 +105,16 @@ export async function cleanupExpiredOAuthGrantsHandler(
     }
   }
 
-  const staleClients = await ctx.db.query('agentAccessOAuthClients').take(batchSize * 5)
+  // Only never-used clients older than 30 days are scanned. A client holding a grant is stamped used so it leaves the window and the sweep always advances.
+  const staleClients = await ctx.db.query('agentAccessOAuthClients')
+    .withIndex('by_lastUsedAt_and_createdAt', (query) => query.eq('lastUsedAt', undefined).lt('createdAt', effectiveNow - 30 * 24 * 60 * 60 * 1_000))
+    .take(batchSize)
   for (const row of staleClients) {
-    if (row.lastUsedAt !== undefined || row.createdAt >= effectiveNow - 30 * 24 * 60 * 60 * 1_000) continue
     const grant = await ctx.db.query('agentAccessOAuthGrants')
       .withIndex('by_clientId_and_status', (query) => query.eq('clientId', row.clientId))
       .first()
     if (grant === null) await ctx.db.delete(row._id)
+    else await ctx.db.patch(row._id, { lastUsedAt: effectiveNow })
   }
 
   const rescheduled = deleted === batchSize

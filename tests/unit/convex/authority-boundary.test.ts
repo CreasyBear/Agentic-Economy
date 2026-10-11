@@ -39,6 +39,8 @@ const GRANT_REF = `grt_${'7'.repeat(32)}`
 const PARENT_GRANT_REF = `grt_${'a'.repeat(32)}`
 const OWNERSHIP_REF = `own_${'9'.repeat(32)}`
 const SECRET = 'authority-boundary-source-write-secret-32-bytes'
+// Production deployments disable the root-secret fallback, so the session family key is set too.
+const SESSION_KEY = `authority-test:${SECRET}`
 const ACCESS_POLICY = {
   format: 'ae.agent-access-policy:v2' as const,
   operationAccess: 'all_admitted' as const,
@@ -131,6 +133,7 @@ describe('canonical agent authority boundary', () => {
     'drives the %s isolation case through the registered mutation and commits no denied authority snapshot',
     async (caseKind, overrides, inputPatch) => {
       vi.stubEnv('AE_SOURCE_WRITE_SECRET', SECRET)
+      vi.stubEnv('AE_SOURCE_WRITE_KEY_SESSION', SESSION_KEY)
       const backend = testBackend()
       await seedCanonicalChain(backend, overrides)
       const args = await signedMutationArgs(inputPatch, `authority-boundary-isolation:${caseKind}`)
@@ -365,6 +368,7 @@ describe('canonical agent authority boundary', () => {
     'enforces current selected-Tool authority for %s through the registered mutation',
     async (caseName: string, operationKey: string, overrides: SeedOverrides, allowed: boolean) => {
       vi.stubEnv('AE_SOURCE_WRITE_SECRET', SECRET)
+      vi.stubEnv('AE_SOURCE_WRITE_KEY_SESSION', SESSION_KEY)
       const backend = testBackend()
       await seedCanonicalChain(backend, {
         ...(overrides.credential === undefined ? {} : { credential: overrides.credential }),
@@ -580,6 +584,7 @@ describe('canonical agent authority boundary', () => {
 
   it('requires exact source-write admission for the registered production mutation', async () => {
     vi.stubEnv('AE_SOURCE_WRITE_SECRET', SECRET)
+      vi.stubEnv('AE_SOURCE_WRITE_KEY_SESSION', SESSION_KEY)
     const backend = testBackend()
     await seedCanonicalChain(backend)
 
@@ -843,7 +848,7 @@ async function signedMutationArgs(
     bodyDigest: sourceWriteBodyDigest(JSON.stringify(command)),
   }
   const sourceWrite = await createSourceWriteAdmission({
-    env: { AE_SOURCE_WRITE_SECRET: SECRET },
+    env: { AE_SOURCE_WRITE_SECRET: SECRET, AE_SOURCE_WRITE_KEY_SESSION: SESSION_KEY },
     request,
     scope: 'agent_identity',
     operationKey: command.operationKey,

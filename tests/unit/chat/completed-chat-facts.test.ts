@@ -93,7 +93,9 @@ describe('completed chat facts', () => {
         amount: { currency: 'USD', units: '0', exponent: 2 }, priceDigest: 'p',
       },
     }))
-    expect(answer).toContain('\\!\\[a\\]\\(http://e\\)')
+    expect(answer).toContain('\\!\\[a\\]\\(http\\://e\\)')
+    expect(answer).not.toContain('http://')
+    expect(answer).not.toContain('https://')
     expect(answer).not.toContain('](http')
     expect(answer).not.toMatch(/(^|[^\\])\]\(/)
   })

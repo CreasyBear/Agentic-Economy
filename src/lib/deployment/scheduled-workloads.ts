@@ -44,6 +44,7 @@ export const SCHEDULED_WORKLOADS = [
   { name: 'refresh market flow', workloadKind: 'cron', handler: 'refreshMarketFlow', daily: { hourUTC: 1, minuteUTC: 15 } },
   { name: 'send operator stalled digest', workloadKind: 'cron', handler: 'sendOperatorDigest', daily: { hourUTC: 22, minuteUTC: 0 } },
   { name: 'send stalled step emails', workloadKind: 'cron', handler: 'sendStalledStepEmails', daily: { hourUTC: 22, minuteUTC: 30 } },
+  { name: 'alert stuck stripe inbox', workloadKind: 'cron', handler: 'alertStuckStripeInbox', interval: { hours: 1 } },
   { name: 'retry journey event forwards', workloadKind: 'cron', handler: 'retryJourneyEventForwards', interval: { hours: 1 } },
   // Leave headroom for the five-minute readiness probe without extending source clocks.
   { name: 'reconcile treasury balances', workloadKind: 'reconciliation', handler: 'reconcileTreasuryBalances', interval: { minutes: 5 } },
@@ -56,6 +57,7 @@ export type TimedWorkloadName = Extract<typeof SCHEDULED_WORKLOADS[number], { in
 
 /** Names of workloads that run on a Convex cron timer, sorted for manifests. */
 export const SCHEDULED_WORKLOAD_JOB_NAMES = [
+  'alert stuck stripe inbox',
   'cleanup expired agent access oauth grants',
   'cleanup expired source write nonces',
   'expire alpha content',

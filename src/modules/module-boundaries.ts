@@ -113,6 +113,7 @@ export const MODULE_BOUNDARY_MANIFEST: ModuleBoundaryManifest = {
   testOnlyWhiteBoxExceptions: [
     { id: 'declared-unit-quantity-proof', importers: ['tests/unit/capability-execution/declared-service-units.test.ts'], to: 'capability-execution', entry: 'declared-service-units.ts', owner: 'capability-execution' },
     { id: 'streaming-completion-sdk-proof', importers: ['tests/unit/capability-supply/streaming-chat-receipt.test.ts'], to: 'capability-supply', entry: 'internal/streaming-chat-receipt.ts', owner: 'capability-supply' },
+    { id: 'x402-offer-receipt-drift-proof', importers: ['tests/unit/capability-supply/route-transport-x402.test.ts'], to: 'capability-supply', entry: 'internal/route-transport-x402.ts', owner: 'capability-supply' },
     { id: 'streaming-completion-http-proof', importers: ['tests/unit/capability-supply/streaming-chat-receipt.test.ts', 'tests/unit/capability-supply/route-transport-http-json-path.test.ts'], to: 'capability-supply', entry: 'internal/route-transport-http-json.ts', owner: 'capability-supply' },
     {
       id: 'native-formance-usage-reader-proof',

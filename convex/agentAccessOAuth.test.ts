@@ -23,6 +23,8 @@ import {
 
 const modules = import.meta.glob('./**/*.ts')
 const SOURCE_WRITE_SECRET = 'oauth-local-source-write-secret-material-32'
+// A production deployment disables the root-secret fallback, so these tests also hold the session family key.
+const SESSION_KEY = `oauth-test:${SOURCE_WRITE_SECRET}`
 const SOURCE_REQUEST = {
   method: 'POST',
   initiatorOrigin: 'https://ae.example',
@@ -36,7 +38,7 @@ const sourceArgs = async (
   nonce = command.operationKey,
 ) => {
   const sourceWrite = await createSourceWriteAdmission({
-    env: { AE_SOURCE_WRITE_SECRET: SOURCE_WRITE_SECRET },
+    env: { AE_SOURCE_WRITE_SECRET: SOURCE_WRITE_SECRET, AE_SOURCE_WRITE_KEY_SESSION: SESSION_KEY },
     request: { ...SOURCE_REQUEST, bodyDigest: sourceWriteCommandBodyDigest(command) },
     scope: 'agent_identity',
     operationKey: command.operationKey,
@@ -55,6 +57,7 @@ const previousDeploymentEnvironment = process.env.AE_DEPLOYMENT_ENVIRONMENT
 
 beforeEach(() => {
   vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
+  vi.stubEnv('AE_SOURCE_WRITE_KEY_SESSION', SESSION_KEY)
 })
 
 afterEach(() => {
@@ -1616,6 +1619,7 @@ describe('Agent Access OAuth grant cleanup', () => {
 describe('durable OAuth refresh families', () => {
   beforeEach(() => {
     vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development')
+    vi.stubEnv('AE_SOURCE_WRITE_KEY_SESSION', SESSION_KEY)
   })
 
   it('refuses a fresh refresh claim after a deployment flip while allowing expiry revocation', async () => {

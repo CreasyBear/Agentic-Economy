@@ -4400,6 +4400,12 @@
   {
     "visibility": "internal",
     "module": "workloadCron",
+    "method": "alertStuckStripeInbox",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "workloadCron",
     "method": "cleanupExpiredAgentAccessOAuthGrants",
     "kind": "mutation"
   },

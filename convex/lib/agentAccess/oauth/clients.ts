@@ -56,7 +56,6 @@ function sameClientMaterial(left: OAuthClientMaterial, right: OAuthClientMateria
     && sameStringArray(left.grantTypes, right.grantTypes)
     && left.tokenEndpointAuthMethod === right.tokenEndpointAuthMethod
     && left.createdAt === right.createdAt
-    && left.lastUsedAt === right.lastUsedAt
 }
 
 function clientFromDocument(row: Doc<'agentAccessOAuthClients'>) {

@@ -4,9 +4,9 @@ import type { DataModel } from '../../../_generated/dataModel'
 
 export type SuppressionReason = 'hard_bounce' | 'complaint'
 
-/** Addresses are kept as a keyed HMAC-SHA256 hash, so the table holds no plain addresses and a leaked table cannot be dictionary-attacked without the server key. Throws when the secret is unset so the caller skips the send. */
-export async function emailAddressHash(address: string, secret: string | undefined = process.env.EMAIL_UNSUBSCRIBE_SECRET): Promise<string> {
-  if (secret === undefined || secret.length === 0) throw new Error('EMAIL_UNSUBSCRIBE_SECRET is not set')
+/** Addresses are kept as a keyed HMAC-SHA256 hash under its own never-rotated secret (separate from the unsubscribe signing key, so rotating that cannot un-suppress anyone), so the table holds no plain addresses and a leaked table cannot be dictionary-attacked without the server key. Throws when the secret is unset so the caller skips the send. */
+export async function emailAddressHash(address: string, secret: string | undefined = process.env.EMAIL_SUPPRESSION_HASH_SECRET): Promise<string> {
+  if (secret === undefined || secret.length === 0) throw new Error('EMAIL_SUPPRESSION_HASH_SECRET is not set')
   const encoder = new TextEncoder()
   const key = await crypto.subtle.importKey('raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
   const digest = await crypto.subtle.sign('HMAC', key, encoder.encode(`suppression:v1:${address.trim().toLowerCase()}`))

@@ -91,6 +91,12 @@ export const ingest = mutation({
           failureCode: 'stripe_event_identity_conflict',
           updatedAt: now,
         })
+        // The row stays applied or ignored, so the hourly stuck scan never sees it: alert the operator here, once per event.
+        await enqueueOperatorAlert(ctx, {
+          alertRef: `stripe-conflict-${existing.stripeEventId}`,
+          subject: 'Stripe inbox: event identity conflict',
+          text: `Stripe event ${existing.stripeEventId} was replayed with a different payload after it was ${existing.state}. The original row is untouched; reconcile by hand.`,
+        })
         return { kind: 'accepted', status: 'reconciliation_required' }
       }
       await ctx.db.patch(existing._id, {

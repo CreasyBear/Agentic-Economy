@@ -417,7 +417,7 @@ export async function seedAgent(
       actorPrincipalRef: principalId,
       subjectPrincipalRef: principalId,
       scopes: [...principal.scopes],
-      resourceRefs: [toolRef],
+      resourceRefs: ['*'], // matches production: an all_admitted grant carries the wildcard resource
       budgetLimit: 1,
       budgetUsed: 0,
       expiresAt,

@@ -57,7 +57,7 @@ export function WorkspaceProfileSettings({ identity, status, defaultName }: Work
   </SettingsPage>
   return <SettingsPage title="Business profile" description="Manage the workspace name your team sees."
     action={provider ? <Link to="/owner/operations" className={actionLinkClassName('secondary', 'md')}>View Tools</Link> : undefined}>
-    <div inert={readPaused} aria-busy={readPaused} className="space-y-10">
+    <div inert={readPaused} aria-busy={readPaused} className="flex flex-col gap-10">
     <SettingsGroup title="Workspace" description="The name used for your team and receipts; distinct from your public provider name.">
       <SettingsRow label="Workspace name" description="The name members see when working in this workspace.">
         {workspace === undefined ? <div role="status" aria-busy="true" aria-label="Loading workspace name" className="h-10 w-64 max-w-full"><div aria-hidden="true"><ArcSkeleton lines={1} /></div></div>

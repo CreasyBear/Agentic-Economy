@@ -136,6 +136,12 @@ export async function retryJourneyEventForwardsHandler(ctx: WorkloadCronActionCo
   return null
 }
 
+export async function alertStuckStripeInboxHandler(ctx: WorkloadCronActionContext): Promise<null> {
+  await ctx.runQuery(internal.workloadCron.admit, { name: 'alert stuck stripe inbox' })
+  await ctx.runMutation(internal.moneyStripeWebhookInbox.alertStuck, {})
+  return null
+}
+
 export async function snapshotMarketplaceMetricsDayHandler(ctx: WorkloadCronActionContext): Promise<null> {
   await ctx.runQuery(internal.workloadCron.admit, { name: 'snapshot marketplace metrics day' })
   await ctx.runAction(internal.adminConsoleMetrics.refreshMarketplaceMetrics, {})

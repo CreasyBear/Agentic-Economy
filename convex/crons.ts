@@ -25,6 +25,7 @@ const HANDLERS: Record<TimedWorkloadName, FunctionReference<'mutation' | 'action
   'refresh market flow': internal.workloadCron.refreshMarketFlow,
   'send operator stalled digest': internal.workloadCron.sendOperatorDigest,
   'send stalled step emails': internal.workloadCron.sendStalledStepEmails,
+  'alert stuck stripe inbox': internal.workloadCron.alertStuckStripeInbox,
   'retry journey event forwards': internal.workloadCron.retryJourneyEventForwards,
   'refresh payment readiness': internal.workloadCron.refreshPaymentReadiness,
 }
@@ -38,6 +39,5 @@ for (const workload of SCHEDULED_WORKLOADS) {
   if (!('interval' in workload) || workload.interval === undefined) continue
   crons.interval(workload.name, workload.interval, HANDLERS[workload.name], {})
 }
-crons.interval('alert stuck stripe inbox', { hours: 1 }, internal.moneyStripeWebhookInbox.alertStuck, {})
 
 export default crons
