@@ -24,6 +24,7 @@ export function redactSensitiveText(value: string): string {
     .replace(cookieHeaderPattern, (_match: string, prefix: string) => `${prefix}${filteredTelemetryValue}`)
     .replace(relativeUrlQueryPattern, (_match: string, prefix: string, pathname: string) => `${prefix}${pathname}`)
     .replace(urlUserInfoPattern, '$1[Filtered]@')
+    .replace(/([?&]code=)[^&\s"'`#]+/giu, '$1[Filtered]')
     .replace(
       secretAssignmentPattern,
       (_match: string, prefix: string, quote: string) => `${prefix}${quote}${filteredTelemetryValue}${quote}`,
