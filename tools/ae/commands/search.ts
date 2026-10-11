@@ -8,7 +8,7 @@ import { REASON_COPY, REASON_COPY_FALLBACK } from '@/content/reason-copy'
 import { formatSearchSignals } from '@/modules/registry/search-signals'
 
 import type { CliOptions } from '../lib/args'
-import { CliFailure, callJson, heading, line, printJson, requireOk } from '../lib/output'
+import { CliFailure, callJson, heading, line, printJson, requireOk, sanitizeText } from '../lib/output'
 import { resolveAgentAccessCredential } from '../lib/config'
 import { requireAgentAccessKey } from './status'
 import { continuationCommand } from '../lib/continuation-command'
@@ -103,23 +103,23 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
     printJson({ ...result, ...(nextPageCommand === undefined ? {} : { nextPageCommand }), ...(saveNeedCommand === undefined ? {} : { saveNeedCommand }) })
     return
   }
-  heading(`Market Tools for "${result.query}" (${outcome.durationMs}ms)`)
+  heading(`Market Tools for "${sanitizeText(result.query)}" (${outcome.durationMs}ms)`)
   if (result.freshness !== undefined && result.freshness.state !== 'fresh') line(`  Catalogue may be out of date (${result.freshness.state}). Results can be incomplete.`)
   if (result.recipient !== undefined) line(`  Ranking: ${result.recipient.label} (${result.recipient.host}) receives ${result.recipient.data}.`)
   line(`  ${result.kind} · scope: ${result.assessed.source}/${result.assessed.scope} · ${result.assessed.coverage} coverage (${result.assessed.examined} examined)`)
   if (result.kind === 'noMatch') line('  No suitable Tools found in the assessed sources.')
   if (result.kind === 'scoped') line('  Only assessed supply is shown; more Tools may exist.')
-  if (result.kind === 'unavailable') line(`  Search unavailable: ${result.reason}`)
+  if (result.kind === 'unavailable') line(`  Search unavailable: ${sanitizeText(result.reason)}`)
   for (const [index, tool] of result.results.entries()) {
     const accessLabel = tool.access === 'ae_callable' ? 'AE callable'
       : tool.access === 'setup_required' ? 'Connect to call'
         : `Unavailable: ${REASON_COPY[tool.reason ?? 'fallback'] ?? REASON_COPY_FALLBACK}`
-    line(`  ${index + 1}. ${tool.title} · ${accessLabel}`)
+    line(`  ${index + 1}. ${sanitizeText(tool.title)} · ${accessLabel}`)
     line(`     ref: ${tool.toolRef ?? tool.detailRef}`)
     if (tool.access === 'ae_callable' && parseCallableRef(tool.toolRef)?.kind === 'listing') {
       line(`     quote · ae call ${tool.toolRef} --input '<json>'`)
     }
-    line(`     ${tool.readiness} · ${tool.price.kind === 'indicative' ? tool.price.label : 'Price unavailable'}`)
+    line(`     ${sanitizeText(tool.readiness)} · ${tool.price.kind === 'indicative' ? sanitizeText(tool.price.label) : 'Price unavailable'}`)
     if (tool.signals !== undefined) line(`     ${formatSearchSignals(tool.signals)}`)
     for (const action of tool.next) {
       line(`     ${action.action} ${JSON.stringify(action.args)} · ${commandFor(action)}`)

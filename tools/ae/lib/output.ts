@@ -259,6 +259,12 @@ export function heading(text: string): void {
   process.stdout.write(`\n${text}\n${'-'.repeat(text.length)}\n`)
 }
 
+/** Strip C0/C1 control characters (ESC, CSI, etc.) except newline and tab from remote-sourced text. CWE-150. */
+export function sanitizeText(text: string): string {
+  // eslint-disable-next-line no-control-regex
+  return text.replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/gu, '')
+}
+
 export function line(text = ''): void {
   process.stdout.write(`${text}\n`)
 }
