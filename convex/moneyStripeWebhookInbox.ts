@@ -62,6 +62,26 @@ export const ingest = mutation({
       if (existing.payloadDigest === args.event.payloadDigest
         && existing.eventType === args.event.eventType
         && existing.destination === args.destination) {
+        if (existing.state === 'failed') {
+          await ctx.db.patch(existing._id, {
+            state: 'queued',
+            failureCode: undefined,
+            completedAt: undefined,
+            updatedAt: now,
+          })
+          const workId = await stripeWebhookWorkpool.enqueueAction(
+            ctx,
+            processStripeWebhookRef,
+            { stripeEventId: existing.stripeEventId },
+            {
+              retry: true,
+              onComplete: completeStripeWebhookRef,
+              context: { stripeEventId: existing.stripeEventId },
+            },
+          )
+          await ctx.db.patch(existing._id, { workId })
+          return { kind: 'accepted', status: 'queued' }
+        }
         return { kind: 'accepted', status: 'replayed' }
       }
       await ctx.db.patch(existing._id, {
@@ -120,6 +140,30 @@ export const readForProcessing = internalQuery({
       .withIndex('by_stripeEventId', (index) => index.eq('stripeEventId', args.stripeEventId))
       .unique()
     return row === null ? null : { destination: row.destination, event: row.event, state: row.state }
+  },
+})
+
+export const listStuckForOperator = internalQuery({
+  args: {},
+  returns: v.array(v.object({
+    stripeEventId: v.string(),
+    state: v.union(v.literal('failed'), v.literal('reconciliation_required')),
+    failureCode: v.optional(v.string()),
+    completedAt: v.optional(v.number()),
+  })),
+  handler: async (ctx) => {
+    const rows = []
+    for (const state of ['failed', 'reconciliation_required'] as const) {
+      rows.push(...await ctx.db.query('moneyStripeWebhookInbox')
+        .withIndex('by_state_and_receivedAt', (index) => index.eq('state', state))
+        .take(100))
+    }
+    return rows.map((row) => ({
+      stripeEventId: row.stripeEventId,
+      state: row.state as 'failed' | 'reconciliation_required',
+      failureCode: row.failureCode,
+      completedAt: row.completedAt,
+    }))
   },
 })
 
