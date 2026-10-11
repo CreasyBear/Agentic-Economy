@@ -55,9 +55,9 @@ export async function readAdminAuditAccessHandler(
 
 export async function listAdminApprovalProposalsHandler(
   ctx: QueryCtx,
-  { paginationOpts }: { paginationOpts: PaginationOptions; refreshAt?: number },
+  { paginationOpts, refreshAt }: { paginationOpts: PaginationOptions; refreshAt?: number },
 ) {
   const authority = await resolveAdminAuthority(ctx, 'read_admin_readbacks')
   if (authority.kind === 'denied') return { page: [], isDone: true, continueCursor: '' }
-  return await listOpenApprovalProposals(ctx, authority.membership.role === 'owner_admin', paginationOpts)
+  return await listOpenApprovalProposals(ctx, authority.membership.role === 'owner_admin', paginationOpts, refreshAt ?? Date.now())
 }

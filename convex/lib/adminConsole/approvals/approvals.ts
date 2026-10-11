@@ -182,6 +182,7 @@ export async function listOpenApprovalProposals(
   ctx: QueryCtx,
   includeCommand: boolean,
   paginationOpts: PaginationOptions,
+  now: number,
 ): Promise<PaginationResult<{
   proposalRef: string
   action: AdminProposableAction
@@ -190,7 +191,6 @@ export async function listOpenApprovalProposals(
   createdAt: number
   expiresAt: number
 }>> {
-  const now = Date.now()
   const result = await ctx.db.query('adminApprovalProposals')
     .withIndex('by_status_and_expiresAt', (query) =>
       query.eq('status', 'awaiting_second_approval').gt('expiresAt', now))
