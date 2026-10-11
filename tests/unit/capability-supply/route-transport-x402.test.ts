@@ -15,7 +15,7 @@ import { privateKeyToAccount } from 'viem/accounts'
 
 import type { RouteTransportFetch } from '@/modules/capability-supply/route-transport-runtime'
 import { x402PaymentCredentialRefFromEnvironment } from '@/modules/capability-supply/server'
-import { prepareX402PaymentMaterial } from '@/modules/capability-supply/internal/route-transport-x402-payment'
+import { freshX402ChallengeSelection, prepareX402PaymentMaterial } from '@/modules/capability-supply/internal/route-transport-x402-payment'
 
 import {
   X402_PAYMENT_CREDENTIAL_REF,
@@ -551,6 +551,20 @@ describe('registered route transport runtime', () => {
     expect(sign).not.toHaveBeenCalled()
     expect(send).toHaveBeenCalledTimes(1)
     expect(fresh.wasCanceled()).toBe(true)
+  })
+
+  it('refuses a fresh 402 that drops the committed offer-receipt before any authorization', () => {
+    const target = 'https://provider.example/fresh-offer'
+    const committed = {
+      ...x402PaymentRequired(target),
+      extensions: { 'offer-receipt': { info: { offers: [{ format: 'jws' }] } } },
+    } as unknown as Parameters<typeof freshX402ChallengeSelection>[0]['challenge']
+    const requirement = committed.accepts[0]!
+    const base = { challenge: committed, requirement }
+    const bare = x402PaymentRequired(target) as unknown as typeof committed
+    expect(freshX402ChallengeSelection(base, bare)).toBeUndefined()
+    expect(freshX402ChallengeSelection(base, committed)).toBeDefined()
+    expect(freshX402ChallengeSelection({ challenge: bare, requirement }, bare)).toBeDefined()
   })
 
   it('does not follow or sign a redirect returned by the fresh unpaid request', async () => {

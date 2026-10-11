@@ -261,11 +261,25 @@ export function freshX402ChallengeSelection(
   if (!x402ResourcesEquivalent(committed.challenge.resource, freshChallenge.resource)) {
     return undefined
   }
+  if (offerReceiptDropped(committed.challenge, freshChallenge)) return undefined
   const requirement = freshChallenge.accepts.find((candidate) =>
     x402RequirementsEquivalent(committed.requirement, candidate))
   return requirement === undefined
     ? undefined
     : { challenge: freshChallenge, requirement }
+}
+
+/** A committed offer-receipt extension must survive into the fresh challenge; offers re-sign, so presence is the invariant. */
+function offerReceiptDropped(committed: X402Challenge, fresh: X402Challenge): boolean {
+  const info = (challenge: X402Challenge): Record<string, unknown> | undefined => {
+    const info = (challenge.extensions?.['offer-receipt'] as { info?: unknown } | undefined)?.info
+    return typeof info === 'object' && info !== null ? info as Record<string, unknown> : undefined
+  }
+  const committedInfo = info(committed)
+  if (committedInfo === undefined) return false
+  const freshInfo = info(fresh)
+  return freshInfo === undefined
+    || ('offers' in committedInfo && !(Array.isArray(freshInfo.offers) && freshInfo.offers.length > 0))
 }
 
 /** Names a fresh 402 that differs from the committed requirement only in price or only in payee. */
