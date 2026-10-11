@@ -52,6 +52,8 @@ export async function enqueueStalledStepEmailsHandler(
     await enqueueEmail(ctx, {
       eventKind,
       stream: 'lifecycle',
+      // stalledRecipient only returns owners who switched stalled-step emails on.
+      consentBasis: 'express',
       recipientPrincipalRef,
       accountRef,
       sourceEventRef: accountRef,

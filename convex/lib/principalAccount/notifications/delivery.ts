@@ -188,6 +188,8 @@ export async function readNotificationContextHandler(
   args: { deliveryId: Id<'notificationDeliveries'> },
 ): Promise<NotificationContext> {
   const delivery = await ctx.db.get(args.deliveryId)
+  // Enforced again at send time: lifecycle mail never goes without a stored consent basis.
+  if (delivery?.state === 'pending' && delivery.stream === 'lifecycle' && delivery.consentBasis === undefined) return { kind: 'skip', code: 'consent_basis_missing' }
   if(delivery!==null&&delivery.state==='pending'&&delivery.usageEvidenceJson!==undefined)return await readUsageDeliveryContext(ctx,delivery)
   if (delivery !== null && delivery.state === 'pending' && isStalledKind(delivery.eventKind)) {
     return await readStalledDeliveryContext(ctx, { ...delivery, eventKind: delivery.eventKind })

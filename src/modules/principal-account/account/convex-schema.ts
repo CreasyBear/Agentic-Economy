@@ -188,6 +188,8 @@ export const notificationDeliveryValue = v.object({
   stream: v.optional(notificationStreamValue),
   required: v.optional(v.boolean()),
   sourceEventRef: v.string(),
+  /** Spam Act 2003 (Cth) s18 basis for lifecycle mail: express (the owner opted in) or inferred (the account relationship). */
+  consentBasis: v.optional(v.union(v.literal('express'), v.literal('inferred'))),
   usageEvidenceJson:v.optional(v.string()),
   preferenceRevision:v.optional(v.number()),
   authorityRevisionAccount:v.optional(v.number()),

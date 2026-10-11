@@ -65,7 +65,7 @@ export async function verifyUnsubscribeToken(secret: string, token: string): Pro
 /** One-click unsubscribe URL for a controllable stream. Null when this deployment cannot sign one, so the caller skips the send. */
 export async function unsubscribeUrlFor(payload: UnsubscribePayload): Promise<string | null> {
   const secret = process.env.EMAIL_UNSUBSCRIBE_SECRET?.trim()
-  const convexSiteUrl = process.env.CONVEX_SITE_URL?.trim().replace(/\/+$/u, '')
-  if (!secret || !convexSiteUrl) return null
-  return `${convexSiteUrl}/notifications/unsubscribe?t=${encodeURIComponent(await signUnsubscribeToken(secret, payload))}`
+  const siteUrl = process.env.AE_SITE_URL?.trim().replace(/\/+$/u, '')
+  if (!secret || !siteUrl) return null
+  return `${siteUrl}/api/unsubscribe?t=${encodeURIComponent(await signUnsubscribeToken(secret, payload))}`
 }

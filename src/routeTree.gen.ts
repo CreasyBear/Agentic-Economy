@@ -42,6 +42,7 @@ import { Route as ApiSplatRouteImport } from './routes/api.$'
 import { Route as ApiBusinessesRouteImport } from './routes/api.businesses'
 import { Route as ApiHealthRouteImport } from './routes/api.health'
 import { Route as ApiReadyRouteImport } from './routes/api.ready'
+import { Route as ApiUnsubscribeRouteImport } from './routes/api.unsubscribe'
 import { Route as DevelopersApiRouteImport } from './routes/developers.api'
 import { Route as DevelopersDiscoveryRouteImport } from './routes/developers.discovery'
 import { Route as FundFundingSessionIdRouteImport } from './routes/fund.$fundingSessionId'
@@ -339,6 +340,11 @@ const ApiHealthRoute = ApiHealthRouteImport.update({
 const ApiReadyRoute = ApiReadyRouteImport.update({
   id: '/api/ready',
   path: '/api/ready',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiUnsubscribeRoute = ApiUnsubscribeRouteImport.update({
+  id: '/api/unsubscribe',
+  path: '/api/unsubscribe',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DevelopersApiRoute = DevelopersApiRouteImport.update({
@@ -1075,6 +1081,7 @@ export interface FileRoutesByFullPath {
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
   '/api/health': typeof ApiHealthRoute
   '/api/ready': typeof ApiReadyRoute
+  '/api/unsubscribe': typeof ApiUnsubscribeRoute
   '/developers/api': typeof DevelopersApiRoute
   '/developers/discovery': typeof DevelopersDiscoveryRoute
   '/fund/$fundingSessionId': typeof FundFundingSessionIdRoute
@@ -1240,6 +1247,7 @@ export interface FileRoutesByTo {
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
   '/api/health': typeof ApiHealthRoute
   '/api/ready': typeof ApiReadyRoute
+  '/api/unsubscribe': typeof ApiUnsubscribeRoute
   '/developers/api': typeof DevelopersApiRoute
   '/developers/discovery': typeof DevelopersDiscoveryRoute
   '/fund/$fundingSessionId': typeof FundFundingSessionIdRoute
@@ -1407,6 +1415,7 @@ export interface FileRoutesById {
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
   '/api/health': typeof ApiHealthRoute
   '/api/ready': typeof ApiReadyRoute
+  '/api/unsubscribe': typeof ApiUnsubscribeRoute
   '/developers/api': typeof DevelopersApiRoute
   '/developers/discovery': typeof DevelopersDiscoveryRoute
   '/fund/$fundingSessionId': typeof FundFundingSessionIdRoute
@@ -1574,6 +1583,7 @@ export interface FileRouteTypes {
     | '/api/businesses'
     | '/api/health'
     | '/api/ready'
+    | '/api/unsubscribe'
     | '/developers/api'
     | '/developers/discovery'
     | '/fund/$fundingSessionId'
@@ -1739,6 +1749,7 @@ export interface FileRouteTypes {
     | '/api/businesses'
     | '/api/health'
     | '/api/ready'
+    | '/api/unsubscribe'
     | '/developers/api'
     | '/developers/discovery'
     | '/fund/$fundingSessionId'
@@ -1905,6 +1916,7 @@ export interface FileRouteTypes {
     | '/api/businesses'
     | '/api/health'
     | '/api/ready'
+    | '/api/unsubscribe'
     | '/developers/api'
     | '/developers/discovery'
     | '/fund/$fundingSessionId'
@@ -2069,6 +2081,7 @@ export interface RootRouteChildren {
   ApiBusinessesRoute: typeof ApiBusinessesRouteWithChildren
   ApiHealthRoute: typeof ApiHealthRoute
   ApiReadyRoute: typeof ApiReadyRoute
+  ApiUnsubscribeRoute: typeof ApiUnsubscribeRoute
   DevelopersApiRoute: typeof DevelopersApiRoute
   DevelopersDiscoveryRoute: typeof DevelopersDiscoveryRoute
   FundFundingSessionIdRoute: typeof FundFundingSessionIdRoute
@@ -2374,6 +2387,13 @@ declare module '@tanstack/react-router' {
       path: '/api/ready'
       fullPath: '/api/ready'
       preLoaderRoute: typeof ApiReadyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/unsubscribe': {
+      id: '/api/unsubscribe'
+      path: '/api/unsubscribe'
+      fullPath: '/api/unsubscribe'
+      preLoaderRoute: typeof ApiUnsubscribeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/developers/api': {
@@ -3613,6 +3633,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiBusinessesRoute: ApiBusinessesRouteWithChildren,
   ApiHealthRoute: ApiHealthRoute,
   ApiReadyRoute: ApiReadyRoute,
+  ApiUnsubscribeRoute: ApiUnsubscribeRoute,
   DevelopersApiRoute: DevelopersApiRoute,
   DevelopersDiscoveryRoute: DevelopersDiscoveryRoute,
   FundFundingSessionIdRoute: FundFundingSessionIdRoute,

@@ -66,6 +66,7 @@ export async function enqueueEmail(ctx: MutationCtx, input: {
   recipientPrincipalRef: string
   accountRef: string
   sourceEventRef: string
+  consentBasis?: 'express' | 'inferred'
   evidence?: Pick<Doc<'notificationDeliveries'>, 'usageEvidenceJson' | 'preferenceRevision' | 'authorityRevisionAccount'>
 }): Promise<'enqueued' | 'exists' | 'suppressed'> {
   const existing = await ctx.db.query('notificationDeliveries')
@@ -76,7 +77,9 @@ export async function enqueueEmail(ctx: MutationCtx, input: {
       .eq('sourceEventRef', input.sourceEventRef)).unique()
   if (existing !== null) return 'exists'
 
-  const enabled = streamEnabled(input.stream)
+  // Lifecycle mail without a recorded consent basis is refused, and the refusal is kept as a suppressed row.
+  const consented = input.stream !== 'lifecycle' || input.consentBasis !== undefined
+  const enabled = consented && streamEnabled(input.stream)
     && (!PHASE2_KINDS.has(input.eventKind) || phase2Enabled())
     && (!PHASE3_KINDS.has(input.eventKind) || phase3Enabled())
   const now = Date.now()
@@ -91,9 +94,10 @@ export async function enqueueEmail(ctx: MutationCtx, input: {
     stream: input.stream,
     required: input.stream === 'transactional',
     sourceEventRef: input.sourceEventRef,
+    ...(input.consentBasis === undefined ? {} : { consentBasis: input.consentBasis }),
     ...input.evidence,
     state: admitted ? 'pending' : 'suppressed',
-    ...(admitted ? {} : { suppressCode: !enabled ? 'stream_disabled' : (capCode ?? 'notification_rate_limited') }),
+    ...(admitted ? {} : { suppressCode: !consented ? 'consent_basis_missing' : !enabled ? 'stream_disabled' : (capCode ?? 'notification_rate_limited') }),
     createdAt: now,
     updatedAt: now,
   })
