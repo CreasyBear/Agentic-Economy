@@ -11,6 +11,7 @@ import { createCustomerRequestServiceAssertion } from '../src/modules/agent-acce
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
 import { createAgentAccessGrant } from '../src/modules/agent-access/policy'
 import { defaultSandboxAgentAccessPolicy } from '../src/modules/agent-access/sandbox-policy'
+import { convexTestWithWorkers } from '../tests/helpers/convex-fixtures'
 import { api, internal } from './_generated/api'
 import schema from './schema'
 import { interactiveCredentialExpiryNonce } from './lib/principalAccount/interactiveCredential/nonce'
@@ -613,6 +614,38 @@ describe('account security history', () => {
 
       const account = await readAccount(backend, owner.accountRef)
       expect(account?.displayName).toBe(workspaceName)
+    })
+
+    it('E1: first primary email sighting records the digest, a later change enqueues email_changed once', async () => {
+      process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN = serviceKey
+      const prior = { phase2: process.env.AE_EMAIL_PHASE2_ENABLED, kind: process.env.AE_EMAIL_KIND_EMAIL_CHANGED_ENABLED }
+      process.env.AE_EMAIL_PHASE2_ENABLED = 'true'
+      process.env.AE_EMAIL_KIND_EMAIL_CHANGED_ENABLED = 'true'
+      try {
+        const backend = convexTestWithWorkers()
+        const owner = await insertOwner(backend, 'w06_e1')
+        const send = async (delivery: string, observedAt: number, email: string) => {
+          const command = {
+            ...profileObservation(owner, delivery, observedAt, 'Ada Lovelace'),
+            primaryEmailDigest: canonicalDigest({ contract: 'ae.clerk-primary-email:v1', email }),
+          }
+          await backend.mutation(api.securityAccountHistory.recordClerkSecurityEventForServer, {
+            ...command, serviceAuth: await assertion(command),
+          })
+        }
+        const notices = async () => (await backend.run(async (ctx) => await ctx.db.query('notificationDeliveries').collect()))
+          .filter((row) => row.eventKind === 'email_changed')
+
+        await send('delivery_e1_a', 9_000, 'a@example.test')
+        expect(await notices()).toHaveLength(0)
+        await send('delivery_e1_b', 9_100, 'b@example.test')
+        expect(await notices()).toHaveLength(1)
+        await send('delivery_e1_b', 9_100, 'b@example.test')
+        expect(await notices()).toHaveLength(1)
+      } finally {
+        if (prior.phase2 === undefined) delete process.env.AE_EMAIL_PHASE2_ENABLED; else process.env.AE_EMAIL_PHASE2_ENABLED = prior.phase2
+        if (prior.kind === undefined) delete process.env.AE_EMAIL_KIND_EMAIL_CHANGED_ENABLED; else process.env.AE_EMAIL_KIND_EMAIL_CHANGED_ENABLED = prior.kind
+      }
     })
 
     it('S7: password-reset observation revokes credentials and updates displayName', async () => {
