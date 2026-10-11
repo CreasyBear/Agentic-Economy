@@ -43,6 +43,7 @@ export const adminApprovalProposalValue = v.object({
     v.literal('set_business_suppression'),
     v.literal('change_commercial_policy'),
     v.literal('set_payments_paused'),
+    v.literal('set_payments_audience'),
     v.literal('grant_promotional_credit'),
       v.literal('issue_trial'),
     v.literal('grant_admin_membership'),

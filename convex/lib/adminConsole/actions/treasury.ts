@@ -105,6 +105,47 @@ export function paymentsPausedSpec(
 }
 
 /**
+ * Requires: the same signed owner/MFA/digest boundary as pause; Ensures: sets who payments are open to
+ * ('admins' = trial credit only, 'everyone' = full Stripe and paid calls). Widening runs the resume gates.
+ * Invariant: while paused ('none') only the saved resume audience changes; no revision bump when unchanged.
+ */
+export function paymentsAudienceSpec(
+  ctx: MutationCtx,
+  args: AdminCommandWireArgs<'set_payments_audience'>,
+): AdminCommandSpec<'set_payments_audience'> {
+  const { environment, audience } = args.input
+  return {
+    targetType: 'billing', targetRef: `platform-launch:${environment}`,
+    auditEventType: 'protected_action.attempt_succeeded', requireExpectedStateDigest: true,
+    currentStateDigest: async () => (await readTreasuryControlState(ctx, environment)).launchStateDigest,
+    apply: async () => {
+      if (!treasuryCommandEnvironmentMatches(environment)) return { kind: 'refused', code: 'environment_mismatch' }
+      const { launch } = await readTreasuryControlState(ctx, environment)
+      if (audience === 'everyone' && launch.paymentsOpenTo !== 'everyone') {
+        if (environment === 'production' && (await readPaymentReadiness(ctx, environment, Date.now())).kind !== 'ready') {
+          return { kind: 'refused', code: 'payments_not_ready' }
+        }
+        const refusal = await treasuryResumeRefusal(ctx, environment, Date.now())
+        if (refusal !== undefined) return { kind: 'refused', code: refusal }
+      }
+      const paymentsOpenTo = launch.paymentsOpenTo === 'none' ? 'none' : audience
+      if (paymentsOpenTo !== launch.paymentsOpenTo || audience !== launch.resumePaymentsOpenTo) {
+        const row = await ctx.db.query('platformLaunch')
+          .withIndex('by_environment', (q) => q.eq('environment', environment)).unique()
+        const next: TreasuryControlState['launch'] = { environment, paymentsOpenTo, resumePaymentsOpenTo: audience, revision: launch.revision + 1, updatedAt: Date.now() }
+        if (row === null) await ctx.db.insert('platformLaunch', next)
+        else await ctx.db.patch(row._id, next)
+      }
+      return {
+        kind: 'applied', code: 'payments_audience_changed',
+        effectRefs: [`platform-launch:${environment}`],
+        beforeState: launch.paymentsOpenTo, afterState: paymentsOpenTo,
+      }
+    },
+  }
+}
+
+/**
  * Requires: the same signed owner/MFA/digest boundary, canonical bounded units, 0 <= lowWater <= target and target > 0.
  * Ensures: stores a complete fixed-threshold variant; never changes payment authority or audience.
  * Invariant: one settings row per environment, protected by transactional indexed reads.

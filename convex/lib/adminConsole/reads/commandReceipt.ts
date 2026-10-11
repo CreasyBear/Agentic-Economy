@@ -11,10 +11,10 @@ const actionValue = v.union(
   v.literal('close_removal_dispute'), v.literal('grant_admin_membership'),
   v.literal('revoke_admin_membership'), v.literal('verify_capability_source_authority'),
   v.literal('change_commercial_policy'), v.literal('grant_promotional_credit'),
-  v.literal('issue_trial'), v.literal('set_payments_paused'), v.literal('change_treasury_thresholds'),
+  v.literal('issue_trial'), v.literal('set_payments_paused'), v.literal('set_payments_audience'), v.literal('change_treasury_thresholds'),
 )
 const successValue = v.union(
-  v.literal('call_content_reviewed'), v.literal('payments_paused'), v.literal('payments_resumed'),
+  v.literal('call_content_reviewed'), v.literal('payments_paused'), v.literal('payments_resumed'), v.literal('payments_audience_changed'),
   v.literal('treasury_thresholds_changed'), v.literal('business_suppressed'), v.literal('business_unsuppressed'),
   v.literal('dispute_closed'), v.literal('membership_granted'), v.literal('membership_revoked'),
   v.literal('source_authority_verified'), v.literal('source_authority_insufficient'),

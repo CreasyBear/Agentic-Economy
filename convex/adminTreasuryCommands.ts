@@ -3,7 +3,7 @@ import { mutation } from './_generated/server'
 import { adminCommandArgsValue, adminCommandReceiptValue } from './lib/adminConsole/commands/contracts'
 import { runAdminCommand } from './lib/adminConsole/commands/commandEnvelope'
 import { refused } from './lib/adminConsole/commands/commandEnvelopeSteps'
-import { paymentsPausedSpec, treasuryThresholdsSpec, treasuryCommandEnvironmentMatches } from './lib/adminConsole/actions/treasury'
+import { paymentsAudienceSpec, paymentsPausedSpec, treasuryThresholdsSpec, treasuryCommandEnvironmentMatches } from './lib/adminConsole/actions/treasury'
 import { treasuryEnvironmentValue } from '@/modules/money/treasury'
 
 const pauseArgs = adminCommandArgsValue(
@@ -16,6 +16,19 @@ export const setPaymentsPaused = mutation({
   returns: adminCommandReceiptValue(v.literal('set_payments_paused'), v.union(v.literal('payments_paused'), v.literal('payments_resumed')), v.string()),
   handler: (ctx, args) => treasuryCommandEnvironmentMatches(args.input.environment)
     ? runAdminCommand(ctx, args, paymentsPausedSpec(ctx, args))
+    : refused(args, 'environment_mismatch'),
+})
+
+const audienceArgs = adminCommandArgsValue(
+  v.literal('set_payments_audience'),
+  v.object({ environment: treasuryEnvironmentValue, audience: v.union(v.literal('admins'), v.literal('everyone')) }),
+  v.union(v.literal('launch_open'), v.literal('launch_close'), v.literal('correction')),
+)
+export const setPaymentsAudience = mutation({
+  args: audienceArgs.fields,
+  returns: adminCommandReceiptValue(v.literal('set_payments_audience'), v.literal('payments_audience_changed'), v.string()),
+  handler: (ctx, args) => treasuryCommandEnvironmentMatches(args.input.environment)
+    ? runAdminCommand(ctx, args, paymentsAudienceSpec(ctx, args))
     : refused(args, 'environment_mismatch'),
 })
 

@@ -77,6 +77,7 @@ function approvalSheet(command: AdminCommandRequest, proposalRef: string, onOpen
     case 'set_payments_paused':
       return <TreasuryPaymentApproval key={proposalRef} command={command} proposalRef={proposalRef} onOpenChange={onOpenChange} />
     case 'change_treasury_thresholds':
+    case 'set_payments_audience':
       return null
     case 'set_business_suppression':
       return <AdminActionSheet {...common} action={command.action} input={command.input} initialReasonCode={command.reasonCode} targetRefs={[{ label: ADMIN_AUDIT_ACTION_COPY.targetLabels.businessId, value: command.input.businessId }]} />
