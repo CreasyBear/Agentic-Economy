@@ -48,7 +48,7 @@ export async function checkQuote(
         'loopback_readiness_unprovable',
       )
     }
-    return skippedQuoteCheck('no sandbox Tool is published; run npm run dev:local (stage sandbox-tool)', LOCAL_DEV_COMMAND)
+    return skippedQuoteCheck('no sandbox Tool is published here; find a Tool with `ae list`.', continuationCommand(['ae', 'list', '--limit', '5']))
   }
   try {
     const outcome = await callJson(options.baseUrl, TOOL_QUOTE_PATH, {
@@ -89,7 +89,7 @@ export async function checkQuote(
 function quoteRefusalCommand(options: CliOptions, code: string): string | undefined {
   // Sandbox authority is what a local refusal usually lacks: `ae connect` first,
   // then reseed the grant the Quote path resolves.
-  if (QUOTE_AUTHORITY_REFUSAL_CODES.includes(code)) return LOCAL_DEV_COMMAND
+  if (QUOTE_AUTHORITY_REFUSAL_CODES.includes(code) && isLoopbackCliBaseUrl(options.baseUrl)) return LOCAL_DEV_COMMAND
   if (QUOTE_FUNDING_REFUSAL_PATTERN.test(code)) return continuationCommand(['ae', 'fund', ...originFlags(options), '--json'])
   return continuationCommand(['ae', 'doctor', ...originFlags(options), '--json'])
 }
