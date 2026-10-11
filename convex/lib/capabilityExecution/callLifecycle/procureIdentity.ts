@@ -79,7 +79,7 @@ export async function reserveProcureHandler(ctx: MutationCtx, args: Command) {
   await ctx.db.insert('operationKeys', {
     scope: 'capability_execution', actorKind: 'agent', actorRef: args.principal.principalId,
     operationName: 'tool.procure', key: args.idempotencyKey, requestHash: digest,
-    status: 'in_progress', reservationNonce: args.reservationNonce, effectRefs: [], createdAt: now, updatedAt: now,
+    status: 'in_progress', ...(args.reservationNonce === undefined ? {} : { reservationNonce: args.reservationNonce }), effectRefs: [], createdAt: now, updatedAt: now,
   })
   return { kind: 'reserved' as const }
 }
