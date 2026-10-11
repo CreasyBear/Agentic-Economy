@@ -3702,6 +3702,12 @@
     "kind": "query"
   },
   {
+    "visibility": "internal",
+    "module": "moneyStripeWebhookInbox",
+    "method": "requeue",
+    "kind": "mutation"
+  },
+  {
     "visibility": "public",
     "module": "moneyStripeWebhookWorker",
     "method": "fulfillReturn",

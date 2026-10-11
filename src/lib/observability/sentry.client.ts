@@ -33,7 +33,7 @@ export function initSentryClient(router?: AnyRouter): boolean {
     tracesSampleRate: import.meta.env.PROD ? 0.1 : 1,
     beforeSend(event, hint) {
       const safe = sanitizeTelemetryEvent(event)
-      return safe === null ? null : routeExpectedEvent(safe, hint, Sentry.addBreadcrumb)
+      return safe === null ? null : routeExpectedEvent(safe, hint, Sentry.addBreadcrumb, false)
     },
     beforeSendTransaction(event) {
       return sanitizeTelemetryEvent(event)

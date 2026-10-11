@@ -30,10 +30,7 @@ export async function handleFundingConstraintsRequest(request: Request, head = f
       if (live.kind !== 'available') {
         // Payments deliberately closed is a typed refusal, not an outage.
         if (PAYMENTS_OFF_CODES.has(live.code)) {
-          return Response.json(
-            { kind: 'refused', code: 'payments_not_open', retryable: false },
-            { status: 409, headers: { 'Cache-Control': 'no-store' } },
-          )
+          return problem({ status: 409, kind: 'ALREADY_EXISTS', code: 'payments_not_open', retryable: false })
         }
         return problem({
           status: 503,

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { dependencyBreaker } from '@/lib/observability/circuit-breaker'
-import { JevUnavailableError } from '@/modules/decision-engine/contracts'
+import { JevUnavailableError } from '@/modules/decision-engine/public'
 
 const gateway = vi.hoisted(() => ({ execute: vi.fn() }))
 vi.mock('@/modules/decision-engine/public', async (importOriginal) => ({

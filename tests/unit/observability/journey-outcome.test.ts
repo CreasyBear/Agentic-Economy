@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { emitJourneyEvent, eraseAccountJourney } from '../../../convex/lib/journey/events'
 import { readStalledPage } from '../../../convex/lib/journey/stalled'
 import { buildDigest, formatDigest } from '../../../convex/operatorDigest'
@@ -133,16 +133,19 @@ describe('journey outcomes', () => {
     ])
   })
 
-  it('forwards one Sentry metric and one tagged event when Sentry is configured', () => {
+  it('forwards one Sentry metric and no event for a good outcome when Sentry is configured', () => {
     vi.stubEnv('SENTRY_DSN', 'https://public@example.ingest.sentry.io/1')
+    vi.stubEnv('SENTRY_ENVIRONMENT', 'production')
+    const vitest = process.env.VITEST
+    delete process.env.VITEST
+    onTestFinished(() => { if (vitest !== undefined) process.env.VITEST = vitest; vi.unstubAllEnvs() })
     expect(initSentryServer()).toBe(true)
     recordSearchResult('noMatch')
     expect(sentry.metrics.count).toHaveBeenCalledTimes(1)
     expect(sentry.metrics.count).toHaveBeenCalledWith('ae.journey', 1, {
       attributes: { journey: 'search', outcome: 'noMatch', good: 'true' },
     })
-    expect(sentry.captureMessage).toHaveBeenCalledTimes(1)
-    expect(sentry.captureMessage).toHaveBeenCalledWith('[ae.journey]')
+    expect(sentry.captureMessage).not.toHaveBeenCalled()
     expect(journeyLogs()).toHaveLength(1)
   })
 })

@@ -19,6 +19,8 @@ export function createCircuitBreaker(options: CircuitBreakerOptions = {}) {
   const { threshold = 5, openMs = 30_000, now = Date.now, isFailure = () => true } = options
   const states = new Map<string, BreakerState>()
   return {
+    /** Forgets all state; for test isolation. */
+    reset: () => states.clear(),
     /** Runs `fn`, or throws CircuitOpenError immediately while the breaker is open (or a probe is in flight). */
     async run<T>(name: string, fn: () => Promise<T>): Promise<T> {
       const state = states.get(name) ?? { failures: 0, openedAt: undefined, probing: false }

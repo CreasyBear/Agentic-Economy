@@ -150,7 +150,7 @@ describe('durable chat cost hooks through the installed SDK', () => {
 
   it('retains a pending record when completion storage is unavailable and keeps the usable answer', async () => {
     const { backend, binding } = await trackedTurn()
-    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const error = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     const fetch = vi.fn<typeof globalThis.fetch>(async () => streamingResponse(0.01))
     await backend.action(async ctx => {
       const unavailable = new Proxy(ctx, {

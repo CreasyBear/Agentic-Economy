@@ -319,7 +319,8 @@ function providerToolName(part: Record<string, unknown>): string | undefined {
 function outputRecord(part: Record<string, unknown>): Record<string, unknown> | undefined {
   let output: unknown = part.output
   if (isRecord(output) && (output.type === 'json' || output.type === 'text')) output = output.value
-  if (typeof output === 'string') {
+  // Model-facing text results are stored as JSON text, and can arrive JSON-encoded once more.
+  for (let pass = 0; pass < 2 && typeof output === 'string'; pass += 1) {
     if (new TextEncoder().encode(output).byteLength > 64 * 1024) return undefined
     try { output = JSON.parse(output) } catch (cause) {
       return degradeBackend(cause, undefined, { site: 'toolCard.outputRecord', reason: 'invalid_response' })

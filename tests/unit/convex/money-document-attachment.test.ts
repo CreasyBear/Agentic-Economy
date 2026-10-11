@@ -162,7 +162,7 @@ describe('financial document attachment recovery', () => {
       if (reads <= 2) await bothRead
       return snapshot
     })
-    const warn = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     if (cleanupFails) rpc.remove.mockRejectedValueOnce(new Error('cleanup unavailable'))
     const results = await Promise.all([render(rpc.ctx, { documentRef }), render(rpc.ctx, { documentRef })])
     const row = await expectCanonicalBytes(backend)

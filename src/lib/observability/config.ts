@@ -34,7 +34,7 @@ export function normalizeEnvironment(raw: string | undefined): ObservabilityEnvi
 }
 
 function isSentryEnvironment(environment: ObservabilityEnvironment, env: EnvRecord): boolean {
-  return environment !== 'development' && env.VITEST === undefined && process.env.VITEST === undefined
+  return environment !== 'development' && env.VITEST === undefined && (typeof process === 'undefined' || process.env.VITEST === undefined)
 }
 
 export function isObservabilityDisabled(env: EnvRecord): boolean {

@@ -1,8 +1,9 @@
-import { CircuitOpenError, dependencyBreaker } from '@/lib/observability/circuit-breaker'
+import { CircuitOpenError } from '@/lib/observability/circuit-breaker'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { normalizeSearchText, SEARCH_STOP_WORDS } from '@/modules/common/normalize-search-text'
 import {
   executeDecisionGateway,
+  jevBreaker,
   JevUnavailableError,
   type DecisionGatewayOptions,
   type JevAnswer,
@@ -169,7 +170,7 @@ export async function rankCompactDirectoryRows(
   ]))
   let decision
   try {
-    decision = await dependencyBreaker.run('jev', () => executeDecisionGateway({
+    decision = await jevBreaker.run('jev', () => executeDecisionGateway({
       state: {
         query: query.trim(),
         candidates: rows.map(row => ({ title: row.title, summary: row.summary, provider: row.provider })),
@@ -364,7 +365,7 @@ async function scoreToolSearch(
 
   let decision
   try {
-    decision = await dependencyBreaker.run('jev', () => executeDecisionGateway(
+    decision = await jevBreaker.run('jev', () => executeDecisionGateway(
       {
         state: {
           query: cleanQuery,

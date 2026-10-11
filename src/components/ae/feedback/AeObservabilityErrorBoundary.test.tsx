@@ -18,7 +18,7 @@ describe('AeObservabilityErrorBoundary', () => {
       return <p>recovered</p>
     }
     render(
-      <AeObservabilityErrorBoundary fallback={({ resetError }) => <button onClick={() => { fail = false; resetError() }}>retry</button>}>
+      <AeObservabilityErrorBoundary fallback={({ resetError }) => <button type="button" onClick={() => { fail = false; resetError() }}>retry</button>}>
         <Child />
       </AeObservabilityErrorBoundary>,
     )

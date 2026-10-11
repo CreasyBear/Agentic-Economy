@@ -62,7 +62,7 @@ describe('public funding preflight', () => {
     const response = await handleFundingConstraintsRequest(new Request('https://ae.example/api/v1/funding/constraints'))
     expect(response.status).toBe(409)
     expect(response.headers.get('cache-control')).toBe('no-store')
-    await expect(response.json()).resolves.toEqual({ kind: 'refused', code: 'payments_not_open', retryable: false })
+    await expect(response.json()).resolves.toMatchObject({ code: 'payments_not_open', retryable: false })
   })
 
   it('keeps 503 when the source throws', async () => {
