@@ -325,12 +325,14 @@ export async function handleFundingHandoffAction(
     if (result.kind === 'refused' || result.kind === 'error') {
       const status = result.kind === 'refused' && result.code === 'funding_idempotency_conflict'
         ? 409
+        : result.kind === 'refused' && result.code === 'rate_limited'
+          ? 429
         : result.kind === 'refused' && result.code === 'funding_amount_invalid'
           ? 400
           : result.kind === 'error' && result.code === 'funding_pending' ? 404 : 503
       return withRequestCorrelationHeader(problem({
         status,
-        kind: status === 409 ? 'ALREADY_EXISTS' : status === 404 ? 'NOT_FOUND' : status === 400 ? 'INVALID_ARGUMENT' : 'UNAVAILABLE',
+        kind: status === 429 ? 'RESOURCE_EXHAUSTED' : status === 409 ? 'ALREADY_EXISTS' : status === 404 ? 'NOT_FOUND' : status === 400 ? 'INVALID_ARGUMENT' : 'UNAVAILABLE',
         code: result.code,
         retryable: result.retryable,
         detail: status === 409 ? 'This idempotency key was already used with a different amount.' : status === 400 ? 'The AUD principal amount is outside the current funding limits.' : 'Funding status is temporarily unavailable. Poll the same funding session.',

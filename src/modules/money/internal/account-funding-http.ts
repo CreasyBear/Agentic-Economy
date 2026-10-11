@@ -1,7 +1,7 @@
 import { auth } from '@clerk/tanstack-react-start/server'
 import { createServerFn } from '@tanstack/react-start'
 import { productionMoneyManifestReady } from '@/lib/deployment/env-schema'
-import { setResponseHeader } from '@tanstack/react-start/server'
+import { getRequest, setResponseHeader } from '@tanstack/react-start/server'
 import { z } from 'zod'
 import type { PaidCallsAvailability } from '@/content/availability-copy'
 
@@ -17,6 +17,7 @@ import {
   sourceQuery,
   type ConvexServerFunctionAssertion,
 } from '@/lib/server/convex-source'
+import { assertHttpAdmission } from '@/lib/server/rate-limit'
 import { sourceWriteAdmissionFromContext } from '@/lib/server/source-write-admission'
 import {
   createStripeMoneyProvider,
@@ -285,6 +286,9 @@ export const beginAccountFundingServer = createServerFn({ method: 'POST' })
   .validator((data) => beginInputSchema.parse(data))
   .handler(async ({ data, context }): Promise<AccountFundingStartResult> => {
     setResponseHeader('cache-control', 'no-store')
+    // Per-IP card-testing guard; the per-Account limit runs in the reserve mutation. Fails closed.
+    const admission = await assertHttpAdmission(getRequest(), 'funding-checkout-ip').catch(() => undefined)
+    if (admission === undefined || !admission.ok) return refusal('rate_limited', true)
     return await beginAccountFundingThroughSource(data, context)
   })
 

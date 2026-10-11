@@ -3,6 +3,7 @@ import { makeFunctionReference } from 'convex/server'
 import { v, type Infer } from 'convex/values'
 import type { Id } from '../../../_generated/dataModel'
 import type { MutationCtx } from '../../../_generated/server'
+import { enqueueOperatorAlert } from '../../../operatorDigest'
 import { marketDispatchWorkpool } from '../../../marketDispatchWorkpool'
 import { canonicalDigest } from '../../../../src/modules/common/canonical-digest'
 
@@ -82,6 +83,11 @@ export const completeDocumentWorkHandler = async (ctx: MutationCtx, { workId, co
         evidenceRefs: [row.documentRef, row.snapshotDigest],
         createdAt: now,
         updatedAt: now,
+      })
+      if (existing === null) await enqueueOperatorAlert(ctx, {
+        alertRef: `case:${caseRef}`,
+        subject: 'Reconciliation case opened',
+        text: `Case ${caseRef} kind document_difference reason ${failureCode}.`,
       })
     }
     return null

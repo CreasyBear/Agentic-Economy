@@ -1,6 +1,6 @@
 import type { AeSiteUtilityDocumentSection } from '@/components/ae/website/utility-document.contracts'
 
-export const trustLastUpdated = '1 October 2026'
+export const trustLastUpdated = '11 October 2026'
 export const trustSections = [
   {
     id: 'money',
@@ -45,7 +45,7 @@ export const trustSections = [
     body: [
       'Preparing a Quote can send your actual inputs to the selected Tool Provider before payment or final Call approval. Running the Tool also sends the inputs it needs. Chat and ranking services receive relevant request and conversation context to generate answers and select Tools.',
       'Tool declarations can describe input categories, purposes and release stages. They do not always specify a Provider’s retention, training use or processing countries, and they are not an independent audit. Check whether the available terms and controls suit your information before sending it.',
-      'aecon stores account, chat, Call and financial records for the service. Public settlement records can remain on the blockchain after an account closes. The privacy draft identifies the services involved and the retention and location details still needing confirmation. Use Support for access, correction or deletion requests.',
+      'aecon stores account, chat, Call and financial records for the service. Public settlement records can remain on the blockchain after an account closes. The privacy policy identifies the services involved. Use Support for access, correction or deletion requests.',
     ],
   },
   {

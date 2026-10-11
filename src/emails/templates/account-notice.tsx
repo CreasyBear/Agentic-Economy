@@ -7,7 +7,7 @@ import { TextOnlySeparator } from '../text-only'
 
 /** Phase 2 and 3 notices. All are required transactional mail: no unsubscribe, the footer links to settings. */
 export type NoticeKind =
-  | 'funding_failed' | 'task_refunded' | 'task_stuck' | 'credit_exhausted'
+  | 'funding_failed' | 'funding_disputed' | 'task_refunded' | 'task_stuck' | 'credit_exhausted'
   | 'key_issued' | 'key_revoked' | 'account_paused' | 'account_restored'
   | 'role_changed' | 'team_membership_changed' | 'email_changed' | 'data_request_received'
   | 'welcome' | 'provider_live' | 'provider_offboarded' | 'provider_offboarding_blocked'
@@ -45,6 +45,12 @@ const NOTICES: Record<NoticeKind, Notice> = {
     preheader: () => 'Try again or use another card.',
     body: () => "Your payment didn't go through, so no credit was added. You can try again or use another card.",
     label: 'Try again', path: '/owner/credit', campaign: 'funding_failed',
+  },
+  funding_disputed: {
+    subject: () => 'Your bank disputed a credit purchase',
+    preheader: () => 'Spending is paused while we respond.',
+    body: () => 'Your bank has disputed a credit purchase. Spending is paused while we respond. Contact Support for the outcome.',
+    label: 'View account', path: '/owner/credit', campaign: 'funding_disputed',
   },
   task_refunded: {
     subject: ({ amount }) => `Refunded ${need(amount)} for a failed call`,

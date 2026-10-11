@@ -1,5 +1,6 @@
 import { internalMutation, internalQuery, mutation, query } from './_generated/server'
 import { finalizeFundingEventHandler } from './lib/money/funding/stripeEventPipeline'
+import { finalizeFundingDisputeHandler } from './lib/money/funding/stripeDisputePipeline'
 import { finalizeFundingRefundHandler } from './lib/money/funding/stripeRefundPipeline'
 import {
   markFundingBookingUnknownArgs, markFundingBookingUnknownHandler,
@@ -181,6 +182,18 @@ export const finalizeVerifiedRefundFromInbox = internalMutation({
   args: trustedFinalizeFundingEventArgsValue.fields,
   returns: applyFundingEventResultValue,
   handler: finalizeFundingRefundHandler,
+})
+
+export const finalizeVerifiedDispute = internalMutation({
+  args: finalizeFundingEventArgsValue.fields,
+  returns: applyFundingEventResultValue,
+  handler: finalizeFundingDisputeHandler,
+})
+
+export const finalizeVerifiedDisputeFromInbox = internalMutation({
+  args: trustedFinalizeFundingEventArgsValue.fields,
+  returns: applyFundingEventResultValue,
+  handler: finalizeFundingDisputeHandler,
 })
 
 export const markFundingBookingUnknown = internalMutation({

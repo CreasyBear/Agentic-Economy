@@ -60,6 +60,23 @@ export function eventRowMatches(
         compareExactAmounts(rowAmount, event.amount) === 0
       )
     }
+    case 'dispute': {
+      const rowAmount =
+        row.amountUnits === undefined || row.currency === undefined || row.exponent === undefined
+          ? undefined
+          : amountFromParts(row.currency, row.amountUnits, row.exponent)
+      return (
+        row.commandRef === undefined &&
+        row.sessionId === undefined &&
+        row.paymentId === event.paymentId &&
+        row.chargeId === event.chargeId &&
+        row.providerObjectDigest === event.disputeDigest &&
+        row.disputeStatus === event.disputeStatus &&
+        row.metadataDigest === undefined &&
+        rowAmount !== undefined &&
+        compareExactAmounts(rowAmount, event.amount) === 0
+      )
+    }
     default: {
       const _exhaustive: never = event
       return _exhaustive
@@ -107,6 +124,17 @@ export function eventRowFields(event: StripeMoneyWebhookEvent) {
         chargeId: event.chargeId,
         providerObjectDigest: event.refundDigest,
         refundStatus: event.status,
+        currency: event.amount.currency,
+        amountUnits: event.amount.units,
+        exponent: event.amount.exponent,
+      }
+    case 'dispute':
+      return {
+        ...base,
+        paymentId: event.paymentId,
+        chargeId: event.chargeId,
+        providerObjectDigest: event.disputeDigest,
+        disputeStatus: event.disputeStatus,
         currency: event.amount.currency,
         amountUnits: event.amount.units,
         exponent: event.amount.exponent,

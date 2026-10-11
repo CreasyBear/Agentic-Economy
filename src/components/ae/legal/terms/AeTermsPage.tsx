@@ -1,3 +1,4 @@
+import { TERMS_VERSION } from '@/components/ae/legal/legal-version'
 import { Link } from '@tanstack/react-router'
 
 import { AeSiteUtilityDocument } from '@/components/ae/website/AeSiteUtilityDocument'
@@ -20,7 +21,7 @@ export function AeTermsPage() {
       title={termsTitle}
       description={termsDescription}
       lastUpdated={termsLastUpdated}
-      version="Alpha draft for review"
+      version={TERMS_VERSION}
       sections={termsSections}
       intro={(
         <p>

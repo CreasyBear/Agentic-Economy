@@ -34,6 +34,10 @@ const ALLOWLISTED_OCCURRENCES: Record<string, Readonly<{ reason: string }>> = {
   // Internal diagnostic probe rows (machine introspection results), not an
   // HTTP error envelope served to callers.
   'src/routes/api.discovery.schema.ts': { reason: 'internal diagnostic rows' },
+  // Resend (a webhook sender) reads bare status codes; a problem+json body adds nothing for it.
+  'src/routes/api.resend.webhook.ts': { reason: 'webhook proxy returns bare status codes to Resend' },
+  // Opened from an email client by a person (HTML) or by RFC 8058 one-click; not a JSON API surface.
+  'src/routes/api.unsubscribe.ts': { reason: 'human and RFC 8058 unsubscribe page, HTML not problem+json' },
 }
 
 describe('RFC 9457 envelope drift', () => {

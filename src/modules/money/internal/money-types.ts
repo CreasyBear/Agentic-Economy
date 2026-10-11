@@ -39,6 +39,7 @@ export type MoneyRefusalCode =
   | 'credit_topup_pending'
   | 'credit_topup_outcome_unknown'
   | 'funding_amount_invalid'
+  | 'rate_limited'
   | 'funding_pending'
   | 'funding_outcome_unknown'
   | 'funding_idempotency_conflict'

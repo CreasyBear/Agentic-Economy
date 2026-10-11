@@ -1,10 +1,11 @@
+import { LEGAL_ENTITY_LINE } from '@/components/ae/legal/legal-version'
 import type { AeSiteUtilityDocumentSection } from '@/components/ae/website/utility-document.contracts'
 
-// Draft alpha terms for review; contracting entity and legal contact details remain unresolved.
-export const termsLastUpdated = '1 October 2026'
+// Terms for the invitation-only alpha.
+export const termsLastUpdated = '11 October 2026'
 export const termsTitle = 'Terms of service.'
-export const termsDescription = 'Draft terms for the invitation-only alpha, promotional credits and Tool Calls through Agentic Economy.'
-export const termsIntro = 'These draft terms describe the invitation-only alpha. The contracting legal entity and legal contact details must be confirmed before acceptance or publication.'
+export const termsDescription = 'Terms for the invitation-only alpha, promotional credits and Tool Calls through Agentic Economy.'
+export const termsIntro = `These terms describe the invitation-only alpha and are made between the user and ${LEGAL_ENTITY_LINE}.`
 export const termsAvailabilityLead = 'Website and API checks appear on our'
 export const termsAvailabilityLink = 'status page'
 export const termsClosingLead = 'Read alongside our'
@@ -15,7 +16,7 @@ export const termsSections = [
     id: 'agreement',
     heading: 'Scope and agreement',
     body: [
-      'These terms cover Agentic Economy’s website and invitation-only alpha: accounts, Agent access, Tool discovery, promotional AUD credits, Calls and usage records. ‘AE’, ‘we’ and ‘us’ mean Agentic Economy. ‘Customer’ means the individual or organisation using the service; an authorised Agent acts for that Customer. The contracting legal entity and legal contact details must be confirmed before these terms are accepted.',
+      `These terms cover Agentic Economy’s website and invitation-only alpha: accounts, Agent access, Tool discovery, promotional AUD credits, Calls and usage records. ‘AE’, ‘we’ and ‘us’ mean Agentic Economy. ‘Customer’ means the individual or organisation using the service; an authorised Agent acts for that Customer. These terms are made between the Customer and ${LEGAL_ENTITY_LINE}.`,
       'Visiting the website does not open an account or authorise a Call. The platform terms apply when the Customer accepts them during onboarding or signs an order form. Alpha access is by invitation. Features are available only as offered; examples and roadmaps are not promises of future features or integrations.',
       'An accepted order form may identify services and expressly agreed departures from these terms. A data-processing agreement governs conflicting provisions about Customer personal information. Mandatory legal rights prevail over every document. Third-party conditions apply only where disclosed and agreed before the relevant use.',
     ],
@@ -126,7 +127,7 @@ export const termsSections = [
     heading: 'Suspension and closure',
     body: [
       'AE may restrict access when reasonably necessary to address a material breach, security threat, suspected fraud or legal obligation. The action should be limited to the affected activity where practicable. AE will explain the reason and route to review unless doing so would be unlawful or undermine a legitimate investigation. Remediable breaches should receive a reasonable opportunity to be corrected.',
-      'Customers may request closure using the published account or support process, subject to separately accepted commitments. Closure stops new use but does not erase unresolved transactions. AE will reconcile reservations, draws and credits under their applicable conditions and law, and provide a reasonable opportunity to retrieve available customer records where lawful.',
+      'Customers may request closure using the published account or support process, subject to separately accepted commitments. Closure stops new use but does not erase open transactions. AE will reconcile reservations, draws and credits under their applicable conditions and law, and provide a reasonable opportunity to retrieve available customer records where lawful.',
       'Confidentiality, accrued payment obligations, intellectual-property rights, lawful record retention and provisions needed to resolve existing disputes survive closure. Suspension alone does not authorise automatic forfeiture of purchased Credit.',
     ],
   },

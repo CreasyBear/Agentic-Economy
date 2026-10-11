@@ -126,6 +126,7 @@ const durableTables = [
   'operationKeys',
   'callUsefulnessFeedback',
   'sourceWriteNonces',
+  'termsAcceptances',
   'adminMemberships',
   'adminApprovalProposals',
   'adminMembershipAuditEvents',

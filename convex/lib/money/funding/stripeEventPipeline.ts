@@ -4,6 +4,7 @@ import { recordFundingTerminal } from '@/lib/observability/journey'
 import { emitFundingJourneyEvent } from '../../journey/events'
 import type { MutationCtx } from '../../../_generated/server'
 import { internal } from '../../../_generated/api'
+import { enqueueOperatorAlert } from '../../../operatorDigest'
 import { enqueueAccountNotice } from '../../principalAccount/notifications/enqueue'
 import { enqueueMoneyAlertEvaluation } from '../../principalAccount/notifications/usageAlerts'
 import {
@@ -108,7 +109,7 @@ export async function ensureEventConsistency(
         return { kind: 'replay', appliedRef: priorEvent.appliedRef }
       }
     }
-    if (event.kind === 'refund' && priorEvent.status === 'ignored') {
+    if ((event.kind === 'refund' || event.kind === 'dispute') && priorEvent.status === 'ignored') {
       return priorEvent.appliedRef !== undefined
         ? { kind: 'replay', appliedRef: priorEvent.appliedRef }
         : { kind: 'replay' }
@@ -202,10 +203,17 @@ export async function prepareFundingSettlementEvent(
         updatedAt: event.observedAt,
       })
       // Expiry is not a failure the owner needs mail about.
-      if (!expired) await enqueueAccountNotice(ctx, {
-        eventKind: 'funding_failed', accountRef: command.accountRef,
-        sourceEventRef: command.commandRef, recipientPrincipalRef: command.actorPrincipalRef,
-      })
+      if (!expired) {
+        await enqueueAccountNotice(ctx, {
+          eventKind: 'funding_failed', accountRef: command.accountRef,
+          sourceEventRef: command.commandRef, recipientPrincipalRef: command.actorPrincipalRef,
+        })
+        await enqueueOperatorAlert(ctx, {
+          alertRef: `funding-failed:${command.commandRef}`,
+          subject: 'Payment failed',
+          text: `Funding command ${command.commandRef} failed (${command.accountRef}).`,
+        })
+      }
     }
     if (priorEvent === null) await ctx.db.insert('moneyStripeEvents', {
       ...eventRowFields(event), status: 'ignored',

@@ -1,4 +1,6 @@
 /// <reference types="vite/client" />
+import { register as registerWorkpool } from '@convex-dev/workpool/test'
+import { createTestDisputeEvent } from '../../helpers/stripe-events'
 import { anyApi } from 'convex/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -674,6 +676,7 @@ describe('Account AUD funding through Formance', () => {
 
   it('locks only the affected Account for partial refunds and never prepares a posting', async () => {
     const backend = convexTestWithMarketComponents()
+    registerWorkpool(backend, 'notificationWorkpool')
     const fixture = await publishedBusinessOwner(backend, 'formance-funding-partial-refund')
     const commandRef = 'account-funding:partial-refund'
     const paymentId = 'pi_partial_refund'
@@ -732,6 +735,75 @@ describe('Account AUD funding through Formance', () => {
     await expect(fixture.owner.query(listCases, {
       paginationOpts: { numItems: 10, cursor: null },
     })).resolves.toMatchObject({ page: [expect.objectContaining({ scopeType: 'account' })] })
+  })
+
+  it('freezes the Account on a dispute, alerts once, and replays the event', async () => {
+    const backend = convexTestWithMarketComponents()
+    registerWorkpool(backend, 'notificationWorkpool')
+    const fixture = await publishedBusinessOwner(backend, 'formance-funding-dispute')
+    const paymentId = 'pi_dispute_one'
+    await insertSettledFunding(backend, {
+      accountRef: fixture.canonicalAccountRef,
+      actorPrincipalRef: fixture.canonicalPrincipalRef,
+      commandRef: 'account-funding:dispute-one',
+      paymentId,
+    })
+    const event = createTestDisputeEvent({ paymentId, stripeEventId: 'evt_dispute_one' })
+    const args = () => withSourceWrite('billing', {
+      event,
+      operationKey: 'moneyAccountFunding:applyVerifiedEvent',
+      correlationId: event.stripeEventId,
+    })
+    const first = await fixture.owner.mutation(internal.moneyAccountFunding.prepareVerifiedEvent, await args())
+    expect(first).toMatchObject({ kind: 'accepted', status: 'ignored' })
+    await expect(fixture.owner.mutation(internal.moneyAccountFunding.prepareVerifiedEvent, await args()))
+      .resolves.toMatchObject({ kind: 'accepted', status: 'replayed' })
+    const cases = await backend.run(async (ctx) => await ctx.db.query('moneyReconciliationCases').collect())
+    expect(cases).toHaveLength(1)
+    expect(cases[0]).toMatchObject({
+      scopeType: 'account', scopeRef: fixture.canonicalAccountRef,
+      reasonCode: 'funding_dispute_open', status: 'open',
+    })
+    expect(cases[0]?.evidenceRefs).toEqual(expect.arrayContaining([event.disputeId]))
+    const notices = await backend.run(async (ctx) => await ctx.db.query('notificationDeliveries').collect())
+    expect(notices.filter((row) => row.eventKind === 'funding_disputed' && row.sourceEventRef === event.disputeId)).toHaveLength(1)
+  })
+
+  it('resolves the dispute case on won and claws back credit on lost', async () => {
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
+    const fixture = await publishedBusinessOwner(backend, 'formance-funding-dispute-closed')
+    const run = async (event: ReturnType<typeof createTestDisputeEvent>, fn: 'prepareVerifiedEvent' | 'finalizeVerifiedDispute', extra = {}) =>
+      await fixture.owner.mutation(internal.moneyAccountFunding[fn] as any, await withSourceWrite('billing', {
+        event, operationKey: 'moneyAccountFunding:applyVerifiedEvent', correlationId: event.stripeEventId, ...extra,
+      }) as never)
+    const caseRows = async () => await backend.run(async (ctx) => await ctx.db.query('moneyReconciliationCases').collect())
+    for (const [paymentId, disputeId, status] of [['pi_dispute_won', 'dp_won', 'won'], ['pi_dispute_lost', 'dp_lost', 'lost']] as const) {
+      await insertSettledFunding(backend, {
+        accountRef: fixture.canonicalAccountRef,
+        actorPrincipalRef: fixture.canonicalPrincipalRef,
+        commandRef: `account-funding:${disputeId}`,
+        paymentId,
+      })
+      await run(createTestDisputeEvent({ paymentId, disputeId, stripeEventId: `evt_${disputeId}_open` }), 'prepareVerifiedEvent')
+      const closed = { ...createTestDisputeEvent({ paymentId, disputeId, stripeEventId: `evt_${disputeId}_closed`, eventType: 'charge.dispute.closed' }), disputeStatus: status }
+      if (status === 'won') {
+        await expect(run(closed, 'prepareVerifiedEvent')).resolves.toMatchObject({ kind: 'accepted', status: 'ignored' })
+        expect((await caseRows()).find((c) => c.evidenceRefs.includes(disputeId))).toMatchObject({
+          status: 'resolved', resolutionEvidenceRefs: [closed.stripeEventId],
+        })
+      } else {
+        await expect(run(closed, 'prepareVerifiedEvent')).resolves.toMatchObject({
+          kind: 'prepared', bookingKind: 'reversal', booking: { commandRef: 'funding-reversal:dp_lost' },
+        })
+        const ref = 'formance:tx:dispute-reversal'
+        await expect(run(closed, 'finalizeVerifiedDispute', { formanceTransactionRef: ref }))
+          .resolves.toEqual({ kind: 'accepted', status: 'applied', appliedRef: ref })
+        const command = await backend.run(async (ctx) => await ctx.db.query('moneyFundingCommands')
+          .withIndex('by_paymentId', (q) => q.eq('paymentId', paymentId)).unique())
+        expect(command).toMatchObject({ state: 'reversed', reversalRefundId: disputeId, reversalTransactionRef: ref })
+        expect((await caseRows()).find((c) => c.evidenceRefs.includes(disputeId))).toMatchObject({ status: 'resolved' })
+      }
+    }
   })
 
   it('occupies one funding-command reversal for two succeeded Stripe refunds', async () => {
@@ -934,6 +1006,7 @@ describe('Account AUD funding through Formance', () => {
 
   it('refuses owner close of a processor_difference funding lock without source-write', async () => {
     const backend = convexTestWithMarketComponents()
+    registerWorkpool(backend, 'notificationWorkpool')
     const fixture = await publishedBusinessOwner(backend, 'formance-funding-lock-close')
     const commandRef = 'account-funding:lock-close'
     const paymentId = 'pi_lock_close'

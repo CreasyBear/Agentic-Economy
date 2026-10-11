@@ -1,5 +1,6 @@
 import { anyApi } from 'convex/server'
 import { expect, vi } from 'vitest'
+import { register as registerWorkpool } from '@convex-dev/workpool/test'
 
 import { components, internal } from '../../convex/_generated/api'
 import { evaluateCommercialPolicyGate } from '@/modules/money/public'
@@ -331,6 +332,7 @@ export async function boundAm09AgentHandoff(
     throw new Error('Agent funding handoff functions missing')
   }
   const backend = convexTestWithMarketComponents()
+  registerWorkpool(backend, 'notificationWorkpool')
   const published = await publishedBusinessOwner(backend, `am09-${slug}`)
   const subject = `user_am09-${slug}`
   const { principal: agent } = await issueBuyerAgent(backend, published.owner, subject, {

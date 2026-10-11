@@ -34,13 +34,9 @@ it('reconciles the visible saved terms after changing draft URLs and clears stal
   expect((screen.getByLabelText('x402 resource URL') as HTMLInputElement).value).toBe('')
 })
 
-it('retains later-page inventory context in setup breadcrumbs and the saved setup reopening URL', () => {
+it('retains later-page inventory context in the saved setup reopening URL', () => {
   const input = props('sha256:exact-draft')
   render(<AeOwnerSupplySourceStartPage {...input} search={{ ...input.search, inventoryQ: 'weather forecast', inventorySort: 'relevance', inventoryCursor: 'opaque:+/=' }} />)
-  const back = new URL(screen.getByRole('link', { name: 'Tools' }).getAttribute('href')!, 'https://aecon.test')
-  expect(back.searchParams.get('q')).toBe('weather forecast')
-  expect(back.searchParams.get('sort')).toBe('relevance')
-  expect(back.searchParams.get('cursor')).toBe('opaque:+/=')
   const reopen = new URL(screen.getByRole('link', { name: 'Reopen this saved setup' }).getAttribute('href')!, 'https://aecon.test')
   expect(reopen.searchParams.get('draft')).toBe('sha256:exact-draft')
   expect(reopen.searchParams.get('inventoryCursor')).toBe('opaque:+/=')

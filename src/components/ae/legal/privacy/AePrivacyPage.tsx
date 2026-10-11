@@ -1,3 +1,4 @@
+import { TERMS_VERSION } from '@/components/ae/legal/legal-version'
 import { Link } from '@tanstack/react-router'
 
 import { AeSiteUtilityDocument } from '@/components/ae/website/AeSiteUtilityDocument'
@@ -23,7 +24,7 @@ export function AePrivacyPage() {
       title={privacyTitle}
       description={privacyIntro}
       lastUpdated={privacyLastUpdated}
-      version="Alpha draft for review"
+      version={TERMS_VERSION}
       sections={privacySections}
       intro={<p>{privacyOpening}</p>}
       footer={(

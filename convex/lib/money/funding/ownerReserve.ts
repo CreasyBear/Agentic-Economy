@@ -6,6 +6,7 @@ import { readFundingStartRefusal } from '../treasury/paymentAdmission'
 import { admitInteractiveOwnerConsequence } from '../../authority/consequence/owner'
 import { readCommercialPolicyGate } from '../../../moneyCommercialPolicy'
 import { resolveAndBindLegalCustomer } from '../legalCustomer/binding'
+import { assertAdmission } from '../../platform/rateLimit'
 import { requireSourceWrite } from '../../security/sourceWrite/admission'
 import { canonicalDigest } from '../../../../src/modules/common/canonical-digest'
 import {
@@ -56,6 +57,9 @@ export async function reserveHandler(
       ? { kind: 'accepted', command: fundingCommandView(prior) }
       : refused('funding_idempotency_conflict')
   }
+  // After the replay return so retrying one key never consumes quota.
+  const rate = await assertAdmission(ctx, { name: 'funding-checkout', key: `account:${actor.canonicalAccountRef}` })
+  if (!rate.ok) return refused('rate_limited', true)
   const gate = await readFundingStartRefusal(ctx, args.environment, {
     admin: await readCurrentActiveAdminMembership(ctx) !== undefined,
   })

@@ -10,6 +10,7 @@ import {
 } from '../../../agentAccessPrincipals'
 import { readCommercialPolicyGate } from '../../../moneyCommercialPolicy'
 import { resolveAndBindLegalCustomer } from '../legalCustomer/binding'
+import { assertAdmission } from '../../platform/rateLimit'
 import { requireSourceRead, requireSourceWrite } from '../../security/sourceWrite/admission'
 import { canonicalDigest } from '../../../../src/modules/common/canonical-digest'
 import {
@@ -129,6 +130,8 @@ export async function reserveAgentHandoffHandler(
       ? { kind: 'accepted', command: fundingCommandView(prior) }
       : refused('funding_idempotency_conflict')
   }
+  const rate = await assertAdmission(ctx, { name: 'funding-checkout', key: `account:${admission.ownerId}` })
+  if (!rate.ok) return refused('rate_limited', true)
   const gate = await readFundingStartRefusal(ctx, args.environment, { admin: false })
   if (gate !== null) return refused(gate)
   const now = Date.now()

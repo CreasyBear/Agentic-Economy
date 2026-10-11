@@ -381,6 +381,22 @@ describe('sendOperatorDigest', () => {
     await expect(backend.action(internal.notificationDelivery.sendOperatorDigest, {})).resolves.toBeNull()
     expect(sendEmail).not.toHaveBeenCalled()
   })
+
+  it('posts an operator alert keyed by alertRef and suppresses without credentials', async () => {
+    const backend = createInteractiveAuthorityBackend()
+    const sendEmail = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response('{}', { status: 200 }))
+    vi.stubGlobal('fetch', sendEmail)
+    const args = { alertRef: 'dispute:dp_1', subject: 'aecon dispute', text: 'accountRef acc_1 dispute dp_1' }
+
+    await expect(backend.action(internal.notificationDelivery.sendOperatorAlert, args)).resolves.toBeNull()
+    const [, request] = sendEmail.mock.calls[0] ?? []
+    expect(request?.headers).toMatchObject({ 'Idempotency-Key': 'operator-alert:dispute:dp_1' })
+    expect(JSON.parse(String(request?.body))).toMatchObject({ to: ['operator@example.test'], subject: 'aecon dispute' })
+
+    delete process.env.OPERATOR_EMAIL
+    await expect(backend.action(internal.notificationDelivery.sendOperatorAlert, args)).resolves.toBeNull()
+    expect(sendEmail).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe('postResendEmail', () => {

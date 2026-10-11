@@ -2,6 +2,7 @@ import type { Infer } from 'convex/values'
 
 import type { MutationCtx } from '../../../_generated/server'
 import { requireSourceWrite } from '../../security/sourceWrite/admission'
+import { prepareFundingDisputeEvent } from './stripeDisputePipeline'
 import { prepareFundingRefundEvent } from './stripeRefundPipeline'
 import { prepareFundingSettlementEvent } from './stripeEventPipeline'
 
@@ -26,6 +27,7 @@ export async function prepareVerifiedEventHandler(
   if (sourceWrite.kind === 'rejected') return refused('source_write_denied')
   if (args.event.kind === 'checkout') return await prepareFundingSettlementEvent(ctx, args)
   if (args.event.kind === 'refund') return await prepareFundingRefundEvent(ctx, args)
+  if (args.event.kind === 'dispute') return await prepareFundingDisputeEvent(ctx, args)
   return refused('payment_binding_invalid')
 }
 
@@ -35,5 +37,6 @@ export async function prepareVerifiedEventFromInboxHandler(
 ): Promise<Infer<typeof prepareFundingEventResultValue>> {
   if (args.event.kind === 'checkout') return await prepareFundingSettlementEvent(ctx, args)
   if (args.event.kind === 'refund') return await prepareFundingRefundEvent(ctx, args)
+  if (args.event.kind === 'dispute') return await prepareFundingDisputeEvent(ctx, args)
   return refused('payment_binding_invalid')
 }

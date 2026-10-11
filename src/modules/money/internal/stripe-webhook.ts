@@ -46,6 +46,23 @@ export type StripeRefundWebhookEvent = Readonly<{
   observedAt: number
 }>
 
+export type StripeDisputeWebhookEvent = Readonly<{
+  kind: 'dispute'
+  stripeEventId: string
+  eventType: 'charge.dispute.created' | 'charge.dispute.updated' | 'charge.dispute.closed'
+  externalRef: string
+  disputeId: string
+  paymentId: string
+  chargeId: string
+  disputeStatus: string
+  reason: string
+  amount: ExactAmount
+  evidenceDueBy?: number
+  disputeDigest: string
+  payloadDigest: string
+  observedAt: number
+}>
+
 export type StripeAccountUpdatedWebhookEvent = Readonly<{
   kind: 'account'
   stripeEventId: string
@@ -66,6 +83,7 @@ export type StripeAccountUpdatedWebhookEvent = Readonly<{
 export type StripeMoneyWebhookEvent =
   | StripeCheckoutWebhookEvent
   | StripeRefundWebhookEvent
+  | StripeDisputeWebhookEvent
   | StripeAccountUpdatedWebhookEvent
 
 export type StripeWebhookVerification = StripeMoneyWebhookEvent | MoneyRefusal

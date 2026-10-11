@@ -96,6 +96,8 @@ export const resolveOwnerCase = mutation({
       return { kind: 'refused' as const, code: 'money_case_not_found' }
     }
     if (row.status === 'resolved') return { kind: 'replayed' as const, caseRef: row.caseRef }
+    // A bank dispute freezes the account; only an operator may lift it.
+    if (row.reasonCode.startsWith('funding_dispute')) return { kind: 'refused' as const, code: 'money_case_operator_only' }
     if (args.confirmation !== row.caseRef
       || args.resolutionEvidenceRef !== args.resolutionEvidenceRef.trim()
       || !/^[\u0020-\u007e]{1,500}$/u.test(args.resolutionEvidenceRef)) {

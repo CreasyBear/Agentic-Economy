@@ -22,6 +22,8 @@ export const RATE_LIMIT_NAMES = [
   'dispute-open',
   'paid-call-report',
   'mcp-anonymous',
+  'funding-checkout',
+  'funding-checkout-ip',
 ] as const
 
 export type RateLimitName = (typeof RATE_LIMIT_NAMES)[number]
@@ -49,4 +51,8 @@ export const RATE_LIMIT_POLICY: Record<RateLimitName, RateLimitPolicyConfig> = {
   'chat-anonymous-global': { kind: 'fixed window', rate: 5_000, period: 24 * HOUR_MS },
   'dispute-open': { kind: 'token bucket', rate: 3, period: MINUTE_MS, capacity: 3 },
   'mcp-anonymous': { kind: 'token bucket', rate: 30, period: MINUTE_MS, capacity: 30 },
+  // Stripe card-testing guidance: rate limit Checkout Session creation.
+  'funding-checkout': { kind: 'fixed window', rate: 5, period: HOUR_MS },
+  // Looser per-IP guard: retries replay without consuming the per-Account quota, and many owners can share one IP.
+  'funding-checkout-ip': { kind: 'fixed window', rate: 30, period: HOUR_MS },
 }

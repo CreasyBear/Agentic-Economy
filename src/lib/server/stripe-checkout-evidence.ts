@@ -346,6 +346,7 @@ function creditSessionCreateParams(
     client_reference_id: input.commandRef,
     metadata: creditMetadata(input),
     payment_intent_data: { metadata: creditMetadata(input) },
+    payment_method_options: { card: { request_three_d_secure: "automatic" } },
     expires_at: Math.floor(expiresAt / 1000),
     success_url: input.successReturnRef,
     cancel_url: cancelReturnRef,

@@ -808,6 +808,7 @@ import type * as securityAccountHistory from "../securityAccountHistory.js";
 import type * as serviceAssertion from "../serviceAssertion.js";
 import type * as sourceWriteAdmission from "../sourceWriteAdmission.js";
 import type * as stripeWebhookWorkpool from "../stripeWebhookWorkpool.js";
+import type * as termsAcceptance from "../termsAcceptance.js";
 import type * as trialAccess from "../trialAccess.js";
 import type * as trialAccessActions from "../trialAccessActions.js";
 import type * as usageTrackedMutation from "../usageTrackedMutation.js";
@@ -1634,6 +1635,7 @@ declare const fullApi: ApiFromModules<{
   serviceAssertion: typeof serviceAssertion;
   sourceWriteAdmission: typeof sourceWriteAdmission;
   stripeWebhookWorkpool: typeof stripeWebhookWorkpool;
+  termsAcceptance: typeof termsAcceptance;
   trialAccess: typeof trialAccess;
   trialAccessActions: typeof trialAccessActions;
   usageTrackedMutation: typeof usageTrackedMutation;

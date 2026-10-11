@@ -18,7 +18,7 @@ afterEach(cleanup)
 describe('Trust centre', () => {
   it('offers seven linked topics and discloses the pre-payment release of Tool inputs', () => {
     render(<AeTrustPage />)
-    expect(screen.getByText(/Alpha draft for review/u)).toBeInTheDocument()
+    expect(screen.getByText(/Version 2026-10-11/u)).toBeInTheDocument()
     const contents = screen.getByRole('navigation', { name: 'On this page' })
     const links = within(contents).getAllByRole('link')
     expect(links).toHaveLength(7)

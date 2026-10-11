@@ -126,8 +126,29 @@ export const refundEventArg = v.object({
   payloadDigest: identifier,
   observedAt: v.number(),
 })
+export const disputeEventArg = v.object({
+  kind: v.literal('dispute'),
+  stripeEventId: identifier,
+  eventType: v.union(
+    v.literal('charge.dispute.created'),
+    v.literal('charge.dispute.updated'),
+    v.literal('charge.dispute.closed'),
+  ),
+  externalRef: identifier,
+  disputeId: identifier,
+  paymentId: identifier,
+  chargeId: identifier,
+  disputeStatus: identifier,
+  reason: identifier,
+  amount: exactAmount,
+  evidenceDueBy: v.optional(v.number()),
+  disputeDigest: identifier,
+  payloadDigest: identifier,
+  observedAt: v.number(),
+})
 export const stripeMoneyWebhookEventArg = v.union(
   checkoutEventArg,
   refundEventArg,
+  disputeEventArg,
   accountUpdatedEventArg,
 )

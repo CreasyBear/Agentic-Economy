@@ -42,6 +42,9 @@ export function topUpErrorCopy(result: MoneyRefusal | AccountFundingOutcomeUnkno
   if (result.code === 'billing_identity_missing' || result.code === 'billing_identity_mismatch') {
     return `Your signed-in Account could not be confirmed. ${FINANCIAL_NO_PAYMENT} Refresh this page and sign in again.`
   }
+  if (result.code === 'rate_limited') {
+    return `Too many top-up attempts. ${FINANCIAL_NO_PAYMENT} Wait a while, then try again.`
+  }
   if (result.code === 'funding_amount_invalid') {
     return `That amount is outside the allowed range. ${FINANCIAL_NO_PAYMENT} Use a suggested amount or the limits shown under the field.`
   }
