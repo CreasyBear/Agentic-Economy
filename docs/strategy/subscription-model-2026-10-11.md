@@ -43,7 +43,7 @@ Pattern: three shapes. Pure prepaid credit (OpenRouter, Replicate, API providers
 
 ### A: Credits plus loading fee, with auto top-up and owner spend cap
 
-- Pros: matches OpenRouter and API-credit shape; reuses the live loading flow and the `auto_topup_failed` notification; no new ledger template (each reload runs the same `FUNDING_SETTLED` split); no subscription law exposure; directly answers the overage-control pattern.
+- Pros: matches OpenRouter and API-credit shape; reuses the live loading flow and the `auto_topup_failed` notification; no new ledger template (each reload runs the same `FUNDING_SETTLED` split); no subscription-law exposure, but off-session charges need customer consent, mandate records and failed-charge and chargeback budget; directly answers the overage-control pattern.
 - Cons: no recurring revenue; small reloads can earn less than fixed Stripe cost, so it needs a minimum top-up.
 - Customer impact: predictable spend via cap, no lock-in, nothing to cancel.
 - GST and accounting: unchanged. Fee and GST on each load. Whether prepaid AUD credit is a voucher is open and affects timing of GST on the principal.
@@ -59,7 +59,7 @@ Pattern: three shapes. Pure prepaid credit (OpenRouter, Replicate, API providers
 
 ### C: Platform subscription for features, credits separate
 
-- Pros: credits stay prepaid and separate, so no stored-value or grant issue; simple licensed price; no ledger change beyond recording the fee as revenue.
+- Pros: credits stay prepaid and separate, so no stored-value or grant issue; simple licensed price; a monthly fee billed in advance is a contract liability recognised over the period, so it needs a deferred-revenue account and an accountant-confirmed GST timing rule (build item 9).
 - Cons: no team or seat model exists; no usage base yet to justify seats, analytics or priority routing; needs renewal webhooks and a plan entity.
 - Customer impact: pay for features, not for spend; does not by itself give spend predictability.
 - GST and accounting: flat fee is a taxable supply with GST on the fee only, not on pass-through provider payments.
@@ -85,8 +85,8 @@ Open-source billing engines considered: Lago (AGPLv3, replaces Stripe's billing 
 Adopt E. Build A now: owner monthly spend cap, then auto top-up with a minimum reload and a user-set monthly cap. Defer any subscription until the payments switch is on and the Stripe, GST and ACL answers are in. Hold B and D.
 
 Reasoning:
-- Activation is the first receipted call on real credit. A subscription does not help it; auto top-up and trial-to-paid conversion do.
-- Pay-per-call prepaid credit is a proven base (OpenRouter, API providers) and avoids subscription law. The Unfair Trading Practices bill starts 1 July 2027 and adds subscription-trap and drip-pricing rules reaching small-business subscribers (enacted text unchecked).
+- Hypothesis, untested: activation is the first receipted call on real credit, and a subscription does not help it; auto top-up and trial-to-paid conversion might. No activation or conversion data is attached yet.
+- Pay-per-call prepaid credit is a proven base (OpenRouter, API providers) and avoids subscription law. The Unfair Trading Practices bill starts 1 July 2027 and adds subscription-trap and drip-pricing rules reaching small-business subscribers (date and scope unverified against the enacted text; not relied on for the decision, and it is unchecked whether aecon's own business customers fall in scope).
 - Aecon credits pay third-party providers, which sits close to Stripe's prohibited-use wording. Keeping credits as Formance balances and using Stripe only for cash and licensed prices avoids relying on Stripe credit grants.
 
 Where the panel disagreed (four members, all backing E):
@@ -97,16 +97,17 @@ Where the panel disagreed (four members, all backing E):
 
 ## 5. First version
 
-Stage 1 (ships first, no subscription):
+Stage 1 (ships first, no subscription; gated by the measurement step and written accountant answers in section 7):
 - Plan: Pay as you go. Price: loading fee as today. Includes prepaid AUD credit, owner monthly cap, auto top-up, low-balance and cap-reached notices.
 - Minimum reload: set from actual Stripe AU fees (to be measured).
+- Refund and expiry rule for unused prepaid credit: must be written before any load goes live.
 
-Stage 2 (one of, after decisions):
+Stage 2 (hypotheses only, not scheduled until interview and waitlist results are in; price points below are untested hypotheses, not derived from cost or a stated FX rate):
 - Pro (C): flat monthly fee, test A$20 to A$60 inclusive of GST. Includes team seats, higher caps, analytics, priority routing. Credits stay separate.
 - Plus (B-lite): small monthly fee, test A$10 to A$30 including A$5 to A$20 of platform credit drawn before prepaid, expiring at period end. Only if Stripe, accountant and ACL answers allow.
 
 How it shows:
-- Pricing page: three-column plan layout copied from stock Arc pricing block; Pay as you go first, GST-inclusive prices, cap and cancellation terms stated up front (drip-pricing rule).
+- Pricing page: show only what can be bought today (Pay as you go). Pro and Plus appear only when purchasable, never as fake doors. Layout from the stock Arc pricing block; GST-inclusive prices, cap and cancellation terms stated up front (drip-pricing rule).
 - `/for-agents`: one line on spend cap and auto top-up for agents acting on a budget; no plan upsell in the agent path.
 - Credit page: auto top-up toggle, threshold, monthly cap, saved card; later, plan card with renewal date and cancel button.
 - Emails: low balance, auto top-up succeeded, auto top-up failed (reuses `auto_topup_failed`), cap reached; later, renewal notice before each charge and cancellation confirmation.
@@ -115,6 +116,8 @@ How it shows:
 ## 6. Build plan
 
 All tasks behind the payments switch. Reference: OpenRouter auto top-up, Vercel spend budget, Stripe Billing.
+
+Stage 0 (before any Stage 1 build): pull funded-account data (repeat reloads, zero-balance events, trial cohort) and measure Stripe AU fees including the fixed component, payout timing and USDC conversion cost; record both in this doc. Run 10 to 15 buyer interviews and a non-transacting waitlist. If repeat-reload data is thin, drop auto top-up and the owner cap from Stage 1 and spend the effort on first-call activation.
 
 Stage 1:
 1. Owner-level monthly cap: add an owner period to `agentSpendingPeriods` reusing period accounts (v1.4); enforce in managed-call reserve. Verify with an `ae` CLI call that is refused at the cap.
@@ -136,7 +139,19 @@ Stage 2 (after decisions 1 to 4 below):
 
 1. Approve E and stage 1 now.
 2. Stage 2 shape: C (Pro features) or B-lite (Plus with included credit), or neither until usage proves it.
-3. Commission a written view from Stripe on stored value for credits that pay third-party providers, and an accountant view on voucher status of prepaid AUD credit and GST on recurring fees.
+3. Before Stage 1 ships, get written answers on: voucher status and GST timing of loaded principal; GST computed as 1/11 of the tax-inclusive amount (add a test case); principal versus agent for provider payments and so gross versus net revenue; fee timing, breakage and refund rules. Commission a written view from Stripe on stored value for credits that pay third-party providers, and an accountant view on voucher status of prepaid AUD credit and GST on recurring fees.
 4. Should the loading fee apply to the plan fee, and should plan credit expire at period end.
 5. Minimum reload amount and default cap once Stripe AU fees are measured.
 6. Price ranges to test in section 5, and whether to run them as a waitlist or alpha cohort first.
+
+## 8. Review notes
+
+Two outside reviews (CFO, skeptical investor) were applied. Accepted: Stage 0 measurement gate, activation claim relabelled as hypothesis, auto top-up exposure corrected, Option C accounting corrected, pricing page limited to purchasable plans, Stage 2 price points labelled hypotheses and unscheduled, UTP bill relabelled unverified, GST, principal-or-agent, refund and expiry questions added to decision 3.
+
+Rejected or deferred:
+- Benchmark rows with conflicting sources (L28, L36, L38): kept as context, not used as anchors in the recommendation; per-source dated logs deferred to the pricing work.
+- Full P&L, cash-flow forecast and AUD price ladder net of GST before decision 1: deferred. Inputs (Stripe AU fees, reload behaviour) do not exist yet; Stage 0 produces them, and a model built now would be invented numbers.
+- Trial credit unit and accounting treatment (L17): the unit is micro-units of AUD in code; treatment goes to the accountant list in decision 3 rather than being specified here.
+- Stored-value and payments-licensing legal view as a separate gate: already covered by decision 3 (Stripe written view); the legal view is added to the same commission, not a new decision.
+- Dropping Stage 2 planning entirely: kept as labelled hypotheses, since the options analysis is the doc's purpose; only scheduling is withheld.
+- Panel agreement as evidence: acknowledged as internal opinion only.
