@@ -53,9 +53,12 @@ export const sendDeliveryEmail = internalAction({
     })
     if (suppressed !== null) return { outcome: 'suppressed', code: suppressed }
 
-    // The tax invoice's buyer line falls back to the account email, known only here (design doc 6.1).
-    const email = context.email.eventKind === 'funding_receipt'
-      ? { ...context.email, props: { ...context.email.props, buyerEmail: primaryEmail.emailAddress } }
+    // From A$1,000 the invoice names the buyer; without an ABN or legal name that is the Clerk name and the account email (design doc 6.1). Below it nothing is added.
+    const props = context.email.eventKind === 'funding_receipt' ? context.email.props as { totalUnits: string; exponent: number; buyerName?: string } : undefined
+    const needsBuyer = props !== undefined && BigInt(props.totalUnits) >= 1000n * 10n ** BigInt(props.exponent)
+    const accountName = [user.firstName, user.lastName].filter(Boolean).join(' ')
+    const email = props !== undefined && needsBuyer
+      ? { ...context.email, props: { ...props, buyerEmail: primaryEmail.emailAddress, ...(props.buyerName === undefined && accountName !== '' ? { buyerName: accountName } : {}) } }
       : context.email
     const rendered = await renderEmail(email as EmailInput)
     // Only alert and lifecycle props carry an unsubscribe target; required mail has none.

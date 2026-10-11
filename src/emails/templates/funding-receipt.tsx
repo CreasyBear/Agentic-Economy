@@ -79,9 +79,9 @@ export default function FundingReceiptEmail({
         {[invoiceNumber, confirmedAt === undefined ? undefined : `${formatTimestamp(confirmedAt, timeZone)} ${zoneLabel(confirmedAt, timeZone)}`.trim()].filter(Boolean).join(' | ')}
       </Text>
       <Text className="ae-text" style={{ ...bodyText, fontSize: 14, lineHeight: '20px' }}>{SUPPLIER_LINE}</Text>
-      {needsBuyer || buyer !== '' ? (
+      {needsBuyer ? (
         <Text className="ae-text" style={{ ...bodyText, fontSize: 14, lineHeight: '20px' }}>
-          Billed to: {needsBuyer ? buyer : buyerEmail}
+          Billed to: {buyer}
         </Text>
       ) : null}
       <Section style={{ margin: '0 0 16px' }}>

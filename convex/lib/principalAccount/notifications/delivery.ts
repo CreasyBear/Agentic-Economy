@@ -8,6 +8,7 @@ import { formatMoney } from '@/emails/money'
 import { readExactAmount } from '@/modules/money/public'
 import type { Doc, Id } from '../../../_generated/dataModel'
 import type { MutationCtx, QueryCtx } from '../../../_generated/server'
+import { readFundingTaxDocuments } from '../../money/documents/taxInvoices'
 import { resolveClerkUserIdForPrincipal } from '../workspace/directory'
 import { activeOwnerPrincipalRef, PHASE3_KINDS } from './enqueue'
 import { isStalledKind, readStalledDeliveryContext } from './stalled'
@@ -127,10 +128,14 @@ async function readMoneyNoticeContext(ctx: QueryCtx, delivery: Doc<'notification
     const exact = [principalUnits, serviceFeeUnits, taxUnits, totalUnits].map((units) => moneyNoticeAmount({ currency: command.currency, units, exponent }))
     if (exact.includes(undefined)) return skip('amount_unsafe')
     amount = exact[0]
+    // The invoice number and date are the issued tax document's own; an unissued invoice is not sent as one.
+    const invoice = (await readFundingTaxDocuments(ctx, command, Date.now())).taxInvoice
+    if (invoice.kind !== 'issued') return skip('tax_invoice_not_issued')
     const taxFacts = await ctx.db.query('moneyCustomerTaxFacts')
       .withIndex('by_accountRef', (query) => query.eq('accountRef', delivery.accountRef)).unique()
     props = {
       principalUnits, serviceFeeUnits, taxUnits, totalUnits, exponent,
+      invoiceNumber: invoice.documentNumber, confirmedAt: new Date(invoice.issuedAt).toISOString(),
       ...(taxFacts?.abn ? { buyerAbn: taxFacts.abn } : {}),
       ...(taxFacts?.legalName ? { buyerName: taxFacts.legalName } : {}),
     }
