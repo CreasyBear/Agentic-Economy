@@ -11,10 +11,8 @@ import type { MutationCtx, QueryCtx } from '../../../_generated/server'
 import { readFundingTaxDocuments } from '../../money/documents/taxInvoices'
 import { resolveClerkUserIdForPrincipal } from '../workspace/directory'
 import { accountOwnerPrincipalRef, ACCOUNT_STATE_KINDS, activeOwnerPrincipalRef, PHASE3_KINDS } from './enqueue'
-import type { JourneyEventName } from '../../journey/events'
-import { hasJourneyEvent } from '../../journey/stalled'
 import { isStalledKind, readStalledDeliveryContext } from './stalled'
-import { unsubscribeUrlFor } from './unsubscribe'
+import { LIFECYCLE_EXIT_EVENTS, lifecycleSkipCode } from './unsubscribe'
 import { recordSuppression, suppressionCode } from './suppression'
 
 export const readSendSuppressionArgs = { deliveryId: v.id('notificationDeliveries'), addressHash: v.string() }
@@ -197,26 +195,6 @@ const readActiveMembership = async (ctx: QueryCtx, delivery: Doc<'notificationDe
     .withIndex('by_accountRef_and_memberPrincipalRef_and_lifecycle', (query) => query
       .eq('accountRef', delivery.accountRef).eq('memberPrincipalRef', delivery.recipientPrincipalRef).eq('lifecycle', 'active'))
     .first()
-
-/** Lifecycle kinds that run through the account notice reader, with the journey events that end each one (design doc section 5). Stalled nudges check their own steps in stalled.ts. */
-const LIFECYCLE_EXIT_EVENTS: Partial<Record<Doc<'notificationDeliveries'>['eventKind'], JourneyEventName[]>> = {
-  welcome: ['funded'],
-  first_call_done: [],
-  week_one_wrap: [],
-  first_call_failed: ['first_call'],
-}
-
-/** Send-time lifecycle checks shared by every lifecycle kind: exit conditions, owner opt-out, then the signed unsubscribe link (set on props). Returns a skip code or null. */
-async function lifecycleSkipCode(ctx: QueryCtx, delivery: Doc<'notificationDeliveries'>, props: Record<string, string>): Promise<string | null> {
-  for (const event of LIFECYCLE_EXIT_EVENTS[delivery.eventKind] ?? []) {
-    if (await hasJourneyEvent(ctx, delivery.accountRef, event)) return `${delivery.eventKind}_exited`
-  }
-  if (await hasJourneyEvent(ctx, delivery.accountRef, 'lifecycle_unsubscribed')) return 'opted_out'
-  const unsubscribeUrl = await unsubscribeUrlFor({ principalRef: delivery.recipientPrincipalRef, accountRef: delivery.accountRef, stream: 'lifecycle' })
-  if (unsubscribeUrl === null) return 'unsubscribe_url_missing'
-  props.unsubscribeUrl = unsubscribeUrl
-  return null
-}
 
 /** Phase 3 and T13 account notices. Recipient is re-checked at send time; the link target comes from sourceEventRef. Required mail, so no unsubscribe target. */
 async function readAccountNoticeContext(ctx: QueryCtx, delivery: Doc<'notificationDeliveries'>): Promise<NotificationContext> {

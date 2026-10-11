@@ -912,7 +912,6 @@ describe('stalled step notification deliveries', () => {
   it('builds a stalled email with a footer unsubscribe link and the RFC 8058 target', async () => {
     vi.stubEnv('AE_STALLED_EMAILS_ENABLED', 'true')
     vi.stubEnv('AE_SITE_URL', 'https://ae.example.test')
-    vi.stubEnv('CONVEX_SITE_URL', 'https://convex.example.test/')
     vi.stubEnv('EMAIL_UNSUBSCRIBE_SECRET', UNSUBSCRIBE_SECRET)
     const backend = await createNotificationBackend()
     await seedStalledOwner(backend, true)
@@ -921,7 +920,7 @@ describe('stalled step notification deliveries', () => {
     if (delivery === undefined) throw new Error('delivery_missing')
 
     const context = await backend.query(internal.notifications.readNotificationContext, { deliveryId: delivery._id })
-    const unsubscribeUrl = `https://convex.example.test/notifications/unsubscribe?t=${encodeURIComponent(await signedToken('lifecycle'))}`
+    const unsubscribeUrl = `https://ae.example.test/api/unsubscribe?t=${encodeURIComponent(await signedToken('lifecycle'))}`
     expect(context).toMatchObject({
       kind: 'ready',
       stream: 'lifecycle',

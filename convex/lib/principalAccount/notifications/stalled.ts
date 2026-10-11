@@ -4,7 +4,7 @@ import type { PaginationOptions } from 'convex/server'
 import { STALLED_STEPS as JOURNEY_STALLED_STEPS, readStalledPage, type StalledStep } from '../../journey/stalled'
 import { resolveClerkUserIdForPrincipal } from '../workspace/directory'
 import { enqueueEmail } from './enqueue'
-import { unsubscribeUrlFor } from './unsubscribe'
+import { lifecycleSkipCode } from './unsubscribe'
 
 type StalledKind = 'stalled_not_funded' | 'stalled_no_agent' | 'stalled_never_called'
 
@@ -79,17 +79,14 @@ export async function readStalledDeliveryContext(
   if (clerkUserId === null) return { kind: 'skip' as const, code: 'no_clerk_identity' }
   const siteUrl = process.env.AE_SITE_URL?.trim().replace(/\/+$/u, '')
   if (siteUrl === undefined || siteUrl.length === 0) return { kind: 'skip' as const, code: 'site_url_missing' }
-  const unsubscribeUrl = await unsubscribeUrlFor({
-    principalRef: delivery.recipientPrincipalRef,
-    accountRef: delivery.accountRef,
-    stream: 'lifecycle',
-  })
-  if (unsubscribeUrl === null) return { kind: 'skip' as const, code: 'unsubscribe_url_missing' }
+  const props: Record<string, string> = { siteUrl }
+  const skipCode = await lifecycleSkipCode(ctx, delivery, props)
+  if (skipCode !== null) return { kind: 'skip' as const, code: skipCode }
   return {
     kind: 'ready' as const,
     deliveryRef: delivery.deliveryRef,
     clerkUserId,
     stream: 'lifecycle' as const,
-    email: { eventKind: delivery.eventKind, props: { siteUrl, unsubscribeUrl } },
+    email: { eventKind: delivery.eventKind, props },
   }
 }
