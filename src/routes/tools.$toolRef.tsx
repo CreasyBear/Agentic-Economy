@@ -1,4 +1,4 @@
-import { createFileRoute, notFound } from '@tanstack/react-router'
+import { createFileRoute, notFound, redirect } from '@tanstack/react-router'
 import { useCallback } from 'react'
 
 import { PublicToolDetail } from '@/components/ae/market/public-tool-detail/PublicToolDetail'
@@ -8,8 +8,10 @@ import { BRAND_NAME } from '@/content/brand-copy'
 import { degrade } from '@/lib/observability/degrade'
 import { readCanonicalBaseUrlServer } from '@/lib/server/canonical-url.functions'
 import { isPublicToolRef } from '@/modules/capability-supply/public'
+import { directoryProviderKey } from '@/modules/market/x402-directory-index'
 import { toolDisplayTitle } from '@/modules/market/tool-view-model'
 import {
+  readDirectoryToolDetailRouteServer,
   readPublicToolDetailRouteServer,
   type PublicToolDetailRouteResult,
 } from '@/modules/market/tool-detail-route.functions'
@@ -19,6 +21,12 @@ export { PublicToolDetail } from '@/components/ae/market/public-tool-detail/Publ
 export const Route = createFileRoute('/tools/$toolRef')({
   validateSearch: validateToolPageSearch,
   loader: async ({ params }) => {
+    // Registry listings render on the provider-host route; resolve the bare id there.
+    if (/^registry:[a-f0-9]{64}$/u.test(params.toolRef)) {
+      const { metadata } = await readDirectoryToolDetailRouteServer({ data: { id: params.toolRef } })
+      if (metadata.kind !== 'found' && metadata.kind !== 'found_upstream') throw notFound({ data: { kind: 'not_found', toolRef: params.toolRef } })
+      throw redirect({ to: '/tools/$providerHost/$slug', params: { providerHost: directoryProviderKey(metadata.item.entry.provider), slug: params.toolRef }, replace: true })
+    }
     if (!isPublicToolRef(params.toolRef)) {
       throw notFound({ data: { kind: 'invalid_ref', toolRef: params.toolRef } })
     }
