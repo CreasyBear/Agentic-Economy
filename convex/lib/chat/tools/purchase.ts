@@ -150,7 +150,7 @@ export function createPurchaseTools(authority: TrustedChatAuthority & { kind: 'a
         inputSchema: z.strictObject({
           quoteRef: z.string().regex(/^operation-commitment:v1:[0-9a-f]{64}$/u),
         }),
-        execute: async (ctx: ToolCtx, input: { quoteRef: string }, options?: { messages?: readonly ModelMessage[] }) => {
+        execute: async (ctx: ToolCtx, input: { quoteRef: string }) => {
           const denied = reserve('tool.call')
           if (denied !== null) return denied
           const commandDigest = canonicalDigest({

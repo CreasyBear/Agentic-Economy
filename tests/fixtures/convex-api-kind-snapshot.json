@@ -2142,12 +2142,6 @@
     "kind": "action"
   },
   {
-    "visibility": "internal",
-    "module": "chatCall",
-    "method": "quoteToolRef",
-    "kind": "query"
-  },
-  {
     "visibility": "public",
     "module": "chatCall",
     "method": "readOwnerChatCards",
@@ -3357,6 +3351,12 @@
     "visibility": "internal",
     "module": "moneyManagedCallLifecycle",
     "method": "releaseBeforeSubmissionWithX402Proof",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyManagedCallLifecycle",
+    "method": "releaseUnusedAuthorization",
     "kind": "action"
   },
   {
