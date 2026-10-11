@@ -22,7 +22,7 @@ const INPUTS: Array<[string, EmailInput]> = [
   ['statement', { eventKind: 'invoice_ready', props: { siteUrl: SITE, periodLabel: 'October 2026', rows: [{ id: 'c1' }] } }],
   ['operator digest', { eventKind: 'operator_digest', props: { siteUrl: SITE, date: '2026-10-11', lines: ['2 stalled accounts', 'No exceptions'] } }],
   ['funding receipt', { eventKind: 'funding_receipt', props: { siteUrl: SITE, principalUnits: '2000', serviceFeeUnits: '100', taxUnits: '100', totalUnits: '2200' } }],
-['funding failed', { eventKind: 'funding_failed', props: { siteUrl: SITE } }],
+  ['funding failed', { eventKind: 'funding_failed', props: { siteUrl: SITE } }],
   ['task refunded', { eventKind: 'task_refunded', props: { siteUrl: SITE, amount: 'A$0.42', taskRef: 'call:abc123' } }],
   ['task stuck', { eventKind: 'task_stuck', props: { siteUrl: SITE } }],
   ['credit exhausted', { eventKind: 'credit_exhausted', props: { siteUrl: SITE } }],
