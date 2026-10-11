@@ -1,7 +1,7 @@
-import { Body, Container, Head, Html, Img, Link, Preview, Section, Text } from '@react-email/components'
+import { Body, Column, Container, Head, Html, Img, Link, Preview, Row, Section, Text } from '@react-email/components'
 import type { CSSProperties, ReactNode } from 'react'
 
-import { EMAIL_COLORS, EMAIL_FONT, EMAIL_LEGAL_LINES, EMAIL_SENDER_NAME, EMAIL_SUPPORT_ADDRESS, EMAIL_TAGLINE, SETTINGS_PATH } from './brand'
+import { EMAIL_COLORS, EMAIL_FONT, EMAIL_LEGAL_LINES, EMAIL_SENDER_NAME, EMAIL_SUPPORT_ADDRESS, SETTINGS_PATH } from './brand'
 import { emailUrl } from './links'
 import { HeaderWithLogoSection } from './vendor/emailcn/header-with-logo'
 
@@ -26,39 +26,41 @@ const DARK_CSS = `
 }`
 
 export const bodyText: CSSProperties = { color: light.text, fontFamily: EMAIL_FONT, fontSize: 16, lineHeight: '24px', margin: '0 0 16px' }
-const mutedText: CSSProperties = { color: light.muted, fontFamily: EMAIL_FONT, fontSize: 13, lineHeight: '20px', margin: '0 0 8px' }
+const reasonText: CSSProperties = { color: light.muted, fontFamily: EMAIL_FONT, fontSize: 13, lineHeight: '20px', margin: '16px 0 0' }
 const footerText: CSSProperties = { color: EMAIL_COLORS.onForestMuted, fontFamily: EMAIL_FONT, fontSize: 13, lineHeight: '20px', margin: '0 0 8px' }
 const footerLink: CSSProperties = { color: EMAIL_COLORS.onForest, textDecoration: 'underline' }
 
-/** The one button. Structure copied from emailcn `button` (primary, Section plus Link, padded inline-block), restyled to the website pair: charcoal fill and chalk text, flipped in dark. The vendored file exports only a full-document wrapper, so it cannot nest. */
+/** The one button. Structure from emailcn `button` (primary): Section (a table) holding a padded Link, restyled to the website pair, charcoal fill with chalk text, flipped in dark. Source: https://www.emailcn.run/r/react-email/ button.tsx, vendored at ./vendor/emailcn/button.tsx, whose export is a full-document wrapper and cannot nest. Table based: Section, Row, Column carry the fill and radius, and the Link pads inside the cell so Outlook keeps the shape. */
 export function CtaButton({ href, children }: { href: string; children: ReactNode }) {
   return (
     <Section style={{ margin: '24px 0', textAlign: 'left' }}>
-      <Link
-        className="ae-btn"
-        href={href}
-        style={{
-          backgroundColor: light.buttonFill,
-          borderRadius: 10,
-          color: light.buttonText,
-          display: 'inline-block',
-          fontFamily: EMAIL_FONT,
-          fontSize: 16,
-          fontWeight: 500,
-          lineHeight: '24px',
-          padding: '10px 24px',
-          textAlign: 'center',
-          textDecoration: 'none',
-        }}
-      >
-        {children}
-      </Link>
+      <Row>
+        <Column className="ae-btn" align="left" style={{ backgroundColor: light.buttonFill, borderRadius: 10 }}>
+          <Link
+            className="ae-btn"
+            href={href}
+            style={{
+              color: light.buttonText,
+              display: 'inline-block',
+              fontFamily: EMAIL_FONT,
+              fontSize: 16,
+              fontWeight: 500,
+              lineHeight: '24px',
+              padding: '10px 24px',
+              textAlign: 'center',
+              textDecoration: 'none',
+            }}
+          >
+            {children}
+          </Link>
+        </Column>
+      </Row>
     </Section>
   )
 }
 
 /** Forest band footer. Structure copied from emailcn `utility-footer` (legal variant: Section, Row, Column, divider rule, link row), restyled to the website footer (forest band, chalk text, chalk and gold symbol). The vendored file exports only a full-document wrapper. */
-function Footer({ siteUrl, campaign, reason, unsubscribeUrl, showSettings }: { siteUrl: string; campaign: string; reason: string; unsubscribeUrl: string | undefined; showSettings: boolean }) {
+function Footer({ siteUrl, campaign, unsubscribeUrl, showSettings }: { siteUrl: string; campaign: string; unsubscribeUrl: string | undefined; showSettings: boolean }) {
   const links: { label: string; href: string }[] = []
   if (showSettings) links.push({ label: 'Notification settings', href: emailUrl(siteUrl, SETTINGS_PATH, { campaign, content: 'settings' }) })
   links.push({ label: 'Privacy', href: emailUrl(siteUrl, '/privacy', { campaign, content: 'privacy' }) })
@@ -66,8 +68,7 @@ function Footer({ siteUrl, campaign, reason, unsubscribeUrl, showSettings }: { s
   return (
     <Section style={{ backgroundColor: EMAIL_COLORS.forest, padding: '32px 24px' }} className="ae-pad">
       <Img src={new URL(FOOTER_LOGO_PATH, siteUrl).toString()} width={32} alt="" data-skip-in-text style={{ display: 'block', height: 'auto', marginBottom: 16 }} />
-      <Text style={{ ...footerText, color: EMAIL_COLORS.onForest, fontSize: 14 }}>{reason}</Text>
-      <Section data-skip-in-text style={{ backgroundColor: EMAIL_COLORS.onForestDivider, height: 1, lineHeight: '1px', margin: '16px 0' }}>&zwj;</Section>
+      <Section data-skip-in-text style={{ backgroundColor: EMAIL_COLORS.onForestDivider, height: 1, lineHeight: '1px', margin: '0 0 16px' }}>&zwj;</Section>
       {EMAIL_LEGAL_LINES.filter((line) => line !== EMAIL_SUPPORT_ADDRESS).map((line) => {
         const at = line.indexOf(ABN)
         return (
@@ -93,12 +94,11 @@ function Footer({ siteUrl, campaign, reason, unsubscribeUrl, showSettings }: { s
           </span>
         ))}
       </Text>
-      <Text style={{ ...footerText, margin: '16px 0 0' }}>{EMAIL_SENDER_NAME}. {EMAIL_TAGLINE}.</Text>
     </Section>
   )
 }
 
-/** The one skeleton (design doc 2.3): preheader, header, content slot (heading, lead, body, one CTA), then the forest footer band carrying reason, legal identity, support, privacy and the unsubscribe slot. */
+/** The one skeleton (design doc 2.3): preheader, header, content slot (heading, lead, body, one CTA), then the reason line, then the forest footer band carrying legal identity, support, privacy and the unsubscribe slot. */
 export function Layout({ preview, siteUrl, campaign, reason, unsubscribeUrl, showSettings = true, children }: {
   preview: string
   siteUrl: string
@@ -126,12 +126,15 @@ export function Layout({ preview, siteUrl, campaign, reason, unsubscribeUrl, sho
             text={EMAIL_SENDER_NAME}
             variant="with-text"
             alignment="left"
-            backgroundColor={light.page}
+            backgroundColor={EMAIL_COLORS.chalk}
             pageBackgroundColor="transparent"
-            textColor={light.text}
+            textColor={EMAIL_COLORS.charcoal}
           />
-          <Section className="ae-pad" style={{ padding: '8px 24px 24px' }}>{children}</Section>
-          <Footer siteUrl={siteUrl} campaign={campaign} reason={reason} unsubscribeUrl={unsubscribeUrl} showSettings={showSettings} />
+          <Section className="ae-pad" style={{ padding: '8px 24px 24px' }}>
+            {children}
+            <Text className="ae-muted" style={reasonText}>{reason}</Text>
+          </Section>
+          <Footer siteUrl={siteUrl} campaign={campaign} unsubscribeUrl={unsubscribeUrl} showSettings={showSettings} />
         </Container>
       </Body>
     </Html>
