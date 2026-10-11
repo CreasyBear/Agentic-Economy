@@ -40,16 +40,16 @@ export default function StatementReadyEmail({ siteUrl, periodLabel, rows, total,
       <Section style={{ margin: '0 0 16px' }}>
         {shown.map((row) => (
           <Row key={row.id}>
-            <Column className="ae-text" style={{ ...cell, width: '60%' }}>
+            <Column className="ae-text ae-rule" style={{ ...cell, width: '60%' }}>
               {[row.product, row.provider].filter(Boolean).join(', ') || row.id}
               {row.at === undefined ? null : <span className="ae-muted" style={{ color: EMAIL_COLORS.light.muted }}><br />{formatTimestamp(row.at, timeZone)}</span>}
             </Column>
-            <Column className="ae-text" align="right" style={{ ...cell, textAlign: 'right' }}>{formatMoney(row.total)}</Column>
+            <Column className="ae-text ae-rule" align="right" style={{ ...cell, textAlign: 'right' }}>{formatMoney(row.total)}</Column>
           </Row>
         ))}
         {more > 0 ? (
           <Row>
-            <Column className="ae-muted" colSpan={2} style={{ ...cell, color: EMAIL_COLORS.light.muted }}>{formatCount(more)} more {more === 1 ? 'call' : 'calls'}</Column>
+            <Column className="ae-muted ae-rule" colSpan={2} style={{ ...cell, color: EMAIL_COLORS.light.muted }}>{formatCount(more)} more {more === 1 ? 'call' : 'calls'}</Column>
           </Row>
         ) : null}
         <Row>
