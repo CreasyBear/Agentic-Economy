@@ -191,7 +191,7 @@ function serverFailure(options: CliOptions, summary: string): DoctorCheckDraft {
     id: 'server', state: 'fail', summary,
     nextCommand: isLoopbackCliBaseUrl(options.baseUrl)
       ? LOCAL_DEV_COMMAND
-      : continuationCommand(['ae', 'status', '--base-url', safeOrigin, '--json']),
+      : continuationCommand(['ae', 'config', '--base-url', safeOrigin, '--json']),
   }
 }
 
