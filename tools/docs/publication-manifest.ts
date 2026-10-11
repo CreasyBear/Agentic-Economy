@@ -89,7 +89,7 @@ export const publicationManifest = {
   ],
   reference: { operationId: 'tool.call', path: '/api/v1/tools/call', method: 'post', schemaCount: 7 },
   referencePublication: {
-    operationCount: 68, renderedOperationCount: 61, schemaCount: 148,
+    operationCount: 70, renderedOperationCount: 63, schemaCount: 149,
     unsupported: [
       {
         operationId: 'tool.plan.quote', path: '/api/v1/tools/plans/quote', method: 'post',
