@@ -47,7 +47,7 @@ const SECOND_ORG_BINDING_REF = `aob_${'n'.repeat(32)}`
 const SECOND_ORG_ACCOUNT_REF = `acc_${'n'.repeat(32)}`
 const SECOND_ORG_OWNERSHIP_REF = `own_${'n'.repeat(32)}`
 
-const INVITEE_PRINCIPAL_REF = `prn_${'i'.repeat(32)}`
+const INVITEE_PRINCIPAL_REF = `prn_${'c'.repeat(32)}`
 const INVITEE_BINDING_REF = `eib_${'i'.repeat(32)}`
 const INVITEE_PROVIDER_IDENTIFIER = 'https://clerk.example.test|user_invitee_01'
 const OWNER_PROVIDER_IDENTIFIER = INTERACTIVE_TOKEN_IDENTIFIER
@@ -55,6 +55,8 @@ const TOKEN_IDENTIFIER = INTERACTIVE_TOKEN_IDENTIFIER
 const AGENT_PRINCIPAL_REF = `prn_${'g'.repeat(32)}`
 const AGENT_BINDING_REF = `eib_${'g'.repeat(32)}`
 
+const REMOVED_AGENT_REF = `prn_${'a'.repeat(32)}`
+const OTHER_AGENT_REF = `prn_${'b'.repeat(32)}`
 const MEMBERSHIP_ID = 'orgmem_test_workspace_membership_alpha'
 const ENDED_MEMBERSHIP_REF = `mem_${'e'.repeat(32)}`
 const PRIOR_ACTIVE_MEMBERSHIP_REF = `mem_${'p'.repeat(32)}`
@@ -1196,7 +1198,7 @@ describe('workspaceMemberships recordOrganizationMembershipUpdatedForServer (W-1
     await insertActiveMembershipRow(backend, {
       accountRef,
       memberPrincipalRef: PRINCIPAL_OWNER_REF,
-      membershipRef: `mem_${'o'.repeat(32)}`,
+      membershipRef: `mem_${'b'.repeat(32)}`,
       role: 'org:member',
     })
 
@@ -1416,6 +1418,42 @@ describe('workspaceMemberships recordOrganizationMembershipDeletedForServer (W-1
     expect(notices.filter((row) => row.eventKind === 'team_membership_changed')).toEqual([
       expect.objectContaining({ state: 'suppressed', accountRef }),
     ])
+  })
+
+  it('D1b: removed member loses their agent and credentials while another member agent stays active', async () => {
+    const backend = createBackend()
+    const accountRef = await seedDeletedObservationFixture(backend)
+    const agentRow = (principalId: string, ownerTokenIdentifier: string) => ({
+      principalId, ownerId: accountRef, ownerTokenIdentifier, credentialId: `key_${principalId}`,
+      applicationRef: 'agentic-economy', environment: 'sandbox' as const, scopes: ['market_tools:call'],
+      authorityMode: 'read_only' as const, grantGeneration: 1, spendingPolicyDigest: 'sha256:x',
+      lifecycle: 'active' as const, expiresAt: NOW + 100_000, recordedAt: NOW, lastSeenAt: NOW,
+    })
+    const credentialRow = (principalRef: string) => ({
+      bindingRef: `eib_${principalRef}`, credentialRef: `crd_${principalRef}`, principalRef, type: 'api_key' as const,
+      lifecycle: 'active' as const, generation: 1, issueIdempotencyRef: `issue:${principalRef}`, revision: 1,
+      issuedAt: NOW, expiresAt: NOW + 100_000, updatedAt: NOW,
+    })
+    await backend.run(async (ctx) => {
+      await ctx.db.insert('agentAccessPrincipals', agentRow(REMOVED_AGENT_REF, INVITEE_PROVIDER_IDENTIFIER) as never)
+      await ctx.db.insert('agentAccessPrincipals', agentRow(OTHER_AGENT_REF, OWNER_PROVIDER_IDENTIFIER) as never)
+      await ctx.db.insert('credentials', credentialRow(REMOVED_AGENT_REF) as never)
+      await ctx.db.insert('credentials', credentialRow(OTHER_AGENT_REF) as never)
+    })
+
+    const result = await recordOrganizationMembershipDeletedForServer(backend, deletedMembershipCommand({ deliveryRef: 'delivery-d1b' }))
+    expect(result).toEqual({ kind: 'accepted', status: 'applied' })
+
+    const state = await backend.run(async (ctx) => ({
+      agents: await ctx.db.query('agentAccessPrincipals').collect(),
+      credentials: await ctx.db.query('credentials').collect(),
+    }))
+    const lifecycleOf = (rows: ReadonlyArray<{ lifecycle: string }>, key: string, value: string) =>
+      rows.find((row) => (row as Record<string, unknown>)[key] === value)?.lifecycle
+    expect(lifecycleOf(state.agents, 'principalId', REMOVED_AGENT_REF)).toBe('revoked')
+    expect(lifecycleOf(state.credentials, 'principalRef', REMOVED_AGENT_REF)).toBe('revoked')
+    expect(lifecycleOf(state.agents, 'principalId', OTHER_AGENT_REF)).toBe('active')
+    expect(lifecycleOf(state.credentials, 'principalRef', OTHER_AGENT_REF)).toBe('active')
   })
 
   it('D2: same deliveryRefHash replay returns replayed with one ended row and one audit', async () => {

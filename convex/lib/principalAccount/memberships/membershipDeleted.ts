@@ -2,6 +2,7 @@ import type { MutationCtx } from '../../../_generated/server'
 import { CLERK_USER_PROVIDER_NAMESPACE } from '../interactiveAuthority/constants'
 import { RECORD_DELETED_OPERATION, RECORD_DELETED_SCOPE, auditEventIdFromDeliveryRefHash, recordCommandDigest, resolveOrgBindings, validateRecordCommand, verifyRecordServiceAuth } from './auth'
 import { recordOrganizationMembershipDeletedAudit } from './audit'
+import { revokeMachineAgentsForCreatorObservation } from '../../security/accountHistory/machineCascade'
 import { enqueueAccountNotice } from '../notifications/enqueue'
 import { CLERK_ORG_MEMBERSHIP_ACTOR_REF, WorkspaceMembershipError, type RecordArgs, type RecordResult } from './contracts'
 
@@ -109,6 +110,8 @@ export const recordOrganizationMembershipDeletedForServerHandler = async (ctx: M
       },
       revision: membership.revision + 1,
     })
+
+    await revokeMachineAgentsForCreatorObservation(ctx, command, { principalRef: principal.principalRef }, command.observedAt, toolRef, account.accountRef)
 
     const now = Date.now()
     await recordOrganizationMembershipDeletedAudit(ctx.db, {

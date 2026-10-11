@@ -6,12 +6,15 @@ import { persistAgentAudit } from '../../agentAccess/principals/records'
 
 const MACHINE_AGENT_CASCADE_CAP = 64
 
+type CascadeObservation = Pick<ClerkSecurityObservation, 'providerIdentifier' | 'deliveryRefHash' | 'observedAt'>
+
 export async function revokeMachineAgentsForCreatorObservation(
   ctx: Pick<MutationCtx, 'db'>,
-  observation: ClerkSecurityObservation,
+  observation: CascadeObservation,
   authority: Readonly<{ principalRef: string }>,
   createdAt: number,
   correlationRef: string,
+  onlyAccountRef?: string,
 ): Promise<void> {
   const accountRefs = new Set<string>()
   const ownershipRows = await ctx.db.query('accountOwnerships')
@@ -27,6 +30,11 @@ export async function revokeMachineAgentsForCreatorObservation(
       .eq('lifecycle', 'active'))
     .collect()
   for (const membership of membershipRows) accountRefs.add(membership.accountRef)
+  // A removed member's membership is already ended, so a scoped call names its account directly.
+  if (onlyAccountRef !== undefined) {
+    accountRefs.clear()
+    accountRefs.add(onlyAccountRef)
+  }
 
   const matchedAgents: Doc<'agentAccessPrincipals'>[] = []
   for (const accountRef of accountRefs) {
@@ -71,7 +79,7 @@ async function machineAgentCreatedByHuman(
 async function revokeMachineAgentAdmissionAndDependents(
   ctx: Pick<MutationCtx, 'db'>,
   agent: Doc<'agentAccessPrincipals'>,
-  observation: ClerkSecurityObservation,
+  observation: CascadeObservation,
   authority: Readonly<{ principalRef: string }>,
   createdAt: number,
   correlationRef: string,
