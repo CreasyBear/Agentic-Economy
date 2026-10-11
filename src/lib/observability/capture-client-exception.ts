@@ -1,8 +1,9 @@
+import { loadSentryClient } from '@/lib/observability/load-sentry-client'
 import { createClientOnlyFn } from '@tanstack/react-start'
 import { captureRouteException } from '@/lib/observability/capture-route-exception'
 
 export const captureClientExceptionOnClient = createClientOnlyFn((cause: unknown) => {
-  void import('@/lib/observability/sentry.client').then(({ captureClientException }) => {
+  void loadSentryClient().then(({ captureClientException }) => {
     captureClientException(cause)
   }).catch((importFailure: unknown) => {
     // The Sentry client chunk itself failed to load - report through the

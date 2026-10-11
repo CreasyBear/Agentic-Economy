@@ -1,3 +1,4 @@
+import { loadSentryClient } from '@/lib/observability/load-sentry-client'
 import { toast } from 'sonner'
 import { createClientOnlyFn } from '@tanstack/react-start'
 
@@ -31,7 +32,7 @@ type StaleChunkReloadOptions = {
   storage?: Pick<Storage, 'getItem' | 'setItem'>
 }
 
-const loadSentryClient = createClientOnlyFn(() => import('@/lib/observability/sentry.client'))
+const loadSentryClientOnly = createClientOnlyFn(() => loadSentryClient())
 
 export function isViteStaleChunkError(error: unknown): error is Error {
   return error instanceof Error
@@ -108,7 +109,7 @@ export function attemptViteStaleChunkReload(
   }
 
   const reload = options.reload ?? (() => window.location.reload())
-  const loadSentry = options.loadSentry ?? loadSentryClient
+  const loadSentry = options.loadSentry ?? loadSentryClientOnly
 
   const reloadAfterBoundedSentryFlush = async () => {
     let sentryImportPromise: Promise<SentryClientModule>
