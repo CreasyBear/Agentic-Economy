@@ -96,6 +96,20 @@ export async function retireOfferingTargetsPageHandler(
   }
 }
 
+/** Block verification and tell the owner once per blocker; the failure variant sourceEventRef keeps it apart from the success notice. */
+async function blockAndNotify(ctx: MutationCtx, row: Parameters<typeof block>[1], blocker: Parameters<typeof block>[3]) {
+  const blocked = await block(ctx, row, 'verify-completion', blocker)
+  const business = await ctx.db.get(row.businessId)
+  const owner = business === null ? null : await activeOwnerPrincipalRef(ctx.db, business.owningAccountRef)
+  if (business !== null && owner !== null) {
+    await enqueueEmail(ctx, {
+      eventKind: 'provider_offboarded', stream: 'transactional', recipientPrincipalRef: owner,
+      accountRef: business.owningAccountRef, sourceEventRef: `${row.caseRef}:failed:${blocker}`,
+    })
+  }
+  return blocked
+}
+
 export async function verifyCompletionHandler(ctx: MutationCtx, args: { caseRef: string }) {
   const row = await requireCase(ctx, args.caseRef)
   const routeable = await ctx.db.query('capabilityPublications')
@@ -109,8 +123,8 @@ export async function verifyCompletionHandler(ctx: MutationCtx, args: { caseRef:
     activeOrCleanupPendingConnectionCount: await countActiveConnections(ctx, row.businessId),
     retentionPolicyVersion: row.retentionPolicyVersion,
   })
-  if (completion.kind === 'blocked') return await block(ctx, row, 'verify-completion', completion.blocker)
-  if (await hasUnresolvedPayouts(ctx, String(row.businessId))) return await block(ctx, row, 'verify-completion', 'payout_resolution_required')
+  if (completion.kind === 'blocked') return await blockAndNotify(ctx, row, completion.blocker)
+  if (await hasUnresolvedPayouts(ctx, String(row.businessId))) return await blockAndNotify(ctx, row, 'payout_resolution_required')
   const now = Date.now()
   await ctx.db.patch(row._id, {
     state: 'retired',
