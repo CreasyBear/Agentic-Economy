@@ -29,6 +29,51 @@ const closeWorkspaceReceiptValue = v.union(
   }),
 )
 
+// Ends everything that grants authority through a closed account: memberships,
+// agent access grants, delegations and external organization bindings.
+export async function endAccountDependents(ctx: MutationCtx, targetRef: string, now: number) {
+  const activeMemberships = await ctx.db
+    .query('memberships')
+    .withIndex('by_accountRef_and_lifecycle', (query) => query
+      .eq('accountRef', targetRef)
+      .eq('lifecycle', 'active'))
+    .collect()
+  for (const membership of activeMemberships) {
+    await ctx.db.patch(membership._id, { lifecycle: 'ended', endedAt: now })
+  }
+
+  await eraseAccountJourney(ctx, targetRef)
+
+  const agentGrants = await ctx.db
+    .query('agentAccessGrants')
+    .withIndex('by_ownerId_and_updatedAt', (query) => query.eq('ownerId', targetRef))
+    .collect()
+  for (const grant of agentGrants) {
+    if (grant.lifecycle !== 'active') continue
+    await ctx.db.patch(grant._id, { lifecycle: 'revoked', updatedAt: now })
+  }
+
+  const delegationGrants = await ctx.db
+    .query('authorityDelegationGrants')
+    .withIndex('by_accountRef_and_actorPrincipalRef_and_createdBy_idempotencyRef', (query) => query
+      .eq('accountRef', targetRef))
+    .collect()
+  for (const delegation of delegationGrants) {
+    if (delegation.lifecycle !== 'active') continue
+    await ctx.db.patch(delegation._id, { lifecycle: 'revoked' })
+  }
+
+  const orgBindings = await ctx.db
+    .query('accountExternalOrganizationBindings')
+    .withIndex('by_accountRef_and_lifecycle', (query) => query
+      .eq('accountRef', targetRef)
+      .eq('lifecycle', 'active'))
+    .collect()
+  for (const binding of orgBindings) {
+    await ctx.db.patch(binding._id, { lifecycle: 'revoked', updatedAt: now })
+  }
+}
+
 /** Close the account and end its active ownership row. Shared by workspace close and personal retire. */
 export async function closeAccountAndOwnership(
   ctx: Pick<MutationCtx, 'db'>,
@@ -144,46 +189,7 @@ export const closeWorkspaceHandler = async (ctx: MutationCtx, args: Infer<typeof
 
     await closeAccountAndOwnership(ctx, account, currentOwnership, actionContext, now)
 
-    const activeMemberships = await ctx.db
-      .query('memberships')
-      .withIndex('by_accountRef_and_lifecycle', (query) => query
-        .eq('accountRef', canonicalAccountRef)
-        .eq('lifecycle', 'active'))
-      .collect()
-    for (const membership of activeMemberships) {
-      await ctx.db.patch(membership._id, { lifecycle: 'ended', endedAt: now })
-    }
-
-    await eraseAccountJourney(ctx, canonicalAccountRef)
-
-    const agentGrants = await ctx.db
-      .query('agentAccessGrants')
-      .withIndex('by_ownerId_and_updatedAt', (query) => query.eq('ownerId', canonicalAccountRef))
-      .collect()
-    for (const grant of agentGrants) {
-      if (grant.lifecycle !== 'active') continue
-      await ctx.db.patch(grant._id, { lifecycle: 'revoked', updatedAt: now })
-    }
-
-    const delegationGrants = await ctx.db
-      .query('authorityDelegationGrants')
-      .withIndex('by_accountRef_and_actorPrincipalRef_and_createdBy_idempotencyRef', (query) => query
-        .eq('accountRef', canonicalAccountRef))
-      .collect()
-    for (const delegation of delegationGrants) {
-      if (delegation.lifecycle !== 'active') continue
-      await ctx.db.patch(delegation._id, { lifecycle: 'revoked' })
-    }
-
-    const orgBindings = await ctx.db
-      .query('accountExternalOrganizationBindings')
-      .withIndex('by_accountRef_and_lifecycle', (query) => query
-        .eq('accountRef', canonicalAccountRef)
-        .eq('lifecycle', 'active'))
-      .collect()
-    for (const binding of orgBindings) {
-      await ctx.db.patch(binding._id, { lifecycle: 'revoked', updatedAt: now })
-    }
+    await endAccountDependents(ctx, canonicalAccountRef, now)
 
     await recordWorkspaceAuditEvent(ctx.db, {
       eventType: 'account.workspace.closed',

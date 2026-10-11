@@ -12,7 +12,7 @@ import { InteractiveAuthorityError } from '../../../interactiveAuthority'
 import { persistAuditEvent } from '../../security/audit/persistence'
 import { serviceAssertion } from '../../../serviceAssertion'
 import { resolveAccountRefForPrincipal } from './identity'
-import { closeAccountAndOwnership } from '../workspace/close'
+import { closeAccountAndOwnership, endAccountDependents } from '../workspace/close'
 import { revokeMachineAgentsForCreator } from './retireDependents'
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -208,6 +208,7 @@ export const retirePersonalAccountForServerHandler = async (ctx: MutationCtx, ar
         correlationRef: toolRef,
         idempotencyRef: toolRef,
       }, now)
+      await endAccountDependents(ctx, accountRef, now)
     }
 
     const audit = createPackage3AuditEvent({

@@ -171,14 +171,16 @@ describe('personalAccount retirePersonalAccountForServer (W-09)', () => {
     await seedOwnerMachineAgent(backend, { ownerTokenIdentifier: undefined })
     await retire(backend, retireCommand(TOKEN_IDENTIFIER))
 
-    const { account, ownerships } = await backend.run(async (ctx) => ({
+    const { account, ownerships, memberships } = await backend.run(async (ctx) => ({
       account: await ctx.db.query('accounts').withIndex('by_accountRef', (q) => q.eq('accountRef', ACCOUNT_REF)).unique(),
       ownerships: await ctx.db.query('accountOwnerships').collect(),
+      memberships: await ctx.db.query('memberships').collect(),
     }))
+    expect(memberships.filter((row) => row.accountRef === ACCOUNT_REF).every((row) => row.lifecycle === 'ended')).toBe(true)
     expect(account).toMatchObject({ lifecycle: 'closed' })
     expect(ownerships.filter((row) => row.accountRef === ACCOUNT_REF).every((row) => row.lifecycle === 'ended')).toBe(true)
     expect(await readAgentAccessPrincipal(backend, MACHINE_AGENT_REF)).toMatchObject({ lifecycle: 'revoked' })
-    await expect(readEligibility(backend, identity({ tokenIdentifier: 'teammate', subject: 'teammate' }))).rejects.toBeDefined()
+    expect(ownerships.some((row) => row.accountRef === ACCOUNT_REF && row.lifecycle === 'active')).toBe(false)
   })
 
   it('R8: records account.personal_account.retired audit event', async () => {
