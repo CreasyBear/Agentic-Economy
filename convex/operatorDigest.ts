@@ -3,7 +3,7 @@ import { paginationOptsValidator } from 'convex/server'
 import { v } from 'convex/values'
 
 import { internal } from './_generated/api'
-import { internalMutation, internalQuery, type ActionCtx } from './_generated/server'
+import { internalMutation, internalQuery, type ActionCtx, type MutationCtx } from './_generated/server'
 import { degradeBackend } from '../src/lib/observability/degrade-backend'
 import { formatDateInputValue } from '../src/lib/ui/format-time'
 import { singleLineText } from './lib/journey/events'
@@ -157,6 +157,15 @@ export const enqueue = internalMutation({
     return null
   },
 })
+
+/** Queues a refs-only operator alert on the same retrying workpool; alertRef dedupes at Resend. */
+export async function enqueueOperatorAlert(ctx: MutationCtx, args: { alertRef: string; subject: string; text: string }): Promise<void> {
+  await notificationWorkpool.enqueueAction(ctx, internal.notificationDelivery.sendOperatorAlert, args, {
+    retry: true,
+    onComplete: internal.operatorDigest.completeDigest,
+    context: null,
+  })
+}
 
 /** Reports a digest the workpool gave up on, so a sustained Resend outage still leaves a trace. */
 export const completeDigest = internalMutation({

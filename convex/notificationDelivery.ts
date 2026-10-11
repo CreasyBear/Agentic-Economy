@@ -89,6 +89,36 @@ export const sendDeliveryEmail = internalAction({
   },
 })
 
+/** Refs-only alert to the operator; the alertRef key means a Stripe retry never double sends. */
+export const sendOperatorAlert = internalAction({
+  args: { alertRef: v.string(), subject: v.string(), text: v.string() },
+  returns: v.null(),
+  handler: async (_ctx, { alertRef, subject, text }): Promise<null> => {
+    const resendApiKey = process.env.RESEND_API_KEY?.trim()
+    const fromEmail = process.env.NOTIFICATION_FROM_EMAIL?.trim()
+    const operatorEmail = process.env.OPERATOR_EMAIL?.trim()
+    if (!resendApiKey || !fromEmail || !operatorEmail) {
+      degradeBackend(new Error('operator_alert_credentials_missing'), undefined, {
+        site: 'sendOperatorAlert',
+        reason: 'source_unavailable',
+      })
+      return null
+    }
+    const result = await postResendEmail({
+      apiKey: resendApiKey,
+      from: fromEmail,
+      to: operatorEmail,
+      subject,
+      text,
+      idempotencyKey: `operator-alert:${alertRef}`,
+    })
+    if (result.outcome === 'failed') {
+      degradeBackend(new Error(result.code), undefined, { site: 'sendOperatorAlert', reason: 'invalid_response' })
+    }
+    return null
+  },
+})
+
 export const sendOperatorDigest = internalAction({
   args: {},
   returns: v.null(),
