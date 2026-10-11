@@ -17,13 +17,11 @@ import {
   callResultKindValues,
   callResultSchema,
   callMachineResultSchema,
-  type CallResult,
 } from '@/modules/capability-execution/call-contracts'
 import {
   toolQuoteInputSchema,
   type ToolQuoteResult,
 } from '@/modules/capability-execution/quote'
-import type { SuggestedNextAction } from '@/modules/market/suggested-next-action'
 import { exactAmountSchema, formatCurrencyAmount, formatDisplayAmount, formatDisplayPrice } from '@/modules/money/public'
 import {
   callNextAction,
@@ -33,6 +31,8 @@ import {
   projectCallResult,
   REFUSAL_SUMMARIES,
   type CardChrome,
+  type ExecuteToolCard,
+  type ToolFact,
 } from './tool-card-call-result'
 import { toolCatalogSearchInputSchema, toolChoiceSearchOutputSchema, registryNextActionSchema, type RegistryNextAction } from '@/modules/registry/tool-choice-contracts'
 import type {
@@ -71,11 +71,6 @@ export function toolChoiceReadinessLabel(readiness: NonNullable<ToolChoiceRow['r
     : readiness === 'unavailable' ? getStatusPresentation('unavailable').label : 'Unverified'
 }
 
-export type ToolFact = Readonly<{
-  label: string
-  value: string
-}>
-
 export const INSPECT_ACCOUNT_AVAILABLE_LABEL = 'Account available'
 export const INSPECT_AGENT_MAXIMUM_LABEL = 'Agent maximum'
 const INSPECT_OWNER_FUNDING_FACT_LABELS = new Set<string>([
@@ -83,7 +78,6 @@ const INSPECT_OWNER_FUNDING_FACT_LABELS = new Set<string>([
   INSPECT_AGENT_MAXIMUM_LABEL,
 ])
 
-export type CallResultState = CallResult['kind']
 export type ChatSaveNeed = Readonly<Pick<z.output<typeof toolCatalogSearchInputSchema>, 'query' | 'source' | 'filters'>>
 const storedSaveNeedSchema = toolCatalogSearchInputSchema.pick({ query: true, source: true, filters: true })
 export type ChatNeedActions = Readonly<{
@@ -132,24 +126,7 @@ export type ToolCardProjection =
       facts: readonly ToolFact[]
       toolRefs: readonly string[]
     })
-  | (CardChrome & {
-      kind: 'execute'
-      state: CallResultState
-      toolRefs: readonly string[]
-      name?: string
-      callRef?: string
-      outputPreview?: string
-      outputTruncated?: boolean
-      facts: readonly ToolFact[]
-      paid?: string
-      receiptRef?: string
-      evidenceHash?: string
-      summary: string
-      nextAction?: string
-      retryable?: boolean
-      recoveryReason?: string
-      suggestedNextAction?: SuggestedNextAction
-    })
+  | ExecuteToolCard
   | (CardChrome & {
       kind: 'clarify'
       question: string

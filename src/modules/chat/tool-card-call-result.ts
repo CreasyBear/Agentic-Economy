@@ -5,12 +5,37 @@ import { suggestNextAction, type SuggestedNextAction } from '@/modules/market/su
 import { exactAmountSchema, formatCurrencyAmount, formatDisplayAmount } from '@/modules/money/public'
 import { paidLabel } from './tool-card-price'
 import { CHAT_TOOL_TITLES, type ChatToolId } from './tool-ids'
-import type { CallResultState, ToolCardProjection, ToolFact } from './tool-card'
 
 export type CardChrome = Readonly<{
   toolId: ChatToolId
   title: string
 }>
+
+export type ToolFact = Readonly<{
+  label: string
+  value: string
+}>
+
+export type CallResultState = CallResult['kind']
+
+export type ExecuteToolCard = CardChrome & {
+  kind: 'execute'
+  state: CallResultState
+  toolRefs: readonly string[]
+  name?: string
+  callRef?: string
+  outputPreview?: string
+  outputTruncated?: boolean
+  facts: readonly ToolFact[]
+  paid?: string
+  receiptRef?: string
+  evidenceHash?: string
+  summary: string
+  nextAction?: string
+  retryable?: boolean
+  recoveryReason?: string
+  suggestedNextAction?: SuggestedNextAction
+}
 
 export const REFUSAL_SUMMARIES: Readonly<Record<string, string>> = {
   source_unavailable: 'Source unavailable',
@@ -89,7 +114,7 @@ function receiptFacts(result: Extract<CallResult, { receipt?: unknown }>): ToolF
     : [{ label: 'Receipt', value: result.receipt.state.replaceAll('_', ' ') }]
 }
 
-export function projectCallResult(result: CallResult): ToolCardProjection {
+export function projectCallResult(result: CallResult): ExecuteToolCard {
   const toolRefs = result.toolRef === undefined ? [] : [result.toolRef]
   if (result.kind === 'completed') {
     const preview = outputPreview(result)
