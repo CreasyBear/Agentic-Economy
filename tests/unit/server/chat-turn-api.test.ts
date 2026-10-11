@@ -4,6 +4,10 @@ import { ConvexError } from 'convex/values'
 import { handleChatTurnPost, handleChatTurnResource, type ChatTurnOptions, type ChatTurnSource } from '@/lib/server/chat-turn-api'
 import { ConvexSourceError } from '@/lib/server/convex-source'
 import { setHttpRateLimitAdmissionForTests } from '@/lib/server/rate-limit'
+const observed = vi.hoisted(() => ({ capture: vi.fn() }))
+vi.mock('@/lib/observability/sentry.server', async importOriginal => ({
+  ...(await importOriginal<typeof import('@/lib/observability/sentry.server')>()), captureServerException: observed.capture,
+}))
 import { productionWebManifestFixture } from '../../helpers/production-web-manifest'
 
 const turnRef = `turn_${'0'.repeat(8)}-${'0'.repeat(4)}-4000-8000-${'0'.repeat(12)}`
@@ -240,6 +244,7 @@ describe('authenticated chat Turn HTTP adapter', () => {
     const response = await handleChatTurnPost(post(), options(store))
     expect(response.status).toBe(409)
     expect(await response.json()).toMatchObject({ code: 'turn_fenced', kind: 'FAILED_PRECONDITION' })
+    expect(observed.capture).not.toHaveBeenCalled()
   })
 
   it('projects stream-time key revocation as a nonretryable 401 with an owner authentication handoff', async () => {
