@@ -95,6 +95,11 @@ export function formatDateInputValue(value: TimeValue, timeZone: string): string
   return `${part('year')}-${part('month')}-${part('day')}`
 }
 
+/** Short zone name in the given zone, e.g. "AWST". Empty when the runtime has none. */
+export function formatZoneName(value: TimeValue, timeZone?: string): string {
+  return new Intl.DateTimeFormat(LOCALE, { timeZone, timeZoneName: 'short' }).formatToParts(toDate(value)).find(entry => entry.type === 'timeZoneName')?.value ?? ''
+}
+
 /** ISO-8601 for the `dateTime` attribute of a `<time>` element. */
 export function timestampIso(value: TimeValue): string {
   return toDate(value).toISOString()

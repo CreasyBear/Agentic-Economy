@@ -13,7 +13,8 @@
       "sha256": "53c87f2db05584c1e74e7ed0fdd307fae141f9a9c53b202e852fe5faf5f8d5ba",
       "localRewrite": "imports \"react-email\" to \"@react-email/components\" (1.0.12) and \"@/components/email/*\" to \"./*\"",
       "propsUsed": "HeaderWithLogoSection: logoSrc, logoAlt, logoHref, text, variant=\"with-text\", alignment=\"left\", backgroundColor, pageBackgroundColor, textColor (src/emails/layout.tsx). Unused: HeaderWithLogo document wrapper, theme.",
-      "tsNocheck": null
+      "tsNocheck": null,
+      "permittedTypePatterns": []
     },
     {
       "path": "src/emails/vendor/emailcn/email-assets.ts",
@@ -24,7 +25,8 @@
       "sha256": "cef00fc6543086ceee71c3793ab07011fdc48dbac4bec2e62d67aaffb46baac2",
       "localRewrite": "none",
       "propsUsed": "emailAsset(\"maizzle-insignia.png\") only, evaluated as the header default logoSrc; layout always overrides it.",
-      "tsNocheck": "Upstream getIndexedAsset returns string | undefined (lines 354, 374) under noUncheckedIndexedAccess; fixing means editing vendored source, and our code never reaches those branches."
+      "tsNocheck": "Upstream getIndexedAsset returns string | undefined (lines 354, 374) under noUncheckedIndexedAccess; fixing means editing vendored source, and our code never reaches those branches.",
+      "permittedTypePatterns": []
     },
     {
       "path": "src/emails/vendor/emailcn/font-default.tsx",
@@ -35,7 +37,8 @@
       "sha256": "d4153cd3efc12abb297094ba293708165eb5de40b104b909d2debf2c0a431a92",
       "localRewrite": "import \"react-email\" to \"@react-email/components\" (1.0.12)",
       "propsUsed": "DefaultFonts takes no props; only referenced by the header document wrapper, which we do not render.",
-      "tsNocheck": null
+      "tsNocheck": null,
+      "permittedTypePatterns": []
     },
     {
       "path": "src/emails/vendor/emailcn/theme-default.ts",
@@ -46,7 +49,8 @@
       "sha256": "3ec55baaf7b6a7b209fc01b5066df01b584deb79f6ce8e3d0e460a0acbe0a0c8",
       "localRewrite": "none",
       "propsUsed": "defaultTheme, used as the header wrapper default; our theme is aeconTheme in src/emails/theme.ts.",
-      "tsNocheck": null
+      "tsNocheck": null,
+      "permittedTypePatterns": []
     },
     {
       "path": "src/emails/vendor/emailcn/email-theme.ts",
@@ -57,7 +61,10 @@
       "sha256": "8f0f0ebf3a64779218c8d505cc5d520b300ca9eee5cfa9007155fe1684a64ada",
       "localRewrite": "imports \"react-email\" to \"@react-email/components\" (1.0.12)",
       "propsUsed": "EmailTheme type and createEmailTailwindConfig(aeconTheme) (src/emails/theme.ts).",
-      "tsNocheck": null
+      "tsNocheck": null,
+      "permittedTypePatterns": []
     }
-  ]
+  ],
+  "notInstalled": "button, utility-footer, notification-default, onboarding-default, receipt-default, order-summary-table: each exports a full-document Html wrapper that cannot nest in our layout and takes emailcn's own theme. layout.tsx and the templates copy the structure and restyle it to aeconTheme, naming the slug in a comment (design doc 2.5, P15).",
+  "permittedTypePatterns": []
 }

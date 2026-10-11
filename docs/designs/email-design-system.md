@@ -113,15 +113,15 @@ Source of truth: https://www.emailcn.run/llms.txt. Install is `npx shadcn@latest
 |------|---------------|---------|-----|
 | Theme | `theme-*` item, edited into `aeconTheme` | all | the one shared theme object (T2) |
 | Header | `header-with-logo` | all | logo tile slot of the skeleton |
-| Notification body and CTA | `block-notification-default` | approval, alerts, stalled, provider, role, key, pause | direct |
-| Receipt and tax invoice | `block-receipt-default` | funding receipt (tax invoice) | direct. Rows: credit amount, service fee, GST, total, as in 6.1 |
-| Order summary table | `order-summary-table` | refunds, call statement, rows 29 and 30 | closer fit for refunds and statements than the receipt block |
-| Onboarding | `block-onboarding-default` | welcome, stalled steps | direct |
-| Button | `button` | every CTA | the one button style |
-| Footer | `utility-footer` | every email | restyled to the forest band (2.3) |
+| Notification body and CTA | `block-notification-default` (structure copied, not vendored) | approval, alerts, stalled, provider, role, key, pause | direct |
+| Receipt and tax invoice | `block-receipt-default` (structure copied, not vendored) | funding receipt (tax invoice) | direct. Rows: credit amount, service fee, GST, total, as in 6.1 |
+| Order summary table | `order-summary-table` (structure copied, not vendored) | refunds, call statement, rows 29 and 30 | closer fit for refunds and statements than the receipt block |
+| Onboarding | `block-onboarding-default` (structure copied, not vendored) | welcome, stalled steps | direct |
+| Button | `button` (structure copied, not vendored) | every CTA | the one button style |
+| Footer | `utility-footer` (structure copied, not vendored) | every email | restyled to the forest band (2.3) |
 | Authentication, Invitations, Newsletter | not installed | none | Clerk owns verification, sign-in and invite; no newsletter in scope |
 
-No gap is hand-rolled by default. Only if the vendored files show none fits does a template fall back to `Section`, `Row`, `Column` from `@react-email/components` 1.0.12 [REPO package.json:95], and then it records the named emailcn reference it copied from (P15).
+Only `header-with-logo` and its theme and asset dependencies are vendored (`upstream-manifest.json`, sha256 pinned by tests/imports). The other items export full-document `Html` wrappers that cannot nest in our layout, so templates copy their structure, restyle it to our theme and name the slug in a comment (P15). No gap is hand-rolled by default. Only if the vendored files show none fits does a template fall back to `Section`, `Row`, `Column` from `@react-email/components` 1.0.12 [REPO package.json:95], and then it records the named emailcn reference it copied from (P15).
 
 ---
 

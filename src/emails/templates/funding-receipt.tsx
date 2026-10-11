@@ -7,7 +7,7 @@ import { EMAIL_COLORS, EMAIL_LEGAL_LINES } from '../brand'
 import { bodyText, CtaButton, Layout } from '../layout'
 import { emailUrl } from '../links'
 import { formatMoney } from '../money'
-import { formatTimestamp } from '../../lib/ui/format-time'
+import { formatTimestamp, formatZoneName } from '../../lib/ui/format-time'
 
 /** Units come straight from the funding command (design doc 6.1); nothing is recomputed here. Callers pass the command's `AUD_EXPONENT`; the default of 2 (minor units) exists only for fixtures. */
 export type FundingReceiptProps = {
@@ -49,11 +49,6 @@ function Line({ label, children, strong = false }: { label: string; children: Re
   )
 }
 
-function zoneLabel(at: string, timeZone: string | undefined): string {
-  const part = new Intl.DateTimeFormat('en-AU', { timeZone, timeZoneName: 'short' }).formatToParts(new Date(at)).find((p) => p.type === 'timeZoneName')
-  return part?.value ?? ''
-}
-
 export default function FundingReceiptEmail({
   siteUrl, principalUnits, serviceFeeUnits, taxUnits, totalUnits, exponent = 2,
   invoiceNumber, confirmedAt, timeZone, buyerName, buyerEmail, buyerAbn,
@@ -76,7 +71,7 @@ export default function FundingReceiptEmail({
       {/* Structure from emailcn receipt-default (not vendored; its export is a full-document wrapper and cannot nest, so the body is copied into Layout): title, reference line, rows, divider, total, one button. */}
       <Text className="ae-text" style={{ ...bodyText, fontSize: 22, fontWeight: 500, lineHeight: '28px', margin: '0 0 4px' }}>Tax invoice</Text>
       <Text className="ae-muted" style={{ ...bodyText, ...muted, margin: '0 0 16px' }}>
-        {[invoiceNumber, confirmedAt === undefined ? undefined : `${formatTimestamp(confirmedAt, timeZone)} ${zoneLabel(confirmedAt, timeZone)}`.trim()].filter(Boolean).join(' | ')}
+        {[invoiceNumber, confirmedAt === undefined ? undefined : `${formatTimestamp(confirmedAt, timeZone)} ${formatZoneName(confirmedAt, timeZone)}`.trim()].filter(Boolean).join(' | ')}
       </Text>
       <Text className="ae-text" style={{ ...bodyText, fontSize: 14, lineHeight: '20px' }}>{SUPPLIER_LINE}</Text>
       {needsBuyer ? (
