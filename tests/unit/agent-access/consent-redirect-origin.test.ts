@@ -82,7 +82,7 @@ describe('consent redirect origin', () => {
       redirectUri: 'https://app.example/cb',
     })
     expect(readAgentConsentDetails(html).unverifiedClient).toBe(true)
-    const grant = (scope: string) => ({ requestedScopes: ['market_tools:call', scope] }) as Parameters<typeof modeForGrant>[0]
+    const grant = (scope: string) => ({ requestedScopes: ['market_tools:call', scope] }) as unknown as Parameters<typeof modeForGrant>[0]
     expect(modeForGrant(grant('customer_requests:spending_policy'))).toBe('approval_required')
     expect(modeForGrant(grant('customer_requests:unrestricted_test_only'))).toBe('approval_required')
     expect(modeForGrant(grant('customer_requests:read_only'))).toBe('read_only')

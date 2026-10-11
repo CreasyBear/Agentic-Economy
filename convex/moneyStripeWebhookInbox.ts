@@ -161,8 +161,8 @@ export const listStuckForOperator = internalQuery({
     return rows.map((row) => ({
       stripeEventId: row.stripeEventId,
       state: row.state as 'failed' | 'reconciliation_required',
-      failureCode: row.failureCode,
-      completedAt: row.completedAt,
+      ...(row.failureCode === undefined ? {} : { failureCode: row.failureCode }),
+      ...(row.completedAt === undefined ? {} : { completedAt: row.completedAt }),
     }))
   },
 })

@@ -46,7 +46,7 @@ export function ConsentRequestFacts({
             {'mono' in fact && fact.mono
               ? <code className={`arc-consent-fact-value arc-consent-fact-reference${'emphasis' in fact ? ' font-medium' : ''}`}>{fact.value}</code>
               : <span className="arc-consent-fact-value">{fact.value}</span>}
-            {'unverified' in fact && fact.unverified ? <Badge variant="warning" className="ml-2">Unverified application</Badge> : null}
+            {'unverified' in fact && fact.unverified ? <Badge tone="warning" className="ml-2">Unverified application</Badge> : null}
           </SettingsPageRow>
         ))}
       </SettingsPageGroup>
