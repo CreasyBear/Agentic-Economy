@@ -1,0 +1,16 @@
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { captureBackendException, degradeBackend } from '@/lib/observability/degrade-backend'
+
+describe('serializeCause redaction', () => {
+  afterEach(() => vi.restoreAllMocks())
+
+  it('redacts bearer tokens and key assignments in logged causes', () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const cause = new Error('upstream failed Authorization: Bearer sk_live_abc123 api_key=SUPERSECRET')
+    degradeBackend(cause, null, { site: 't', reason: 'source_unavailable' })
+    captureBackendException('token=hunter2xyz')
+    const out = spy.mock.calls.map((c) => c.join(' ')).join('\n')
+    expect(out).not.toMatch(/sk_live_abc123|SUPERSECRET|hunter2xyz/)
+    expect(out).toContain('[Filtered]')
+  })
+})

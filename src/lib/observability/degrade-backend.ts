@@ -1,3 +1,5 @@
+import { redactSensitiveText } from '@/lib/observability/redact-sensitive-text'
+
 /** Canonical reasons a degraded (fallback-served) result can occur. */
 export type DegradedReason = 'source_unavailable' | 'timeout' | 'not_found' | 'forbidden' | 'invalid_response'
 
@@ -76,10 +78,14 @@ export function boundaryCauseKind(cause: unknown): string {
 function serializeCause(cause: unknown): unknown {
   try {
     if (cause instanceof Error) {
-      return { name: cause.name, message: cause.message, stack: cause.stack }
+      return {
+        name: cause.name,
+        message: redactSensitiveText(cause.message),
+        stack: cause.stack === undefined ? undefined : redactSensitiveText(cause.stack),
+      }
     }
     if (typeof cause === 'string') {
-      return cause
+      return redactSensitiveText(cause)
     }
     // Guard against circular structures / non-serializable values.
     JSON.stringify(cause)
