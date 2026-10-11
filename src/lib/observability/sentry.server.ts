@@ -2,6 +2,7 @@ import * as Sentry from '@sentry/node'
 
 import { readObservabilityServerConfig } from '@/lib/observability/config'
 import { setJourneyReporter, type JourneyOutcomeEvent } from '@/lib/observability/journey'
+import { routeExpectedEvent } from '@/lib/observability/expected-events'
 import {
   sanitizeTelemetryError,
   sanitizeTelemetryEvent,
@@ -26,8 +27,9 @@ export function initSentryServer(): boolean {
     environment: config.environment,
     ...(config.release === undefined ? {} : { release: config.release }),
     tracesSampleRate: config.environment === 'production' ? 0.1 : 1,
-    beforeSend(event) {
-      return sanitizeTelemetryEvent(event)
+    beforeSend(event, hint) {
+      const safe = sanitizeTelemetryEvent(event)
+      return safe === null ? null : routeExpectedEvent(safe, hint, Sentry.addBreadcrumb)
     },
     beforeSendTransaction(event) {
       return sanitizeTelemetryEvent(event)
@@ -46,11 +48,12 @@ function reportJourneyToSentry(event: JourneyOutcomeEvent): void {
   Sentry.metrics.count('ae.journey', 1, {
     attributes: { journey: event.journey, outcome: event.outcome, good },
   })
+  if (event.good) return
   Sentry.withScope((scope) => {
     scope.setTag('journey', event.journey)
     scope.setTag('outcome', event.outcome)
     scope.setTag('good', good)
-    scope.setLevel(event.good ? 'info' : 'warning')
+    scope.setLevel('warning')
     Sentry.captureMessage('[ae.journey]')
   })
 }
