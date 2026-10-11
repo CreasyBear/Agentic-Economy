@@ -926,7 +926,8 @@ describe('stalled step notification deliveries', () => {
       stream: 'lifecycle',
       email: { eventKind: 'stalled_not_funded', props: { siteUrl: 'https://ae.example.test' } },
     })
-    const url = new URL((context as { email: { props: { unsubscribeUrl: string } } }).email.props.unsubscribeUrl)
+    if (context.kind !== 'ready') throw new Error('context_not_ready')
+    const url = new URL(String(context.email.props.unsubscribeUrl))
     expect(url.origin + url.pathname).toBe('https://ae.example.test/api/unsubscribe')
     await expect(verifyUnsubscribeToken(UNSUBSCRIBE_SECRET, url.searchParams.get('t') ?? '')).resolves.toEqual({
       principalRef: PRINCIPAL_REF, accountRef: ACCOUNT_REF, stream: 'lifecycle',
