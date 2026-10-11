@@ -24,8 +24,8 @@ export type OwnerWorkspaceOwner = 'operations' | 'account' | 'workspace' | 'team
 export function ownerWorkspaceOwnerForPath(pathname: string): OwnerWorkspaceOwner {
   if (pathname === '/owner/operations' || pathname.startsWith('/owner/operations/')) return 'operations'
   if (pathname === '/owner/supply' || pathname.startsWith('/owner/supply/')) return 'operations'
-  if (pathname === '/owner/workspace' || pathname.startsWith('/owner/workspace/')) return 'workspace'
-  if (pathname === '/owner/team' || pathname.startsWith('/owner/team/')) return 'team'
+  if (pathname === '/owner/settings/workspace' || pathname.startsWith('/owner/settings/workspace/')) return 'workspace'
+  if (pathname === '/owner/settings/team' || pathname.startsWith('/owner/settings/team/')) return 'team'
   if (pathname === '/owner/settings') return 'account'
   return undefined
 }
