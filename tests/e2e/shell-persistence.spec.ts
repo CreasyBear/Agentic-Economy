@@ -17,25 +17,25 @@ async function navigateMarketToForProviders(page: Page) {
     await page.getByRole('button', { name: 'Open public menu' }).click()
     await page.getByRole('dialog').getByRole('link', { name: 'For providers' }).click()
   } else {
-    await page.getByRole('link', { name: 'For providers', exact: true }).click()
+    await page.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name: 'For providers', exact: true }).click()
   }
   await expect(page).toHaveURL(/\/for-providers$/)
   await expect(page.locator('[data-shell="app-header"][data-probe="alive"]'), 'header remounted on market -> for-providers').toHaveCount(1)
 }
 
-/** Navigates back to `/market` by clicking the persistent header's "Market" link. */
+/** Navigates back to `/market` by clicking the persistent header's "Tools" link. */
 async function navigateHeaderToMarket(page: Page) {
   if (isCompact(page)) {
     await page.getByRole('button', { name: 'Open public menu' }).click()
     await page
       .getByRole('dialog', { name: 'Public navigation' })
       .getByRole('navigation', { name: 'Primary' })
-      .getByRole('link', { name: 'Market' })
+      .getByRole('link', { name: 'Tools', exact: true })
       .click()
   } else {
     await page
       .getByRole('navigation', { name: 'Primary' })
-      .getByRole('link', { name: 'Market' })
+      .getByRole('link', { name: 'Tools', exact: true })
       .click()
   }
   await expect(page).toHaveURL(/\/market/)
@@ -47,8 +47,8 @@ test.describe('app shell persistence', () => {
     await page.goto('/market')
     await page.locator('[data-shell="app-header"][data-hydrated="true"]').waitFor()
 
-    const trigger = page.getByRole('button', { name: 'Find Tools' })
-    const label = trigger.getByText('Find Tools', { exact: true })
+    const trigger = page.getByRole('button', { name: 'Find tools' })
+    const label = trigger.getByText('Find tools', { exact: true })
     for (const width of [375, 1440, 639, 640, 375, 1440]) {
       await page.setViewportSize({ width, height: 812 })
       if (width < 640) {
