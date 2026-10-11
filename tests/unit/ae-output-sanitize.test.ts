@@ -9,4 +9,7 @@ describe('ae output sanitizer', () => {
     // eslint-disable-next-line no-control-regex
     expect(out).not.toMatch(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/u)
   })
+  it('strips bidi controls', () => {
+    expect(sanitizeText('a\u202eb\u2066c\u2069d')).toBe('abcd')
+  })
 })

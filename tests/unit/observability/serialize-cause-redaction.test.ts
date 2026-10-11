@@ -13,4 +13,10 @@ describe('serializeCause redaction', () => {
     expect(out).not.toMatch(/sk_live_abc123|SUPERSECRET|hunter2xyz/)
     expect(out).toContain('[Filtered]')
   })
+
+  it('redacts secrets inside object causes', () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    degradeBackend({ header: 'Authorization: Bearer sk_live_objsecret999' }, null, { site: 't', reason: 'source_unavailable' })
+    expect(spy.mock.calls.map((c) => c.join(' ')).join('\n')).not.toMatch(/sk_live_objsecret999/)
+  })
 })

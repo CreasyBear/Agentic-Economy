@@ -124,12 +124,12 @@ function serializeCause(cause: unknown): unknown {
       return redactSensitiveText(cause)
     }
     // Guard against circular structures / non-serializable values.
-    JSON.stringify(cause)
-    return cause
+    const json = JSON.stringify(cause)
+    return json === undefined ? undefined : redactSensitiveText(json)
   } catch {
     // Intentional bare catch: the reporting path must never throw or recurse.
     try {
-      return String(cause)
+      return redactSensitiveText(String(cause))
     } catch {
       // Intentional bare catch: the reporting path must never throw or recurse.
       return 'unserializable cause'
