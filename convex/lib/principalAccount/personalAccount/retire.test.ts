@@ -11,7 +11,7 @@ const input = { principalRef: 'p1', accountRef: 'a1' }
 describe('deletion notices', () => {
   it('enqueues the request notice and schedules reminder at 11d and completion at 14d', async () => {
     const runAfter = vi.fn()
-    await scheduleDeletionNotices({ scheduler: { runAfter } } as never, input, 0)
+    await scheduleDeletionNotices({ scheduler: { runAfter } } as never, input)
     expect(DELETION_GRACE_MS).toBe(14 * DAY)
     expect(DELETION_REMINDER_LEAD_MS).toBe(3 * DAY)
     expect(enqueueAccountNotice).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ eventKind: 'deletion_requested' }))

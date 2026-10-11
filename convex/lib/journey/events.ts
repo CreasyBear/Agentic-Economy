@@ -51,9 +51,9 @@ export async function emitJourneyEvent(
 
 /** The first credited funding is `funded`; every later one is `topped_up`, keyed by its funding ref. */
 export async function emitFundingJourneyEvent(ctx: JourneyCtx, accountRef: string, fundingRef: string, fundingSource?: string): Promise<void> {
-  const props = fundingSource === undefined ? undefined : { funding_source: fundingSource }
-  if (await emitJourneyEvent(ctx, accountRef, 'funded', { props })) return
-  await emitJourneyEvent(ctx, accountRef, 'topped_up', { key: fundingRef, props })
+  const props = fundingSource === undefined ? {} : { props: { funding_source: fundingSource } }
+  if (await emitJourneyEvent(ctx, accountRef, 'funded', props)) return
+  await emitJourneyEvent(ctx, accountRef, 'topped_up', { key: fundingRef, ...props })
 }
 
 const ERASE_BATCH = 500

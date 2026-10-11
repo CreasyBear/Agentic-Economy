@@ -26,7 +26,7 @@ export const deletionNoticeArgs = {
 }
 
 /** Tell the owner now, then schedule the final reminder and the completion notice. */
-export async function scheduleDeletionNotices(ctx: MutationCtx, input: { principalRef: string; accountRef: string }, now: number): Promise<void> {
+export async function scheduleDeletionNotices(ctx: MutationCtx, input: { principalRef: string; accountRef: string }): Promise<void> {
   await enqueueAccountNotice(ctx, { eventKind: 'deletion_requested', accountRef: input.accountRef, sourceEventRef: `${input.principalRef}:deletion_requested` })
   await ctx.scheduler.runAfter(DELETION_GRACE_MS - DELETION_REMINDER_LEAD_MS, internal.personalAccount.sendDeletionNotice, { ...input, notice: 'final_reminder' })
   await ctx.scheduler.runAfter(DELETION_GRACE_MS, internal.personalAccount.sendDeletionNotice, { ...input, notice: 'completed' })
@@ -213,7 +213,7 @@ export const retirePersonalAccountForServerHandler = async (ctx: MutationCtx, ar
     })
     if (!audit.valid) throw new Error(`personal_account_retire_audit_invalid:${audit.reason}`)
     await persistAuditEvent(ctx.db, audit.event)
-    await scheduleDeletionNotices(ctx, { principalRef: principal.principalRef, accountRef }, now)
+    await scheduleDeletionNotices(ctx, { principalRef: principal.principalRef, accountRef })
 
     return { kind: 'accepted', status: 'applied', eventRef }
 }

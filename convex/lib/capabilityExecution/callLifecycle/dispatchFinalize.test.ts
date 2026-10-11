@@ -13,10 +13,10 @@ const allocation = (purchasedUnits: string) => ({ version: 'ae.promotional-credi
 
 describe('journeyForFinalization funding source', () => {
   it('classifies funding source', () => {
-    expect(callFundingSource({ environment: 'sandbox', promotionalCreditAllocation: undefined })).toBe('sandbox')
+    expect(callFundingSource({ environment: 'sandbox' })).toBe('sandbox')
     expect(callFundingSource({ environment: 'production', promotionalCreditAllocation: allocation('0') })).toBe('trial')
     expect(callFundingSource({ environment: 'production', promotionalCreditAllocation: allocation('3') })).toBe('real')
-    expect(callFundingSource({ environment: 'production', promotionalCreditAllocation: undefined })).toBe('real')
+    expect(callFundingSource({ environment: 'production' })).toBe('real')
   })
 
   it('activates only on a real-credit receipted call; trial emits first_call tagged trial', async () => {
