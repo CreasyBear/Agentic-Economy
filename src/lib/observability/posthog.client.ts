@@ -75,6 +75,38 @@ export function identifyPostHogAccount(distinctId: string): void {
   }).catch(() => {})
 }
 
+export type AttributionTouch = {
+  source?: string; medium?: string; campaign?: string; content?: string; term?: string
+  referrer?: string; landingPath?: string; clickId?: string; at: number
+}
+
+/** Maps PostHog campaign props (`$initial_*` for first touch, `$session_entry_*` for last) to a stored touch. Path only, never the query. */
+export function buildAttributionTouch(props: Record<string, unknown>, prefix: '$initial_' | '$session_entry_', at: number): AttributionTouch | undefined {
+  const str = (key: string): string | undefined => {
+    const value = props[prefix + key]
+    return typeof value === 'string' && value !== '' && value !== '$direct' ? value.slice(0, 200) : undefined
+  }
+  const url = str('current_url') ?? str('url')
+  let landingPath = str('pathname')
+  if (landingPath === undefined && url !== undefined) try { landingPath = new URL(url).pathname } catch { /* ignore */ }
+  const touch = {
+    source: str('utm_source'), medium: str('utm_medium'), campaign: str('utm_campaign'),
+    content: str('utm_content'), term: str('utm_term'), referrer: str('referring_domain') ?? str('referrer'),
+    landingPath, clickId: str('gclid') ?? str('fbclid') ?? str('msclkid'),
+  }
+  const present = Object.entries(touch).filter(([, value]) => value !== undefined)
+  return present.length === 0 ? undefined : { ...Object.fromEntries(present), at }
+}
+
+/** First touch from PostHog's persisted initial person info; last touch from this session's entry props. */
+export async function readPostHogAttribution(): Promise<{ firstTouch?: AttributionTouch; lastTouch?: AttributionTouch } | undefined> {
+  if (!productAnalyticsAllowed() || !(await ensurePostHogClient()) || posthogClient === undefined) return undefined
+  const at = Date.now()
+  const firstTouch = buildAttributionTouch(posthogClient.persistence?.get_initial_props() ?? {}, '$initial_', at)
+  const lastTouch = buildAttributionTouch(posthogClient.sessionPropsManager?.getSessionProps() ?? {}, '$session_entry_', at)
+  return firstTouch === undefined && lastTouch === undefined ? undefined : { ...(firstTouch && { firstTouch }), ...(lastTouch && { lastTouch }) }
+}
+
 /** Sign-out starts a fresh anonymous identity so the next visitor on this browser is not attributed to the account. */
 export function resetPostHogAccount(): void {
   posthogClient?.reset()

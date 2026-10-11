@@ -5,9 +5,9 @@ import { useRouter } from '@tanstack/react-router'
 import { WorkspacePresentationVisibility } from '@/lib/client/workspace-presentation'
 import { rememberOperatorContext } from '@/lib/operator/operator-context-memory'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
-import { useConvexAuth, useQuery } from 'convex/react'
+import { useConvexAuth, useMutation, useQuery } from 'convex/react'
 import { api } from '../../../../convex/_generated/api'
-import { identifyPostHogAccount, resetPostHogAccount } from '@/lib/observability/posthog.client'
+import { identifyPostHogAccount, readPostHogAttribution, resetPostHogAccount } from '@/lib/observability/posthog.client'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import './AppFrameComposition.css'
@@ -27,9 +27,12 @@ export function WorkspaceTransitionBoundary({ children, renderHeader }: { childr
   const { isAuthenticated } = useConvexAuth()
   const distinctId = useQuery(api.journeyEvents.viewerDistinctId, isAuthenticated ? {} : 'skip')
   const wasSignedIn = useRef(false)
+  const recordAttribution = useMutation(api.attribution.recordAttribution)
   useEffect(() => {
-    if (distinctId) identifyPostHogAccount(distinctId)
-  }, [distinctId])
+    if (!distinctId) return
+    identifyPostHogAccount(distinctId)
+    void readPostHogAttribution().then((touches) => touches && recordAttribution(touches)).catch(() => {})
+  }, [distinctId, recordAttribution])
   useEffect(() => {
     if (auth.isSignedIn) wasSignedIn.current = true
     else if (auth.isSignedIn === false && wasSignedIn.current) { wasSignedIn.current = false; resetPostHogAccount() }
