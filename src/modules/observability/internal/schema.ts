@@ -88,6 +88,8 @@ export const observabilityTables = {
     // For tool.procure only: resultHash retains the original completion digest;
     // resultJson becomes a content-free replay result after this timestamp.
     contentExpiredAt: v.optional(v.number()),
+    // tool.procure only: owner nonce minted per request; only it may release the reservation.
+    reservationNonce: v.optional(v.string()),
     effectRefs: v.array(v.string()),
     retryAfter: v.optional(v.number()),
     createdAt: v.number(),
