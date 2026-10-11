@@ -26,7 +26,7 @@ const quoteRef = makeFunctionReference<'action', {
 }, QuoteResult>('chatQuote:quote')
 const callRef = makeFunctionReference<'action', {
   authority: TrustedChatAuthority; operationKey: string; correlationId: string;
-  quoteRef: string; idempotencyKey: string; requireApproval?: boolean
+  quoteRef: string; idempotencyKey: string; requireApproval?: boolean; userRequestText?: string
 }, CallResult>('chatCall:call')
 const payableAdmissionRef = makeFunctionReference<'query', {
   authority: TrustedChatAuthority; toolRef: string
@@ -40,9 +40,11 @@ const chatToolQuoteInputSchema = z.strictObject({
 const CALL_ANSWER_WAIT_MS = 25_000
 const CALL_POLL_MS = 750
 
-/** User-intent evidence: the latest user message names the Tool being bought. */
-function userNamedTool(messages: readonly ModelMessage[] | undefined, toolRef: string): boolean {
-  return latestUserRequest(messages)?.includes(toolRef) === true
+const MAX_USER_REQUEST_CHARS = 4_000
+
+/** The latest user message in full (not the 500-char search excerpt); empty when there is none. */
+function userRequestText(messages: readonly ModelMessage[] | undefined): string {
+  return latestUserRequest(messages, MAX_USER_REQUEST_CHARS) ?? ''
 }
 
 function pause(ms: number): Promise<void> {
@@ -62,8 +64,6 @@ export function createPurchaseTools(authority: TrustedChatAuthority & { kind: 'a
   const planQuoteContract = contractFor('tool.plan.quote')
   const planRunContract = contractFor('tool.plan.run')
   const planGetContract = contractFor('tool.plan.get')
-  // Quotes whose Tool the person never named: their Call waits for owner approval.
-  const unrequestedQuotes = new Set<string>()
   return {
       [CHAT_TOOL_NAME_MAP.canonicalToProvider['tool.plan.suggest']]: createTool({
         description: descriptionFor(contractFor('tool.plan.suggest')), inputSchema: planSuggestInputSchema,
@@ -85,9 +85,12 @@ export function createPurchaseTools(authority: TrustedChatAuthority & { kind: 'a
       }),
       [CHAT_TOOL_NAME_MAP.canonicalToProvider['tool.plan.quote']]: createTool({
         description: descriptionFor(planQuoteContract), inputSchema: planQuoteInputSchema,
-        execute: async (ctx: ToolCtx, input: z.infer<typeof planQuoteInputSchema>) => {
+        execute: async (ctx: ToolCtx, input: z.infer<typeof planQuoteInputSchema>, options?: { messages?: readonly ModelMessage[] }) => {
           const denied = reserve('tool.plan.quote')
           if (denied !== null) return denied
+          // Plans run inside the caps without a per-Call owner gate, so every Tool must be named by the person.
+          const requested = userRequestText(options?.messages)
+          if (!input.plan.nodes.every((node) => requested.includes(node.toolRef))) return failure('tool.plan.quote', 'selected_tool_mismatch')
           const result = await ctx.runAction(internal.chatPlans.quote, { authority: { ...authority, scopes: [...authority.scopes] }, planJson: JSON.stringify(input.plan) })
           return projectedModelFacingOutput('tool.plan.quote', planQuoteContract.outputSchema, () => result)
         },
@@ -135,7 +138,6 @@ export function createPurchaseTools(authority: TrustedChatAuthority & { kind: 'a
             toolRef,
             input: structuredClone(input.input) as Record<string, Value>,
           })
-          if (result.kind === 'committed' && !userNamedTool(options?.messages, toolRef)) unrequestedQuotes.add(result.quoteRef)
           return projectedModelFacingOutput(
             'tool.quote',
             toolQuoteContract.outputSchema,
@@ -148,7 +150,7 @@ export function createPurchaseTools(authority: TrustedChatAuthority & { kind: 'a
         inputSchema: z.strictObject({
           quoteRef: z.string().regex(/^operation-commitment:v1:[0-9a-f]{64}$/u),
         }),
-        execute: async (ctx: ToolCtx, input: { quoteRef: string }) => {
+        execute: async (ctx: ToolCtx, input: { quoteRef: string }, options?: { messages?: readonly ModelMessage[] }) => {
           const denied = reserve('tool.call')
           if (denied !== null) return denied
           const commandDigest = canonicalDigest({
@@ -163,7 +165,8 @@ export function createPurchaseTools(authority: TrustedChatAuthority & { kind: 'a
             correlationId: `chat-invoke-corr:${commandDigest}`,
             quoteRef: input.quoteRef,
             idempotencyKey,
-            ...(unrequestedQuotes.has(input.quoteRef) ? { requireApproval: true } : {}),
+            // chatCall.call decides approval from the stored quote's Tool and this text, not from per-turn memory.
+            userRequestText: userRequestText(options?.messages),
           }
           // Calls run on the worker. Replaying the same idempotent Call returns its stored
           // result, so wait briefly for the answer and let the model reply from it.

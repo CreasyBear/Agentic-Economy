@@ -62,13 +62,13 @@ export function readBelowMatch(value: unknown): readonly string[] {
 }
 
 
-export function latestUserRequest(messages: readonly ModelMessage[] | undefined): string | undefined {
+export function latestUserRequest(messages: readonly ModelMessage[] | undefined, maxChars = 500): string | undefined {
   if (messages === undefined) return undefined
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index]
     if (message === undefined || message.role !== 'user') continue
     const text = messageText(message.content).trim()
-    if (text.length > 0) return Array.from(text).slice(0, 500).join('')
+    if (text.length > 0) return Array.from(text).slice(0, maxChars).join('')
   }
   return undefined
 }
