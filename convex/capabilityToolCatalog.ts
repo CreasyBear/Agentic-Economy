@@ -13,7 +13,8 @@ import {
   type ToolSearchResult, type ToolSearchWireResult, type ToolSearchInput,
   type PublicToolDescriptor, type ToolDetailWireResult, type ToolCompareWireResult,
 } from '@/modules/capability-supply/public'
-import { defaultDnsResolver, isPublicHttpTarget } from '@/modules/network-guard/public'
+import { Agent, fetch as guardedFetch } from 'undici'
+import { createGuardedLookup, defaultDnsResolver } from '@/modules/network-guard/public'
 import { quoteManagedX402BuyerAud } from '@/modules/money/public'
 import { TOOL_SEARCH_USE } from '@/modules/registry/tool-reranker'
 import { chatModelCostBindingValue } from '@/modules/chat/model-cost'
@@ -54,12 +55,14 @@ export async function fetchCatalogPage(input: ToolSearchInput): Promise<Readonly
   const url = new URL('https://facilitator.payai.network/discovery/resources')
   url.searchParams.set('limit', String(limit))
   url.searchParams.set('offset', String(offset))
-  // The host is a fixed literal, but the shared guard still runs so a hijacked or
-  // re-pointed discovery hostname cannot resolve this Call onto a private address.
-  if (!(await isPublicHttpTarget(url, defaultDnsResolver))) throw new Error('catalog_source_unavailable')
-  const response = await fetch(url, { redirect: 'error', headers: { accept: 'application/json' }, signal: AbortSignal.timeout(TIMEOUT_MS) })
+  // The host is a fixed literal. The guarded dispatcher vets the addresses at connect time,
+  // so a re-pointed discovery hostname cannot resolve this fetch onto a private address.
+  const dispatcher = new Agent({ connect: { lookup: createGuardedLookup(defaultDnsResolver) } })
+  let response: Awaited<ReturnType<typeof guardedFetch>>
+  try { response = await guardedFetch(url, { dispatcher, redirect: 'error', headers: { accept: 'application/json' }, signal: AbortSignal.timeout(TIMEOUT_MS) }) } catch (cause) { await dispatcher.close(); throw cause }
+  void dispatcher.close()
   if (!response.ok) throw new Error('catalog_source_unavailable')
-  const body = await readBoundedRequestJson(response, 2_097_152)
+  const body = await readBoundedRequestJson(response as unknown as Response, 2_097_152)
   if (!body.ok || !isRecord(body.value) || !Array.isArray(body.value.items) || body.value.items.length > limit) throw new Error('catalog_source_invalid')
   const pagination = isRecord(body.value.pagination) ? body.value.pagination : undefined
   const total = pagination?.total
@@ -100,11 +103,15 @@ const searchHandler = async (ctx: ActionCtx, args: Infer<typeof catalogSearchArg
   }
   if ((input.source === 'payai' && input.query.trim().length > 0) || (input.query.trim().length > 0 && input.cursor !== undefined)) return serializeToolSearchResult(unavailable('query_invalid'))
   if (input.cursor !== undefined && (!/^(0|[1-9]\d*)$/u.test(input.cursor) || !Number.isSafeInteger(Number(input.cursor)))) return serializeToolSearchResult(unavailable('query_invalid'))
+  // Upstream sources are public and unauthenticated, so bound the fan-out per caller (OWASP API4:2023).
+  const identity = await ctx.auth.getUserIdentity()
+  const admission = await ctx.runMutation(internal.rateLimit.admit, { name: 'public-read', key: identity === null ? 'catalog-search:anonymous' : `catalog-search:${identity.tokenIdentifier}` })
+  if (!admission.ok) return serializeToolSearchResult(unavailable('source_unavailable'))
   let page: Awaited<ReturnType<typeof fetchCatalogPage>>
   try { page = await fetchCatalogPage(input) } catch (cause) { return degradeBackend(cause, serializeToolSearchResult(unavailable('source_unavailable')), { site: 'search', reason: 'source_unavailable' }) }
   const candidates = await facilitatorDiscoverySnapshotCandidates(page.items)
   const snapshot = await ctx.runQuery(internal.capabilityToolCatalogData.sourceSnapshot, { candidates })
-  const refs = [...new Set(snapshot.toolRefs)]
+  const refs = [...new Set(snapshot.toolRefs)].slice(0, PAGE_LIMIT)
   const selectedRefs = input.filters?.networkId === undefined ? refs : await ctx.runQuery(internal.capabilityToolCatalogData.filterNetwork, { toolRefs: refs, networkId: input.filters.networkId })
   const details = await Promise.all(selectedRefs.map((toolRef) => ctx.runQuery(internal.capabilitySupplyTools.detailInternal, { toolRef })))
   const items = details.flatMap((wire) => {
