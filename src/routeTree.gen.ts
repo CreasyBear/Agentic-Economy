@@ -14,6 +14,7 @@ import { Route as SlugRouteImport } from './routes/$slug'
 import { Route as SKILLDotmdRouteImport } from './routes/SKILL[.]md'
 import { Route as OperatorRouteImport } from './routes/_operator'
 import { Route as AboutRouteImport } from './routes/about'
+import { Route as AgentKeysRouteImport } from './routes/agent-keys'
 import { Route as ForAgentsRouteImport } from './routes/for-agents'
 import { Route as ForProvidersRouteImport } from './routes/for-providers'
 import { Route as GlossaryDotmdRouteImport } from './routes/glossary[.]md'
@@ -52,6 +53,7 @@ import { Route as OauthDevice_authorizationRouteImport } from './routes/oauth.de
 import { Route as OauthRegisterRouteImport } from './routes/oauth.register'
 import { Route as OauthRevokeRouteImport } from './routes/oauth.revoke'
 import { Route as OauthTokenRouteImport } from './routes/oauth.token'
+import { Route as OwnerAgentKeysRouteImport } from './routes/owner.agent-keys'
 import { Route as PrivacyRemoveBusinessRouteImport } from './routes/privacy.remove-business'
 import { Route as ProvidersProviderHostRouteImport } from './routes/providers.$providerHost'
 import { Route as SShareTokenRouteImport } from './routes/s.$shareToken'
@@ -195,6 +197,11 @@ const OperatorRoute = OperatorRouteImport.update({
 const AboutRoute = AboutRouteImport.update({
   id: '/about',
   path: '/about',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AgentKeysRoute = AgentKeysRouteImport.update({
+  id: '/agent-keys',
+  path: '/agent-keys',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ForAgentsRoute = ForAgentsRouteImport.update({
@@ -389,6 +396,11 @@ const OauthRevokeRoute = OauthRevokeRouteImport.update({
 const OauthTokenRoute = OauthTokenRouteImport.update({
   id: '/oauth/token',
   path: '/oauth/token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OwnerAgentKeysRoute = OwnerAgentKeysRouteImport.update({
+  id: '/owner/agent-keys',
+  path: '/owner/agent-keys',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PrivacyRemoveBusinessRoute = PrivacyRemoveBusinessRouteImport.update({
@@ -1041,6 +1053,7 @@ export interface FileRoutesByFullPath {
   '/$slug': typeof SlugRouteWithChildren
   '/SKILL.md': typeof SKILLDotmdRoute
   '/about': typeof AboutRoute
+  '/agent-keys': typeof AgentKeysRoute
   '/for-agents': typeof ForAgentsRoute
   '/for-providers': typeof ForProvidersRoute
   '/glossary.md': typeof GlossaryDotmdRoute
@@ -1079,6 +1092,7 @@ export interface FileRoutesByFullPath {
   '/oauth/register': typeof OauthRegisterRoute
   '/oauth/revoke': typeof OauthRevokeRoute
   '/oauth/token': typeof OauthTokenRoute
+  '/owner/agent-keys': typeof OwnerAgentKeysRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
   '/providers/$providerHost': typeof ProvidersProviderHostRoute
   '/s/$shareToken': typeof SShareTokenRoute
@@ -1205,6 +1219,7 @@ export interface FileRoutesByTo {
   '/$slug': typeof SlugRouteWithChildren
   '/SKILL.md': typeof SKILLDotmdRoute
   '/about': typeof AboutRoute
+  '/agent-keys': typeof AgentKeysRoute
   '/for-agents': typeof ForAgentsRoute
   '/for-providers': typeof ForProvidersRoute
   '/glossary.md': typeof GlossaryDotmdRoute
@@ -1243,6 +1258,7 @@ export interface FileRoutesByTo {
   '/oauth/register': typeof OauthRegisterRoute
   '/oauth/revoke': typeof OauthRevokeRoute
   '/oauth/token': typeof OauthTokenRoute
+  '/owner/agent-keys': typeof OwnerAgentKeysRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
   '/providers/$providerHost': typeof ProvidersProviderHostRoute
   '/s/$shareToken': typeof SShareTokenRoute
@@ -1371,6 +1387,7 @@ export interface FileRoutesById {
   '/SKILL.md': typeof SKILLDotmdRoute
   '/_operator': typeof OperatorRouteWithChildren
   '/about': typeof AboutRoute
+  '/agent-keys': typeof AgentKeysRoute
   '/for-agents': typeof ForAgentsRoute
   '/for-providers': typeof ForProvidersRoute
   '/glossary.md': typeof GlossaryDotmdRoute
@@ -1409,6 +1426,7 @@ export interface FileRoutesById {
   '/oauth/register': typeof OauthRegisterRoute
   '/oauth/revoke': typeof OauthRevokeRoute
   '/oauth/token': typeof OauthTokenRoute
+  '/owner/agent-keys': typeof OwnerAgentKeysRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
   '/providers/$providerHost': typeof ProvidersProviderHostRoute
   '/s/$shareToken': typeof SShareTokenRoute
@@ -1537,6 +1555,7 @@ export interface FileRouteTypes {
     | '/$slug'
     | '/SKILL.md'
     | '/about'
+    | '/agent-keys'
     | '/for-agents'
     | '/for-providers'
     | '/glossary.md'
@@ -1575,6 +1594,7 @@ export interface FileRouteTypes {
     | '/oauth/register'
     | '/oauth/revoke'
     | '/oauth/token'
+    | '/owner/agent-keys'
     | '/privacy/remove-business'
     | '/providers/$providerHost'
     | '/s/$shareToken'
@@ -1701,6 +1721,7 @@ export interface FileRouteTypes {
     | '/$slug'
     | '/SKILL.md'
     | '/about'
+    | '/agent-keys'
     | '/for-agents'
     | '/for-providers'
     | '/glossary.md'
@@ -1739,6 +1760,7 @@ export interface FileRouteTypes {
     | '/oauth/register'
     | '/oauth/revoke'
     | '/oauth/token'
+    | '/owner/agent-keys'
     | '/privacy/remove-business'
     | '/providers/$providerHost'
     | '/s/$shareToken'
@@ -1866,6 +1888,7 @@ export interface FileRouteTypes {
     | '/SKILL.md'
     | '/_operator'
     | '/about'
+    | '/agent-keys'
     | '/for-agents'
     | '/for-providers'
     | '/glossary.md'
@@ -1904,6 +1927,7 @@ export interface FileRouteTypes {
     | '/oauth/register'
     | '/oauth/revoke'
     | '/oauth/token'
+    | '/owner/agent-keys'
     | '/privacy/remove-business'
     | '/providers/$providerHost'
     | '/s/$shareToken'
@@ -2032,6 +2056,7 @@ export interface RootRouteChildren {
   SKILLDotmdRoute: typeof SKILLDotmdRoute
   OperatorRoute: typeof OperatorRouteWithChildren
   AboutRoute: typeof AboutRoute
+  AgentKeysRoute: typeof AgentKeysRoute
   ForAgentsRoute: typeof ForAgentsRoute
   ForProvidersRoute: typeof ForProvidersRoute
   GlossaryDotmdRoute: typeof GlossaryDotmdRoute
@@ -2067,6 +2092,7 @@ export interface RootRouteChildren {
   OauthRegisterRoute: typeof OauthRegisterRoute
   OauthRevokeRoute: typeof OauthRevokeRoute
   OauthTokenRoute: typeof OauthTokenRoute
+  OwnerAgentKeysRoute: typeof OwnerAgentKeysRoute
   ProvidersProviderHostRoute: typeof ProvidersProviderHostRoute
   SShareTokenRoute: typeof SShareTokenRoute
   SignInSplatRoute: typeof SignInSplatRoute
@@ -2169,6 +2195,13 @@ declare module '@tanstack/react-router' {
       path: '/about'
       fullPath: '/about'
       preLoaderRoute: typeof AboutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/agent-keys': {
+      id: '/agent-keys'
+      path: '/agent-keys'
+      fullPath: '/agent-keys'
+      preLoaderRoute: typeof AgentKeysRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/for-agents': {
@@ -2435,6 +2468,13 @@ declare module '@tanstack/react-router' {
       path: '/oauth/token'
       fullPath: '/oauth/token'
       preLoaderRoute: typeof OauthTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/owner/agent-keys': {
+      id: '/owner/agent-keys'
+      path: '/owner/agent-keys'
+      fullPath: '/owner/agent-keys'
+      preLoaderRoute: typeof OwnerAgentKeysRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/privacy/remove-business': {
@@ -3561,6 +3601,7 @@ const rootRouteChildren: RootRouteChildren = {
   SKILLDotmdRoute: SKILLDotmdRoute,
   OperatorRoute: OperatorRouteWithChildren,
   AboutRoute: AboutRoute,
+  AgentKeysRoute: AgentKeysRoute,
   ForAgentsRoute: ForAgentsRoute,
   ForProvidersRoute: ForProvidersRoute,
   GlossaryDotmdRoute: GlossaryDotmdRoute,
@@ -3599,6 +3640,7 @@ const rootRouteChildren: RootRouteChildren = {
   OauthRegisterRoute: OauthRegisterRoute,
   OauthRevokeRoute: OauthRevokeRoute,
   OauthTokenRoute: OauthTokenRoute,
+  OwnerAgentKeysRoute: OwnerAgentKeysRoute,
   ProvidersProviderHostRoute: ProvidersProviderHostRoute,
   SShareTokenRoute: SShareTokenRoute,
   SignInSplatRoute: SignInSplatRoute,
