@@ -19,12 +19,11 @@ describe('deletion notices', () => {
   })
 
   it.each([
-    ['retired', 'final_reminder', 'deletion_final_reminder'],
-    ['retired', 'completed', 'deletion_completed'],
-    ['active', 'final_reminder', 'deletion_cancelled'],
-  ])('principal %s + %s sends %s', async (lifecycle, notice, eventKind) => {
+    ['final_reminder', 'deletion_final_reminder'],
+    ['completed', 'deletion_completed'],
+  ])('%s notice sends %s', async (notice, eventKind) => {
     enqueueAccountNotice.mockClear()
-    const ctx = { db: { query: () => ({ withIndex: () => ({ unique: async () => ({ lifecycle }) }) }) } }
+    const ctx = { db: { query: () => ({ withIndex: () => ({ unique: async () => ({ lifecycle: 'retired' }) }) }) } }
     await sendDeletionNoticeHandler(ctx as never, { ...input, notice: notice as 'completed' })
     expect(enqueueAccountNotice).toHaveBeenCalledWith(ctx, expect.objectContaining({ eventKind }))
   })

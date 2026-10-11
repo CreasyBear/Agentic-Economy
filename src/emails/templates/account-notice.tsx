@@ -12,7 +12,7 @@ export type NoticeKind =
   | 'role_changed' | 'team_membership_changed' | 'email_changed' | 'data_request_received'
   | 'welcome' | 'provider_live' | 'provider_offboarded'
   | 'deletion_requested' | 'deletion_completed' | 'first_call_done' | 'week_one_wrap' | 'auto_topup_failed'
-  | 'card_changed' | 'first_call_failed' | 'deletion_cancelled' | 'deletion_final_reminder'
+  | 'card_changed' | 'first_call_failed' | 'deletion_final_reminder'
 
 /** Money arrives already formatted by the loader (moneyNoticeAmount), so no amount is retyped here. */
 export type NoticeProps = { siteUrl: string; amount?: string; taskRef?: string; role?: string; when?: string; toolRef?: string; unsubscribeUrl?: string; calls?: string; spent?: string; balance?: string }
@@ -132,8 +132,8 @@ const NOTICES: Record<NoticeKind, Notice> = {
   },
   deletion_requested: {
     subject: () => 'Your aecon account will be deleted in 14 days',
-    preheader: () => 'Cancel any time before then.',
-    body: () => "We got your request to delete your aecon account. It will be deleted in 14 days, and we'll remind you 3 days before. You can cancel in settings until then. If this wasn't you, contact support@aecon.ai.",
+    preheader: () => "If this wasn't you, contact support@aecon.ai.",
+    body: () => "We got your request to delete your aecon account. It will be deleted in 14 days, and we'll remind you 3 days before. If this wasn't you, contact support@aecon.ai.",
     label: 'Review settings', path: '/owner/settings/privacy', campaign: 'deletion_requested',
   },
   deletion_completed: {
@@ -174,17 +174,11 @@ const NOTICES: Record<NoticeKind, Notice> = {
     body: ({ taskRef }) => `Call ${need(taskRef)} did not complete. Check the call details and your agent's key, then try again.`,
     label: 'View call', path: '/owner/operations', campaign: 'first_call_failed',
   },
-  deletion_cancelled: {
-    subject: () => 'Your aecon account deletion was cancelled',
-    preheader: () => 'Your account stays as it is.',
-    body: () => 'You cancelled the deletion, so your aecon account and its data stay as they are. If this wasn\'t you, contact support@aecon.ai.',
-    label: 'View account', path: '/owner/credit', campaign: 'deletion_cancelled',
-  },
   deletion_final_reminder: {
     subject: () => 'Your aecon account is deleted in 3 days',
-    preheader: () => 'Cancel now to keep it.',
-    body: () => 'Your aecon account and its data will be deleted in 3 days. Cancel the deletion in settings to keep them.',
-    label: 'Cancel deletion', path: '/owner/settings/privacy', campaign: 'deletion_final_reminder',
+    preheader: () => "If this wasn't you, contact support@aecon.ai.",
+    body: () => 'Your aecon account and its data will be deleted in 3 days. If this wasn\'t you, contact support@aecon.ai now.',
+    label: 'Review settings', path: '/owner/settings/privacy', campaign: 'deletion_final_reminder',
   },
 }
 

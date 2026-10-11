@@ -32,14 +32,12 @@ export async function scheduleDeletionNotices(ctx: MutationCtx, input: { princip
   await ctx.scheduler.runAfter(DELETION_GRACE_MS, internal.personalAccount.sendDeletionNotice, { ...input, notice: 'completed' })
 }
 
-/** Scheduled step: if the principal is no longer retired the deletion was cancelled, so send the cancelled notice instead. */
+/** Scheduled step: send the reminder or completion notice. Deletion is immediate and cannot be cancelled. */
 export async function sendDeletionNoticeHandler(ctx: MutationCtx, args: Infer<ReturnType<typeof v.object<typeof deletionNoticeArgs>>>): Promise<null> {
-  const principal = await ctx.db.query('principals').withIndex('by_principalRef', (index) => index.eq('principalRef', args.principalRef)).unique()
-  const cancelled = principal !== null && principal.lifecycle !== 'retired'
   await enqueueAccountNotice(ctx, {
-    eventKind: cancelled ? 'deletion_cancelled' : args.notice === 'completed' ? 'deletion_completed' : 'deletion_final_reminder',
+    eventKind: args.notice === 'completed' ? 'deletion_completed' : 'deletion_final_reminder',
     accountRef: args.accountRef,
-    sourceEventRef: `${args.principalRef}:deletion_${cancelled ? 'cancelled' : args.notice}`,
+    sourceEventRef: `${args.principalRef}:deletion_${args.notice}`,
   })
   return null
 }

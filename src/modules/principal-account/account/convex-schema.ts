@@ -156,7 +156,6 @@ export const notificationEventKindValue = v.union(
   v.literal('auto_topup_failed'),
   v.literal('card_changed'),
   v.literal('first_call_failed'),
-  v.literal('deletion_cancelled'),
   v.literal('deletion_final_reminder'),
   v.literal('operator_exception'),
 )
