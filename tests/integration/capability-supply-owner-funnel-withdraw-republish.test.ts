@@ -286,6 +286,35 @@ describe('owner capability withdraw and republish', () => {
       kind: 'withdrawn',
       revision: first.publicationRevision,
     })
+    const frozenCaseId = await backend.run(async (ctx) => {
+      const business = await ctx.db.get(businessId)
+      return ctx.db.insert('capabilityProviderOffboardingCases', {
+        caseRef: 'provider-offboarding:freeze', owningAccountRef: business!.owningAccountRef, businessId, providerRef: 'provider:freeze',
+        requestedByPrincipalRef: 'principal:freeze',
+        authorityRevision: { binding: 1, credential: 1, principal: 1, account: 1, access: 1, currentOwnership: 1, currentOwnerPrincipal: 1 },
+        authorityProvenance: { providerNamespace: 'clerk/user', bindingRef: 'b', credentialRef: 'c', credentialGeneration: 1, accessKind: 'ownership', accessRef: 'a', currentOwnershipRef: 'o', resolvedAt: 1 },
+        toolTargetCount: 0, offeringTargetCount: 0, connectionTargetCount: 0, targetSnapshotDigest: 'd',
+        currentStep: 'freeze-routeability', state: 'freezing', retentionPolicyVersion: '',
+        blockerCodes: [], evidenceRefs: [], revision: 1, lastCommandId: 'x', lastCommandDigest: 'x', requestedAt: 1, updatedAt: 1,
+        routeabilityFrozenAt: 1,
+      })
+    })
+    await expect(
+      owner.mutation(
+        api.capabilitySupplyOwnerFunnel.republishOwnerCapability,
+        await withSourceWrite('catalog_publish', {
+          ...maintenanceBase,
+          operationKey: 'owner-test-republish-frozen',
+          correlationId: 'owner-test-republish-frozen',
+          proof: {
+            reverificationId: 'test:owner-republish-frozen',
+            firstFactorAgeMinutes: 0,
+            secondFactorAgeMinutes: -1,
+          },
+        }),
+      ),
+    ).resolves.toEqual({ kind: 'refused', reason: 'authorization_denied' })
+    await backend.run(async (ctx) => { await ctx.db.delete(frozenCaseId) })
     const republished = await owner.mutation(
       api.capabilitySupplyOwnerFunnel.republishOwnerCapability,
       await withSourceWrite('catalog_publish', {

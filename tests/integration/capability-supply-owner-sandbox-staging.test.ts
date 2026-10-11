@@ -278,6 +278,34 @@ describe('owner Base Sepolia staging publication', () => {
       await ctx.db.query('capabilityPublications').collect()
     ))).resolves.toEqual([])
 
+    const frozenCommand = await withSourceWrite('catalog_publish', {
+      ...unsignedCommand,
+      operationKey: 'owner-supply:stage:sandbox-x402:frozen',
+      sellerClaim,
+      evidenceRefs: [claimEvidence, inspectionEvidence],
+    })
+    const freezeId = await backend.run(async (ctx) => {
+      const business = await ctx.db.get(businessId)
+      return ctx.db.insert('capabilityProviderOffboardingCases', {
+        caseRef: 'provider-offboarding:freeze', owningAccountRef: business!.owningAccountRef, businessId, providerRef: 'provider:freeze',
+        requestedByPrincipalRef: 'principal:freeze',
+        authorityRevision: { binding: 1, credential: 1, principal: 1, account: 1, access: 1, currentOwnership: 1, currentOwnerPrincipal: 1 },
+        authorityProvenance: { providerNamespace: 'clerk/user', bindingRef: 'b', credentialRef: 'c', credentialGeneration: 1, accessKind: 'ownership', accessRef: 'a', currentOwnershipRef: 'o', resolvedAt: 1 },
+        toolTargetCount: 0, offeringTargetCount: 0, connectionTargetCount: 0, targetSnapshotDigest: 'd',
+        currentStep: 'freeze-routeability', state: 'freezing', retentionPolicyVersion: '',
+        blockerCodes: [], evidenceRefs: [], revision: 1, lastCommandId: 'x', lastCommandDigest: 'x', requestedAt: 1, updatedAt: 1,
+        routeabilityFrozenAt: 1,
+      })
+    })
+    await expect(owner.mutation(
+      api.capabilitySupply.stageOwnerX402Capability,
+      frozenCommand,
+    )).resolves.toEqual({ kind: 'refused', reason: 'authorization_denied' })
+    await expect(backend.run(async (ctx) => (
+      await ctx.db.query('capabilityPublications').collect()
+    ))).resolves.toEqual([])
+    await backend.run(async (ctx) => { await ctx.db.delete(freezeId) })
+
     const command = await withSourceWrite('catalog_publish', {
       ...unsignedCommand,
       sellerClaim,
