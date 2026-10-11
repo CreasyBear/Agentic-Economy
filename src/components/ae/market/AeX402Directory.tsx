@@ -18,7 +18,7 @@ import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLi
 import { PUBLIC_SURFACE } from '@/content/brand-copy'
 import { recordProductJourney } from '@/lib/observability/product-journey'
 import { cn } from '@/lib/utils'
-import { CATALOGUE_STALE_AFTER_MS, sourceFreshnessState } from '@/modules/common/freshness'
+import type { SourceFreshnessState } from '@/modules/common/freshness'
 import { SEARCH_QUERY_MAX_LENGTH } from '@/modules/common/search-query'
 import type { DirectoryExplorerFilterPatch } from '@/modules/market/directory-filters.contracts'
 import { toSavedDirectoryRowModel } from '@/modules/market/directory-card.view-model'
@@ -66,6 +66,8 @@ type AeX402DirectoryProps = Readonly<{
   activeView?: NonNullable<MarketReturnSearch['view']>
   pendingView?: NonNullable<MarketReturnSearch['view']>
   catalogue?: X402DirectoryCatalogue
+  /** Server-computed directory freshness (same value as registry list); the notice shows for any state but 'fresh'. */
+  freshness?: SourceFreshnessState
   overview?: X402DirectoryCatalogueOverview
   providers?: X402DirectoryProvidersPage
   jevRecipient?: string
@@ -144,7 +146,7 @@ function ResultsSkeleton() {
   return <ul className="ae-browse-skeleton" aria-hidden="true">{[0, 1, 2, 3, 4, 5, 6, 7].map(index => <li key={index}><div className="ae-browse-skeleton-media" /><Skeleton lines={3} /></li>)}</ul>
 }
 
-function DirectoryMarketplace({ canonicalSearch: rankedSource, landingRows, loading = false, page, compareEntries, search, workspace = false, defaultLayout = 'grid', activeView, pendingView, catalogue, overview, providers, jevRecipient, cursorReset = false }: AeX402DirectoryProps) {
+function DirectoryMarketplace({ canonicalSearch: rankedSource, landingRows, loading = false, page, compareEntries, search, workspace = false, defaultLayout = 'grid', activeView, pendingView, catalogue, overview, providers, freshness, jevRecipient, cursorReset = false }: AeX402DirectoryProps) {
   const navigate = useNavigate()
   const router = useRouter()
   const marketPath = useMarketPath()
@@ -164,8 +166,7 @@ function DirectoryMarketplace({ canonicalSearch: rankedSource, landingRows, load
   const sourceInput = useMemo(() => directoryInput({ query, offset, network, provider, maxUsdPrice }), [query, offset, network, provider, maxUsdPrice])
   const coverage = catalogue?.kind === 'ok' ? catalogue.coverage : overview?.kind === 'ok' ? overview.coverage : providers?.kind === 'ok' ? providers.coverage : undefined
   const indexed = catalogue?.kind === 'ok' && catalogue.source === 'index'
-  // Same freshness rule as registry list and the x402 directory status: no completed refresh, or one older than 36 h, is not fresh.
-  const catalogueStale = sourceFreshnessState({ ...(coverage === undefined ? {} : { completedAt: coverage.completedAt }) }, CATALOGUE_STALE_AFTER_MS, Date.now()) !== 'fresh'
+  const catalogueStale = freshness !== undefined && freshness !== 'fresh'
   const filterValues = directoryCatalogueSearchValues(search)
   const browse = !Object.entries(filterValues).some(([key, value]) => !['sort', 'indexCursor', 'offset'].includes(key) && value !== undefined && value !== false)
 
