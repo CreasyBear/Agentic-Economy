@@ -722,7 +722,7 @@ async function readFreshX402Challenge(
     ? decodeX402Challenge(response.headers.get('payment-required'))
     : undefined
   await cancelResponseBody(response)
-  const selection = freshChallenge === undefined
+  const selection = freshChallenge === undefined || offerReceiptDropped(committed.challenge, freshChallenge)
     ? undefined
     : freshX402ChallengeSelection(committed, freshChallenge)
   if (selection === undefined) {
@@ -857,4 +857,17 @@ function x402RequestBody(target: URL, configuration: X402Configuration, inputJso
   const request = prepareX402Request(target, configuration, inputJson)
   if (request.kind !== 'prepared' || request.body === undefined) throw new Error('x402_request_body_invalid')
   return request.body
+}
+
+/** A committed offer-receipt extension must survive into the fresh challenge; offers re-sign, so presence is the invariant. */
+export function offerReceiptDropped(committed: X402Challenge, fresh: X402Challenge): boolean {
+  const info = (challenge: X402Challenge): Record<string, unknown> | undefined => {
+    const info = (challenge.extensions?.['offer-receipt'] as { info?: unknown } | undefined)?.info
+    return typeof info === 'object' && info !== null ? info as Record<string, unknown> : undefined
+  }
+  const committedInfo = info(committed)
+  if (committedInfo === undefined) return false
+  const freshInfo = info(fresh)
+  return freshInfo === undefined
+    || ('offers' in committedInfo && !(Array.isArray(freshInfo.offers) && freshInfo.offers.length > 0))
 }

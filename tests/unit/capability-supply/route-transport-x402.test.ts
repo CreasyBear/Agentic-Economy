@@ -15,7 +15,8 @@ import { privateKeyToAccount } from 'viem/accounts'
 
 import type { RouteTransportFetch } from '@/modules/capability-supply/route-transport-runtime'
 import { x402PaymentCredentialRefFromEnvironment } from '@/modules/capability-supply/server'
-import { freshX402ChallengeSelection, prepareX402PaymentMaterial } from '@/modules/capability-supply/internal/route-transport-x402-payment'
+import { offerReceiptDropped } from '@/modules/capability-supply/internal/route-transport-x402'
+import { prepareX402PaymentMaterial } from '@/modules/capability-supply/internal/route-transport-x402-payment'
 
 import {
   X402_PAYMENT_CREDENTIAL_REF,
@@ -553,18 +554,12 @@ describe('registered route transport runtime', () => {
     expect(fresh.wasCanceled()).toBe(true)
   })
 
-  it('refuses a fresh 402 that drops the committed offer-receipt before any authorization', () => {
-    const target = 'https://provider.example/fresh-offer'
-    const committed = {
-      ...x402PaymentRequired(target),
-      extensions: { 'offer-receipt': { info: { offers: [{ format: 'jws' }] } } },
-    } as unknown as Parameters<typeof freshX402ChallengeSelection>[0]['challenge']
-    const requirement = committed.accepts[0]!
-    const base = { challenge: committed, requirement }
-    const bare = x402PaymentRequired(target) as unknown as typeof committed
-    expect(freshX402ChallengeSelection(base, bare)).toBeUndefined()
-    expect(freshX402ChallengeSelection(base, committed)).toBeDefined()
-    expect(freshX402ChallengeSelection({ challenge: bare, requirement }, bare)).toBeDefined()
+  it('treats a fresh 402 that drops the committed offer-receipt as drift', () => {
+    const bare = x402PaymentRequired('https://provider.example/fresh-offer') as unknown as Parameters<typeof offerReceiptDropped>[0]
+    const withOffer = { ...bare, extensions: { 'offer-receipt': { info: { offers: [{ format: 'jws' }] } } } } as typeof bare
+    expect(offerReceiptDropped(withOffer, bare)).toBe(true)
+    expect(offerReceiptDropped(withOffer, withOffer)).toBe(false)
+    expect(offerReceiptDropped(bare, bare)).toBe(false)
   })
 
   it('does not follow or sign a redirect returned by the fresh unpaid request', async () => {
