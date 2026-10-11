@@ -3,6 +3,6 @@
   "compilerOptions": {
     "noEmit": true
   },
-  "include": ["ae/**/*.ts"],
+  "include": ["ae/**/*.ts", "solana-devnet/**/*.ts"],
   "exclude": []
 }

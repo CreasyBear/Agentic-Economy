@@ -1,0 +1,10 @@
+{
+  "name": "@agentic-economy/solana-devnet",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Solana devnet x402 demo. Kept out of the app manifest so the deployed app and Convex never depend on x402 SVM.",
+  "type": "module",
+  "dependencies": {
+    "@x402/svm": "2.23.0"
+  }
+}
