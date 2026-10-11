@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const fixture = vi.hoisted(() => ({
   config: vi.fn(),
-  sdk: { init: vi.fn(), identify: vi.fn(), capture: vi.fn(), register: vi.fn() },
+  sdk: { init: vi.fn(), identify: vi.fn(), reset: vi.fn(), get_distinct_id: vi.fn(() => 'anon'), capture: vi.fn(), register: vi.fn() },
 }))
 vi.mock('@/lib/observability/config', () => ({ readObservabilityClientConfig: fixture.config }))
 vi.mock('posthog-js', () => ({ default: fixture.sdk }))
@@ -51,5 +51,18 @@ describe('browser telemetry initialization boundaries', () => {
     await vi.waitFor(() => expect(fixture.sdk.capture).toHaveBeenCalledWith('ae_product_journey', { action: 'market_viewed' }))
     await new Promise(resolve => window.setTimeout(resolve, 0))
     fixture.sdk.capture.mockReset()
+  })
+
+  it('identifies once per account digest and resets on sign-out', async () => {
+    fixture.config.mockReturnValue({ enabled: true, posthogKey: 'fixture-key', environment: 'development' })
+    const { identifyPostHogAccount, resetPostHogAccount } = await import('@/lib/observability/posthog.client')
+    identifyPostHogAccount('digest-1')
+    await vi.waitFor(() => expect(fixture.sdk.identify).toHaveBeenCalledWith('digest-1'))
+    fixture.sdk.get_distinct_id.mockReturnValue('digest-1')
+    identifyPostHogAccount('digest-1')
+    await new Promise(resolve => window.setTimeout(resolve, 0))
+    expect(fixture.sdk.identify).toHaveBeenCalledOnce()
+    resetPostHogAccount()
+    expect(fixture.sdk.reset).toHaveBeenCalledOnce()
   })
 })

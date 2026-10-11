@@ -67,6 +67,19 @@ export function captureClientProductEvent(event: string, properties?: Record<str
   }).catch(() => {})
 }
 
+/** Joins this browser's anonymous events to the signed-in account's journey digest. */
+export function identifyPostHogAccount(distinctId: string): void {
+  if (!productAnalyticsAllowed()) return
+  void ensurePostHogClient().then((ready) => {
+    if (ready && posthogClient !== undefined && posthogClient.get_distinct_id() !== distinctId) posthogClient.identify(distinctId)
+  }).catch(() => {})
+}
+
+/** Sign-out starts a fresh anonymous identity so the next visitor on this browser is not attributed to the account. */
+export function resetPostHogAccount(): void {
+  posthogClient?.reset()
+}
+
 function ensurePostHogClient(router?: AnyRouter): Promise<boolean> {
   if (typeof window === 'undefined') {
     return Promise.resolve(false)
