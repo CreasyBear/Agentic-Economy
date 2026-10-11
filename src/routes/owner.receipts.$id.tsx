@@ -13,14 +13,14 @@ export const Route = createFileRoute('/owner/receipts/$id')({
   loader: async ({ params }) => {
     if (!documentRefPattern.test(params.id)) return { found: false as const }
     const data = { documentRef: params.id }
-    const url = await readOwnerMoneyDocumentUrlServer({ data: { ...data, format: 'html' } })
+    const url = await readOwnerMoneyDocumentUrlServer({ data: { ...data, format: 'html' } }).catch(() => null)
       ?? await renderOwnerMoneyDocumentServer({ data }).catch(() => null)
     if (url === null) return { found: false as const }
     throw redirect({ href: url })
   },
   head: () => ({
     meta: [
-      { title: 'Receipt | Agentic Economy' },
+      { title: 'Your document | Agentic Economy' },
       { name: 'robots', content: 'noindex, noarchive' },
       { name: 'referrer', content: 'no-referrer' },
     ],
@@ -33,8 +33,8 @@ function ReceiptUnavailable() {
   return (
     <AePageState
       tone="neutral"
-      title="Receipt not found"
-      description="Sign in with the account that owns this receipt, then open the link again. Questions? Email support@aecon.ai."
+      title="Document not found"
+      description="Sign in with the account that owns this document, then open the link again. Questions? Email support@aecon.ai."
     />
   )
 }
