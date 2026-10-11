@@ -39,6 +39,10 @@ export type CreditProviderObligationRecordsProps = Readonly<{
   unavailable?: boolean
 }>
 
+const reasonLabel = (code: string) => code === 'funding_dispute_open'
+  ? 'Your bank has disputed a credit purchase. Spending is paused while we respond.'
+  : enumLabel(code)
+
 function reconciliationScope(record: MoneyReconciliationCaseView): string {
   return record.scopeType === undefined
     ? 'Legacy Account case'
@@ -194,7 +198,7 @@ function reconciliationFacts(record: MoneyReconciliationCaseView) {
     { label: 'Affected scope', value: reconciliationScope(record) },
     { label: 'Owner', value: record.ownerPrincipalRef ?? 'Unassigned', mono: true as const },
     { label: 'Transaction reference', value: record.transactionRef ?? 'Not recorded', mono: true as const },
-    { label: 'Reason', value: enumLabel(record.reasonCode) },
+    { label: 'Reason', value: reasonLabel(record.reasonCode) },
     { label: 'Evidence references', value: referenceList(record.evidenceRefs), mono: true as const },
     { label: 'Resolution evidence references', value: referenceList(record.resolutionEvidenceRefs), mono: true as const },
     timeFact('Created', record.createdAt),

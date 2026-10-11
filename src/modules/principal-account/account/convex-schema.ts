@@ -130,6 +130,7 @@ export const notificationEventKindValue = v.union(
   v.literal('stalled_never_called'),
   v.literal('funding_receipt'),
   v.literal('funding_failed'),
+  v.literal('funding_disputed'),
   v.literal('task_refunded'),
   v.literal('task_stuck'),
   v.literal('credit_exhausted'),

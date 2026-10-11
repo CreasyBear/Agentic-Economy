@@ -189,6 +189,7 @@ async function recipientStillValid(ctx: QueryCtx, delivery: Doc<'notificationDel
       return (await readActiveMembership(ctx, delivery)) !== null
     case 'account_paused':
     case 'account_restored':
+    case 'funding_disputed':
       return await accountOwnerPrincipalRef(ctx.db, delivery.accountRef) === delivery.recipientPrincipalRef
     default:
       return await activeOwnerPrincipalRef(ctx.db, delivery.accountRef) === delivery.recipientPrincipalRef

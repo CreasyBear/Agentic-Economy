@@ -49,6 +49,7 @@ function build(input: EmailInput): { element: ReactElement; subject: string } {
     case 'funding_receipt':
       return { element: <FundingReceipt {...input.props} />, subject: fundingSubject(input.props) }
     case 'funding_failed':
+    case 'funding_disputed':
     case 'task_refunded':
     case 'task_stuck':
     case 'credit_exhausted':

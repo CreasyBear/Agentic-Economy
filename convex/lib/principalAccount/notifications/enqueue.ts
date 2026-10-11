@@ -17,7 +17,7 @@ const streamEnabled = (stream: EmailStream) => process.env[STREAM_SWITCH[stream]
 
 /** Phase 2 account notices stay dark until AE_EMAIL_PHASE2_ENABLED=true, whatever the stream switch says. */
 const PHASE2_KINDS = new Set<Doc<'notificationDeliveries'>['eventKind']>([
-  'funding_receipt', 'funding_failed', 'task_refunded', 'task_stuck', 'credit_exhausted',
+  'funding_receipt', 'funding_failed', 'funding_disputed', 'task_refunded', 'task_stuck', 'credit_exhausted',
   'key_issued', 'key_revoked', 'account_paused', 'account_restored', 'role_changed',
   'team_membership_changed', 'email_changed', 'data_request_received',
   'deletion_requested', 'deletion_completed', 'auto_topup_failed', 'card_changed', 'deletion_final_reminder',
@@ -26,7 +26,7 @@ const phase2Enabled = () => process.env.AE_EMAIL_PHASE2_ENABLED?.trim() === 'tru
 
 /** Account notices wired by T13. Each has its own off switch, AE_EMAIL_KIND_<KIND>_ENABLED, which must be exactly 'true' and is off by default. */
 export const ACCOUNT_STATE_KINDS = new Set<Doc<'notificationDeliveries'>['eventKind']>([
-  'funding_failed', 'task_stuck', 'credit_exhausted', 'key_issued', 'key_revoked',
+  'funding_failed', 'funding_disputed', 'task_stuck', 'credit_exhausted', 'key_issued', 'key_revoked',
   'account_paused', 'account_restored', 'role_changed', 'team_membership_changed', 'email_changed', 'data_request_received',
   'deletion_requested', 'deletion_completed', 'first_call_done', 'week_one_wrap', 'auto_topup_failed',
   'card_changed', 'first_call_failed', 'deletion_final_reminder',

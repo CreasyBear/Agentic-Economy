@@ -764,6 +764,8 @@ describe('Account AUD funding through Formance', () => {
       reasonCode: 'funding_dispute_open', status: 'open',
     })
     expect(cases[0]?.evidenceRefs).toEqual(expect.arrayContaining([event.disputeId]))
+    const notices = await backend.run(async (ctx) => await ctx.db.query('notificationDeliveries').collect())
+    expect(notices.filter((row) => row.eventKind === 'funding_disputed' && row.sourceEventRef === event.disputeId)).toHaveLength(1)
   })
 
   it('resolves the dispute case on won and claws back credit on lost', async () => {

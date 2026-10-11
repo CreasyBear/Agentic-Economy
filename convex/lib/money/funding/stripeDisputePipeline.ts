@@ -4,6 +4,7 @@ import type { MutationCtx } from '../../../_generated/server'
 import type { StripeMoneyWebhookEvent } from '../../../../src/modules/money/public'
 import { eventRowFields } from '../../../moneyStripeEvents'
 import { enqueueOperatorAlert } from '../../../operatorDigest'
+import { enqueueAccountNotice } from '../../principalAccount/notifications/enqueue'
 import { AUD_EXPONENT, compareExactAmounts } from '../../../../src/modules/money/public'
 import { finalizeFundingReversal, fundingReversalBooking } from './stripeRefundPipeline'
 import { ensureEventConsistency, refused, type FundingProviderEvidence, type FinalizeFundingResult, type FundingRefundEvidence, type PrepareFundingResult } from './stripeEventPipeline'
@@ -120,6 +121,10 @@ export async function prepareFundingDisputeEvent(
 
   await openDisputeCase(ctx, command, event, caseRef, existingCase)
   if (existingCase === null || !existingCase.evidenceRefs.includes(event.disputeId)) {
+    await enqueueAccountNotice(ctx, {
+      eventKind: 'funding_disputed', accountRef: command.accountRef,
+      sourceEventRef: event.disputeId, recipientPrincipalRef: command.actorPrincipalRef,
+    })
     await enqueueOperatorAlert(ctx, {
       alertRef: `dispute:${event.disputeId}`,
       subject: 'Dispute opened',
