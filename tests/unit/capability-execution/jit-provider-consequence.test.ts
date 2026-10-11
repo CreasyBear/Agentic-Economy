@@ -672,6 +672,28 @@ describe('JIT provider consequence boundary', () => {
     expect(durableJournal.complete).not.toHaveBeenCalled()
   })
 
+  it('keeps release evidence when a later send is refused before release', async () => {
+    const durableJournal = journal()
+    const first = sendReturning402()
+    let calls = 0
+    const send = vi.fn<RouteTransportFetch>(async (target, init) => {
+      if (calls++ === 0) return first(target, init)
+      throw new ProviderConsequencePreReleaseRefusal()
+    })
+    const { createCallbackScopedX402Runtime } = buildTrackedX402Factory()
+    const { routeInvocation, ...active } = x402Harness({
+      createCallbackScopedX402Runtime,
+      journal: durableJournal,
+      send,
+    })
+
+    const result = await execute(active, OPAQUE_TICKET, routeInvocation)
+
+    expect(send).toHaveBeenCalledTimes(2)
+    expect(result).toMatchObject({ disposition: 'unknown', releaseStarted: true })
+    expect(durableJournal.abortBeforeRelease).not.toHaveBeenCalled()
+  })
+
   it('does not abort or retry when expiry is detected after x402 authorization and submission fencing', async () => {
     const durableJournal = journal()
     const markX402PaymentPossiblySubmitted = vi.fn(async () => undefined)
