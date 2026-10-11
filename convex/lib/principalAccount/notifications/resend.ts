@@ -1,3 +1,10 @@
+import { EMAIL_SENDER_NAME } from '../../../../src/emails/brand'
+
+const REPLY_TO = 'support@aecon.ai'
+
+/** A bare address gets the brand display name; an address that already has one is left alone. */
+export const formatFrom = (from: string): string => (from.includes('<') ? from : `${EMAIL_SENDER_NAME} <${from}>`)
+
 export type ResendEmailInput = Readonly<{
   apiKey: string
   from: string
@@ -31,7 +38,7 @@ export async function postResendEmail(input: ResendEmailInput): Promise<ResendEm
         'User-Agent': 'aecon-notifications/1',
       },
       body: JSON.stringify({
-        from: input.from, to: [input.to], subject: input.subject, text: input.text,
+        from: formatFrom(input.from), reply_to: REPLY_TO, to: [input.to], subject: input.subject, text: input.text,
         ...(input.html === undefined ? {} : { html: input.html }),
         ...(input.headers === undefined ? {} : { headers: input.headers }),
         ...(input.tags === undefined ? {} : { tags: input.tags }),

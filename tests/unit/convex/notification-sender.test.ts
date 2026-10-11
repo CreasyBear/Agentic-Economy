@@ -129,7 +129,8 @@ describe('sendDeliveryEmail', () => {
       'User-Agent': 'aecon-notifications/1',
     })
     expect(JSON.parse(request.body)).toMatchObject({
-      from: 'no-reply@example.test',
+      from: 'aecon <no-reply@example.test>',
+      reply_to: 'support@aecon.ai',
       to: ['owner@example.test'],
       subject: 'Sam canonical principal needs your approval',
       html: expect.stringContaining('Review request'),
@@ -373,5 +374,16 @@ describe('postResendEmail', () => {
     expect(JSON.parse(String(request?.body)).headers).toEqual({
       'List-Unsubscribe': '<https://x.test/u?d=1>', 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
     })
+  })
+
+  it('formats a bare from with the brand name, keeps a named from, and sets reply_to', async () => {
+    const sendEmail = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response('{}', { status: 200 }))
+    vi.stubGlobal('fetch', sendEmail)
+    const base = { apiKey: 'k', to: 'b@example.test', subject: 's', text: 't', idempotencyKey: 'i' }
+    await postResendEmail({ ...base, from: 'a@example.test' })
+    await postResendEmail({ ...base, from: 'Team <a@example.test>' })
+    const bodies = sendEmail.mock.calls.map(([, request]) => JSON.parse(String(request?.body)))
+    expect(bodies[0]).toMatchObject({ from: 'aecon <a@example.test>', reply_to: 'support@aecon.ai' })
+    expect(bodies[1]).toMatchObject({ from: 'Team <a@example.test>', reply_to: 'support@aecon.ai' })
   })
 })
