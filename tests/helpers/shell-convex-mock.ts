@@ -2,4 +2,5 @@
 export const shellConvexMock = {
   useConvexAuth: () => ({ isAuthenticated: false, isLoading: false, isRefreshing: false }),
   useQuery: () => undefined,
+  useMutation: () => async () => null,
 }

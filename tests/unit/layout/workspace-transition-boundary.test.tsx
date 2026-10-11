@@ -32,6 +32,7 @@ const authState = vi.hoisted(() => ({
 }))
 
 
+vi.mock('convex/react', () => ({ useConvexAuth: () => ({ isAuthenticated: false }), useQuery: () => undefined, useMutation: () => async () => null }))
 vi.mock('@clerk/tanstack-react-start', () => ({
   useAuth: () => ({
     isLoaded: authState.isLoaded,

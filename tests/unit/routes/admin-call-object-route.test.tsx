@@ -20,7 +20,7 @@ vi.mock('@clerk/tanstack-react-start', async (importOriginal) => ({
   useAuth: () => clerkAuth,
 }))
 vi.mock('@/components/ae/command-panel', () => ({ AeCommandPanel: () => null }))
-vi.mock('convex/react', () => ({ useQuery: (query: Parameters<typeof getFunctionName>[0]) => {
+vi.mock('convex/react', () => ({ useConvexAuth: () => ({ isAuthenticated: false }), useMutation: () => async () => null, useQuery: (query: Parameters<typeof getFunctionName>[0]) => {
   if (getFunctionName(query) !== 'adminConsoleAudit:readAdminAuditAccess') return undefined
   if (reviewAccess.error !== null) throw reviewAccess.error
   return { kind: 'allowed', role: 'support' }

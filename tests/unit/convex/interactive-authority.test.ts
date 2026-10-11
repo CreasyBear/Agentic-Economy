@@ -424,7 +424,7 @@ describe('interactive authority', () => {
       const chain = unpackSingleCanonicalChain(await collectAuthorityTables(backend))
       const events = await backend.run(async ctx => await ctx.db.query('journeyEvents').collect())
       expect(events.map(event => [event.accountRef, event.eventKey, event.props])).toEqual([
-        [chain.account.accountRef, `${chain.account.accountRef}:signed_up`, undefined],
+        [chain.account.accountRef, `${chain.account.accountRef}:signed_up`, { isNewAccount: 'true' }],
       ])
     })
 
