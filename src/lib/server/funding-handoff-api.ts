@@ -305,11 +305,15 @@ export async function handleFundingHandoffAction(
           ? await fundingHandoffCreateAction.run({ data: createFundingHandoffInputSchema.parse(raw), context })
           : await fundingHandoffStatusAction.run({ data: fundingHandoffStatusInputSchema.parse(raw), context })
     } catch (cause) {
+      const constraintsReason = cause instanceof Error
+        ? /^funding_constraints_unavailable:(.+)$/.exec(cause.message)?.[1]
+        : undefined
       return degrade(cause, withRequestCorrelationHeader(problem({
         status: 503, kind: 'UNAVAILABLE', code: 'funding_source_unavailable', retryable: true,
         detail: 'Funding status is temporarily unavailable. Retry the same request or poll the same funding session.',
         extras: {
           correlationRef: correlationId,
+          ...(constraintsReason ? { reason: constraintsReason } : {}),
           next: [actionName === 'status'
             ? fundingStatusNext(fundingHandoffStatusInputSchema.parse(raw).fundingSessionId)
             : actionName === 'create'
