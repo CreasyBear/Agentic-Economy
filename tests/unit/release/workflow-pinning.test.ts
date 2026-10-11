@@ -3,7 +3,11 @@ import { describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
 
 const files = ['cli-release.yml', 'kernel-release-gate.yml']
-type Job = { env?: Record<string, unknown>; permissions?: Record<string, string> }
+type Job = {
+  env?: Record<string, unknown>
+  permissions?: Record<string, string>
+  steps?: { run?: string }[]
+}
 type Workflow = { permissions?: Record<string, string>; jobs: Record<string, Job> }
 
 describe.each(files)('%s hardening', (file) => {
@@ -24,5 +28,13 @@ describe.each(files)('%s hardening', (file) => {
 
   it('does not grant id-token at workflow level', () => {
     expect(workflow.permissions?.['id-token']).toBeUndefined()
+  })
+
+  it('runs no npm or repo scripts in a job holding id-token', () => {
+    for (const job of Object.values(workflow.jobs)) {
+      if (job.permissions?.['id-token'] !== 'write') continue
+      for (const step of job.steps ?? [])
+        expect(step.run ?? '').not.toMatch(/\bnpm\s+(ci|install|run|exec|--prefix)\b|\bnpx\b/)
+    }
   })
 })

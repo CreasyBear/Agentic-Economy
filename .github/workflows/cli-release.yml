@@ -13,11 +13,12 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  publish:
+  build:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write # keyless cosign signing
+    outputs:
+      version: ${{ steps.tag.outputs.version }}
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -74,12 +75,38 @@ jobs:
             npm --prefix "$GITHUB_WORKSPACE" run test:cli-package
           sha256sum --check SHA256SUMS
 
+      - name: Upload the release archive and checksums
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: cli-release
+          path: ${{ runner.temp }}/cli-release
+          if-no-files-found: error
+          retention-days: 7
+
+  sign-publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # keyless cosign signing; no npm or repo scripts run in this job
+    timeout-minutes: 15
+    steps:
+      - name: Download the release archive and checksums
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: cli-release
+          path: ${{ runner.temp }}/cli-release
+
+      - name: Verify the archive checksum
+        working-directory: ${{ runner.temp }}/cli-release
+        run: sha256sum --check SHA256SUMS
+
       - name: Install Cosign
         uses: sigstore/cosign-installer@faadad0cce49287aee09b3a48701e75088a2c6ad # v4.0.0
 
       - name: Sign and verify the exact release archive
         env:
-          VERSION: ${{ steps.tag.outputs.version }}
+          VERSION: ${{ needs.build.outputs.version }}
           SIGNING_IDENTITY: ${{ github.server_url }}/${{ github.repository }}/.github/workflows/cli-release.yml@${{ github.ref }}
         working-directory: ${{ runner.temp }}/cli-release
         run: |
@@ -92,7 +119,7 @@ jobs:
       - name: Create the public release without replacing existing assets
         env:
           GH_TOKEN: ${{ secrets.AECON_CLI_RELEASE_TOKEN }}
-          VERSION: ${{ steps.tag.outputs.version }}
+          VERSION: ${{ needs.build.outputs.version }}
         shell: bash
         run: |
           if tag_lookup=$(gh api -i "repos/CreasyBear/aecon-cli/git/ref/tags/v$VERSION" 2>&1); then
