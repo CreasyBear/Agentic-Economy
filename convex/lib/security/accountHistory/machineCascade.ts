@@ -4,6 +4,7 @@ import type { Doc } from '../../../_generated/dataModel'
 import type { MutationCtx } from '../../../_generated/server'
 import { persistAgentAudit } from '../../agentAccess/principals/records'
 
+// Sign-in cascades are capped; a scoped removal revokes every agent the member created.
 const MACHINE_AGENT_CASCADE_CAP = 64
 
 type CascadeObservation = Pick<ClerkSecurityObservation, 'providerIdentifier' | 'deliveryRefHash' | 'observedAt'>
@@ -36,16 +37,17 @@ export async function revokeMachineAgentsForCreatorObservation(
     accountRefs.add(onlyAccountRef)
   }
 
+  const cap = onlyAccountRef === undefined ? MACHINE_AGENT_CASCADE_CAP : Number.POSITIVE_INFINITY
   const matchedAgents: Doc<'agentAccessPrincipals'>[] = []
   for (const accountRef of accountRefs) {
-    if (matchedAgents.length >= MACHINE_AGENT_CASCADE_CAP) break
+    if (matchedAgents.length >= cap) break
     const agents = await ctx.db.query('agentAccessPrincipals')
       .withIndex('by_ownerId_and_lifecycle', (index) => index
         .eq('ownerId', accountRef)
         .eq('lifecycle', 'active'))
       .collect()
     for (const agent of agents) {
-      if (matchedAgents.length >= MACHINE_AGENT_CASCADE_CAP) break
+      if (matchedAgents.length >= cap) break
       if (!await machineAgentCreatedByHuman(ctx, agent, accountRef, authority.principalRef, observation.providerIdentifier)) {
         continue
       }
