@@ -25,7 +25,7 @@ function convexSiteOrigin(): string | null {
   return origin !== undefined && /^https:\/\/[a-z0-9-]+\.convex\.site$/u.test(origin) ? origin : null
 }
 
-export async function forwardUnsubscribe(request: Request, method: 'GET' | 'POST'): Promise<Response> {
+async function forwardUnsubscribe(request: Request, method: 'GET' | 'POST'): Promise<Response> {
   const token = new URL(request.url).searchParams.get('t')?.slice(0, 1000) ?? ''
   const origin = convexSiteOrigin()
   if (origin === null || token === '') return new Response('This unsubscribe link is not valid.', { status: 404, headers: { 'Cache-Control': 'no-store' } })
