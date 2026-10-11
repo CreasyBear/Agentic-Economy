@@ -40,7 +40,7 @@ export type CreditProviderObligationRecordsProps = Readonly<{
 }>
 
 const reasonLabel = (code: string) => code === 'funding_dispute_open'
-  ? 'Your bank has disputed a credit purchase. Spending is paused while we respond.'
+  ? 'Your bank has disputed a credit purchase. Spending is paused while we respond. Contact Support for next steps.'
   : enumLabel(code)
 
 function reconciliationScope(record: MoneyReconciliationCaseView): string {

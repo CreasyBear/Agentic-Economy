@@ -49,7 +49,7 @@ const NOTICES: Record<NoticeKind, Notice> = {
   funding_disputed: {
     subject: () => 'Your bank disputed a credit purchase',
     preheader: () => 'Spending is paused while we respond.',
-    body: () => 'Your bank has disputed a credit purchase. Spending is paused while we respond. We will email you when it is settled.',
+    body: () => 'Your bank has disputed a credit purchase. Spending is paused while we respond. Contact Support for the outcome.',
     label: 'View account', path: '/owner/credit', campaign: 'funding_disputed',
   },
   task_refunded: {

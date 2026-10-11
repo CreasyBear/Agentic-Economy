@@ -181,11 +181,31 @@ export async function finalizeFundingDisputeHandler(
   if (args.event.kind !== 'dispute'
     || args.event.eventType !== 'charge.dispute.closed'
     || args.event.disputeStatus !== 'lost') return refused('payment_binding_invalid')
-  return await finalizeFundingReversal(ctx, {
-    event: args.event,
-    paymentId: args.event.paymentId,
-    providerRefId: args.event.disputeId,
-    evidenceDigest: args.event.disputeDigest,
+  const event = args.event
+  const result = await finalizeFundingReversal(ctx, {
+    event,
+    paymentId: event.paymentId,
+    providerRefId: event.disputeId,
+    evidenceDigest: event.disputeDigest,
     formanceTransactionRef: args.formanceTransactionRef,
   })
+  if (result.kind !== 'accepted') return result
+  // The credit is reversed in full, so the freeze has served its purpose: resolve the case.
+  const command = await ctx.db.query('moneyFundingCommands')
+    .withIndex('by_paymentId', (b) => b.eq('paymentId', event.paymentId))
+    .unique()
+  if (command === null) return result
+  const caseRef = `money-case:${canonicalDigest({ format: 'ae.funding-dispute:v1', fundingCommandRef: command.commandRef })}`
+  const openCase = await ctx.db.query('moneyReconciliationCases')
+    .withIndex('by_caseRef', (b) => b.eq('caseRef', caseRef))
+    .unique()
+  if (openCase !== null && openCase.status === 'open') {
+    await ctx.db.patch(openCase._id, {
+      status: 'resolved',
+      resolutionEvidenceRefs: [event.stripeEventId],
+      resolvedAt: event.observedAt,
+      updatedAt: event.observedAt,
+    })
+  }
+  return result
 }
