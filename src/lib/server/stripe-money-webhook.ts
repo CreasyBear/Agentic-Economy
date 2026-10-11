@@ -24,6 +24,7 @@ type CheckoutWebhookEventType =
   | "checkout.session.completed"
   | "checkout.session.async_payment_succeeded"
   | "checkout.session.async_payment_failed"
+  | "checkout.session.expired"
   | "payment_intent.payment_failed";
 
 type StripeV2AccountEventType = StripeAccountUpdatedWebhookEvent["eventType"];
@@ -55,6 +56,7 @@ export function mapStripeMoneyWebhookEvent(
     case "checkout.session.completed":
     case "checkout.session.async_payment_succeeded":
     case "checkout.session.async_payment_failed":
+    case "checkout.session.expired":
       return mapCheckoutSessionWebhookEvent(event, input.config, event.data.object);
     case "refund.created":
     case "refund.updated":
@@ -216,6 +218,7 @@ function checkoutWebhookStatus(
 ): "failed" | "processing" | "paid" {
   switch (eventType) {
     case "checkout.session.async_payment_failed":
+    case "checkout.session.expired":
     case "payment_intent.payment_failed":
       return "failed";
     case "checkout.session.completed":

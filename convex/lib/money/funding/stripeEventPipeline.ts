@@ -186,6 +186,7 @@ export async function prepareFundingSettlementEvent(
         updatedAt: event.observedAt,
       })
     } else {
+      const expired = event.eventType === 'checkout.session.expired'
       recordFundingTerminal(command.state, 'failed')
       await ctx.db.patch(command._id, {
         state: 'failed',
@@ -196,10 +197,11 @@ export async function prepareFundingSettlementEvent(
         ...(args.readback.paymentStatus === undefined ? {} : {
           providerPaymentStatus: args.readback.paymentStatus,
         }),
-        terminalReason: 'async_payment_failed',
+        terminalReason: expired ? 'expired' : 'async_payment_failed',
         updatedAt: event.observedAt,
       })
-      await enqueueAccountNotice(ctx, {
+      // Expiry is not a failure the owner needs mail about.
+      if (!expired) await enqueueAccountNotice(ctx, {
         eventKind: 'funding_failed', accountRef: command.accountRef,
         sourceEventRef: command.commandRef, recipientPrincipalRef: command.actorPrincipalRef,
       })
