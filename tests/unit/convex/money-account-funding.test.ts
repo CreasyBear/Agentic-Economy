@@ -801,7 +801,7 @@ describe('Account AUD funding through Formance', () => {
         const command = await backend.run(async (ctx) => await ctx.db.query('moneyFundingCommands')
           .withIndex('by_paymentId', (q) => q.eq('paymentId', paymentId)).unique())
         expect(command).toMatchObject({ state: 'reversed', reversalRefundId: disputeId, reversalTransactionRef: ref })
-        expect((await caseRows()).find((c) => c.evidenceRefs.includes(disputeId))).toMatchObject({ status: 'open' })
+        expect((await caseRows()).find((c) => c.evidenceRefs.includes(disputeId))).toMatchObject({ status: 'resolved' })
       }
     }
   })
