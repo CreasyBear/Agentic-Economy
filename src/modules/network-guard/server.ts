@@ -1,13 +1,21 @@
+import { isIP } from "node:net";
+
 import { Agent, fetch as guardedFetch } from "undici";
 
 import { readBoundedRequestText } from "@/lib/server/bounded-request-body";
 
-import { createGuardedLookup, defaultDnsResolver } from "./public";
+import { createGuardedLookup, createLookupRefusalError, defaultDnsResolver, isPublicIpAddress } from "./public";
 
 export async function sendGuardedHttpRequest(
   request: Request,
   maximumResponseBytes = 64 * 1024,
 ): Promise<Response> {
+  // Node never calls connect.lookup for IP-literal hosts, so refuse them here.
+  const { hostname } = new URL(request.url);
+  const literal = hostname.startsWith("[") ? hostname.slice(1, -1) : hostname;
+  if (isIP(literal) !== 0 && !isPublicIpAddress(literal)) {
+    throw createLookupRefusalError();
+  }
   const dispatcher = new Agent({
     connect: { lookup: createGuardedLookup(defaultDnsResolver) },
   });

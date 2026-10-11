@@ -122,7 +122,7 @@ function toLookupAddress(address: string, family = isIP(address)): LookupAddress
   }
 }
 
-function createLookupRefusalError(): NodeJS.ErrnoException {
+export function createLookupRefusalError(): NodeJS.ErrnoException {
   const error = new Error('Storefront importer refused a non-public DNS resolution.') as NodeJS.ErrnoException
   error.code = 'ECONNREFUSED'
   return error
@@ -144,7 +144,7 @@ function isBlockedHostname(hostname: string): boolean {
 }
 
 
-function isPublicIpAddress(value: string): boolean {
+export function isPublicIpAddress(value: string): boolean {
   const normalized = normalizeHostname(value)
   if (normalized === undefined) {
     return false
