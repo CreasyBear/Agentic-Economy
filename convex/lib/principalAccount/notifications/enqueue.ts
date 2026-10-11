@@ -86,6 +86,28 @@ async function alertCapCode(ctx: MutationCtx, input: {
   return null
 }
 
+const LIFECYCLE_WINDOW_CAP = 4
+const LIFECYCLE_WINDOW_MS = 14 * ALERT_WINDOW_MS
+
+/** Lifecycle caps (design doc section 5): one per owner per 24 hours and 4 in 14 days, counted from admitted lifecycle rows. Welcome is first in the sequence and never dropped, so it skips the check. */
+async function lifecycleCapCode(ctx: MutationCtx, input: {
+  eventKind: Doc<'notificationDeliveries'>['eventKind']
+  stream: EmailStream
+  recipientPrincipalRef: string
+  accountRef: string
+}, now: number): Promise<string | null> {
+  if (input.stream !== 'lifecycle' || input.eventKind === 'welcome') return null
+  const sent = (await ctx.db.query('notificationDeliveries')
+    .withIndex('by_accountRef_and_createdAt', (query) => query
+      .eq('accountRef', input.accountRef).gte('createdAt', now - LIFECYCLE_WINDOW_MS))
+    .collect())
+    .filter((row) => row.recipientPrincipalRef === input.recipientPrincipalRef
+      && row.stream === 'lifecycle' && row.state !== 'suppressed')
+  if (sent.length >= LIFECYCLE_WINDOW_CAP) return 'lifecycle_window_cap'
+  if (sent.some((row) => row.createdAt >= now - ALERT_WINDOW_MS)) return 'lifecycle_daily_cap'
+  return null
+}
+
 /** The one enqueue path for every email: dedupe, then the stream kill switch, then alert caps, then the stream's admission bucket.
  * Callers own their preference checks. Refused sends are kept as suppressed rows so the dedupe key still holds. */
 export async function enqueueEmail(ctx: MutationCtx, input: {
@@ -114,7 +136,7 @@ export async function enqueueEmail(ctx: MutationCtx, input: {
     && (!PHASE3_KINDS.has(input.eventKind) || phase3Enabled())
     && kindEnabled(input.eventKind)
   const now = Date.now()
-  const capCode = enabled ? await alertCapCode(ctx, input, now) : null
+  const capCode = enabled ? (await alertCapCode(ctx, input, now)) ?? (await lifecycleCapCode(ctx, input, now)) : null
   const admitted = enabled && capCode === null
     && (await assertAdmission(ctx, { name: `email-${input.stream}`, key: input.accountRef })).ok
   const deliveryId = await ctx.db.insert('notificationDeliveries', {
