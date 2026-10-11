@@ -14,7 +14,6 @@ const workspaceFenceReasonValue = v.union(
   v.literal('unreleased_call_holds'),
   v.literal('in_flight_funding'),
   v.literal('open_reconciliation'),
-  v.literal('positive_credit_balance'),
 )
 
 const decommissionEligibilityValue = v.object({

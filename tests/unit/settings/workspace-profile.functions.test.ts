@@ -126,7 +126,7 @@ describe('workspace consequence server producers', () => {
   })
 
   it.each([
-    ['positive credit', { kind: 'ok', balance: { units: '1' } }, 'positive_credit_balance'],
+    ['positive credit', { kind: 'ok', purchasedBalance: { units: '1' } }, 'positive_credit_balance'],
     ['an unavailable balance read', { kind: 'refused', code: 'source_unavailable' }, 'source_unavailable'],
   ])('refuses close before the mutation for %s', async (_name, balance, code) => {
     boundary.action.mockResolvedValue(balance)

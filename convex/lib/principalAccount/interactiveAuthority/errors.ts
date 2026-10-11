@@ -44,7 +44,6 @@ export type InteractiveAuthorityErrorCode =
   | 'legal_customer_rebinding_blocked'
   | 'workspace_confirmation_mismatch'
   | 'workspace_has_unsettled_obligations'
-  | 'workspace_has_positive_credit_balance'
   | 'successor_not_active_member'
   | 'successor_same_as_incumbent'
   | 'successor_principal_inactive'

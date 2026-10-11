@@ -106,14 +106,14 @@ type WorkspaceActionWire = Readonly<{
   sourceWrite: SourceWriteAdmission; sourceWriteRequest: SourceWriteAdmissionRequest
 }>
 const closeWorkspaceMutation = sourceMutation<WorkspaceCloseCommand & WorkspaceActionWire, WorkspaceCloseResult>('workspaceAccounts:closeWorkspace')
-const readCreditAccountAction = sourceAction<{ principalId: string; currency: string }, { kind: 'ok'; balance: { units: string } } | { kind: 'refused'; code: string }>('moneyLedger:readCreditAccount')
+const readCreditAccountAction = sourceAction<{ principalId: string; currency: string }, { kind: 'ok'; purchasedBalance: { units: string } } | { kind: 'refused'; code: string }>('moneyLedger:readCreditAccount')
 
-/** Credit lives in the ledger, which a mutation cannot read, so close is refused here while any remains. */
+/** Credit lives in the ledger, which a mutation cannot read, so close is refused here while purchased credit remains. Promotional credit is not withdrawable and does not block. */
 async function creditCloseRefusal(accountRef: string): Promise<WorkspaceCloseBlockedRefusal | null> {
   try {
     const account = await callSourceAction(readCreditAccountAction, { principalId: accountRef, currency: 'AUD' })
     if (account.kind !== 'ok') return { kind: 'refused', code: 'source_unavailable' }
-    return BigInt(account.balance.units) > 0n ? { kind: 'refused', code: 'positive_credit_balance' } : null
+    return BigInt(account.purchasedBalance.units) > 0n ? { kind: 'refused', code: 'positive_credit_balance' } : null
   } catch (cause) {
     captureRouteException(cause, { site: 'closeWorkspaceServer.creditBalance' })
     return { kind: 'refused', code: 'source_unavailable' }
