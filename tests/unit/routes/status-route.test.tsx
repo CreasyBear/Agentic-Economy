@@ -58,7 +58,7 @@ function operationalManifest() {
 
 function readyDefaults() {
   mocks.getRequest.mockReturnValue(new Request('http://localhost/status'))
-  mocks.readServerReadiness.mockResolvedValue({ status: 'ready' })
+  mocks.readServerReadiness.mockResolvedValue({ status: 'ready', commercial: { quoting: 'ready' } })
   mocks.buildSiteDiscoveryManifest.mockReturnValue(operationalManifest())
   mocks.readCatalogueFreshness.mockResolvedValue({ schemaVersion: 'catalogue-status:v1', status: 'fresh' })
 }
