@@ -294,7 +294,7 @@ export async function finalizeFundingEventHandler(
     appliedRef: args.formanceTransactionRef,
     appliedAt: args.event.observedAt,
   })
-  await emitFundingJourneyEvent(ctx, command.accountRef, command.commandRef)
+  await emitFundingJourneyEvent(ctx, command.accountRef, command.commandRef, 'stripe')
   return {
     kind: 'accepted',
     status: 'applied',

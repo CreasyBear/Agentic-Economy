@@ -67,7 +67,7 @@ const WEEK_MS = 7 * 24 * 3600_000
  * Each is idempotent per account. */
 export async function journeyForFinalization(
   ctx: MutationCtx,
-  row: Pick<CallRow, 'callRef' | 'ownerId'>,
+  row: Pick<CallRow, 'callRef' | 'ownerId' | 'environment'>,
   projection: Pick<CallDispatchProjectionShape, 'state' | 'result'>,
   finalizedAt: number,
 ): Promise<void> {
@@ -80,7 +80,9 @@ export async function journeyForFinalization(
     .withIndex('by_eventKey', q => q.eq('eventKey', `${row.ownerId}:activated`))
     .unique()
   if (activated === null) {
-    await emitJourneyEvent(ctx, row.ownerId, 'activated')
+    await emitJourneyEvent(ctx, row.ownerId, 'activated', {
+      props: { funding_source: row.environment === 'production' ? 'real' : 'sandbox' },
+    })
     return
   }
   const sinceActivated = finalizedAt - activated.createdAt

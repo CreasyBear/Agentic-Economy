@@ -21,7 +21,7 @@ export async function emitJourneyEvent(
   ctx: JourneyCtx,
   accountRef: string,
   name: JourneyEventName,
-  opts: { key?: string } = {},
+  opts: { key?: string; props?: Record<string, number | string> } = {},
 ): Promise<boolean> {
   const eventKey = opts.key === undefined ? `${accountRef}:${name}` : `${accountRef}:${name}:${opts.key}`
   const existing = await ctx.db.query('journeyEvents')
@@ -29,7 +29,7 @@ export async function emitJourneyEvent(
     .unique()
   if (existing !== null) return false
   const createdAt = Date.now()
-  const props: Record<string, number> = {}
+  const props: Record<string, number | string> = { ...opts.props }
   if (name === 'activated') {
     const signedUp = await accountEvent(ctx, accountRef, 'signed_up')
     if (signedUp !== null) props.msSinceSignup = createdAt - signedUp.createdAt
@@ -50,9 +50,10 @@ export async function emitJourneyEvent(
 }
 
 /** The first credited funding is `funded`; every later one is `topped_up`, keyed by its funding ref. */
-export async function emitFundingJourneyEvent(ctx: JourneyCtx, accountRef: string, fundingRef: string): Promise<void> {
-  if (await emitJourneyEvent(ctx, accountRef, 'funded')) return
-  await emitJourneyEvent(ctx, accountRef, 'topped_up', { key: fundingRef })
+export async function emitFundingJourneyEvent(ctx: JourneyCtx, accountRef: string, fundingRef: string, fundingSource?: string): Promise<void> {
+  const props = fundingSource === undefined ? undefined : { funding_source: fundingSource }
+  if (await emitJourneyEvent(ctx, accountRef, 'funded', { props })) return
+  await emitJourneyEvent(ctx, accountRef, 'topped_up', { key: fundingRef, props })
 }
 
 const ERASE_BATCH = 500
