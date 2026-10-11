@@ -53,7 +53,11 @@ export const sendDeliveryEmail = internalAction({
     })
     if (suppressed !== null) return { outcome: 'suppressed', code: suppressed }
 
-    const rendered = await renderEmail(context.email as EmailInput)
+    // The tax invoice's buyer line falls back to the account email, known only here (design doc 6.1).
+    const email = context.email.eventKind === 'funding_receipt'
+      ? { ...context.email, props: { ...context.email.props, buyerEmail: primaryEmail.emailAddress } }
+      : context.email
+    const rendered = await renderEmail(email as EmailInput)
     // Only alert and lifecycle props carry an unsubscribe target; required mail has none.
     const unsubscribeUrl = (context.email.props as { unsubscribeUrl?: string }).unsubscribeUrl
     return await postResendEmail({

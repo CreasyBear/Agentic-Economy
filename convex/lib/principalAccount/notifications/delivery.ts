@@ -116,14 +116,24 @@ const MONEY_NOTICE_KINDS = new Set<Doc<'notificationDeliveries'>['eventKind']>([
 async function readMoneyNoticeContext(ctx: QueryCtx, delivery: Doc<'notificationDeliveries'>): Promise<NotificationContext> {
   const skip = (code: string): NotificationContext => ({ kind: 'skip', code })
   let amount: string | undefined
-  let props: Record<string, string> = {}
+  let props: Record<string, string | number> = {}
   if (delivery.eventKind === 'funding_receipt') {
     const command = await ctx.db.query('moneyFundingCommands')
       .withIndex('by_commandRef', (query) => query.eq('commandRef', delivery.sourceEventRef)).unique()
     if (command === null) return skip('funding_command_missing')
     if (command.actorPrincipalRef !== delivery.recipientPrincipalRef || command.accountRef !== delivery.accountRef) return skip('recipient_changed')
-    // Credit added is the principal; Stripe fees and tax are charged separately.
-    amount = moneyNoticeAmount({ currency: command.currency, units: command.principalUnits, exponent: command.exponent })
+    // Tax invoice (design doc 6.1): every amount is the funding command's own unit string, never recomputed.
+    const { principalUnits, serviceFeeUnits, taxUnits, totalUnits, exponent } = command
+    const exact = [principalUnits, serviceFeeUnits, taxUnits, totalUnits].map((units) => moneyNoticeAmount({ currency: command.currency, units, exponent }))
+    if (exact.includes(undefined)) return skip('amount_unsafe')
+    amount = exact[0]
+    const taxFacts = await ctx.db.query('moneyCustomerTaxFacts')
+      .withIndex('by_accountRef', (query) => query.eq('accountRef', delivery.accountRef)).unique()
+    props = {
+      principalUnits, serviceFeeUnits, taxUnits, totalUnits, exponent,
+      ...(taxFacts?.abn ? { buyerAbn: taxFacts.abn } : {}),
+      ...(taxFacts?.legalName ? { buyerName: taxFacts.legalName } : {}),
+    }
   } else {
     const call = await ctx.db.query('capabilityCalls')
       .withIndex('by_callRef', (query) => query.eq('callRef', delivery.sourceEventRef)).unique()
