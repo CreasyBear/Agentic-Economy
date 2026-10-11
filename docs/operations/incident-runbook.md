@@ -4,7 +4,7 @@ One page. Operator contact is the `OPERATOR_EMAIL` Convex env var (never write a
 
 ## Payments-off switch
 
-Mechanism: the `platformLaunch.paymentsOpenTo` row per environment, read by `readPaymentsAudience` and enforced in `readFundingStartRefusal` (`convex/lib/money/treasury/paymentAdmission.ts`, called at `convex/lib/money/funding/ownerReserve.ts:59`).
+Mechanism: the `platformLaunch.paymentsOpenTo` row per environment, read by `readPaymentsAudience` and enforced in `readFundingStartRefusal` (`convex/lib/money/treasury/paymentAdmission.ts`, called at `convex/lib/money/funding/ownerReserve.ts:63`).
 
 - Production default is `admins` (only Admins can start funding). Set it with the Admin command `set_payments_audience` (`convex/adminTreasuryCommands.ts:setPaymentsAudience`, reason `launch_close`) to `admins`. New funding by non-admins then refuses with `payments_admins_only`.
 - The reader also refuses with `payments_paused` when the audience is `none`, but no command sets `none` (command accepts only `admins` or `everyone`).
@@ -17,9 +17,9 @@ Resume: run `set_payments_audience` to `everyone` (reason `launch_open`) only af
 | Symptom | First check | Action | Who to tell | How to resume |
 |---|---|---|---|---|
 | Stripe webhook failing | Stripe dashboard webhook attempts; `moneyStripeWebhookInbox` rows stuck | Close funding to `admins`; confirm signing secret env matches Stripe; fix, then let Stripe retry (events are idempotent) | Operator (`OPERATOR_EMAIL`) | Failed events drained, inbox empty, then reopen audience |
-| Dispute opened | Stripe dispute notice; owner account state | Follow the T2-T4 dispute freeze (account hold) and the operator email; do not refund or move funds by hand | Operator; affected owner via support | Freeze lifted only by the dispute outcome and an Admin command |
+| Dispute opened | Stripe dispute notice; owner account state | Stripe `charge.dispute.created` or `updated` opens case `funding_dispute_open` and freezes the Account; the operator email names the evidence due date. Respond in the Stripe dashboard; do not refund or move funds by hand | Operator; affected owner via support | Closed won or warning_closed resolves the case automatically. Closed lost reverses the credit and resolves the case. Partial-amount or other closes keep the case open and alert the operator; no command resolves those yet, so they need a code fix |
 | Formance or reconciliation mismatch | Open `moneyReconciliationCases` (`convex/moneyReconciliationCases.ts`) | Owner locked on the case; close funding to `admins`; resolve via `resolveOwnerCase`, append-only correction | Operator | All cases resolved, owner unlocked, reconciliation clean |
-| Convex outage | Convex status page; `/health` and readiness | Nothing to write; do not redeploy mid-outage; funding refuses by itself | Operator | Provider recovered, readiness green, spot-check one funding path |
+| Convex outage | Convex status page; `/api/health` and readiness | Nothing to write; do not redeploy mid-outage; funding refuses by itself | Operator | Provider recovered, readiness green, spot-check one funding path |
 | Provider or search failure | Provider status; readiness output | Degrade: leave search/provider paths failing closed; no manual ledger edits | Operator | Provider healthy and readiness green |
 | Suspected key leak | Which key, where exposed | Close funding to `admins`; rotate the key at the provider and in the Convex/Vercel env per [deployments.md](deployments.md); revoke old; review recent usage | Operator; start breach assessment below | New key live, readiness green, old key confirmed dead |
 
@@ -32,5 +32,5 @@ Under the Privacy Act NDB scheme, if a breach of personal information is suspect
 ## Gaps
 
 - No `none` (full pause) command: `readFundingStartRefusal` supports `payments_paused` but `set_payments_audience` cannot set it. Closing to `admins` is the strongest existing switch.
-- Dispute freeze (T2-T4) is referenced, not yet documented here; link it once merged.
+- No Admin command resolves a dispute case (`resolveOwnerCase` refuses `funding_dispute*` cases with `money_case_operator_only`). Only won, warning_closed and full-amount lost closes resolve automatically.
 - Legal review of the breach section is pending.
