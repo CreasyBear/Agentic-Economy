@@ -47,7 +47,7 @@ function build(input: EmailInput): { element: ReactElement; subject: string } {
     case 'operator_digest':
       return { element: <OperatorDigest {...input.props} />, subject: digestSubject(input.props) }
     case 'funding_receipt':
-      return { element: <FundingReceipt {...input.props} />, subject: fundingSubject() }
+      return { element: <FundingReceipt {...input.props} />, subject: fundingSubject(input.props) }
     case 'funding_failed':
     case 'task_refunded':
     case 'task_stuck':

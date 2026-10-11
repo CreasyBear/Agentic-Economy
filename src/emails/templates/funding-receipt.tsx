@@ -9,7 +9,7 @@ import { emailUrl } from '../links'
 import { formatMoney } from '../money'
 import { formatTimestamp } from '../../lib/ui/format-time'
 
-/** Units come straight from the funding command (design doc 6.1); nothing is recomputed here. `exponent` is the command's AUD exponent, minor units (2) when omitted. */
+/** Units come straight from the funding command (design doc 6.1); nothing is recomputed here. Callers pass the command's `AUD_EXPONENT`; the default of 2 (minor units) exists only for fixtures. */
 export type FundingReceiptProps = {
   siteUrl: string
   principalUnits: string
@@ -32,7 +32,9 @@ export type FundingReceiptProps = {
 const BUYER_THRESHOLD_AUD = 1000n
 const SUPPLIER_LINE = EMAIL_LEGAL_LINES[0] ?? ''
 
-export const subject = () => 'Tax invoice for your aecon top-up'
+const moneyOf = (units: string, exponent: number) => formatMoney(amountFromParts('AUD', units, exponent))
+
+export const subject = ({ totalUnits, exponent = 2 }: FundingReceiptProps) => `Tax invoice for your ${moneyOf(totalUnits, exponent)} aecon top-up`
 
 const row: CSSProperties = { ...bodyText, fontSize: 14, lineHeight: '20px', margin: 0, padding: '8px 0', borderBottom: `1px solid ${EMAIL_COLORS.light.border}` }
 const muted: CSSProperties = { color: EMAIL_COLORS.light.muted }
@@ -56,10 +58,12 @@ export default function FundingReceiptEmail({
   siteUrl, principalUnits, serviceFeeUnits, taxUnits, totalUnits, exponent = 2,
   invoiceNumber, confirmedAt, timeZone, buyerName, buyerEmail, buyerAbn,
 }: FundingReceiptProps) {
-  const money = (units: string) => formatMoney(amountFromParts('AUD', units, exponent))
+  const money = (units: string) => moneyOf(units, exponent)
   const total = money(totalUnits)
   const needsBuyer = BigInt(totalUnits) >= BUYER_THRESHOLD_AUD * 10n ** BigInt(exponent)
   const buyer = buyerAbn !== undefined ? `ABN ${buyerAbn}` : [buyerName, buyerEmail].filter(Boolean).join(', ')
+  // Spec 6.1: from A$1,000 the invoice must name the buyer. Fail loudly rather than print an empty line.
+  if (needsBuyer && buyer === '') throw new Error('funding_receipt_buyer_required')
   const campaign = 'funding_receipt'
   return (
     <Layout
@@ -69,7 +73,7 @@ export default function FundingReceiptEmail({
       reason="You get this because you added credit to your aecon account. It is your record of the purchase."
       showSettings
     >
-      {/* Structure from emailcn receipt-default (see layout.tsx): title, reference line, rows, divider, total, one button. */}
+      {/* Structure from emailcn receipt-default (vendored at ../vendor/emailcn/receipt-default.tsx; its export is a full-document wrapper and cannot nest, so the body is copied into Layout): title, reference line, rows, divider, total, one button. */}
       <Text className="ae-text" style={{ ...bodyText, fontSize: 22, fontWeight: 500, lineHeight: '28px', margin: '0 0 4px' }}>Tax invoice</Text>
       <Text className="ae-muted" style={{ ...bodyText, ...muted, margin: '0 0 16px' }}>
         {[invoiceNumber, confirmedAt === undefined ? undefined : `${formatTimestamp(confirmedAt, timeZone)} ${zoneLabel(confirmedAt, timeZone)}`.trim()].filter(Boolean).join(' | ')}
@@ -88,7 +92,7 @@ export default function FundingReceiptEmail({
         <Line label="Total paid" strong>{total}</Line>
       </Section>
       <Text className="ae-muted" style={{ ...bodyText, ...muted, fontSize: 13, lineHeight: '20px' }}>
-        Questions about this invoice? Email <Link href="mailto:support@aecon.ai" className="ae-link" style={{ color: EMAIL_COLORS.light.text }}>support@aecon.ai</Link>.
+        Questions about this invoice? Email <Link href="mailto:support@aecon.ai" className="ae-link" style={{ color: EMAIL_COLORS.light.text }}>support@aecon.ai</Link>. Read our <Link href={emailUrl(siteUrl, '/privacy', { campaign, content: 'privacy' })} className="ae-link" style={{ color: EMAIL_COLORS.light.text }}>privacy policy</Link>.
       </Text>
       <CtaButton href={emailUrl(siteUrl, '/owner/credit', { campaign, content: 'cta' })}>View credit</CtaButton>
     </Layout>
