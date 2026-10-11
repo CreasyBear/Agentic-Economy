@@ -89,7 +89,8 @@ export const sendDeliveryEmail = internalAction({
     const result = await post(primaryEmail.emailAddress, context.deliveryRef)
     // Email change: the replaced inbox hears of it too. A retry reuses both keys, so neither mail doubles.
     if (result.outcome === 'sent' && context.previousAddress !== undefined && context.previousAddress !== primaryEmail.emailAddress.toLowerCase()) {
-      await post(context.previousAddress, `${context.deliveryRef}:old`)
+      const old = await post(context.previousAddress, `${context.deliveryRef}:old`)
+      if (old.outcome !== 'sent') return old
     }
     return result
   },
