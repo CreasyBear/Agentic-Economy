@@ -12,6 +12,7 @@ import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { isBoundedJsonValue } from '@/modules/capability-contract/public'
 import { constantTimeStringEqual } from '@/lib/server/constant-time'
 import { readTrimmedEnv } from '@/lib/server/read-trimmed-env'
+import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
 
 export const SourceWriteAdmissionScopeValues = [
   'catalog_publish',
@@ -589,7 +590,7 @@ function assertNotProviderSecret(secret: string, env: Env, envName: string): voi
 }
 
 function isProductionEnv(env: Env): boolean {
-  return readTrimmedEnv(env, 'NODE_ENV') === 'production'
+  return readTrimmedEnv(env, 'NODE_ENV') === 'production' || deploymentPaymentEnvironment(env) === 'production'
 }
 function readCsvEnv(env: Env, name: string): readonly string[] {
   const value = readTrimmedEnv(env, name)
