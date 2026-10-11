@@ -1,5 +1,8 @@
 import { formatTimestamp } from '@/lib/ui/format-time'
 import { Link } from '@tanstack/react-router'
+import { useQuery } from 'convex/react'
+import { api } from '../../../../../../convex/_generated/api'
+import { availabilityStatement } from '@/content/availability-copy'
 import { AeAccountFundingPanel } from '@/components/ae/console/AeCreditTopUpPanel'
 import { Card, CardContent } from '@/components/ui/card'
 import { CreditBalanceCard } from './CreditBalanceCard'
@@ -30,6 +33,7 @@ export function CreditFundPanel({
   onCreditRefresh,
   unavailable = {},
 }: CreditFundPanelProps) {
+  const availability = useQuery(api.platformLaunch.readPublicAvailability, {})
   const purchasedBalance = accountBalance?.kind === 'available' ? accountBalance.balance : undefined
   const balance = accountBalance?.kind === 'available' ? accountBalance.totalBalance ?? accountBalance.balance : undefined
   const promotionalBalance = accountBalance?.kind === 'available' ? accountBalance.promotionalBalance : undefined
@@ -106,6 +110,9 @@ export function CreditFundPanel({
         </CreditBalanceCard>
       </CreditProfileSection>
       <CreditProfileSection title="Add funds" description="Review the exact credit, fee, and total before continuing to secure payment.">
+        {availability === undefined ? null : availability.paidCalls === 'soon' ? (
+          <AeAlert tone="info" title="Trial credit only"><span>{availabilityStatement('soon')}</span></AeAlert>
+        ) : (
         <Card className="min-w-0 py-5"><CardContent className="px-5 sm:px-6">
           <AeAccountFundingPanel
             {...(accountFundingPort === undefined ? {} : { port: accountFundingPort })}
@@ -115,6 +122,7 @@ export function CreditFundPanel({
             {...(onCreditRefresh === undefined ? {} : { onRefresh: onCreditRefresh })}
           />
         </CardContent></Card>
+        )}
       </CreditProfileSection>
       <div className="arc-credit-fund__links">
         <Link className="text-primary underline-offset-4 hover:underline" to="/owner/settings/spending">Configure spending defaults</Link>
