@@ -456,12 +456,10 @@ describe('Tool chat Agent tools', () => {
       toolRef: OPERATION_REF,
       input: { company: 'Acme' },
     })).resolves.toEqual(committed)
-    expect(runQuery).toHaveBeenCalledTimes(1)
+    expect(runQuery).toHaveBeenCalledTimes(2)
     expect(getFunctionName(runQuery.mock.calls[0]![0])).toBe('chatTurns:authorizePayableTool')
-    expect(runQuery.mock.calls[0]![1]).toEqual({
-      authority: AUTHORITY,
-      toolRef: OPERATION_REF,
-    })
+    expect(runQuery.mock.calls[0]![1]).toEqual({ authority: AUTHORITY })
+    expect(runQuery.mock.calls[1]![1]).toEqual({ authority: AUTHORITY, toolRef: OPERATION_REF })
     const digest = canonicalDigest({
       turnRef: AUTHORITY.turnRef,
       credentialId: AUTHORITY.credentialLocator,
@@ -480,6 +478,24 @@ describe('Tool chat Agent tools', () => {
     expect(runAction.mock.calls[0]![1]).not.toHaveProperty('principal')
   })
 
+  it('fences a stopped turn before resolving a URL toolRef', async () => {
+    const runQuery = vi.fn(async (_reference: Parameters<ToolCtx['runQuery']>[0], _args: unknown) => false)
+    const runAction = vi.fn()
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    const agent = createChatAgent(mockModel(), AUTHORITY)
+    await expect(invokeTool(agent, 'tool.quote', toolCtx({
+      runQuery: runQuery as ToolCtx['runQuery'],
+      runAction: runAction as ToolCtx['runAction'],
+    }), { toolRef: 'https://example.com/tool', input: {} })).resolves.toEqual({
+      kind: 'chat_tool_refused', toolId: 'tool.quote', reason: 'turn_stopped',
+    })
+    expect(runQuery).toHaveBeenCalledTimes(1)
+    expect(runQuery.mock.calls[0]![1]).toEqual({ authority: AUTHORITY })
+    expect(runAction).not.toHaveBeenCalled()
+    expect(fetchSpy).not.toHaveBeenCalled()
+    fetchSpy.mockRestore()
+  })
+
   it('refuses a canceled key turn before dispatching a Quote', async () => {
     const runQuery = vi.fn(async (_reference: Parameters<ToolCtx['runQuery']>[0], _args: unknown) => false)
     const runAction = vi.fn()
@@ -494,7 +510,7 @@ describe('Tool chat Agent tools', () => {
     })
     expect(runQuery).toHaveBeenCalledTimes(1)
     expect(getFunctionName(runQuery.mock.calls[0]![0])).toBe('chatTurns:authorizePayableTool')
-    expect(runQuery.mock.calls[0]![1]).toEqual({ authority: AUTHORITY, toolRef: OPERATION_REF })
+    expect(runQuery.mock.calls[0]![1]).toEqual({ authority: AUTHORITY })
     expect(runAction).not.toHaveBeenCalled()
   })
 
