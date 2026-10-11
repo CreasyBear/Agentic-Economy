@@ -77,25 +77,26 @@ function positiveSeconds(value: unknown, field: string, fallback: number): numbe
   return value
 }
 
-function verificationUri(value: unknown): string {
-  const uri = textField(value, 'verification_uri')
+const SAFE_URI_CHARS = /^[A-Za-z0-9\-._~:/?#=@+,[\]]+$/
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]'])
+
+/** Strict check before a verification URI is shown or handed to an OS opener (CWE-78). */
+export function isSafeVerificationUri(uri: string): boolean {
+  if (!SAFE_URI_CHARS.test(uri)) return false
   let parsed: URL
   try {
     parsed = new URL(uri)
   } catch {
-    throw new CliFailure('OAuth verification_uri response field must be an absolute HTTP(S) URL with an authority.', {
-      kind: 'UNAVAILABLE',
-      code: 'connect-response-invalid',
-    })
+    return false
   }
+  if (parsed.host.length === 0 || !uri.toLowerCase().startsWith(`${parsed.protocol}//`) || uri.charAt(parsed.protocol.length + 2) === '/') return false
+  return parsed.protocol === 'https:' || (parsed.protocol === 'http:' && LOOPBACK_HOSTS.has(parsed.hostname))
+}
 
-  const protocol = parsed.protocol
-  const hasWebAuthority = (protocol === 'http:' || protocol === 'https:')
-    && uri.toLowerCase().startsWith(`${protocol}//`)
-    && parsed.host.length > 0
-    && uri.slice(`${protocol}//`.length).charAt(0) !== '/'
-  if (!hasWebAuthority) {
-    throw new CliFailure('OAuth verification_uri response field must be an absolute HTTP(S) URL with an authority.', {
+function verificationUri(value: unknown): string {
+  const uri = textField(value, 'verification_uri')
+  if (!isSafeVerificationUri(uri)) {
+    throw new CliFailure('OAuth verification_uri response field must be an https URL (http only for loopback) with safe characters.', {
       kind: 'UNAVAILABLE',
       code: 'connect-response-invalid',
     })
@@ -166,9 +167,9 @@ function printConnectResult(value: JsonRecord, options: CliOptions): void {
 
 function openVerificationUri(uri: string, options: CliOptions): void {
   if (options.json || !process.stdout.isTTY || process.env.AE_DISABLE_BROWSER_OPEN === '1') return
-  const command = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'cmd' : 'xdg-open'
-  const args = process.platform === 'win32' ? ['/c', 'start', '', uri] : [uri]
-  const child = spawn(command, args, { detached: true, stdio: 'ignore' })
+  if (!isSafeVerificationUri(uri)) return
+  const command = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'explorer.exe' : 'xdg-open'
+  const child = spawn(command, [uri], { detached: true, stdio: 'ignore' })
   child.unref()
 }
 
