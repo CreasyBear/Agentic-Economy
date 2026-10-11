@@ -64,6 +64,7 @@ export function degradeBackend<T>(
     console.error('[ae.degraded]', JSON.stringify({
       operation: context.site,
       reason: context.reason,
+      ...backendTags(),
       cause: serializeCause(cause),
     }))
   } catch {
@@ -71,6 +72,18 @@ export function degradeBackend<T>(
     // Never let logging failure change control flow.
   }
   return fallback
+}
+
+/**
+ * Environment and release tags for Convex Log Streaming to Sentry.
+ * CONVEX_DEPLOYMENT is `prod:<name>` or `dev:<name>`; prod maps to production, dev to development.
+ * SENTRY_ENVIRONMENT (set on the Convex deployment, e.g. preview) wins when present.
+ */
+function backendTags(): { environment: string; release?: string } {
+  const env = process.env
+  const raw = env.SENTRY_ENVIRONMENT?.trim() || (env.CONVEX_DEPLOYMENT?.startsWith('prod:') ? 'production' : 'development')
+  const release = env.SENTRY_RELEASE?.trim()
+  return { environment: raw, ...(release ? { release } : {}) }
 }
 
 /**
@@ -88,6 +101,7 @@ export function captureBackendException(
   try {
     console.error('[ae.exception]', JSON.stringify({
       level,
+      ...backendTags(),
       ...context,
       cause: serializeCause(cause),
     }))

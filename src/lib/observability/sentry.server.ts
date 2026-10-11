@@ -17,7 +17,7 @@ export function initSentryServer(): boolean {
   }
 
   const config = readObservabilityServerConfig()
-  if (!config.enabled || config.sentryDsn === undefined) {
+  if (!config.sentryEnabled || config.sentryDsn === undefined) {
     return false
   }
 

@@ -2,6 +2,8 @@ type EnvRecord = Record<string, string | undefined>
 
 export type ObservabilityClientConfig = {
   enabled: boolean
+  /** Sentry reports only from production and preview, never under Vitest. */
+  sentryEnabled: boolean
   sentryDsn?: string
   posthogKey?: string
   posthogHost: string
@@ -12,6 +14,7 @@ export type ObservabilityClientConfig = {
 
 export type ObservabilityServerConfig = {
   enabled: boolean
+  sentryEnabled: boolean
   sentryDsn?: string
   posthogKey?: string
   posthogHost: string
@@ -21,6 +24,18 @@ export type ObservabilityServerConfig = {
 }
 
 const defaultPosthogHost = 'https://us.i.posthog.com'
+
+export type ObservabilityEnvironment = 'production' | 'preview' | 'development'
+
+/** One env scheme (Vercel's): anything that is not production or preview is development. */
+export function normalizeEnvironment(raw: string | undefined): ObservabilityEnvironment {
+  const value = raw?.trim().toLowerCase()
+  return value === 'production' || value === 'preview' ? value : 'development'
+}
+
+function isSentryEnvironment(environment: ObservabilityEnvironment, env: EnvRecord): boolean {
+  return environment !== 'development' && env.VITEST === undefined && process.env.VITEST === undefined
+}
 
 export function isObservabilityDisabled(env: EnvRecord): boolean {
   return env.VITE_AE_DISABLE_OBSERVABILITY === 'true' || env.AE_DISABLE_OBSERVABILITY === 'true'
@@ -41,14 +56,15 @@ export function readObservabilityClientConfig(
   const posthogHost = readTrimmed(env.VITE_POSTHOG_HOST) ?? defaultPosthogHost
   const posthogAppUrl = readTrimmed(env.VITE_POSTHOG_APP_URL)
   const release = readRelease(env)
-  const environment =
+  const environment = normalizeEnvironment(
     readTrimmed(env.VITE_SENTRY_ENVIRONMENT) ??
     readTrimmed(env.SENTRY_ENVIRONMENT) ??
-    readTrimmed(env.VERCEL_ENV) ??
-    import.meta.env.MODE
+    readTrimmed(env.VERCEL_ENV),
+  )
 
   return {
     enabled: !disabled && (sentryDsn !== undefined || posthogKey !== undefined),
+    sentryEnabled: !disabled && sentryDsn !== undefined && isSentryEnvironment(environment, env),
     ...(sentryDsn === undefined ? {} : { sentryDsn }),
     ...(posthogKey === undefined ? {} : { posthogKey }),
     posthogHost,
@@ -67,14 +83,15 @@ export function readObservabilityServerConfig(
   const posthogHost = readTrimmed(env.POSTHOG_HOST) ?? readTrimmed(env.VITE_POSTHOG_HOST) ?? defaultPosthogHost
   const posthogAppUrl = readTrimmed(env.POSTHOG_APP_URL) ?? readTrimmed(env.VITE_POSTHOG_APP_URL)
   const release = readRelease(env)
-  const environment =
+  const environment = normalizeEnvironment(
     readTrimmed(env.SENTRY_ENVIRONMENT) ??
     readTrimmed(env.VERCEL_ENV) ??
-    readTrimmed(env.NODE_ENV) ??
-    'development'
+    readTrimmed(env.NODE_ENV),
+  )
 
   return {
     enabled: !disabled && (sentryDsn !== undefined || posthogKey !== undefined),
+    sentryEnabled: !disabled && sentryDsn !== undefined && isSentryEnvironment(environment, env),
     ...(sentryDsn === undefined ? {} : { sentryDsn }),
     ...(posthogKey === undefined ? {} : { posthogKey }),
     posthogHost,
@@ -86,6 +103,7 @@ export function readObservabilityServerConfig(
 
 function readRelease(env: EnvRecord): string | undefined {
   return (
+    readTrimmed(env.VITE_SENTRY_RELEASE) ??
     readTrimmed(env.SENTRY_RELEASE) ??
     readTrimmed(env.VERCEL_GIT_COMMIT_SHA) ??
     readTrimmed(env.GITHUB_SHA)
