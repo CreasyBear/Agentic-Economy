@@ -49,6 +49,8 @@ export async function canonicalAgentCallCore(
   ctx: ActionCtx,
   args: CanonicalCallArgs,
   trustedChat?: TrustedChatAuthority,
+  /** Chat Calls without user-intent evidence stop at the existing owner approval. */
+  requireApproval = false,
 ): Promise<Infer<typeof callResultValue>> {
   const material = await ctx.runQuery(internal.capabilityQuotes.readForCall, {
     principal: args.principal,
@@ -120,7 +122,7 @@ export async function canonicalAgentCallCore(
     quoteRef: material.quoteRef,
     operationKey: args.operationKey,
     correlationId: args.correlationId,
-    principal: admitted,
+    principal: requireApproval && admitted.authorityMode !== 'read_only' ? { ...admitted, authorityMode: 'approval_required' } : admitted,
     toolRef: material.toolRef,
     input: material.input,
     decisionPrice: material.decisionPrice,

@@ -159,6 +159,40 @@ export type AgentAccessAuthenticationOptions = Readonly<{
   consequenceResource?: string
 }>
 
+/**
+ * The Clerk-verified API key candidate for the request, or null when the
+ * credential is missing, malformed, rejected or unverifiable. Callers pick a
+ * rate bucket by verified identity and reuse the candidate instead of verifying
+ * the same secret twice.
+ */
+export async function verifyApiKeyCandidate(
+  request: Request,
+  authenticate?: () => Promise<AgentAccessApiKeyAuth>,
+): Promise<AgentAccessApiKeyAuth | null> {
+  try {
+    if (authenticate !== undefined) {
+      const candidate = await authenticate()
+      return candidate.isAuthenticated ? candidate : null
+    }
+    const authorization = request.headers.get('authorization')
+    const secret = authorization === null
+      ? request.headers.get('x-api-key')
+      : /^Bearer ([^\s]+)$/i.exec(authorization)?.[1]
+    if (secret === null || secret === undefined || secret.length === 0) return null
+    const verified = await clerkClient().apiKeys.verify(secret)
+    return {
+      isAuthenticated: true,
+      tokenType: 'api_key',
+      id: verified.id,
+      subject: verified.subject,
+      scopes: verified.scopes,
+      claims: verified.claims,
+    }
+  } catch {
+    return null
+  }
+}
+
 export async function authenticateAgentAccess(
   options: AgentAccessAuthenticationOptions = {},
 ): Promise<Readonly<{ kind: 'authenticated'; principal: AgentAccessPrincipal }> | AgentAccessRefusal> {

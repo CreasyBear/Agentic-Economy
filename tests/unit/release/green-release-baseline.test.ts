@@ -145,7 +145,7 @@ describe('green release baseline', () => {
       AE_FORMANCE_ENVIRONMENT: 'sandbox',
       AE_FORMANCE_GATEWAY_URL: 'http://127.0.0.1:3069',
     })
-    expect(native?.steps?.find(step => step.uses === 'actions/setup-node@v4')?.with?.['node-version-file']).toBe('.nvmrc')
+    expect(native?.steps?.find(step => step.uses?.startsWith('actions/setup-node@') === true)?.with?.['node-version-file']).toBe('.nvmrc')
     expect(native?.steps?.some(step => step.run === 'npm install --global npm@11.5.1 --ignore-scripts')).toBe(true)
     const start = native?.steps?.find(step => step.name === 'Boot isolated pinned native money stack')
     expect(start?.run).toContain('docker compose -f tests/config/native-money/compose.yml up --detach --wait --wait-timeout 90')
@@ -329,7 +329,9 @@ describe('green release baseline', () => {
 
   it('provides every production manifest requirement to the live gateway job', () => {
     const workflow = readWorkflow('.github/workflows/kernel-release-gate.yml')
-    const liveEnvironment = workflow.jobs?.['live-gateway-proof']?.env ?? {}
+    const liveJob = workflow.jobs?.['live-gateway-proof']
+    // Secrets are step-scoped; the job proves a requirement is supplied if any of its steps receives it.
+    const liveEnvironment = Object.assign({}, liveJob?.env, ...(liveJob?.steps ?? []).map(step => step.env))
     const requiredNames = DEPLOYMENT_MANIFEST.configuration.requiredProduction
       .flatMap(({ names }) => names)
       .concat(DEPLOYMENT_MANIFEST.configuration.controlledPackage5.flatMap(({ names }) => names))
@@ -401,7 +403,7 @@ describe('green release baseline', () => {
     expect(workflowText).not.toContain('AE_GATEWAY_SMOKE_TOPUP_WEBHOOK_RAW_BODY')
     expect(workflowText).not.toContain('AE_GATEWAY_SMOKE_TOPUP_WEBHOOK_SIGNATURE')
     expect(workflowText).not.toContain('AE_GATEWAY_SMOKE_TOPUP_EXTERNAL_REF')
-    expect(workflowText).toContain('actions/download-artifact@v4')
+    expect(workflowText).toContain('actions/download-artifact@')
     expect(workflowText).toContain('live_gateway_prepare_workflow_run_id')
     const upload = live?.steps?.[uploadIndex]
     expect(upload?.with?.path).toBe('output/release/operation-gateway-smoke.json')
@@ -419,13 +421,14 @@ describe('green release baseline', () => {
     expect(dispatch?.inputs?.live_gateway_run_id?.type).toBe('string')
     expect(dispatch?.inputs?.live_gateway_stage?.type).toBe('choice')
     expect(dispatch?.inputs?.live_gateway_prepare_workflow_run_id?.type).toBe('string')
-    expect(live?.env?.CDP_API_KEY_ID).toBe('${{ secrets.CDP_API_KEY_ID }}')
-    expect(live?.env?.CDP_API_KEY_SECRET).toBe('${{ secrets.CDP_API_KEY_SECRET }}')
-    expect(live?.env?.CDP_WALLET_SECRET).toBe('${{ secrets.CDP_WALLET_SECRET }}')
-    expect(live?.env?.AE_X402_CDP_ACCOUNT_NAME).toBe('${{ secrets.AE_X402_CDP_ACCOUNT_NAME }}')
-    expect(live?.env?.AE_X402_CUSTODY_ENABLED).toBe('true')
-    expect(live?.env?.AE_X402_CUSTODY_MAX_ATOMIC).toBe('${{ secrets.AE_X402_CUSTODY_MAX_ATOMIC }}')
-    expect(live?.env?.AE_X402_RPC_URLS_JSON).toBe('${{ secrets.AE_X402_RPC_URLS_JSON }}')
+    const liveEnv: Record<string, unknown> = Object.assign({}, live?.env, ...(live?.steps ?? []).map(step => step.env))
+    expect(liveEnv.CDP_API_KEY_ID).toBe('${{ secrets.CDP_API_KEY_ID }}')
+    expect(liveEnv.CDP_API_KEY_SECRET).toBe('${{ secrets.CDP_API_KEY_SECRET }}')
+    expect(liveEnv.CDP_WALLET_SECRET).toBe('${{ secrets.CDP_WALLET_SECRET }}')
+    expect(liveEnv.AE_X402_CDP_ACCOUNT_NAME).toBe('${{ secrets.AE_X402_CDP_ACCOUNT_NAME }}')
+    expect(liveEnv.AE_X402_CUSTODY_ENABLED).toBe('true')
+    expect(liveEnv.AE_X402_CUSTODY_MAX_ATOMIC).toBe('${{ secrets.AE_X402_CUSTODY_MAX_ATOMIC }}')
+    expect(liveEnv.AE_X402_RPC_URLS_JSON).toBe('${{ secrets.AE_X402_RPC_URLS_JSON }}')
   })
 
   it('proves a fresh checkout reaches a sellable local sandbox with only the Clerk development instance', () => {

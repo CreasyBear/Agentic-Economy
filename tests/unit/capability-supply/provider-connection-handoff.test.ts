@@ -278,6 +278,34 @@ describe('Provider connection owner handoff', () => {
     })
   })
 
+  it.each(['javascript:alert(1)', 'data:text/html,x', 'http://evil.example/authorize'])('refuses non-https authorization URL %s', async (bad) => {
+    mocks.callSourceQuery.mockResolvedValue({
+      kind: 'available',
+      attempt: {
+        attemptRef: 'pca_oauth', businessRef: 'business:one', sourceKind: 'mcp_oauth',
+        sourceUrl: 'https://mcp.provider.example/mcp', sourceOrigin: 'https://mcp.provider.example',
+        authentication: { kind: 'mcp_oauth' }, environment: 'production', state: 'pending', expiresAt: Date.now() + 60_000,
+      },
+    })
+    mocks.callSourceMutation.mockResolvedValueOnce({
+      kind: 'prepared', attemptRef: 'pca_oauth', secretRef: 'sec_00000000000040008000000000000062',
+      provisionAuthority: authority('provision', 'oauth-start'), rotationAuthority: authority('rotate', 'oauth-callback'),
+    })
+    const writeSecret = vi.fn()
+    const beginAuth = vi.fn().mockImplementation(async ({ authProvider: provider }) => {
+      await provider.saveDiscoveryState({ authorizationServerUrl: 'https://login.provider.example' })
+      await provider.saveClientInformation({ client_id: 'registered-client', issuer: 'https://login.provider.example' })
+      await provider.saveCodeVerifier('pkce-verifier-never-convex-0123456789abcdefghijkl')
+      await provider.redirectToAuthorization(new URL(bad))
+    })
+    const result = await startOwnerMcpProviderConnection({
+      data: { attemptRef: 'pca_oauth', idempotencyKey: 'oauth-bad-url', callbackUrl: 'https://ae.example/owner/supply/connections/oauth/callback?attempt=pca_oauth' },
+      context: { request: 'owner' },
+    }, { beginAuth, writeSecret, randomState: () => 'oauth-state-never-convex' })
+    expect(result.kind).toBe('refused')
+    expect(writeSecret).not.toHaveBeenCalled()
+  })
+
   it('does not start a new Provider MCP OAuth ceremony when its production rollout is disabled', async () => {
     vi.stubEnv('NODE_ENV', 'production')
     vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')

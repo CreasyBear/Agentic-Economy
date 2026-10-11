@@ -1823,43 +1823,10 @@ describe('durable OAuth refresh families', () => {
       .withIndex('by_principalId', (query) => query.eq('principalId', fixture.principalRef)).unique()))
       .toMatchObject({ credentialId: commit.successorCredentialId, grantGeneration: 2, lifecycle: 'active' })
 
-    const recovery = {
-      tokenHash: create.tokenHash, clientId: fixture.clientId, claimRef: 'delivery-recovery',
-      successorTokenHash: 'sha256:rotate-token-three', now: commit.createdAt + 1,
-      claimExpiresAt: commit.createdAt + 30_001,
-      operationKey: 'oauth-refresh:recovery', correlationId: 'oauth-refresh:recovery',
-    }
-    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
-    await expect(backend.mutation(api.agentAccessOAuth.claimRefreshFamily, {
-      ...recovery, ...(await sourceArgs(recovery, 'oauth-refresh:recovery:wrong-environment')),
-    })).resolves.toEqual({ kind: 'invalid_grant' })
-    const blockedRecovery = await backend.run(async (ctx) => ({
-      family: await ctx.db.query('agentAccessOAuthRefreshFamilies')
-        .withIndex('by_familyRef', (query) => query.eq('familyRef', created.family.familyRef)).unique(),
-      consumed: await ctx.db.query('agentAccessOAuthRefreshTokens')
-        .withIndex('by_tokenHash', (query) => query.eq('tokenHash', create.tokenHash)).unique(),
-      successor: await ctx.db.query('agentAccessOAuthRefreshTokens')
-        .withIndex('by_tokenHash', (query) => query.eq('tokenHash', recovery.successorTokenHash)).unique(),
-    }))
-    expect(blockedRecovery.family).toMatchObject({ lifecycle: 'active', currentTokenHash: claim.successorTokenHash })
-    expect(blockedRecovery.consumed).toMatchObject({ lifecycle: 'consumed' })
-    expect(blockedRecovery.consumed?.recoveredAt).toBeUndefined()
-    expect(blockedRecovery.successor).toBeNull()
-    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development')
-    await expect(backend.mutation(api.agentAccessOAuth.claimRefreshFamily, {
-      ...recovery, ...(await sourceArgs(recovery)),
-    })).resolves.toMatchObject({
-      kind: 'recovered',
-      family: {
-        currentProviderCredentialId: commit.successorCredentialId,
-        currentTokenHash: recovery.successorTokenHash,
-      },
-    })
-
     const reuse = {
-      tokenHash: create.tokenHash, clientId: fixture.clientId, claimRef: 'late-reuse',
-      successorTokenHash: 'sha256:rotate-token-four', now: commit.replayUntil + 1,
-      claimExpiresAt: commit.replayUntil + 30_001,
+      tokenHash: create.tokenHash, clientId: fixture.clientId, claimRef: 'early-reuse',
+      successorTokenHash: 'sha256:rotate-token-four', now: commit.createdAt + 1,
+      claimExpiresAt: commit.createdAt + 30_001,
       operationKey: 'oauth-refresh:reuse:late', correlationId: 'oauth-refresh:reuse:late',
     }
     await expect(backend.mutation(api.agentAccessOAuth.claimRefreshFamily, {

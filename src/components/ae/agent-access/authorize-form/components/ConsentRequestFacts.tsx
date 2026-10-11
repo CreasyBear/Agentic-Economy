@@ -1,4 +1,5 @@
 import { SettingsPageGroup, SettingsPageRow } from '@/components/ae/shared/arc-pro/settings-page/settings-page'
+import { Badge } from '@/components/arc/badge/badge'
 import { Button } from '@/components/arc/button/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 
@@ -29,21 +30,23 @@ export function ConsentRequestFacts({
   flow,
   redirectDisposition,
   redirectOrigin,
+  unverifiedClient,
 }: ConsentRequestFactsProps) {
   return (
     <div className="arc-market arc-consent-request-facts">
       <SettingsPageGroup title="Request details" headingLevel={2}>
         {[
-          { label: 'Application', value: `${clientName} · ${environment === 'sandbox' ? 'Sandbox' : 'Production'}` },
-          returnSiteFact({ flow, ...(redirectDisposition === undefined ? {} : { redirectDisposition }), ...(redirectOrigin === undefined ? {} : { redirectOrigin }) }),
+          { ...returnSiteFact({ flow, ...(redirectDisposition === undefined ? {} : { redirectDisposition }), ...(redirectOrigin === undefined ? {} : { redirectOrigin }) }), emphasis: true },
+          { label: 'Application', value: `${clientName} · ${environment === 'sandbox' ? 'Sandbox' : 'Production'}`, unverified: unverifiedClient === true },
           ...(presentation === 'review' ? [{ label: 'Tools', value: toolSelectionSummary }] : []),
           ...(presentation === 'context' ? [] : [{ label: 'Requested limits', value: accessSummary }]),
           ...(presentation === 'review' ? [{ label: 'Connection', value: `Stays signed in for ${formatConsentDuration(expiresInSeconds)} after approval, unless you disconnect it first.` }] : []),
         ].map(fact => (
           <SettingsPageRow key={fact.label} label={fact.label} headingLevel={3}>
             {'mono' in fact && fact.mono
-              ? <code className="arc-consent-fact-value arc-consent-fact-reference">{fact.value}</code>
+              ? <code className={`arc-consent-fact-value arc-consent-fact-reference${'emphasis' in fact ? ' font-medium' : ''}`}>{fact.value}</code>
               : <span className="arc-consent-fact-value">{fact.value}</span>}
+            {'unverified' in fact && fact.unverified ? <Badge tone="warning" className="ml-2">Unverified application</Badge> : null}
           </SettingsPageRow>
         ))}
       </SettingsPageGroup>

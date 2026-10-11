@@ -28,6 +28,7 @@ export type AgentConsentDetails = Readonly<{
   reconnectAmbiguous?: boolean
   redirectDisposition?: 'origin' | 'none' | 'unavailable'
   redirectOrigin?: string
+  unverifiedClient?: boolean
 }>
 
 function readConsentTarget(value: unknown): AgentConsentTarget | undefined {
@@ -149,5 +150,6 @@ export function readAgentConsentDetails(html: string): AgentConsentDetails {
     ...(reconnectAmbiguous ? { reconnectAmbiguous: true } : {}),
     ...(redirectDisposition === undefined ? {} : { redirectDisposition }),
     ...(redirectOrigin === undefined ? {} : { redirectOrigin }),
+    ...(consent?.dataset.unverifiedClient === 'true' ? { unverifiedClient: true } : {}),
   }
 }

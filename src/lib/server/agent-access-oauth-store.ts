@@ -151,7 +151,6 @@ export type AgentAccessOAuthRefreshCreateResult =
 
 export type AgentAccessOAuthRefreshClaimResult =
   | Readonly<{ kind: 'claimed' | 'replayed'; family: AgentAccessOAuthRefreshFamily; claimRef: string }>
-  | Readonly<{ kind: 'recovered'; family: AgentAccessOAuthRefreshFamily; invalidatedProviderCredentialId?: string }>
   | Readonly<{ kind: 'invalid_grant' | 'busy' | 'revoked' }>
 
 export type AgentAccessOAuthRefreshCommitResult =

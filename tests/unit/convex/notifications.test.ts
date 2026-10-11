@@ -8,7 +8,7 @@ import { enqueueEmail } from '../../../convex/lib/principalAccount/notifications
 import { moneyNoticeAmount } from '../../../convex/lib/principalAccount/notifications/delivery'
 import type { Id } from '../../../convex/_generated/dataModel'
 import { emailAddressHash } from '../../../convex/lib/principalAccount/notifications/suppression'
-import { signUnsubscribeToken } from '../../../convex/lib/principalAccount/notifications/unsubscribe'
+import { signUnsubscribeToken, verifyUnsubscribeToken } from '../../../convex/lib/principalAccount/notifications/unsubscribe'
 import { buildDigest } from '../../../convex/operatorDigest'
 import { convexTestWithWorkers } from '../../helpers/convex-fixtures'
 import { samIdentity } from '../../helpers/interactive-authority-provisioning'
@@ -920,11 +920,17 @@ describe('stalled step notification deliveries', () => {
     if (delivery === undefined) throw new Error('delivery_missing')
 
     const context = await backend.query(internal.notifications.readNotificationContext, { deliveryId: delivery._id })
-    const unsubscribeUrl = `https://ae.example.test/api/unsubscribe?t=${encodeURIComponent(await signedToken('lifecycle'))}`
+    // Tokens carry iat and exp, so two signings differ by a millisecond: compare the verified payload.
     expect(context).toMatchObject({
       kind: 'ready',
       stream: 'lifecycle',
-      email: { eventKind: 'stalled_not_funded', props: { siteUrl: 'https://ae.example.test', unsubscribeUrl } },
+      email: { eventKind: 'stalled_not_funded', props: { siteUrl: 'https://ae.example.test' } },
+    })
+    if (context.kind !== 'ready') throw new Error('context_not_ready')
+    const url = new URL(String(context.email.props.unsubscribeUrl))
+    expect(url.origin + url.pathname).toBe('https://ae.example.test/api/unsubscribe')
+    await expect(verifyUnsubscribeToken(UNSUBSCRIBE_SECRET, url.searchParams.get('t') ?? '')).resolves.toEqual({
+      principalRef: PRINCIPAL_REF, accountRef: ACCOUNT_REF, stream: 'lifecycle',
     })
   })
 

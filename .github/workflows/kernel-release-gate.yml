@@ -54,8 +54,8 @@ jobs:
       AE_FORMANCE_GATEWAY_URL: http://127.0.0.1:3069
       AE_DEPLOYMENT_ENVIRONMENT: development
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: '.nvmrc'
           cache: npm
@@ -119,7 +119,7 @@ jobs:
         run: docker compose -f tests/config/native-money/compose.yml down --volumes --remove-orphans --timeout 10
       - name: Upload sanitized native money evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: release-${{ github.sha }}-${{ github.run_id }}-native-money-contract
           path: output/native-money/
@@ -132,9 +132,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: '.nvmrc'
           cache: npm
@@ -147,7 +147,7 @@ jobs:
 
       - name: Cache the release Chromium browser
         id: playwright-cache
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
@@ -180,7 +180,7 @@ jobs:
 
       - name: Upload sanitized source release evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: release-${{ github.sha }}-${{ github.run_id }}-source-release-gate
           path: |
@@ -199,9 +199,9 @@ jobs:
       - name: 'Announce deploy-guard target: local-anonymous'
         run: "echo 'target: local-anonymous'"
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: '.nvmrc'
           cache: npm
@@ -219,7 +219,7 @@ jobs:
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
 
       - name: Cache the Convex local backend binary
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ~/.cache/convex/binaries
           key: convex-local-backend-${{ runner.os }}-${{ steps.convex-backend-version.outputs.version }}
@@ -255,7 +255,7 @@ jobs:
       # browser, so this job proves the anonymous sandbox only; doctor reports
       # the credentialed checks as warn/skipped by design.
       - name: Cache the fresh-checkout Chromium browser
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
@@ -302,7 +302,7 @@ jobs:
 
       - name: Upload the fresh-checkout evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: release-${{ github.sha }}-${{ github.run_id }}-fresh-checkout-proof
           path: output/fresh-checkout/
@@ -327,9 +327,9 @@ jobs:
       PLAYWRIGHT_BASE_URL: ${{ vars.AE_CHAT_STAGING_BASE_URL }}
       AE_RELEASE_SOURCE_REVISION: ${{ github.sha }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: '.nvmrc'
           cache: npm
@@ -360,7 +360,7 @@ jobs:
 
       - name: Upload only the sanitized chat staging result
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: release-${{ github.sha }}-${{ github.run_id }}-chat-staging-smoke
           path: output/release/playwright-chat-staging-smoke.json
@@ -381,9 +381,9 @@ jobs:
       AE_AUTHENTICATED_E2E_BASE_URL: ${{ vars.AE_AUTHENTICATED_E2E_BASE_URL }}
       AE_RELEASE_SOURCE_REVISION: ${{ github.sha }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: '.nvmrc'
           cache: npm
@@ -418,52 +418,11 @@ jobs:
       VERCEL_ENV: production
       AE_CANONICAL_BASE_URL: https://agentic-economy-phi.vercel.app
       AE_CANONICAL_HOST_ALLOWLIST: agentic-economy-phi.vercel.app
-      CONVEX_URL: ${{ secrets.AE_RELEASE_CONVEX_URL }}
-      VITE_CONVEX_URL: ${{ secrets.AE_RELEASE_CONVEX_URL }}
-      AE_RELEASE_CONVEX_URL: ${{ secrets.AE_RELEASE_CONVEX_URL }}
-      AE_RELEASE_CONVEX_DEPLOYMENT_ID: ${{ secrets.AE_RELEASE_CONVEX_DEPLOYMENT_ID }}
-      AE_CONVEX_SERVER_FUNCTION_TOKEN: ${{ secrets.AE_CONVEX_SERVER_FUNCTION_TOKEN }}
-      VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
-      CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
-      CLERK_JWT_ISSUER_DOMAIN: ${{ secrets.CLERK_JWT_ISSUER_DOMAIN }}
-      CLERK_WEBHOOK_SIGNING_SECRET: ${{ secrets.CLERK_WEBHOOK_SIGNING_SECRET }}
-      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
       AE_LLM_MODEL: ${{ vars.AE_LLM_MODEL }}
-      AE_CHAT_PROXY_SECRET: ${{ secrets.AE_CHAT_PROXY_SECRET }}
-      CDP_API_KEY_ID: ${{ secrets.CDP_API_KEY_ID }}
-      CDP_API_KEY_SECRET: ${{ secrets.CDP_API_KEY_SECRET }}
-      CDP_WALLET_SECRET: ${{ secrets.CDP_WALLET_SECRET }}
-      AE_X402_CDP_ACCOUNT_NAME: ${{ secrets.AE_X402_CDP_ACCOUNT_NAME }}
-      AE_X402_CDP_EXPECTED_EVM_ADDRESS: ${{ secrets.AE_X402_CDP_EXPECTED_EVM_ADDRESS }}
-      AE_X402_CDP_ACCOUNT_POLICY_ID: ${{ secrets.AE_X402_CDP_ACCOUNT_POLICY_ID }}
-      AE_X402_CDP_PROJECT_POLICY_ID: ${{ secrets.AE_X402_CDP_PROJECT_POLICY_ID }}
-      AE_X402_CDP_POLICY_RULES_DIGEST: ${{ secrets.AE_X402_CDP_POLICY_RULES_DIGEST }}
-      AE_X402_CDP_CREDENTIAL_GENERATION: ${{ secrets.AE_X402_CDP_CREDENTIAL_GENERATION }}
       AE_X402_CUSTODY_ENABLED: "true"
-      AE_X402_CUSTODY_MAX_ATOMIC: ${{ secrets.AE_X402_CUSTODY_MAX_ATOMIC }}
-      AE_X402_CUSTODY_DAILY_MAX_ATOMIC: ${{ secrets.AE_X402_CUSTODY_DAILY_MAX_ATOMIC }}
-      AE_X402_CUSTODY_PAYEE_DAILY_MAX_ATOMIC: ${{ secrets.AE_X402_CUSTODY_PAYEE_DAILY_MAX_ATOMIC }}
-      AE_X402_CUSTODY_NEW_PAYEE_MAX_ATOMIC: ${{ secrets.AE_X402_CUSTODY_NEW_PAYEE_MAX_ATOMIC }}
-      AE_X402_RPC_URLS_JSON: ${{ secrets.AE_X402_RPC_URLS_JSON }}
-      AE_SOURCE_WRITE_KEY_BILLING: ${{ secrets.AE_SOURCE_WRITE_KEY_BILLING }}
-      AE_SOURCE_WRITE_KEY_PROTECTED: ${{ secrets.AE_SOURCE_WRITE_KEY_PROTECTED }}
-      AE_SOURCE_WRITE_KEY_CATALOG: ${{ secrets.AE_SOURCE_WRITE_KEY_CATALOG }}
-      AE_SOURCE_WRITE_KEY_OPERATOR: ${{ secrets.AE_SOURCE_WRITE_KEY_OPERATOR }}
-      AE_SOURCE_WRITE_KEY_REPAIR: ${{ secrets.AE_SOURCE_WRITE_KEY_REPAIR }}
-      AE_SOURCE_WRITE_KEY_SESSION: ${{ secrets.AE_SOURCE_WRITE_KEY_SESSION }}
-      STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
-      STRIPE_READBACK_KEY: ${{ secrets.STRIPE_READBACK_KEY }}
-      STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
-      STRIPE_V2_WEBHOOK_SECRET: ${{ secrets.STRIPE_V2_WEBHOOK_SECRET }}
-      STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID: ${{ secrets.STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID }}
       AE_FORMANCE_ENVIRONMENT: ${{ vars.AE_FORMANCE_ENVIRONMENT }}
-      AE_FORMANCE_GATEWAY_URL: ${{ secrets.AE_FORMANCE_GATEWAY_URL }}
       AE_FORMANCE_LEDGER: ${{ vars.AE_FORMANCE_LEDGER }}
       AE_FORMANCE_REQUEST_TIMEOUT_MS: ${{ vars.AE_FORMANCE_REQUEST_TIMEOUT_MS }}
-      AE_FORMANCE_ACCESS_CLIENT_ID: ${{ secrets.AE_FORMANCE_ACCESS_CLIENT_ID }}
-      AE_FORMANCE_ACCESS_CLIENT_SECRET: ${{ secrets.AE_FORMANCE_ACCESS_CLIENT_SECRET }}
-      SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
-      VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
       SENTRY_ENVIRONMENT: ${{ vars.SENTRY_ENVIRONMENT }}
       VITE_SENTRY_ENVIRONMENT: ${{ vars.VITE_SENTRY_ENVIRONMENT }}
       AE_PACKAGE5_WRITES_ENABLED: ${{ vars.AE_PACKAGE5_WRITES_ENABLED }}
@@ -484,25 +443,17 @@ jobs:
       AE_GATEWAY_SMOKE_BASE_URL: https://agentic-economy-phi.vercel.app
       AE_GATEWAY_SMOKE_JOB_QUERY: ${{ vars.AE_GATEWAY_SMOKE_JOB_QUERY }}
       AE_GATEWAY_SMOKE_OWNER_QUERY: ${{ vars.AE_GATEWAY_SMOKE_OWNER_QUERY }}
-      AE_GATEWAY_SMOKE_INPUT_JSON: ${{ secrets.AE_GATEWAY_SMOKE_INPUT_JSON }}
-      AE_GATEWAY_SMOKE_API_KEY: ${{ secrets.AE_GATEWAY_SMOKE_API_KEY }}
-      AE_GATEWAY_SMOKE_RELEASE_API_KEY: ${{ secrets.AE_GATEWAY_SMOKE_RELEASE_API_KEY }}
       AE_RELEASE_SOURCE_REVISION: ${{ github.sha }}
-      AE_RELEASE_DEPLOYMENT_ID: ${{ secrets.AE_RELEASE_DEPLOYMENT_ID }}
-      AE_GATEWAY_SMOKE_OWNER_OPENAPI_DOCUMENT_JSON: ${{ secrets.AE_GATEWAY_SMOKE_OWNER_OPENAPI_DOCUMENT_JSON }}
       AE_GATEWAY_SMOKE_OWNER_OPENAPI_PATH: ${{ vars.AE_GATEWAY_SMOKE_OWNER_OPENAPI_PATH }}
       AE_GATEWAY_SMOKE_OWNER_OPENAPI_METHOD: ${{ vars.AE_GATEWAY_SMOKE_OWNER_OPENAPI_METHOD }}
-      AE_GATEWAY_SMOKE_OWNER_CLERK_SESSION_ID: ${{ secrets.AE_GATEWAY_SMOKE_OWNER_CLERK_SESSION_ID }}
-      AE_GATEWAY_SMOKE_OWNER_CLERK_USER_ID: ${{ secrets.AE_GATEWAY_SMOKE_OWNER_CLERK_USER_ID }}
       AE_GATEWAY_SMOKE_CONTROL_BUSINESS_ID: ${{ vars.AE_GATEWAY_SMOKE_CONTROL_BUSINESS_ID }}
-      AE_GATEWAY_SMOKE_CREDENTIAL_ID: ${{ secrets.AE_GATEWAY_SMOKE_CREDENTIAL_ID }}
       AE_GATEWAY_SMOKE_TOPUP_STAGE: ${{ inputs.live_gateway_stage }}
       AE_GATEWAY_SMOKE_TOPUP_AMOUNT_JSON: ${{ vars.AE_GATEWAY_SMOKE_TOPUP_AMOUNT_JSON }}
       AE_GATEWAY_SMOKE_PAYOUT_IDEMPOTENCY_KEY: ${{ format('{0}:payout', inputs.live_gateway_run_id) }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: '.nvmrc'
           cache: npm
@@ -515,10 +466,110 @@ jobs:
         # cannot read them (react-doctor/build-pipeline-secret-boundary).
         run: npm ci --ignore-scripts
       - name: Verify production deployment manifest before live smoke
+        env:
+          CONVEX_URL: ${{ secrets.AE_RELEASE_CONVEX_URL }}
+          VITE_CONVEX_URL: ${{ secrets.AE_RELEASE_CONVEX_URL }}
+          AE_RELEASE_CONVEX_URL: ${{ secrets.AE_RELEASE_CONVEX_URL }}
+          AE_RELEASE_CONVEX_DEPLOYMENT_ID: ${{ secrets.AE_RELEASE_CONVEX_DEPLOYMENT_ID }}
+          AE_CONVEX_SERVER_FUNCTION_TOKEN: ${{ secrets.AE_CONVEX_SERVER_FUNCTION_TOKEN }}
+          VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+          CLERK_JWT_ISSUER_DOMAIN: ${{ secrets.CLERK_JWT_ISSUER_DOMAIN }}
+          CLERK_WEBHOOK_SIGNING_SECRET: ${{ secrets.CLERK_WEBHOOK_SIGNING_SECRET }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          AE_CHAT_PROXY_SECRET: ${{ secrets.AE_CHAT_PROXY_SECRET }}
+          CDP_API_KEY_ID: ${{ secrets.CDP_API_KEY_ID }}
+          CDP_API_KEY_SECRET: ${{ secrets.CDP_API_KEY_SECRET }}
+          CDP_WALLET_SECRET: ${{ secrets.CDP_WALLET_SECRET }}
+          AE_X402_CDP_ACCOUNT_NAME: ${{ secrets.AE_X402_CDP_ACCOUNT_NAME }}
+          AE_X402_CDP_EXPECTED_EVM_ADDRESS: ${{ secrets.AE_X402_CDP_EXPECTED_EVM_ADDRESS }}
+          AE_X402_CDP_ACCOUNT_POLICY_ID: ${{ secrets.AE_X402_CDP_ACCOUNT_POLICY_ID }}
+          AE_X402_CDP_PROJECT_POLICY_ID: ${{ secrets.AE_X402_CDP_PROJECT_POLICY_ID }}
+          AE_X402_CDP_POLICY_RULES_DIGEST: ${{ secrets.AE_X402_CDP_POLICY_RULES_DIGEST }}
+          AE_X402_CDP_CREDENTIAL_GENERATION: ${{ secrets.AE_X402_CDP_CREDENTIAL_GENERATION }}
+          AE_X402_CUSTODY_MAX_ATOMIC: ${{ secrets.AE_X402_CUSTODY_MAX_ATOMIC }}
+          AE_X402_CUSTODY_DAILY_MAX_ATOMIC: ${{ secrets.AE_X402_CUSTODY_DAILY_MAX_ATOMIC }}
+          AE_X402_CUSTODY_PAYEE_DAILY_MAX_ATOMIC: ${{ secrets.AE_X402_CUSTODY_PAYEE_DAILY_MAX_ATOMIC }}
+          AE_X402_CUSTODY_NEW_PAYEE_MAX_ATOMIC: ${{ secrets.AE_X402_CUSTODY_NEW_PAYEE_MAX_ATOMIC }}
+          AE_X402_RPC_URLS_JSON: ${{ secrets.AE_X402_RPC_URLS_JSON }}
+          AE_SOURCE_WRITE_KEY_BILLING: ${{ secrets.AE_SOURCE_WRITE_KEY_BILLING }}
+          AE_SOURCE_WRITE_KEY_PROTECTED: ${{ secrets.AE_SOURCE_WRITE_KEY_PROTECTED }}
+          AE_SOURCE_WRITE_KEY_CATALOG: ${{ secrets.AE_SOURCE_WRITE_KEY_CATALOG }}
+          AE_SOURCE_WRITE_KEY_OPERATOR: ${{ secrets.AE_SOURCE_WRITE_KEY_OPERATOR }}
+          AE_SOURCE_WRITE_KEY_REPAIR: ${{ secrets.AE_SOURCE_WRITE_KEY_REPAIR }}
+          AE_SOURCE_WRITE_KEY_SESSION: ${{ secrets.AE_SOURCE_WRITE_KEY_SESSION }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_READBACK_KEY: ${{ secrets.STRIPE_READBACK_KEY }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          STRIPE_V2_WEBHOOK_SECRET: ${{ secrets.STRIPE_V2_WEBHOOK_SECRET }}
+          STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID: ${{ secrets.STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID }}
+          AE_FORMANCE_GATEWAY_URL: ${{ secrets.AE_FORMANCE_GATEWAY_URL }}
+          AE_FORMANCE_ACCESS_CLIENT_ID: ${{ secrets.AE_FORMANCE_ACCESS_CLIENT_ID }}
+          AE_FORMANCE_ACCESS_CLIENT_SECRET: ${{ secrets.AE_FORMANCE_ACCESS_CLIENT_SECRET }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
+          AE_GATEWAY_SMOKE_INPUT_JSON: ${{ secrets.AE_GATEWAY_SMOKE_INPUT_JSON }}
+          AE_GATEWAY_SMOKE_API_KEY: ${{ secrets.AE_GATEWAY_SMOKE_API_KEY }}
+          AE_GATEWAY_SMOKE_RELEASE_API_KEY: ${{ secrets.AE_GATEWAY_SMOKE_RELEASE_API_KEY }}
+          AE_RELEASE_DEPLOYMENT_ID: ${{ secrets.AE_RELEASE_DEPLOYMENT_ID }}
+          AE_GATEWAY_SMOKE_OWNER_OPENAPI_DOCUMENT_JSON: ${{ secrets.AE_GATEWAY_SMOKE_OWNER_OPENAPI_DOCUMENT_JSON }}
+          AE_GATEWAY_SMOKE_OWNER_CLERK_SESSION_ID: ${{ secrets.AE_GATEWAY_SMOKE_OWNER_CLERK_SESSION_ID }}
+          AE_GATEWAY_SMOKE_OWNER_CLERK_USER_ID: ${{ secrets.AE_GATEWAY_SMOKE_OWNER_CLERK_USER_ID }}
+          AE_GATEWAY_SMOKE_CREDENTIAL_ID: ${{ secrets.AE_GATEWAY_SMOKE_CREDENTIAL_ID }}
         run: npm run verify:deployment-manifest -- --environment production
 
       - name: Prepare a run-scoped paid Checkout before any external payment
         if: inputs.live_gateway_stage == 'prepare'
+        env:
+          CONVEX_URL: ${{ secrets.AE_RELEASE_CONVEX_URL }}
+          VITE_CONVEX_URL: ${{ secrets.AE_RELEASE_CONVEX_URL }}
+          AE_RELEASE_CONVEX_URL: ${{ secrets.AE_RELEASE_CONVEX_URL }}
+          AE_RELEASE_CONVEX_DEPLOYMENT_ID: ${{ secrets.AE_RELEASE_CONVEX_DEPLOYMENT_ID }}
+          AE_CONVEX_SERVER_FUNCTION_TOKEN: ${{ secrets.AE_CONVEX_SERVER_FUNCTION_TOKEN }}
+          VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+          CLERK_JWT_ISSUER_DOMAIN: ${{ secrets.CLERK_JWT_ISSUER_DOMAIN }}
+          CLERK_WEBHOOK_SIGNING_SECRET: ${{ secrets.CLERK_WEBHOOK_SIGNING_SECRET }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          AE_CHAT_PROXY_SECRET: ${{ secrets.AE_CHAT_PROXY_SECRET }}
+          CDP_API_KEY_ID: ${{ secrets.CDP_API_KEY_ID }}
+          CDP_API_KEY_SECRET: ${{ secrets.CDP_API_KEY_SECRET }}
+          CDP_WALLET_SECRET: ${{ secrets.CDP_WALLET_SECRET }}
+          AE_X402_CDP_ACCOUNT_NAME: ${{ secrets.AE_X402_CDP_ACCOUNT_NAME }}
+          AE_X402_CDP_EXPECTED_EVM_ADDRESS: ${{ secrets.AE_X402_CDP_EXPECTED_EVM_ADDRESS }}
+          AE_X402_CDP_ACCOUNT_POLICY_ID: ${{ secrets.AE_X402_CDP_ACCOUNT_POLICY_ID }}
+          AE_X402_CDP_PROJECT_POLICY_ID: ${{ secrets.AE_X402_CDP_PROJECT_POLICY_ID }}
+          AE_X402_CDP_POLICY_RULES_DIGEST: ${{ secrets.AE_X402_CDP_POLICY_RULES_DIGEST }}
+          AE_X402_CDP_CREDENTIAL_GENERATION: ${{ secrets.AE_X402_CDP_CREDENTIAL_GENERATION }}
+          AE_X402_CUSTODY_MAX_ATOMIC: ${{ secrets.AE_X402_CUSTODY_MAX_ATOMIC }}
+          AE_X402_CUSTODY_DAILY_MAX_ATOMIC: ${{ secrets.AE_X402_CUSTODY_DAILY_MAX_ATOMIC }}
+          AE_X402_CUSTODY_PAYEE_DAILY_MAX_ATOMIC: ${{ secrets.AE_X402_CUSTODY_PAYEE_DAILY_MAX_ATOMIC }}
+          AE_X402_CUSTODY_NEW_PAYEE_MAX_ATOMIC: ${{ secrets.AE_X402_CUSTODY_NEW_PAYEE_MAX_ATOMIC }}
+          AE_X402_RPC_URLS_JSON: ${{ secrets.AE_X402_RPC_URLS_JSON }}
+          AE_SOURCE_WRITE_KEY_BILLING: ${{ secrets.AE_SOURCE_WRITE_KEY_BILLING }}
+          AE_SOURCE_WRITE_KEY_PROTECTED: ${{ secrets.AE_SOURCE_WRITE_KEY_PROTECTED }}
+          AE_SOURCE_WRITE_KEY_CATALOG: ${{ secrets.AE_SOURCE_WRITE_KEY_CATALOG }}
+          AE_SOURCE_WRITE_KEY_OPERATOR: ${{ secrets.AE_SOURCE_WRITE_KEY_OPERATOR }}
+          AE_SOURCE_WRITE_KEY_REPAIR: ${{ secrets.AE_SOURCE_WRITE_KEY_REPAIR }}
+          AE_SOURCE_WRITE_KEY_SESSION: ${{ secrets.AE_SOURCE_WRITE_KEY_SESSION }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_READBACK_KEY: ${{ secrets.STRIPE_READBACK_KEY }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          STRIPE_V2_WEBHOOK_SECRET: ${{ secrets.STRIPE_V2_WEBHOOK_SECRET }}
+          STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID: ${{ secrets.STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID }}
+          AE_FORMANCE_GATEWAY_URL: ${{ secrets.AE_FORMANCE_GATEWAY_URL }}
+          AE_FORMANCE_ACCESS_CLIENT_ID: ${{ secrets.AE_FORMANCE_ACCESS_CLIENT_ID }}
+          AE_FORMANCE_ACCESS_CLIENT_SECRET: ${{ secrets.AE_FORMANCE_ACCESS_CLIENT_SECRET }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
+          AE_GATEWAY_SMOKE_INPUT_JSON: ${{ secrets.AE_GATEWAY_SMOKE_INPUT_JSON }}
+          AE_GATEWAY_SMOKE_API_KEY: ${{ secrets.AE_GATEWAY_SMOKE_API_KEY }}
+          AE_GATEWAY_SMOKE_RELEASE_API_KEY: ${{ secrets.AE_GATEWAY_SMOKE_RELEASE_API_KEY }}
+          AE_RELEASE_DEPLOYMENT_ID: ${{ secrets.AE_RELEASE_DEPLOYMENT_ID }}
+          AE_GATEWAY_SMOKE_OWNER_OPENAPI_DOCUMENT_JSON: ${{ secrets.AE_GATEWAY_SMOKE_OWNER_OPENAPI_DOCUMENT_JSON }}
+          AE_GATEWAY_SMOKE_OWNER_CLERK_SESSION_ID: ${{ secrets.AE_GATEWAY_SMOKE_OWNER_CLERK_SESSION_ID }}
+          AE_GATEWAY_SMOKE_OWNER_CLERK_USER_ID: ${{ secrets.AE_GATEWAY_SMOKE_OWNER_CLERK_USER_ID }}
+          AE_GATEWAY_SMOKE_CREDENTIAL_ID: ${{ secrets.AE_GATEWAY_SMOKE_CREDENTIAL_ID }}
         run: |
           export AE_GATEWAY_SMOKE_PAYOUT_REF="${AE_GATEWAY_SMOKE_RUN_ID}:payout"
           export AE_GATEWAY_SMOKE_PAYOUT_IDEMPOTENCY_KEY="${AE_GATEWAY_SMOKE_RUN_ID}:payout"
@@ -528,7 +579,7 @@ jobs:
 
       - name: Upload the exact run-scoped Checkout preparation artifact
         if: inputs.live_gateway_stage == 'prepare'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: release-${{ github.sha }}-${{ github.run_id }}-gateway-topup-preparation
           path: output/release/operation-gateway-topup-preparation.json
@@ -543,7 +594,7 @@ jobs:
 
       - name: Download the exact same-run Checkout preparation artifact
         if: inputs.live_gateway_stage == 'complete'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           repository: ${{ github.repository }}
@@ -553,6 +604,56 @@ jobs:
 
       - name: Observe same-run paid provider state and emit the strict receipt
         if: inputs.live_gateway_stage == 'complete'
+        env:
+          CONVEX_URL: ${{ secrets.AE_RELEASE_CONVEX_URL }}
+          VITE_CONVEX_URL: ${{ secrets.AE_RELEASE_CONVEX_URL }}
+          AE_RELEASE_CONVEX_URL: ${{ secrets.AE_RELEASE_CONVEX_URL }}
+          AE_RELEASE_CONVEX_DEPLOYMENT_ID: ${{ secrets.AE_RELEASE_CONVEX_DEPLOYMENT_ID }}
+          AE_CONVEX_SERVER_FUNCTION_TOKEN: ${{ secrets.AE_CONVEX_SERVER_FUNCTION_TOKEN }}
+          VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+          CLERK_JWT_ISSUER_DOMAIN: ${{ secrets.CLERK_JWT_ISSUER_DOMAIN }}
+          CLERK_WEBHOOK_SIGNING_SECRET: ${{ secrets.CLERK_WEBHOOK_SIGNING_SECRET }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          AE_CHAT_PROXY_SECRET: ${{ secrets.AE_CHAT_PROXY_SECRET }}
+          CDP_API_KEY_ID: ${{ secrets.CDP_API_KEY_ID }}
+          CDP_API_KEY_SECRET: ${{ secrets.CDP_API_KEY_SECRET }}
+          CDP_WALLET_SECRET: ${{ secrets.CDP_WALLET_SECRET }}
+          AE_X402_CDP_ACCOUNT_NAME: ${{ secrets.AE_X402_CDP_ACCOUNT_NAME }}
+          AE_X402_CDP_EXPECTED_EVM_ADDRESS: ${{ secrets.AE_X402_CDP_EXPECTED_EVM_ADDRESS }}
+          AE_X402_CDP_ACCOUNT_POLICY_ID: ${{ secrets.AE_X402_CDP_ACCOUNT_POLICY_ID }}
+          AE_X402_CDP_PROJECT_POLICY_ID: ${{ secrets.AE_X402_CDP_PROJECT_POLICY_ID }}
+          AE_X402_CDP_POLICY_RULES_DIGEST: ${{ secrets.AE_X402_CDP_POLICY_RULES_DIGEST }}
+          AE_X402_CDP_CREDENTIAL_GENERATION: ${{ secrets.AE_X402_CDP_CREDENTIAL_GENERATION }}
+          AE_X402_CUSTODY_MAX_ATOMIC: ${{ secrets.AE_X402_CUSTODY_MAX_ATOMIC }}
+          AE_X402_CUSTODY_DAILY_MAX_ATOMIC: ${{ secrets.AE_X402_CUSTODY_DAILY_MAX_ATOMIC }}
+          AE_X402_CUSTODY_PAYEE_DAILY_MAX_ATOMIC: ${{ secrets.AE_X402_CUSTODY_PAYEE_DAILY_MAX_ATOMIC }}
+          AE_X402_CUSTODY_NEW_PAYEE_MAX_ATOMIC: ${{ secrets.AE_X402_CUSTODY_NEW_PAYEE_MAX_ATOMIC }}
+          AE_X402_RPC_URLS_JSON: ${{ secrets.AE_X402_RPC_URLS_JSON }}
+          AE_SOURCE_WRITE_KEY_BILLING: ${{ secrets.AE_SOURCE_WRITE_KEY_BILLING }}
+          AE_SOURCE_WRITE_KEY_PROTECTED: ${{ secrets.AE_SOURCE_WRITE_KEY_PROTECTED }}
+          AE_SOURCE_WRITE_KEY_CATALOG: ${{ secrets.AE_SOURCE_WRITE_KEY_CATALOG }}
+          AE_SOURCE_WRITE_KEY_OPERATOR: ${{ secrets.AE_SOURCE_WRITE_KEY_OPERATOR }}
+          AE_SOURCE_WRITE_KEY_REPAIR: ${{ secrets.AE_SOURCE_WRITE_KEY_REPAIR }}
+          AE_SOURCE_WRITE_KEY_SESSION: ${{ secrets.AE_SOURCE_WRITE_KEY_SESSION }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_READBACK_KEY: ${{ secrets.STRIPE_READBACK_KEY }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          STRIPE_V2_WEBHOOK_SECRET: ${{ secrets.STRIPE_V2_WEBHOOK_SECRET }}
+          STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID: ${{ secrets.STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID }}
+          AE_FORMANCE_GATEWAY_URL: ${{ secrets.AE_FORMANCE_GATEWAY_URL }}
+          AE_FORMANCE_ACCESS_CLIENT_ID: ${{ secrets.AE_FORMANCE_ACCESS_CLIENT_ID }}
+          AE_FORMANCE_ACCESS_CLIENT_SECRET: ${{ secrets.AE_FORMANCE_ACCESS_CLIENT_SECRET }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
+          AE_GATEWAY_SMOKE_INPUT_JSON: ${{ secrets.AE_GATEWAY_SMOKE_INPUT_JSON }}
+          AE_GATEWAY_SMOKE_API_KEY: ${{ secrets.AE_GATEWAY_SMOKE_API_KEY }}
+          AE_GATEWAY_SMOKE_RELEASE_API_KEY: ${{ secrets.AE_GATEWAY_SMOKE_RELEASE_API_KEY }}
+          AE_RELEASE_DEPLOYMENT_ID: ${{ secrets.AE_RELEASE_DEPLOYMENT_ID }}
+          AE_GATEWAY_SMOKE_OWNER_OPENAPI_DOCUMENT_JSON: ${{ secrets.AE_GATEWAY_SMOKE_OWNER_OPENAPI_DOCUMENT_JSON }}
+          AE_GATEWAY_SMOKE_OWNER_CLERK_SESSION_ID: ${{ secrets.AE_GATEWAY_SMOKE_OWNER_CLERK_SESSION_ID }}
+          AE_GATEWAY_SMOKE_OWNER_CLERK_USER_ID: ${{ secrets.AE_GATEWAY_SMOKE_OWNER_CLERK_USER_ID }}
+          AE_GATEWAY_SMOKE_CREDENTIAL_ID: ${{ secrets.AE_GATEWAY_SMOKE_CREDENTIAL_ID }}
         run: |
           export AE_GATEWAY_SMOKE_PAYOUT_REF="${AE_GATEWAY_SMOKE_RUN_ID}:payout"
           export AE_GATEWAY_SMOKE_PAYOUT_IDEMPOTENCY_KEY="${AE_GATEWAY_SMOKE_RUN_ID}:payout"
@@ -573,7 +674,7 @@ jobs:
 
       - name: Upload the validated strict opt-in paid gateway receipt
         if: inputs.live_gateway_stage == 'complete'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: release-${{ github.sha }}-${{ github.run_id }}-paid-gateway-smoke-receipt
           path: output/release/operation-gateway-smoke.json

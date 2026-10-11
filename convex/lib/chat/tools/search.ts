@@ -5,7 +5,7 @@ import { z } from 'zod'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
 import { deserializeToolSearchResult, serializeToolSearchResult, PublicToolRegistrySchemaVersion, x402PaymentProfileForEnvironment, type PublicToolDescriptor, type ToolSearchResult } from '@/modules/capability-supply/public'
-import { latestUserRequest } from '@/modules/chat/search-presentation'
+import { latestUserRequest, toUntrustedModelOutput } from '@/modules/chat/search-presentation'
 import { CHAT_TOOL_NAME_MAP } from '@/modules/chat/tool-card'
 import { projectToolListChoices, projectToolSearchChoices, type SearchResult, type ToolChoiceSearchOutput } from '@/modules/registry/tool-choice-contracts'
 import { lexicalToolMatch } from '@/modules/registry/tool-reranker'
@@ -307,9 +307,11 @@ export function createSearchTools(
         const deniedSearch = reserveSearch('registry.tools.list', 'list', data.cursor, latestUserRequest(options.messages))
         if (deniedSearch !== null) return deniedSearch
         const filters = operationSourceFilters(data.filters)
+        const rateKey = ctx.userId ?? ctx.threadId
         const result = await ctx.runAction(internal.capabilityToolCatalog.searchInternal, {
           query: '',
           limit: data.limit,
+          ...(rateKey === undefined ? {} : { rateKey }),
           ...(data.source === undefined ? {} : { source: data.source }),
           ...(data.cursor === undefined ? {} : { cursor: data.cursor }),
           ...(filters === undefined ? {} : { filters }),
@@ -330,10 +332,7 @@ export function createSearchTools(
       description: descriptionFor(searchContract),
       inputSchema: continuation === undefined ? searchContract.schema : z.strictObject({}),
       // The card keeps its signed cursor; the model never receives a cursor it could echo as prose.
-      toModelOutput: (_ctx, { output }) => ({
-        type: 'text',
-        value: JSON.stringify(output, (key, value) => key === 'cursor' || key === 'nextCursor' ? undefined : value),
-      }),
+      toModelOutput: (_ctx, { output }) => toUntrustedModelOutput(output),
       execute: async (ctx: ToolCtx, input: unknown, options: { messages?: ModelMessage[]; toolCallId: string }) =>
         executeChatSearch(ctx, input, options, { reserve, reserveSearch, continuation, searchTurn, onSearchOutput }),
     }),

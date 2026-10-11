@@ -3,6 +3,7 @@ import { deploymentPaymentEnvironment, type PaymentEnvironment } from '@/lib/dep
 import { reverificationErrorResponse } from '@clerk/shared/authorization-errors'
 import {
   AGENT_ACCESS_AUTHORITY_MODE_VALUES,
+  agentAuthorityModeAllows,
   type AgentAccessAuthorityMode,
 } from '@/modules/agent-access/contract'
 import {
@@ -249,6 +250,8 @@ export async function handleOAuthConsentPost(request: Request, options: OAuthApi
     || currentGrant.approvedAccess.environment !== environment) return oauthError('invalid_grant', 400)
   const authorityMode = consentAuthorityMode(form)
   if (authorityMode === null || authorityMode === undefined) return oauthError('invalid_scope', 400)
+  const ceiling = modeForGrant(currentGrant)
+  if (ceiling === undefined || !agentAuthorityModeAllows(ceiling, authorityMode)) return oauthError('invalid_scope', 400)
   if (environment === 'production'
     && (authorityMode === 'unrestricted_test_only' || modeForGrant(currentGrant) === 'unrestricted_test_only')) {
     return oauthError('invalid_scope', 400)

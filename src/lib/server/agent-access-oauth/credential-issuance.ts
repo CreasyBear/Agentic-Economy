@@ -1,6 +1,6 @@
 import { clerkClient } from '@clerk/tanstack-react-start/server'
 import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
-import type { AgentAccessAuthorityMode } from '@/modules/agent-access/contract'
+import { AGENT_ACCESS_AUTHORITY_MODE_VALUES, agentAuthorityScopeForMode, type AgentAccessAuthorityMode } from '@/modules/agent-access/contract'
 import {
   AGENT_ACCESS_DEFAULT_APPLICATION_REF,
   AGENT_ACCESS_KEY_TTL_SECONDS,
@@ -197,7 +197,7 @@ export async function issueReplacementGrantKey(input: Readonly<{
     name: `AE Agent replacement ${input.idempotencyKey.slice(-12)}`,
     subject: input.ownerId,
     createdBy: input.ownerId,
-    scopes: [...input.grant.requestedScopes],
+    scopes: scopesAtMode(input.grant.requestedScopes, input.authorityMode),
     secondsUntilExpiration: accessTtlSeconds,
     claims: {
       aePurpose: AGENT_ACCESS_PURPOSE,
@@ -207,7 +207,7 @@ export async function issueReplacementGrantKey(input: Readonly<{
       aeIssuanceKey: input.idempotencyKey,
       aeApplicationRef: AGENT_ACCESS_DEFAULT_APPLICATION_REF,
       aeEnvironment: input.grant.approvedAccess.environment,
-      aeScopes: JSON.stringify(input.grant.requestedScopes),
+      aeScopes: JSON.stringify(scopesAtMode(input.grant.requestedScopes, input.authorityMode)),
       aePrincipalRef: input.target.principalRef,
       aeConnectionTarget: 'replace_credential',
       aeToolSelectionDigest: toolSelectionDigest,
@@ -227,7 +227,7 @@ export async function issueReplacementGrantKey(input: Readonly<{
     credentialId: key.id,
     applicationRef: AGENT_ACCESS_DEFAULT_APPLICATION_REF,
     environment: input.grant.approvedAccess.environment,
-    scopes: input.grant.requestedScopes,
+    scopes: scopesAtMode(input.grant.requestedScopes, input.authorityMode),
     authorityMode: input.authorityMode,
     toolAccess: input.spendingPolicy.toolAccess,
     toolRefs: input.spendingPolicy.toolRefs,
@@ -256,6 +256,13 @@ export async function issueReplacementGrantKey(input: Readonly<{
       successorGrantRef: prepared.successorGrantRef,
     },
   }
+}
+
+/** The key's runtime authority comes from its scopes, so a requested mode scope above the capped mode is replaced. */
+function scopesAtMode(requested: readonly string[], mode: AgentAccessAuthorityMode): string[] {
+  const modeScopes = new Set<string>(AGENT_ACCESS_AUTHORITY_MODE_VALUES.map(agentAuthorityScopeForMode))
+  if (!requested.some((scope) => modeScopes.has(scope))) return [...requested]
+  return [...new Set(requested.map((scope) => (modeScopes.has(scope) ? agentAuthorityScopeForMode(mode) : scope)))]
 }
 
 export async function issueGrantKey(
@@ -287,7 +294,7 @@ export async function issueGrantKey(
         ownerId: inputOwnerId,
         name: inputGrant.displayName,
         idempotencyKey,
-        scopes: inputGrant.requestedScopes,
+        scopes: scopesAtMode(inputGrant.requestedScopes, authorityMode),
         grantRef: inputGrant.grantRef,
         authorityMode,
         approvedAccess: {
@@ -315,7 +322,7 @@ export async function issueGrantKey(
       input: {
         name: inputGrant.displayName,
         idempotencyKey,
-        scopes: inputGrant.requestedScopes,
+        scopes: scopesAtMode(inputGrant.requestedScopes, authorityMode),
         grantRef: issuedAgentGrantRef(inputOwnerId, idempotencyKey),
         environment: inputGrant.approvedAccess.environment,
         toolAccess: inputGrant.approvedAccess.toolAccess,

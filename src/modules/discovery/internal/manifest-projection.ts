@@ -74,13 +74,13 @@ export function projectManifestCatalog<TOffering>(
   }
 }
 
+/** Display hygiene only, not a prompt-injection control: provider text is labelled untrusted where it is emitted. */
 export function safePublicText(value: string): string {
   return value
     .normalize('NFKC')
     .replace(/[\u202a-\u202e\u2066-\u2069]/gu, '')
     .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/gu, ' ')
     .replace(/javascript\s*:/giu, 'blocked-uri ')
-    .replace(/ignore previous instructions/giu, 'untrusted instruction')
     .replace(/[`*_#>\[\]()]/gu, ' ')
     .replace(/\bendpoint\b/giu, 'untrusted claim')
     .replace(/\b(?:verified|callable|payable)\b/giu, 'untrusted claim')

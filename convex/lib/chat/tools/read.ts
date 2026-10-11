@@ -1,3 +1,4 @@
+import { toUntrustedModelOutput } from '@/modules/chat/search-presentation'
 import { createTool, type ToolCtx } from '@convex-dev/agent'
 import type { FunctionArgs } from 'convex/server'
 import { z } from 'zod'
@@ -27,6 +28,7 @@ export function createReadTools(reserve: ReserveChatTool) {
     [CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.describe']]: createTool({
       description: descriptionFor(describeContract),
       inputSchema: z.strictObject({ toolRef: z.string().min(1).max(200) }),
+      toModelOutput: (_ctx, { output }) => toUntrustedModelOutput(output),
       execute: async (ctx: ToolCtx, input: { toolRef: string }, options) => {
         const denied = reserve('registry.tools.describe')
         if (denied !== null) return denied
@@ -65,6 +67,7 @@ export function createReadTools(reserve: ReserveChatTool) {
     [CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.tools.compare']]: createTool({
       description: descriptionFor(compareContract),
       inputSchema: compareContract.schema as z.ZodType<ToolCompareInput>,
+      toModelOutput: (_ctx, { output }) => toUntrustedModelOutput(output),
       execute: async (ctx: ToolCtx, input: ToolCompareInput) => {
         const denied = reserve('registry.tools.compare')
         if (denied !== null) return denied

@@ -179,6 +179,7 @@ function ticket(routeInvocation = createTestProviderInvocation({ now: NOW })): C
 function environment(overrides: Record<string, string | undefined> = {}) {
   return {
     AE_DEPLOYMENT_ENVIRONMENT: 'development',
+    AE_SECRET_LIFECYCLE_RPC_TOKEN: 't'.repeat(43),
     AE_INFISICAL_BASE_URL: 'https://app.infisical.com',
     AE_INFISICAL_PLATFORM_PROJECT_ID: 'project-platform',
     AE_INFISICAL_PLATFORM_ENVIRONMENT: 'production',
@@ -222,7 +223,7 @@ function consequenceRequest(
   }
   return new Request('https://agentic-economy.example/api/internal/provider-consequence', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${'t'.repeat(43)}` },
     body: JSON.stringify(body),
   })
 }
@@ -230,7 +231,7 @@ function consequenceRequest(
 function signingRequest(canonicalTicket = ticket()) {
   return new Request('https://agentic-economy.example/api/internal/provider-consequence', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${'t'.repeat(43)}` },
     body: JSON.stringify({
       action: 'issue',
       ticket: canonicalTicket,

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
+import { admitAnonymousChat } from '../../../convex/lib/chat/anonymous/http'
 import { handleAnonymousChatRequest } from '../../../convex/lib/chat/anonymous/request'
 import {
   MAX_ANONYMOUS_CHAT_MESSAGES,
@@ -121,5 +122,24 @@ describe('anonymous chat Convex boundary', () => {
     expect(response.status).toBe(429)
     expect(response.headers.get('retry-after')).toBe('2')
     expect(await response.json()).toEqual({ code: 'rate_limited' })
+  })
+
+  it('refuses rotating IPs once the global daily budget is spent', async () => {
+    let globalLeft = 2
+    const admit = async (name: string) => name === 'chat-anonymous-global' && globalLeft-- <= 0
+      ? { ok: false as const, retryAfter: 60_000 }
+      : { ok: true as const }
+    const stream = vi.fn(async () => new Response('stream'))
+    const statuses: number[] = []
+    for (let i = 0; i < 4; i++) {
+      const key = `ip:sha256:${String(i).repeat(64)}:sha256:${'b'.repeat(64)}`
+      const res = await handleAnonymousChatRequest(proxyRequest({
+        messages: [{ role: 'user', content: 'hello' }],
+      }, { 'x-ae-chat-admission-key': key }), {
+        proxySecret: PROXY_SECRET, admit: (k) => admitAnonymousChat(admit, k), stream,
+      })
+      statuses.push(res.status)
+    }
+    expect(statuses).toEqual([200, 200, 429, 429])
   })
 })

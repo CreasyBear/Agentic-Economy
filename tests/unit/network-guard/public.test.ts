@@ -17,4 +17,10 @@ describe('public HTTP target address guard', () => {
   it('still admits 6to4 that embeds a public IPv4 address', async () => {
     await expect(isPublicHttpTarget(new URL('https://[2002:808:808::1]/'), refuseLookup)).resolves.toBe(true)
   })
+
+  it('refuses IPv4-compatible ::/96 addresses', async () => {
+    await expect(isPublicHttpTarget(new URL('https://[::7f00:1]/'), refuseLookup)).resolves.toBe(false)
+    await expect(isPublicHttpTarget(new URL('https://[::a00:1]/'), refuseLookup)).resolves.toBe(false)
+    await expect(isPublicHttpTarget(new URL('https://[2606:4700::1111]/'), refuseLookup)).resolves.toBe(true)
+  })
 })

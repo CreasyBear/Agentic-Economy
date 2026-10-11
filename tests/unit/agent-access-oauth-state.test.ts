@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 
 import { CUSTOMER_REQUEST_SPENDING_POLICY_SCOPE, MARKET_TOOLS_CALL_SCOPE, MARKET_SUPPLY_MANAGE_SCOPE } from '@/modules/agent-access/contract'
 import { AGENT_ACCESS_KEY_TTL_SECONDS } from '@/modules/agent-access/agent-access'
-import { createOAuthStoreFixture } from '../helpers/agent-access-oauth-store-fixture'
+import { handleOAuthTokenPost } from '@/lib/server/agent-access-oauth-api'
+import { createOAuthStoreFixture, refreshFamilyFixture, refreshStoreFixture } from '../helpers/agent-access-oauth-store-fixture'
 
 import {
   approveGrant,
@@ -678,5 +679,35 @@ describe('Customer Request OAuth state machine', () => {
       },
     })).resolves.toEqual({ kind: 'refused', reason: 'invalid_target' })
     expect(issued).toBe(false)
+  })
+  it('refuses a rotated refresh token presented again inside 60 s and never returns the live secret', async () => {
+    const now = 20_000
+    const store = createOAuthStoreFixture()
+    await store.insertClient({
+      clientId: 'client-reuse', clientName: 'Reuse client', redirectUris: ['http://localhost/callback'],
+      grantTypes: ['authorization_code', 'refresh_token'], tokenEndpointAuthMethod: 'none', createdAt: now,
+    })
+    const consumed = new Set<string>()
+    let revoked = false
+    const refreshStore = refreshStoreFixture({
+      claimRefreshFamily: async ({ tokenHash }) => {
+        if (consumed.has(tokenHash)) { revoked = true; return { kind: 'revoked' } }
+        consumed.add(tokenHash)
+        return { kind: 'claimed', family: refreshFamilyFixture({ updatedAt: now }), claimRef: 'c1' }
+      },
+    })
+    let secretReads = 0
+    const call = () => handleOAuthTokenPost(new Request('http://localhost/oauth/token', {
+      method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', origin: 'http://localhost' },
+      body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: 'rotated-token', client_id: 'client-reuse' }),
+    }), { store, refreshStore, now: () => now + 1_000, getSecret: async () => { secretReads += 1; return { secret: 'live-secret' } } })
+
+    await call()
+    secretReads = 0
+    const replay = await call()
+    expect(replay.status).toBe(400)
+    expect(await replay.json()).toMatchObject({ error: 'invalid_grant' })
+    expect(secretReads).toBe(0)
+    expect(revoked).toBe(true)
   })
 })

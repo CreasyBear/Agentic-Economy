@@ -2142,6 +2142,12 @@
     "kind": "action"
   },
   {
+    "visibility": "internal",
+    "module": "chatCall",
+    "method": "quoteToolRef",
+    "kind": "query"
+  },
+  {
     "visibility": "public",
     "module": "chatCall",
     "method": "readOwnerChatCards",
@@ -3664,6 +3670,12 @@
     "module": "moneyStripeWebhookInbox",
     "method": "ingest",
     "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyStripeWebhookInbox",
+    "method": "listStuckForOperator",
+    "kind": "query"
   },
   {
     "visibility": "internal",

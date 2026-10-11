@@ -2,6 +2,8 @@ import { getFunctionName } from 'convex/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const sdk = vi.hoisted(() => ({ list: vi.fn(), search: vi.fn() }))
+const guarded = vi.hoisted(() => ({ fetch: vi.fn() }))
+vi.mock('undici', () => ({ Agent: class { close = async () => undefined }, fetch: guarded.fetch }))
 vi.mock('@coinbase/cdp-sdk', async (original) => ({ ...await original<typeof import('@coinbase/cdp-sdk')>(), listX402DiscoveryResources: sdk.list, searchX402Resources: sdk.search }))
 import { fetchCatalogPage, search } from '../../../convex/capabilityToolCatalog'
 
@@ -19,18 +21,19 @@ describe('SDK-backed catalogue discovery', () => {
       items: [structuredClone(timezonePaymentRequired20260819Fixture.paymentRequired)],
       pagination: { offset: 0, total: 1 },
     })
-    const runMutation = vi.fn().mockResolvedValue({ toolRefs: [] })
+    const runMutation = vi.fn().mockResolvedValue({ ok: true })
+    const auth = { getUserIdentity: async () => ({ tokenIdentifier: 'tok_1' }) }
     const runQuery = vi.fn(async (reference: unknown) => {
       if (getFunctionName(reference as never) === 'capabilityToolCatalogData:sourceSnapshot') {
         return { toolRefs: [], incomplete: true }
       }
       return { name: 'refresh facilitator discovery' }
     })
-    const result = await searchHandler({ runQuery, runMutation }, { source: 'coinbase', query: '' })
+    const result = await searchHandler({ runQuery, runMutation, auth }, { source: 'coinbase', query: '' })
     expect(runQuery).toHaveBeenCalledWith(expect.anything(), {
       candidates: [expect.objectContaining({ sourceRouteRef: expect.any(String) })],
     })
-    expect(runMutation).not.toHaveBeenCalled()
+    expect(runMutation).toHaveBeenCalledTimes(1)
     expect(result).toMatchObject({ kind: 'ok', items: [], partialResults: true })
   })
 
@@ -81,7 +84,7 @@ describe('SDK-backed catalogue discovery', () => {
 
   it('uses PayAI documented pagination and refuses semantic-search emulation', async () => {
     const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: [{ resource: 'https://provider.test/tool' }], pagination: { total: 51 } }), { headers: { 'content-type': 'application/json' } }))
-    vi.stubGlobal('fetch', fetcher)
+    guarded.fetch.mockImplementation(fetcher)
     await expect(fetchCatalogPage({ source: 'payai', query: '', cursor: '40' })).resolves.toMatchObject({ nextCursor: '41' })
     expect(String(fetcher.mock.calls[0]?.[0])).toBe('https://facilitator.payai.network/discovery/resources?limit=20&offset=40')
     await expect(fetchCatalogPage({ source: 'payai', query: 'weather' })).rejects.toThrow('payai_browse_only')
