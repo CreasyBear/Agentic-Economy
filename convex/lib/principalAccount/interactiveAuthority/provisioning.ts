@@ -25,7 +25,6 @@ import {
   requireCurrentInteractiveSession,
 } from './sessionProof'
 import { emitJourneyEvent } from '../../journey/events'
-import { quietHoursDelayMs } from '../../journey/stalled'
 import { enqueueEmail } from '../notifications/enqueue'
 
 function interactiveOwnerDigest(kind: string, tokenIdentifier: string): string {
@@ -337,12 +336,11 @@ async function provisionOwnerIdentity(
     },
   })
   await emitJourneyEvent(ctx, accountRef, 'signed_up')
-  // Welcome is lifecycle mail (design doc row 4): +0 min, held to the 8 am to 8 pm send window, exit and opt-out re-read at send time.
-  // Consent is inferred from the account relationship until Q3 settles the wording. The Phase 3 gate in enqueueEmail keeps it dark.
+  // Welcome is transactional and required (email-system.md row 4, item 14): sent at once, no unsubscribe link and no lifecycle opt-out.
+  // The Phase 3 gate in enqueueEmail keeps it dark.
   await enqueueEmail(ctx, {
-    eventKind: 'welcome', stream: 'lifecycle', consentBasis: 'inferred', recipientPrincipalRef: principalRef,
+    eventKind: 'welcome', stream: 'transactional', recipientPrincipalRef: principalRef,
     accountRef, sourceEventRef: accountRef,
-    notBefore: now + quietHoursDelayMs(now),
   })
   await ctx.db.insert('externalIdentityBindings', {
     bindingRef,

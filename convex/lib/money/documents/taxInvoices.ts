@@ -12,6 +12,7 @@ import {
   validCommercialPolicyControl, validProductionCommercialPolicyControl, type TaxDocumentSnapshot, type TaxInvoiceSnapshot,
 } from '../../../../src/modules/money/public'
 import { requireStripeAccountContext } from '../customer/authority'
+import { enqueueFundingReceiptHandler } from '../../principalAccount/notifications/enqueue'
 import { createAndQueueDocument } from './insert'
 import { enqueueDocumentRender } from './workpool'
 
@@ -284,6 +285,16 @@ export async function readFundingTaxDocuments(ctx: ReadCtx, command: FundingComm
   const adjustment = await readAdjustment(ctx, command, invoice, row.renderInputDigest, now)
   return { taxInvoice, adjustmentNote: 'kind' in adjustment ? adjustment
     : adjustment.row === null ? { kind: 'ready' } : documentStatus(adjustment.row, adjustment.snapshot) }
+}
+
+/** The funding receipt carries the tax invoice, so it is enqueued only once the invoice is issued (files attached), never when the Stripe event applies.
+ * enqueueEmail dedupes on the command ref, so a replayed attachment is a no-op. */
+export async function enqueueIssuedFundingReceipt(ctx: MutationCtx, row: Doc<'moneyDocuments'>): Promise<void> {
+  const [transactionRef] = row.sourceTransactionRefs
+  if (row.kind !== 'tax_invoice' || transactionRef === undefined) return
+  const command = await ctx.db.query('moneyFundingCommands')
+    .withIndex('by_appliedTransactionRef', q => q.eq('appliedTransactionRef', transactionRef)).unique()
+  if (command !== null) await enqueueFundingReceiptHandler(ctx, { commandRef: command.commandRef })
 }
 
 async function queueSnapshot(ctx: MutationCtx, snapshot: TaxDocumentSnapshot): Promise<void> {

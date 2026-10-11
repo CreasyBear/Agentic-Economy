@@ -74,9 +74,8 @@ export async function unsubscribeUrlFor(payload: UnsubscribePayload): Promise<st
   return `${siteUrl}/api/unsubscribe?t=${encodeURIComponent(await signUnsubscribeToken(secret, payload))}`
 }
 
-/** Lifecycle kinds that run through the account notice reader, with the journey events that end each one (design doc section 5). Stalled nudges end on their own step completion, checked in stalled.ts. */
+/** Lifecycle kinds that run (welcome is transactional and required, so it is not here) through the account notice reader, with the journey events that end each one (design doc section 5). Stalled nudges end on their own step completion, checked in stalled.ts. */
 export const LIFECYCLE_EXIT_EVENTS: Partial<Record<Doc<'notificationDeliveries'>['eventKind'], JourneyEventName[]>> = {
-  welcome: ['funded'],
   first_call_done: [],
   week_one_wrap: [],
   first_call_failed: ['first_call'],

@@ -2,6 +2,7 @@ import type { PaginationOptions } from 'convex/server'
 import { v } from 'convex/values'
 import type { QueryCtx } from '../../_generated/server'
 import type { JourneyEventName } from './events'
+import { msSinceMidnight } from '@/lib/ui/format-time'
 
 const STALLED_MIN_AGE_MS = 24 * 3600_000
 
@@ -45,9 +46,7 @@ const SEND_WINDOW = { startHour: 8, endHour: 20 }
 /** Lifecycle mail holds until 8:00 am to 8:00 pm in the owner's timezone (design doc section 5). No timezone is stored for an owner yet, so the
  * fallback Australia/Sydney applies. Returns 0 inside the window, else the wait in ms until it next opens. */
 export function quietHoursDelayMs(now: number, timeZone: string = QUIET_HOURS_TIME_ZONE): number {
-  const parts = new Intl.DateTimeFormat('en-AU', { timeZone, hour: 'numeric', minute: 'numeric', second: 'numeric', hourCycle: 'h23' }).formatToParts(new Date(now))
-  const at = (type: string) => Number(parts.find((part) => part.type === type)?.value ?? 0)
-  const sinceMidnightMs = ((at('hour') * 60 + at('minute')) * 60 + at('second')) * 1000
+  const sinceMidnightMs = msSinceMidnight(now, timeZone)
   const startMs = SEND_WINDOW.startHour * 3600_000
   if (sinceMidnightMs >= startMs && sinceMidnightMs < SEND_WINDOW.endHour * 3600_000) return 0
   return sinceMidnightMs < startMs ? startMs - sinceMidnightMs : 24 * 3600_000 - sinceMidnightMs + startMs

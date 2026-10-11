@@ -40,11 +40,6 @@ export const process = internalAction({
     const work = await ctx.runQuery(internal.moneyStripeWebhookInbox.readForProcessing, args)
     if (work === null) return { kind: 'reconciliation_required', code: 'stripe_webhook_inbox_missing' }
     if (work.state === 'applied' || work.state === 'ignored') {
-      // A retry after the top-up applied but the receipt enqueue failed must still enqueue it.
-      // enqueueEmail dedupes on sourceEventRef, so a repeat is a no-op.
-      if (work.state === 'applied' && work.event.kind !== 'refund' && work.event.kind !== 'account') {
-        await ctx.runMutation(internal.notifications.enqueueFundingReceipt, { commandRef: work.event.commandRef })
-      }
       return { kind: 'accepted', status: 'replayed' }
     }
     if (work.state !== 'queued') {
@@ -123,9 +118,6 @@ export const process = internalAction({
       operationKey: 'moneyStripeWebhookInbox:process',
       correlationId: event.stripeEventId,
     })
-    if (result.kind === 'accepted' && result.status === 'applied') {
-      await ctx.runMutation(internal.notifications.enqueueFundingReceipt, { commandRef: command.commandRef })
-    }
     return result.kind === 'refused' ? retryOrReconcile(result) : result
   },
 })

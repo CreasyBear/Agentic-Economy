@@ -1,4 +1,5 @@
 import {enqueueDocumentUsageAlert} from '../../principalAccount/notifications/usageAlerts'
+import { enqueueIssuedFundingReceipt } from './taxInvoices'
 import { v, type Infer } from 'convex/values'
 import type { MutationCtx } from '../../../_generated/server'
 
@@ -44,6 +45,7 @@ export const attachRenderedFileHandler = async (ctx: MutationCtx, args: Infer<ty
       failureCode: undefined,
       renderedAt: args.renderedAt,
     })
+    if (row.kind === 'tax_invoice') await enqueueIssuedFundingReceipt(ctx, row)
     if(row.kind==='monthly_usage')await enqueueDocumentUsageAlert(ctx,row.documentRef)
     return { kind: 'attached' as const, fileId: args.fileId, csvFileId: args.csvFileId }
   }

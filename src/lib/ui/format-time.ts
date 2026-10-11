@@ -100,6 +100,13 @@ export function formatZoneName(value: TimeValue, timeZone?: string): string {
   return new Intl.DateTimeFormat(LOCALE, { timeZone, timeZoneName: 'short' }).formatToParts(toDate(value)).find(entry => entry.type === 'timeZoneName')?.value ?? ''
 }
 
+/** Milliseconds since local midnight in `timeZone`, for send-window checks. */
+export function msSinceMidnight(value: TimeValue, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat(LOCALE, { timeZone, hour: 'numeric', minute: 'numeric', second: 'numeric', hourCycle: 'h23' }).formatToParts(toDate(value))
+  const at = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find(entry => entry.type === type)?.value ?? 0)
+  return ((at('hour') * 60 + at('minute')) * 60 + at('second')) * 1000
+}
+
 /** ISO-8601 for the `dateTime` attribute of a `<time>` element. */
 export function timestampIso(value: TimeValue): string {
   return toDate(value).toISOString()

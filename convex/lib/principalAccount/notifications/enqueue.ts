@@ -89,14 +89,14 @@ async function alertCapCode(ctx: MutationCtx, input: {
 const LIFECYCLE_WINDOW_CAP = 4
 const LIFECYCLE_WINDOW_MS = 14 * ALERT_WINDOW_MS
 
-/** Lifecycle caps (design doc section 5): one per owner per 24 hours and 4 in 14 days, counted from sent or pending lifecycle rows only (suppressed and failed rows, including a skipped welcome, do not count; a live welcome does). Welcome is never dropped, so it skips the check itself. */
+/** Lifecycle caps (design doc section 5): one per owner per 24 hours and 4 in 14 days, counted from sent or pending lifecycle rows only (suppressed and failed rows do not count). */
 async function lifecycleCapCode(ctx: MutationCtx, input: {
   eventKind: Doc<'notificationDeliveries'>['eventKind']
   stream: EmailStream
   recipientPrincipalRef: string
   accountRef: string
 }, now: number): Promise<string | null> {
-  if (input.stream !== 'lifecycle' || input.eventKind === 'welcome') return null
+  if (input.stream !== 'lifecycle') return null
   const sent = (await ctx.db.query('notificationDeliveries')
     .withIndex('by_accountRef_and_createdAt', (query) => query
       .eq('accountRef', input.accountRef).gte('createdAt', now - LIFECYCLE_WINDOW_MS))

@@ -2,6 +2,7 @@ import type { Doc } from '../../../_generated/dataModel'
 import type { MutationCtx, QueryCtx } from '../../../_generated/server'
 import type { PaginationOptions } from 'convex/server'
 import { STALLED_STEPS as JOURNEY_STALLED_STEPS, readStalledPage, type StalledStep } from '../../journey/stalled'
+import { notificationDeliveryStateRank } from '@/modules/principal-account/account/convex-schema'
 import { resolveClerkUserIdForPrincipal } from '../workspace/directory'
 import { enqueueEmail } from './enqueue'
 import { lifecycleSkipCode } from './unsubscribe'
@@ -75,6 +76,14 @@ export async function readStalledDeliveryContext(
     .withIndex('by_accountRef_and_name', (query) => query.eq('accountRef', delivery.accountRef).eq('name', JOURNEY_STALLED_STEPS[step.step].to))
     .first()
   if (done !== null) return { kind: 'skip' as const, code: 'stalled_step_completed' }
+  if (delivery.eventKind === 'stalled_never_called') {
+    // The first-call-failed email already went to this account, so this nudge would repeat it.
+    const failed = await ctx.db.query('notificationDeliveries')
+      .withIndex('by_recipient_account_event_source', (query) => query
+        .eq('recipientPrincipalRef', delivery.recipientPrincipalRef).eq('accountRef', delivery.accountRef).eq('eventKind', 'first_call_failed'))
+      .collect()
+    if (failed.some((row) => notificationDeliveryStateRank[row.state] >= notificationDeliveryStateRank.sent)) return { kind: 'skip' as const, code: 'first_call_failed_sent' }
+  }
   const clerkUserId = await resolveClerkUserIdForPrincipal(ctx.db, delivery.recipientPrincipalRef)
   if (clerkUserId === null) return { kind: 'skip' as const, code: 'no_clerk_identity' }
   const siteUrl = process.env.AE_SITE_URL?.trim().replace(/\/+$/u, '')

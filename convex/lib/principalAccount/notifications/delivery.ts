@@ -5,6 +5,7 @@ import { vOnCompleteArgs } from '@convex-dev/workpool'
 import { AUTHORITY_REQUEST_TTL_MS } from '../../capabilityExecution/callLifecycle/admissionApprovals'
 import { notificationDeliveryStateRank } from '@/modules/principal-account/account/convex-schema'
 import { formatMoney } from '@/emails/money'
+import { formatTimestamp, formatZoneName } from '@/lib/ui/format-time'
 import { readExactAmount } from '@/modules/money/public'
 import type { Doc, Id } from '../../../_generated/dataModel'
 import type { MutationCtx, QueryCtx } from '../../../_generated/server'
@@ -225,7 +226,7 @@ async function readAccountNoticeContext(ctx: QueryCtx, delivery: Doc<'notificati
     if (amount !== undefined) props.amount = amount
   }
   if (delivery.eventKind === 'data_request_received') {
-    props.when = new Intl.DateTimeFormat('en-AU', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Australia/Perth', timeZoneName: 'short' }).format(new Date(delivery.createdAt))
+    props.when = `${formatTimestamp(delivery.createdAt, 'Australia/Perth')} ${formatZoneName(delivery.createdAt, 'Australia/Perth')}`
   }
   return {
     kind: 'ready',

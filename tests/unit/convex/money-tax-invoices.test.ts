@@ -148,6 +148,16 @@ describe('funding tax invoice issuance', () => {
     expect(await owner.query(api.moneyDocuments.readOwnerDocumentUrl, { documentRef, format: 'csv' })).toMatch(/^https?:/u)
   })
 
+  it('enqueues the funding receipt only once the tax invoice is issued, keyed on the command', async () => {
+    const { backend, owner } = await fixture()
+    const receipts = () => backend.run(async ctx => (await ctx.db.query('notificationDeliveries').collect()).filter(row => row.eventKind === 'funding_receipt'))
+    await owner.mutation(api.moneyDocuments.issueOwnerFundingTaxInvoice, { commandRef })
+    expect(await receipts()).toHaveLength(0)
+    await renderDocument(transport(backend).ctx, { documentRef })
+    await renderDocument(transport(backend).ctx, { documentRef })
+    expect(await receipts()).toEqual([expect.objectContaining({ sourceEventRef: commandRef, stream: 'transactional' })])
+  })
+
   it('retains one immutable invoice and canonical pair across duplicate issuance, rendering and profile/policy changes', async () => {
     const { backend, owner, canonicalAccountRef } = await fixture()
     await Promise.all([owner.mutation(api.moneyDocuments.issueOwnerFundingTaxInvoice, { commandRef }), owner.mutation(api.moneyDocuments.issueOwnerFundingTaxInvoice, { commandRef })])
