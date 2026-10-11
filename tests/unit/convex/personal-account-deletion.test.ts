@@ -163,6 +163,24 @@ describe('personalAccount retirePersonalAccountForServer (W-09)', () => {
     expect(admission).toMatchObject({ lifecycle: 'revoked' })
   })
 
+  it('R7b: closes the owned account, ends ownership, revokes owner-less agents, blocks members', async () => {
+    process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN = serviceKey
+    const backend = createBackend()
+    await seedAuthority(backend)
+    await seedTeammateMembership(backend)
+    await seedOwnerMachineAgent(backend, { ownerTokenIdentifier: undefined })
+    await retire(backend, retireCommand(TOKEN_IDENTIFIER))
+
+    const { account, ownerships } = await backend.run(async (ctx) => ({
+      account: await ctx.db.query('accounts').withIndex('by_accountRef', (q) => q.eq('accountRef', ACCOUNT_REF)).unique(),
+      ownerships: await ctx.db.query('accountOwnerships').collect(),
+    }))
+    expect(account).toMatchObject({ lifecycle: 'closed' })
+    expect(ownerships.filter((row) => row.accountRef === ACCOUNT_REF).every((row) => row.lifecycle === 'ended')).toBe(true)
+    expect(await readAgentAccessPrincipal(backend, MACHINE_AGENT_REF)).toMatchObject({ lifecycle: 'revoked' })
+    await expect(readEligibility(backend, identity({ tokenIdentifier: 'teammate', subject: 'teammate' }))).rejects.toBeDefined()
+  })
+
   it('R8: records account.personal_account.retired audit event', async () => {
     process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN = serviceKey
     const backend = createBackend()
@@ -448,7 +466,10 @@ async function listNotificationPreferences(backend: InteractiveAuthorityBackend)
       .collect()) as PreferenceRow[])
 }
 
-async function seedOwnerMachineAgent(backend: InteractiveAuthorityBackend): Promise<void> {
+async function seedOwnerMachineAgent(
+  backend: InteractiveAuthorityBackend,
+  options: { ownerTokenIdentifier?: string | undefined } = { ownerTokenIdentifier: TOKEN_IDENTIFIER },
+): Promise<void> {
   const credentialId = 'key_w09_machine'
   const grantRef = 'grant:w09:machine'
   const applicationRef = 'agentic-economy'
@@ -502,7 +523,7 @@ async function seedOwnerMachineAgent(backend: InteractiveAuthorityBackend): Prom
     await ctx.db.insert('agentAccessPrincipals', {
       principalId: MACHINE_AGENT_REF,
       ownerId: ACCOUNT_REF,
-      ownerTokenIdentifier: TOKEN_IDENTIFIER,
+      ...(options.ownerTokenIdentifier === undefined ? {} : { ownerTokenIdentifier: options.ownerTokenIdentifier }),
       credentialId,
       applicationRef,
       environment,

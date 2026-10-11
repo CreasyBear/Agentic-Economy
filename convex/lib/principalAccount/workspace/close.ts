@@ -1,3 +1,4 @@
+import type { Doc } from '../../../_generated/dataModel'
 import type { MutationCtx } from '../../../_generated/server'
 import { v, type Infer } from 'convex/values'
 
@@ -27,6 +28,28 @@ const closeWorkspaceReceiptValue = v.union(
     accountRevision: v.number(),
   }),
 )
+
+/** Close the account and end its active ownership row. Shared by workspace close and personal retire. */
+export async function closeAccountAndOwnership(
+  ctx: Pick<MutationCtx, 'db'>,
+  account: Doc<'accounts'>,
+  ownership: Doc<'accountOwnerships'>,
+  actionContext: AccountActionContext,
+  now: number,
+): Promise<void> {
+  await ctx.db.patch(account._id, {
+    lifecycle: 'closed',
+    revision: account.revision + 1,
+    updatedAt: now,
+    lastAction: actionContext,
+  })
+  await ctx.db.patch(ownership._id, {
+    lifecycle: 'ended',
+    revision: ownership.revision + 1,
+    endedAt: now,
+    endedBy: actionContext,
+  })
+}
 
 export const closeWorkspaceArgs = v.object({
     expectedAccountRef: v.string(),
@@ -119,19 +142,7 @@ export const closeWorkspaceHandler = async (ctx: MutationCtx, args: Infer<typeof
     }
     const nextAccountRevision = account.revision + 1
 
-    await ctx.db.patch(account._id, {
-      lifecycle: 'closed',
-      revision: nextAccountRevision,
-      updatedAt: now,
-      lastAction: actionContext,
-    })
-
-    await ctx.db.patch(currentOwnership._id, {
-      lifecycle: 'ended',
-      revision: currentOwnership.revision + 1,
-      endedAt: now,
-      endedBy: actionContext,
-    })
+    await closeAccountAndOwnership(ctx, account, currentOwnership, actionContext, now)
 
     const activeMemberships = await ctx.db
       .query('memberships')

@@ -16,7 +16,11 @@ export async function revokeMachineAgentsForCreator(
       .eq('ownerPrincipalRef', humanPrincipalRef)
       .eq('lifecycle', 'active'))
     .collect()
-  for (const ownership of ownershipRows) accountRefs.add(ownership.accountRef)
+  const ownedAccountRefs = new Set<string>()
+  for (const ownership of ownershipRows) {
+    accountRefs.add(ownership.accountRef)
+    ownedAccountRefs.add(ownership.accountRef)
+  }
 
   const membershipRows = await ctx.db.query('memberships')
     .withIndex('by_memberPrincipalRef_and_lifecycle', (index) => index
@@ -35,7 +39,9 @@ export async function revokeMachineAgentsForCreator(
       .collect()
     for (const agent of agents) {
       if (matchedAgents.length >= MACHINE_AGENT_CASCADE_CAP) break
-      if (agent.ownerTokenIdentifier !== observation.providerIdentifier) continue
+      const ownerMatches = agent.ownerTokenIdentifier === observation.providerIdentifier
+        || (agent.ownerTokenIdentifier === undefined && ownedAccountRefs.has(accountRef))
+      if (!ownerMatches) continue
       matchedAgents.push(agent)
     }
   }
