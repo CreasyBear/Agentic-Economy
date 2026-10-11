@@ -1278,6 +1278,7 @@ describe('phase 3 email gate', () => {
   it('reads a phase 3 welcome back as a ready required notice for the active owner at send time', async () => {
     vi.stubEnv('AE_EMAIL_PHASE3_ENABLED', 'true')
     vi.stubEnv('AE_SITE_URL', 'https://app.aecon.test')
+    vi.stubEnv('EMAIL_UNSUBSCRIBE_SECRET', UNSUBSCRIBE_SECRET)
     const backend = await createNotificationBackend()
     await seedAuthority(backend)
     await enqueuePhase3(backend, 'welcome')
