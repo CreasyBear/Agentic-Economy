@@ -311,12 +311,14 @@ export class CapabilityProcurementEngine {
         principal, correlationId,
       })
       if (quoteRes.kind === 'refused') {
-        return await finish({
+        const refused: ToolProcureResult = {
           ...common, kind: 'refused', status: 'refused',
           code: quoteRes.code,
           retryable: quoteRes.retryable,
           detail: quoteRes.reason ?? 'Quote request refused by capability engine.',
-        })
+        }
+        // Retryable refusals leave the key open so the same key can re-Quote.
+        return quoteRes.retryable ? refused : await finish(refused)
       }
       quote = quoteSnapshotSchema.parse({
         quoteRef: quoteRes.quoteRef, price: quoteRes.price,
