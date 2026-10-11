@@ -1,0 +1,3807 @@
+[
+ {
+  "verdict": "needs_validation",
+  "fingerprint": "ci-authenticated-proof-staging-secrets-any-ref",
+  "title": "authenticated-platform-proof exposes staging environment secrets to any dispatched ref",
+  "description": "The job gates only on workflow_dispatch, binds environment staging and passes Clerk and Vercel bypass secrets to code from the dispatched ref; chat-staging-proof requires refs/heads/main.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": ".github/workflows/kernel-release-gate.yml",
+    "line": 370,
+    "scope": "kernel-release-gate.yml",
+    "description": "authenticated-platform-proof exposes staging environment secrets to any dispatched ref"
+   }
+  ],
+  "evidence": [
+   {
+    "file": ".github/workflows/kernel-release-gate.yml",
+    "line": 370,
+    "description": "The job gates only on workflow_dispatch, binds environment staging and passes Clerk and Vercel bypass secrets to code from the dispatched ref; chat-staging-proof requires refs/heads/main."
+   }
+  ],
+  "claimed_root_cause": "Missing ref restriction on an environment-scoped secret job.",
+  "blockers": [
+   "Staging deployment-branch rules, reviewers and secret scope are not visible in source."
+  ],
+  "validation_plan": {
+   "deployment": "Settings > Environments > staging, check deployment branch rule and whether the three secrets are environment or repository scoped."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "ci-cli-release-install-scripts-with-id-token",
+  "title": "cli-release runs dependency lifecycle scripts in the job that holds id-token: write and signs the release",
+  "description": "The publish job grants id-token: write at job level, runs plain npm ci (lifecycle scripts enabled, 7 lockfile packages have install scripts), then npm pack (prepack builds dist/ae.js) and keyless cosign sign-blob in the same job.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": ".github/workflows/cli-release.yml",
+    "line": 45,
+    "scope": "cli-release.yml",
+    "description": "cli-release runs dependency lifecycle scripts in the job that holds id-token: write and signs the release"
+   }
+  ],
+  "evidence": [
+   {
+    "file": ".github/workflows/cli-release.yml",
+    "line": 45,
+    "description": "The publish job grants id-token: write at job level, runs plain npm ci (lifecycle scripts enabled, 7 lockfile packages have install scripts), then npm pack (prepack builds dist/ae.js) and keyless cosign sign-blob in the "
+   }
+  ],
+  "root_cause": "Install-time code from lockfile dependencies executes in a job that also holds OIDC signing authority and builds the signed artifact; kernel-release-gate.yml uses npm ci --ignore-scripts for the same reason.",
+  "intended_behavior": "Release identity should only sign artifacts built from reviewed inputs, with no dependency install code running while OIDC token request variables are present.",
+  "conditions": [
+   {
+    "kind": "environmental_dependency",
+    "description": "A compromised upstream release of a lockfile package with an install script (esbuild, @sentry/cli, core-js) runs during npm ci in the publish job."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Principal described in the input condition, using the target's native interface; static white-box trace only.",
+   "payloads": [
+    "A compromised upstream release of a lockfile package with an install script (esbuild, @sentry/cli, core-js) runs during npm ci in the publish job."
+   ],
+   "instructions": [
+    "Read the cited source locations on origin/main.",
+    "Follow the trace from the entrypoint to the sink; no live request was sent."
+   ],
+   "observed_result": "Source trace confirms the described behaviour; no runtime execution was performed under the white-box rules."
+  },
+  "remediation": {
+   "strategy": "Use npm ci --ignore-scripts in cli-release.yml, build in a job without id-token, and sign in a separate minimal job that consumes the uploaded tarball artifact."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "Needs the stated precondition and lower-trust access is limited."
+   },
+   "impact": {
+    "score": "medium",
+    "reason": "Bounded impact as described; no cross-tenant read or unbounded spend demonstrated."
+   },
+   "overall_severity": "medium"
+  },
+  "confidence": {
+   "score": "medium",
+   "reason": "Verified by independent source reading; not executed."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "convex-anonymous-chat-json-before-cap",
+  "title": "Anonymous chat request.json() has no byte cap",
+  "description": "Gated by the proxy secret, then request.json() parses unbounded before the 16 KB transcript check. The public proxy caps at 18 KB.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/lib/chat/anonymous/request.ts",
+    "line": 43,
+    "scope": "request.ts",
+    "description": "Anonymous chat request.json() has no byte cap"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/lib/chat/anonymous/request.ts",
+    "line": 43,
+    "description": "Gated by the proxy secret, then request.json() parses unbounded before the 16 KB transcript check. The public proxy caps at 18 KB."
+   }
+  ],
+  "root_cause": "Cap applied after parse.",
+  "intended_behavior": "Bounded parsing.",
+  "conditions": [
+   {
+    "kind": "environmental_dependency",
+    "description": "Direct POST with the proxy secret and a large body."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Principal described in the input condition, using the target's native interface; static white-box trace only.",
+   "payloads": [
+    "Direct POST with the proxy secret and a large body."
+   ],
+   "instructions": [
+    "Read the cited source locations on origin/main.",
+    "Follow the trace from the entrypoint to the sink; no live request was sent."
+   ],
+   "observed_result": "Source trace confirms the described behaviour; no runtime execution was performed under the white-box rules."
+  },
+  "remediation": {
+   "strategy": "Cap bytes before parsing as the other routes do."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "Needs the stated precondition and lower-trust access is limited."
+   },
+   "impact": {
+    "score": "low",
+    "reason": "Bounded impact as described; no cross-tenant read or unbounded spend demonstrated."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "medium",
+   "reason": "Verified by independent source reading; not executed."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "convex-anonymous-rerank-not-in-cost-ledger",
+  "title": "Anonymous search rerank LLM calls bypass the model-cost ledger",
+  "description": "The anonymous path creates the agent without searchTurn, so presentSearch gets no modelCostBinding and rerank calls through OpenRouter are unrecorded. Volume is bounded by the 5000/day admission budget; the gap is cost accounting and visibility.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/lib/chat/tools/search.ts",
+    "line": 178,
+    "scope": "search.ts",
+    "description": "Anonymous search rerank LLM calls bypass the model-cost ledger"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/lib/chat/tools/search.ts",
+    "line": 178,
+    "description": "The anonymous path creates the agent without searchTurn, so presentSearch gets no modelCostBinding and rerank calls through OpenRouter are unrecorded. Volume is bounded by the 5000/day admission budget; the gap is cost a"
+   }
+  ],
+  "root_cause": "modelCostBinding is spread only when searchTurn is defined.",
+  "intended_behavior": "All model spend should be recorded.",
+  "conditions": [
+   {
+    "kind": "environmental_dependency",
+    "description": "Any admitted anonymous chat request that triggers search."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Principal described in the input condition, using the target's native interface; static white-box trace only.",
+   "payloads": [
+    "Any admitted anonymous chat request that triggers search."
+   ],
+   "instructions": [
+    "Read the cited source locations on origin/main.",
+    "Follow the trace from the entrypoint to the sink; no live request was sent."
+   ],
+   "observed_result": "Source trace confirms the described behaviour; no runtime execution was performed under the white-box rules."
+  },
+  "remediation": {
+   "strategy": "Provide an anonymous cost binding or account rerank spend against a global anonymous ledger."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "Needs the stated precondition and lower-trust access is limited."
+   },
+   "impact": {
+    "score": "low",
+    "reason": "Bounded impact as described; no cross-tenant read or unbounded spend demonstrated."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "medium",
+   "reason": "Verified by independent source reading; not executed."
+  }
+ },
+ {
+  "verdict": "needs_validation",
+  "fingerprint": "convex-anonymous-stream-concurrency",
+  "title": "No concurrency cap on open anonymous LLM streams",
+  "description": "Admission is request-count only; a burst within budget can hold many concurrent streams of up to about 87 seconds.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/lib/chat/anonymous/stream.ts",
+    "line": 14,
+    "scope": "stream.ts",
+    "description": "No concurrency cap on open anonymous LLM streams"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/lib/chat/anonymous/stream.ts",
+    "line": 14,
+    "description": "Admission is request-count only; a burst within budget can hold many concurrent streams of up to about 87 seconds."
+   }
+  ],
+  "claimed_root_cause": "No semaphore.",
+  "blockers": [
+   "Convex httpAction and OpenRouter concurrency limits."
+  ],
+  "validation_plan": {
+   "deployment": "check platform limits and observed concurrent streams."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "convex-booking-ceilings-not-reasserted",
+  "title": "bookingFromRows does not re-assert per-call and plan-node ceilings",
+  "description": "buyerAmountUnits comes from quote.decisionAudUnits with no comparison to maximumSpendPerCallUnits or nodeCeilingUnits; ceilings are enforced only at issue. Quote rows are written only by issueQuote, so this is defense in depth.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/lib/money/managedCall/booking.ts",
+    "line": 97,
+    "scope": "booking.ts",
+    "description": "bookingFromRows does not re-assert per-call and plan-node ceilings"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/lib/money/managedCall/booking.ts",
+    "line": 97,
+    "description": "buyerAmountUnits comes from quote.decisionAudUnits with no comparison to maximumSpendPerCallUnits or nodeCeilingUnits; ceilings are enforced only at issue. Quote rows are written only by issueQuote, so this is defense in"
+   }
+  ],
+  "root_cause": "Booking trusts stored quote amounts.",
+  "intended_behavior": "Ceilings hold at settlement.",
+  "conditions": [
+   {
+    "kind": "environmental_dependency",
+    "description": "A quote row written outside issueQuote."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Principal described in the input condition, using the target's native interface; static white-box trace only.",
+   "payloads": [
+    "A quote row written outside issueQuote."
+   ],
+   "instructions": [
+    "Read the cited source locations on origin/main.",
+    "Follow the trace from the entrypoint to the sink; no live request was sent."
+   ],
+   "observed_result": "Source trace confirms the described behaviour; no runtime execution was performed under the white-box rules."
+  },
+  "remediation": {
+   "strategy": "Assert decisionAudUnits <= maximumSpendPerCallUnits and <= nodeCeilingUnits in bookingFromRows."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "Needs the stated precondition and lower-trust access is limited."
+   },
+   "impact": {
+    "score": "low",
+    "reason": "Bounded impact as described; no cross-tenant read or unbounded spend demonstrated."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "medium",
+   "reason": "Verified by independent source reading; not executed."
+  }
+ },
+ {
+  "verdict": "rejected",
+  "fingerprint": "convex-call-content-review-replay",
+  "title": "Captured admission replays review_call_content without consuming its nonce",
+  "description": "Operation replay returns the stored receipt without nonce consumption inside the original 10 minute MFA window.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/lib/adminConsole/commands/commandEnvelope.ts",
+    "line": 80,
+    "scope": "commandEnvelope.ts",
+    "description": "Captured admission replays review_call_content without consuming its nonce"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/lib/adminConsole/commands/commandEnvelope.ts",
+    "line": 80,
+    "description": "Operation replay returns the stored receipt without nonce consumption inside the original 10 minute MFA window."
+   }
+  ],
+  "claimed_root_cause": "Documented idempotent replay: same actor, same args, membership and window rechecked",
+  "reason": "Documented idempotent replay: same actor, same args, membership and window rechecked; no new access."
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "convex-chat-call-approval-substring-gate",
+  "title": "Owner-chat approval gate is satisfied by any mention of the Tool ref in user text",
+  "description": "requireApproval is cleared when the latest user message merely contains the toolRef. Owner-chat authority is spending_policy, so a model steered by provider text can quote and call or run a plan after a non-purchase question that includes a ref. The read-only restriction exists only as prompt text.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/chatCall.ts",
+    "line": 199,
+    "scope": "chatCall.ts",
+    "description": "Owner-chat approval gate is satisfied by any mention of the Tool ref in user text"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/chatCall.ts",
+    "line": 199,
+    "description": "requireApproval is cleared when the latest user message merely contains the toolRef. Owner-chat authority is spending_policy, so a model steered by provider text can quote and call or run a plan after a non-purchase ques"
+   }
+  ],
+  "root_cause": "A substring match on the user message is treated as purchase intent and plan.run has no user-text check.",
+  "intended_behavior": "Calls without explicit owner purchase intent should require owner approval.",
+  "conditions": [
+   {
+    "kind": "environmental_dependency",
+    "description": "Owner asks a read-only question containing operation:v1:<hex>; injected listing text steers the model to tool.quote then tool.call."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Principal described in the input condition, using the target's native interface; static white-box trace only.",
+   "payloads": [
+    "Owner asks a read-only question containing operation:v1:<hex>; injected listing text steers the model to tool.quote then tool.call."
+   ],
+   "instructions": [
+    "Read the cited source locations on origin/main.",
+    "Follow the trace from the entrypoint to the sink; no live request was sent."
+   ],
+   "observed_result": "Source trace confirms the described behaviour; no runtime execution was performed under the white-box rules."
+  },
+  "remediation": {
+   "strategy": "Require an explicit purchase action (UI approval or structured intent) rather than substring inclusion, and enforce the read-only intent in code for plan run."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "medium",
+    "reason": "Needs the stated precondition and lower-trust access is limited."
+   },
+   "impact": {
+    "score": "medium",
+    "reason": "Bounded impact as described; no cross-tenant read or unbounded spend demonstrated."
+   },
+   "overall_severity": "medium"
+  },
+  "confidence": {
+   "score": "medium",
+   "reason": "Verified by independent source reading; not executed."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "convex-chat-markdown-link-injection",
+  "title": "Provider-authored Tool titles and Call output interpolated unescaped into assistant Markdown",
+  "description": "choice.title and outputPreview are inserted raw into saved assistant text; the client renders Markdown with http/https links, so a listing title can inject a clickable link inside an AE reply. HTML is skipped and images dropped.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/lib/chat/generate/completedFacts.ts",
+    "line": 42,
+    "scope": "completedFacts.ts",
+    "description": "Provider-authored Tool titles and Call output interpolated unescaped into assistant Markdown"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/lib/chat/generate/completedFacts.ts",
+    "line": 42,
+    "description": "choice.title and outputPreview are inserted raw into saved assistant text; the client renders Markdown with http/https links, so a listing title can inject a clickable link inside an AE reply. HTML is skipped and images "
+   }
+  ],
+  "root_cause": "sanitizeChatToolString strips angle brackets only; no Markdown escaping on titles or output previews.",
+  "intended_behavior": "Provider text should render as inert text.",
+  "conditions": [
+   {
+    "kind": "environmental_dependency",
+    "description": "Listing title like Verify [your account](https://attacker.example)."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Principal described in the input condition, using the target's native interface; static white-box trace only.",
+   "payloads": [
+    "Listing title like Verify [your account](https://attacker.example)."
+   ],
+   "instructions": [
+    "Read the cited source locations on origin/main.",
+    "Follow the trace from the entrypoint to the sink; no live request was sent."
+   ],
+   "observed_result": "Source trace confirms the described behaviour; no runtime execution was performed under the white-box rules."
+  },
+  "remediation": {
+   "strategy": "Escape Markdown in provider-authored strings (markdownText) before interpolation or render them as plain text."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "Needs the stated precondition and lower-trust access is limited."
+   },
+   "impact": {
+    "score": "low",
+    "reason": "Bounded impact as described; no cross-tenant read or unbounded spend demonstrated."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "medium",
+   "reason": "Verified by independent source reading; not executed."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "convex-chat-share-survives-account-retirement",
+  "title": "Shared chat links keep serving transcripts after owner retirement or workspace close",
+  "description": "Retire and close never touch chatThreadShares; reads check only the HMAC grant. The retired owner cannot revoke (resolveBusinessActor returns anonymous). Exposure ends when idle-content retention (30 days from last turn) clears messages, so it is bounded not indefinite.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/lib/chat/shares/reads.ts",
+    "line": 58,
+    "scope": "reads.ts",
+    "description": "Shared chat links keep serving transcripts after owner retirement or workspace close"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/lib/chat/shares/reads.ts",
+    "line": 58,
+    "description": "Retire and close never touch chatThreadShares; reads check only the HMAC grant. The retired owner cannot revoke (resolveBusinessActor returns anonymous). Exposure ends when idle-content retention (30 days from last turn)"
+   }
+  ],
+  "root_cause": "No owner lifecycle predicate on share reads and no share revocation in retire or close.",
+  "intended_behavior": "Closure and deletion should end shared access.",
+  "conditions": [
+   {
+    "kind": "environmental_dependency",
+    "description": "Open a share token after the owner retired."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Principal described in the input condition, using the target's native interface; static white-box trace only.",
+   "payloads": [
+    "Open a share token after the owner retired."
+   ],
+   "instructions": [
+    "Read the cited source locations on origin/main.",
+    "Follow the trace from the entrypoint to the sink; no live request was sent."
+   ],
+   "observed_result": "Source trace confirms the described behaviour; no runtime execution was performed under the white-box rules."
+  },
+  "remediation": {
+   "strategy": "Revoke shares in retire and close, and check owner lifecycle in listSharedMessages."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "Needs the stated precondition and lower-trust access is limited."
+   },
+   "impact": {
+    "score": "low",
+    "reason": "Bounded impact as described; no cross-tenant read or unbounded spend demonstrated."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "medium",
+   "reason": "Verified by independent source reading; not executed."
+  }
+ },
+ {
+  "verdict": "needs_validation",
+  "fingerprint": "convex-chat-thread-search-existence-oracle",
+  "title": "Thread title search leaks existence of sibling-principal thread titles within an account",
+  "description": "The search index is filtered by ownerId only and principal filtering happens after pagination, so empty pages reveal matches by other principals of the same account.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/lib/chat/threads/listing.ts",
+    "line": 123,
+    "scope": "listing.ts",
+    "description": "Thread title search leaks existence of sibling-principal thread titles within an account"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/lib/chat/threads/listing.ts",
+    "line": 123,
+    "description": "The search index is filtered by ownerId only and principal filtering happens after pagination, so empty pages reveal matches by other principals of the same account."
+   }
+  ],
+  "claimed_root_cause": "Post-pagination filter.",
+  "blockers": [
+   "Runtime pagination behaviour and whether siblings exist."
+  ],
+  "validation_plan": {
+   "local": "convex-test with two principals under one account."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "convex-chat-tool-quote-resolves-before-turn-fence",
+  "title": "Chat tool.quote resolves URL refs before the turn fence",
+  "description": "callableToolRef (egress and publish) runs before payableAdmissionRef checks turn state, cancellation and supersession, contradicting the invariant stated in x402Directory.resolve.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/lib/chat/tools/purchase.ts",
+    "line": 123,
+    "scope": "purchase.ts",
+    "description": "Chat tool.quote resolves URL refs before the turn fence"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/lib/chat/tools/purchase.ts",
+    "line": 123,
+    "description": "callableToolRef (egress and publish) runs before payableAdmissionRef checks turn state, cancellation and supersession, contradicting the invariant stated in x402Directory.resolve."
+   }
+  ],
+  "root_cause": "Ordering of resolve and fence.",
+  "intended_behavior": "Cancelled turns do no work.",
+  "conditions": [
+   {
+    "kind": "environmental_dependency",
+    "description": "tool.quote with a URL ref after the turn is cancelled."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Principal described in the input condition, using the target's native interface; static white-box trace only.",
+   "payloads": [
+    "tool.quote with a URL ref after the turn is cancelled."
+   ],
+   "instructions": [
+    "Read the cited source locations on origin/main.",
+    "Follow the trace from the entrypoint to the sink; no live request was sent."
+   ],
+   "observed_result": "Source trace confirms the described behaviour; no runtime execution was performed under the white-box rules."
+  },
+  "remediation": {
+   "strategy": "Run authorizePayableTool before resolveCallableRef."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "Needs the stated precondition and lower-trust access is limited."
+   },
+   "impact": {
+    "score": "low",
+    "reason": "Bounded impact as described; no cross-tenant read or unbounded spend demonstrated."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "medium",
+   "reason": "Verified by independent source reading; not executed."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "convex-closed-owner-tools-stay-routeable",
+  "title": "Published tools of a closed or retired owner stay listed, quotable and routeable",
+  "description": "Close and retire never touch businesses, publications or provider connections, and readCurrentPublishedTool, qualification and quote paths check publicStatus and freeze only, never account lifecycle. The UI copy says Tools stop. Settlement leg not traced.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/lib/capabilitySupply/currentTool/reads.ts",
+    "line": 126,
+    "scope": "reads.ts",
+    "description": "Published tools of a closed or retired owner stay listed, quotable and routeable"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/lib/capabilitySupply/currentTool/reads.ts",
+    "line": 126,
+    "description": "Close and retire never touch businesses, publications or provider connections, and readCurrentPublishedTool, qualification and quote paths check publicStatus and freeze only, never account lifecycle. The UI copy says Too"
+   }
+  ],
+  "root_cause": "No account lifecycle predicate on the publication read path and no offboarding on close.",
+  "intended_behavior": "Closed workspaces' Tools stop.",
+  "conditions": [
+   {
+    "kind": "environmental_dependency",
+    "description": "Public catalog read and Quote after workspace close."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Principal described in the input condition, using the target's native interface; static white-box trace only.",
+   "payloads": [
+    "Public catalog read and Quote after workspace close."
+   ],
+   "instructions": [
+    "Read the cited source locations on origin/main.",
+    "Follow the trace from the entrypoint to the sink; no live request was sent."
+   ],
+   "observed_result": "Source trace confirms the described behaviour; no runtime execution was performed under the white-box rules."
+  },
+  "remediation": {
+   "strategy": "Start offboarding or unpublish on close and add an account-active check to readCurrentPublishedTool."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "medium",
+    "reason": "Needs the stated precondition and lower-trust access is limited."
+   },
+   "impact": {
+    "score": "medium",
+    "reason": "Bounded impact as described; no cross-tenant read or unbounded spend demonstrated."
+   },
+   "overall_severity": "medium"
+  },
+  "confidence": {
+   "score": "medium",
+   "reason": "Verified by independent source reading; not executed."
+  }
+ },
+ {
+  "verdict": "rejected",
+  "fingerprint": "convex-connect-x402-eip191-unverified",
+  "title": "Convex connect mutations never verify the EIP-191 payee signature",
+  "description": "Only a regex checks the signature in Convex.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/lib/capabilitySupply/providerConnectionOwner/x402.ts",
+    "line": 52,
+    "scope": "x402.ts",
+    "description": "Convex connect mutations never verify the EIP-191 payee signature"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/lib/capabilitySupply/providerConnectionOwner/x402.ts",
+    "line": 52,
+    "description": "Only a regex checks the signature in Convex."
+   }
+  ],
+  "claimed_root_cause": "Signed single-use admission bound to args is minted only after verification in the Next layer",
+  "reason": "Signed single-use admission bound to args is minted only after verification in the Next layer; defense in depth."
+ },
+ {
+  "verdict": "needs_validation",
+  "fingerprint": "convex-delegated-publish-skips-proof-policy",
+  "title": "Agent-delegated publish, republish and withdraw never enforce the declared strict proofPolicy",
+  "description": "admitAgentPublicationConsequence only null-checks the admission; owner paths enforce strict proof.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/lib/capabilitySupply/publish/prepared.ts",
+    "line": 309,
+    "scope": "prepared.ts",
+    "description": "Agent-delegated publish, republish and withdraw never enforce the declared strict proofPolicy"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/lib/capabilitySupply/publish/prepared.ts",
+    "line": 309,
+    "description": "admitAgentPublicationConsequence only null-checks the admission; owner paths enforce strict proof."
+   }
+  ],
+  "claimed_root_cause": "proofPolicy unread on the agent path.",
+  "blockers": [
+   "Whether delegated publish is meant to rely on grant-time reverification."
+  ],
+  "validation_plan": {
+   "deployment": "confirm intent; check consent consequence action."
+  }
+ },
+ {
+  "verdict": "needs_validation",
+  "fingerprint": "convex-devseed-gate-only-checks-deployment-environment",
+  "title": "devSeed production gate trusts only AE_DEPLOYMENT_ENVIRONMENT",
+  "description": "requireDevelopmentDeployment does not cross-check AE_FORMANCE_ENVIRONMENT like the money gate. Internal mutations only; a misdeclared deployment would accept fixed-id dev rows.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/devSeed.ts",
+    "line": 58,
+    "scope": "devSeed.ts",
+    "description": "devSeed production gate trusts only AE_DEPLOYMENT_ENVIRONMENT"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/devSeed.ts",
+    "line": 58,
+    "description": "requireDevelopmentDeployment does not cross-check AE_FORMANCE_ENVIRONMENT like the money gate. Internal mutations only; a misdeclared deployment would accept fixed-id dev rows."
+   }
+  ],
+  "claimed_root_cause": "Weaker gate than the money environment check.",
+  "blockers": [
+   "Live values of both variables on the production Convex deployment."
+  ],
+  "validation_plan": {
+   "local": "unit test with development plus production formance.",
+   "deployment": "npx convex env list (names and values on the owner's own console)."
+  }
+ },
+ {
+  "verdict": "rejected",
+  "fingerprint": "convex-directory-refresh-stuck-refreshing",
+  "title": "Refresh begin returns refreshing forever if a generation never completes",
+  "description": "begin has no staleness check.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/lib/market/directoryIndex/refreshFlow.ts",
+    "line": 27,
+    "scope": "refreshFlow.ts",
+    "description": "Refresh begin returns refreshing forever if a generation never completes"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/lib/market/directoryIndex/refreshFlow.ts",
+    "line": 27,
+    "description": "begin has no staleness check."
+   }
+  ],
+  "claimed_root_cause": "Workpool recovery completes failed or timed-out actions and onComplete clears the generation",
+  "reason": "Workpool recovery completes failed or timed-out actions and onComplete clears the generation; no evidence of a stuck path."
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "convex-email-suppression-unkeyed-hash",
+  "title": "Email suppression keys are unkeyed SHA-256 of the lowercased address",
+  "description": "emailSuppressions stores a deterministic unsalted hash next to a plaintext domain, so a reader of the table can test guessed addresses. Not reachable by lower-trust principals.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/lib/principalAccount/notifications/suppression.ts",
+    "line": 8,
+    "scope": "suppression.ts",
+    "description": "Email suppression keys are unkeyed SHA-256 of the lowercased address"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/lib/principalAccount/notifications/suppression.ts",
+    "line": 8,
+    "description": "emailSuppressions stores a deterministic unsalted hash next to a plaintext domain, so a reader of the table can test guessed addresses. Not reachable by lower-trust principals."
+   }
+  ],
+  "root_cause": "Unkeyed hash of PII.",
+  "intended_behavior": "Hashes should not be offline-guessable.",
+  "conditions": [
+   {
+    "kind": "environmental_dependency",
+    "description": "Read access to the emailSuppressions table."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Principal described in the input condition, using the target's native interface; static white-box trace only.",
+   "payloads": [
+    "Read access to the emailSuppressions table."
+   ],
+   "instructions": [
+    "Read the cited source locations on origin/main.",
+    "Follow the trace from the entrypoint to the sink; no live request was sent."
+   ],
+   "observed_result": "Source trace confirms the described behaviour; no runtime execution was performed under the white-box rules."
+  },
+  "remediation": {
+   "strategy": "Use HMAC-SHA256 with a server-held key (pattern exists in unsubscribe.ts) and drop or leave existing rows."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "Needs the stated precondition and lower-trust access is limited."
+   },
+   "impact": {
+    "score": "low",
+    "reason": "Bounded impact as described; no cross-tenant read or unbounded spend demonstrated."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "medium",
+   "reason": "Verified by independent source reading; not executed."
+  }
+ },
+ {
+  "verdict": "needs_validation",
+  "fingerprint": "convex-export-includes-all-membership-audit-events",
+  "title": "Personal export includes unfiltered audit history of every membership account",
+  "description": "Export takes 50 audit rows per membership account with no event-type allowlist or activation bound; the owner-history query also has no ownership gate.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/lib/principalAccount/personalAccount/exportData.ts",
+    "line": 117,
+    "scope": "exportData.ts",
+    "description": "Personal export includes unfiltered audit history of every membership account"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/lib/principalAccount/personalAccount/exportData.ts",
+    "line": 117,
+    "description": "Export takes 50 audit rows per membership account with no event-type allowlist or activation bound; the owner-history query also has no ownership gate."
+   }
+  ],
+  "claimed_root_cause": "No allowlist in export.",
+  "blockers": [
+   "Intended visibility of audit rows for members."
+  ],
+  "validation_plan": {
+   "deployment": "product decision, then filter through the owner-history allowlist."
+  }
+ },
+ {
+  "verdict": "needs_validation",
+  "fingerprint": "convex-fulfill-return-regresses-reversed-funding",
+  "title": "Owner fulfillReturn can regress a reversed funding command to succeeded",
+  "description": "Only succeeded short-circuits; a reversed command falls through, the Formance reference replays, and finalize patches state to succeeded leaving reversal fields. Fires only if Stripe still reports complete and paid after a refund and the command was webhook-settled.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/lib/money/funding/returnFulfillment.ts",
+    "line": 26,
+    "scope": "returnFulfillment.ts",
+    "description": "Owner fulfillReturn can regress a reversed funding command to succeeded"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/lib/money/funding/returnFulfillment.ts",
+    "line": 26,
+    "description": "Only succeeded short-circuits; a reversed command falls through, the Formance reference replays, and finalize patches state to succeeded leaving reversal fields. Fires only if Stripe still reports complete and paid after"
+   }
+  ],
+  "claimed_root_cause": "No reversed guard.",
+  "blockers": [
+   "Stripe session status after a full refund."
+  ],
+  "validation_plan": {
+   "local": "unit test reversed command through fulfillReturn.",
+   "deployment": "Stripe sandbox refund and session read."
+  }
+ },
+ {
+  "verdict": "rejected",
+  "fingerprint": "convex-http-route-table-untested",
+  "title": "Route wiring for convex/http.ts has no test coverage",
+  "description": "No test imports convex/http.ts.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/http.ts",
+    "line": 19,
+    "scope": "http.ts",
+    "description": "Route wiring for convex/http.ts has no test coverage"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/http.ts",
+    "line": 19,
+    "description": "No test imports convex/http.ts."
+   }
+  ],
+  "claimed_root_cause": "convex-test loads the router and notifications, resend and anonymous chat routes are tested via fetch",
+  "reason": "convex-test loads the router and notifications, resend and anonymous chat routes are tested via fetch; residual gap is internal RPC routes only."
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "convex-legacy-unsubscribe-token-no-expiry",
+  "title": "Legacy unsubscribe tokens bypass expiry until a hard-coded cutoff",
+  "description": "HMAC-valid tokens without kid or exp are accepted until 2026-12-15. The effect is opt-out only and the legacy window is hours of issued tokens.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/lib/principalAccount/notifications/unsubscribe.ts",
+    "line": 71,
+    "scope": "unsubscribe.ts",
+    "description": "Legacy unsubscribe tokens bypass expiry until a hard-coded cutoff"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/lib/principalAccount/notifications/unsubscribe.ts",
+    "line": 71,
+    "description": "HMAC-valid tokens without kid or exp are accepted until 2026-12-15. The effect is opt-out only and the legacy window is hours of issued tokens."
+   }
+  ],
+  "root_cause": "Deliberate compatibility branch.",
+  "intended_behavior": "All tokens expire.",
+  "conditions": [
+   {
+    "kind": "environmental_dependency",
+    "description": "Unsubscribe link signed before kid and exp existed."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Principal described in the input condition, using the target's native interface; static white-box trace only.",
+   "payloads": [
+    "Unsubscribe link signed before kid and exp existed."
+   ],
+   "instructions": [
+    "Read the cited source locations on origin/main.",
+    "Follow the trace from the entrypoint to the sink; no live request was sent."
+   ],
+   "observed_result": "Source trace confirms the described behaviour; no runtime execution was performed under the white-box rules."
+  },
+  "remediation": {
+   "strategy": "Delete the legacy branch (repo rule: no backward compatibility)."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "Needs the stated precondition and lower-trust access is limited."
+   },
+   "impact": {
+    "score": "low",
+    "reason": "Bounded impact as described; no cross-tenant read or unbounded spend demonstrated."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "medium",
+   "reason": "Verified by independent source reading; not executed."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "convex-managed-x402-approval-unreachable",
+  "title": "Owner approval for managed x402 Tools can never succeed",
+  "description": "pricingConfigDecisionAmount is undefined for managed_x402, so the authority request lacks maximumSpend and approvalRequestMatches returns false; approval is refused with invocation_invalid after the owner sees a quote price. Fail-closed availability defect.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/lib/capabilityExecution/callLifecycle/admissionApprovals.ts",
+    "line": 361,
+    "scope": "admissionApprovals.ts",
+    "description": "Owner approval for managed x402 Tools can never succeed"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/lib/capabilityExecution/callLifecycle/admissionApprovals.ts",
+    "line": 361,
+    "description": "pricingConfigDecisionAmount is undefined for managed_x402, so the authority request lacks maximumSpend and approvalRequestMatches returns false; approval is refused with invocation_invalid after the owner sees a quote pr"
+   }
+  ],
+  "root_cause": "Quote-time authority request and approval match disagree on maximumSpend for managed pricing.",
+  "intended_behavior": "An owner-approved managed x402 call should dispatch.",
+  "conditions": [
+   {
+    "kind": "environmental_dependency",
+    "description": "Approval-required agent calls a managed_x402 Tool, then the owner approves."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Principal described in the input condition, using the target's native interface; static white-box trace only.",
+   "payloads": [
+    "Approval-required agent calls a managed_x402 Tool, then the owner approves."
+   ],
+   "instructions": [
+    "Read the cited source locations on origin/main.",
+    "Follow the trace from the entrypoint to the sink; no live request was sent."
+   ],
+   "observed_result": "Source trace confirms the described behaviour; no runtime execution was performed under the white-box rules."
+  },
+  "remediation": {
+   "strategy": "Carry quote.decisionAudUnits into maximumSpend for managed_x402 requests."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "medium",
+    "reason": "Needs the stated precondition and lower-trust access is limited."
+   },
+   "impact": {
+    "score": "medium",
+    "reason": "Bounded impact as described; no cross-tenant read or unbounded spend demonstrated."
+   },
+   "overall_severity": "medium"
+  },
+  "confidence": {
+   "score": "medium",
+   "reason": "Verified by independent source reading; not executed."
+  }
+ },
+ {
+  "verdict": "needs_validation",
+  "fingerprint": "convex-market-presence-overlapping-chains",
+  "title": "Hourly market presence refresh starts a new self-rescheduling chain with no lock",
+  "description": "Each hourly cron starts a chain that pages 20 rows and reschedules itself; overlap happens only if a pass exceeds an hour. Not attacker reachable.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/marketPresence.ts",
+    "line": 82,
+    "scope": "marketPresence.ts",
+    "description": "Hourly market presence refresh starts a new self-rescheduling chain with no lock"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/marketPresence.ts",
+    "line": 82,
+    "description": "Each hourly cron starts a chain that pages 20 rows and reschedules itself; overlap happens only if a pass exceeds an hour. Not attacker reachable."
+   }
+  ],
+  "claimed_root_cause": "No in-flight marker.",
+  "blockers": [
+   "Production row count and per-page duration."
+  ],
+  "validation_plan": {
+   "deployment": "Convex insights for marketPresence:refresh duration versus table size."
+  }
+ },
+ {
+  "verdict": "needs_validation",
+  "fingerprint": "convex-money-sweep-claim-not-a-lease",
+  "title": "Money sweeps and owner report path do not enforce the claim lease",
+  "description": "claimHandler returns work for any pending row without checking nextWorkAt, so the cron sweep and reportOwner can submit the same refund concurrently; promotionalCredit has the same shape. Finish is idempotent and refund references are deterministic.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/lib/capabilityExecution/paidCallReports/lifecycle.ts",
+    "line": 20,
+    "scope": "lifecycle.ts",
+    "description": "Money sweeps and owner report path do not enforce the claim lease"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/lib/capabilityExecution/paidCallReports/lifecycle.ts",
+    "line": 20,
+    "description": "claimHandler returns work for any pending row without checking nextWorkAt, so the cron sweep and reportOwner can submit the same refund concurrently; promotionalCredit has the same shape. Finish is idempotent and refund "
+   }
+  ],
+  "claimed_root_cause": "Claim does not check or advance a lease.",
+  "blockers": [
+   "Formance behaviour for concurrent identical command references is outside the repo."
+  ],
+  "validation_plan": {
+   "local": "convex-test with two concurrent claims.",
+   "deployment": "confirm Formance rejects or replays a duplicate reference."
+  }
+ },
+ {
+  "verdict": "rejected",
+  "fingerprint": "convex-monthly-exposure-undefined-units",
+  "title": "Monthly held exposure may under-count carried-over Calls",
+  "description": "Possible exclusion of rows without buyerAmountUnits.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/lib/money/monthlyBudget/exposure.ts",
+    "line": 24,
+    "scope": "exposure.ts",
+    "description": "Monthly held exposure may under-count carried-over Calls"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/lib/money/monthlyBudget/exposure.ts",
+    "line": 24,
+    "description": "Possible exclusion of rows without buyerAmountUnits."
+   }
+  ],
+  "claimed_root_cause": "undefined sorts below strings so lt('0') includes them, and CARRY_STATES covers them.",
+  "reason": "undefined sorts below strings so lt('0') includes them, and CARRY_STATES covers them."
+ },
+ {
+  "verdict": "needs_validation",
+  "fingerprint": "convex-oauth-grant-read-admission-returns-secrets",
+  "title": "Replayable read admissions gate public queries returning claim tokens",
+  "description": "getGrantByHash and getGrantByRef return the full grant including deliveryClaimToken and issuanceKey under a replayable read admission.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/agentAccessOAuth.ts",
+    "line": 82,
+    "scope": "agentAccessOAuth.ts",
+    "description": "Replayable read admissions gate public queries returning claim tokens"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/agentAccessOAuth.ts",
+    "line": 82,
+    "description": "getGrantByHash and getGrantByRef return the full grant including deliveryClaimToken and issuanceKey under a replayable read admission."
+   }
+  ],
+  "claimed_root_cause": "Verify-only admission plus unfiltered projection.",
+  "blockers": [
+   "Whether admission arguments can leak via logs."
+  ],
+  "validation_plan": {
+   "deployment": "check Convex function-arg logging and Sentry breadcrumbs; strip secrets from the query return."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "convex-oauth-register-unbounded-client-rows",
+  "title": "Unbounded anonymous client row creation via /oauth/register",
+  "description": "Every well-formed registration inserts a row; nothing deletes clients and the only limit is 5/min per ingress IP.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/lib/agentAccess/oauth/clients.ts",
+    "line": 20,
+    "scope": "clients.ts",
+    "description": "Unbounded anonymous client row creation via /oauth/register"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/lib/agentAccess/oauth/clients.ts",
+    "line": 20,
+    "description": "Every well-formed registration inserts a row; nothing deletes clients and the only limit is 5/min per ingress IP."
+   }
+  ],
+  "root_cause": "No retention or global cap.",
+  "intended_behavior": "Registry growth should be bounded.",
+  "conditions": [
+   {
+    "kind": "environmental_dependency",
+    "description": "POST /oauth/register from many IPs."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Principal described in the input condition, using the target's native interface; static white-box trace only.",
+   "payloads": [
+    "POST /oauth/register from many IPs."
+   ],
+   "instructions": [
+    "Read the cited source locations on origin/main.",
+    "Follow the trace from the entrypoint to the sink; no live request was sent."
+   ],
+   "observed_result": "Source trace confirms the described behaviour; no runtime execution was performed under the white-box rules."
+  },
+  "remediation": {
+   "strategy": "Add TTL cleanup for unused clients and a global registration budget."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "Needs the stated precondition and lower-trust access is limited."
+   },
+   "impact": {
+    "score": "low",
+    "reason": "Bounded impact as described; no cross-tenant read or unbounded spend demonstrated."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "medium",
+   "reason": "Verified by independent source reading; not executed."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "convex-owner-republish-ignores-offboarding-freeze",
+  "title": "Owner republish reactivates a withdrawn Tool during offboarding routeability freeze",
+  "description": "republishOwnerCapabilityHandler never calls providerRouteabilityIsFrozen, so a provider under an open offboarding freeze can restore a withdrawn revision to current. Calls stay refused and completion is blocked, so impact is state integrity only.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/lib/capabilitySupply/ownerFunnel/republish.ts",
+    "line": 16,
+    "scope": "republish.ts",
+    "description": "Owner republish reactivates a withdrawn Tool during offboarding routeability freeze"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/lib/capabilitySupply/ownerFunnel/republish.ts",
+    "line": 16,
+    "description": "republishOwnerCapabilityHandler never calls providerRouteabilityIsFrozen, so a provider under an open offboarding freeze can restore a withdrawn revision to current. Calls stay refused and completion is blocked, so impac"
+   }
+  ],
+  "root_cause": "The freeze check exists in publish/prepared.ts and providerConnectionOwner/x402.ts but not in the republish write path.",
+  "intended_behavior": "No new current publication should be created while routeability is frozen.",
+  "conditions": [
+   {
+    "kind": "environmental_dependency",
+    "description": "republishOwnerCapability mutation by the business owner for a withdrawn Tool while an offboarding case has routeabilityFrozenAt set."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Principal described in the input condition, using the target's native interface; static white-box trace only.",
+   "payloads": [
+    "republishOwnerCapability mutation by the business owner for a withdrawn Tool while an offboarding case has routeabilityFrozenAt set."
+   ],
+   "instructions": [
+    "Read the cited source locations on origin/main.",
+    "Follow the trace from the entrypoint to the sink; no live request was sent."
+   ],
+   "observed_result": "Source trace confirms the described behaviour; no runtime execution was performed under the white-box rules."
+  },
+  "remediation": {
+   "strategy": "Call providerRouteabilityIsFrozen in republishOwnerCapabilityHandler and refuse while frozen."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "Needs the stated precondition and lower-trust access is limited."
+   },
+   "impact": {
+    "score": "low",
+    "reason": "Bounded impact as described; no cross-tenant read or unbounded spend demonstrated."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "medium",
+   "reason": "Verified by independent source reading; not executed."
+  }
+ },
+ {
+  "verdict": "rejected",
+  "fingerprint": "convex-owner-runtime-prepare-ignores-freeze",
+  "title": "Owner runtime-prepare functions skip the offboarding freeze",
+  "description": "prepareOwnerMcpRuntime and HTTP variants lack providerRouteabilityIsFrozen.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/lib/capabilitySupply/providerConnectionOwner/runtime.ts",
+    "line": 114,
+    "scope": "runtime.ts",
+    "description": "Owner runtime-prepare functions skip the offboarding freeze"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/lib/capabilitySupply/providerConnectionOwner/runtime.ts",
+    "line": 114,
+    "description": "prepareOwnerMcpRuntime and HTTP variants lack providerRouteabilityIsFrozen."
+   }
+  ],
+  "claimed_root_cause": "Owner acting on own connection crosses no boundary and rotation commit is freeze-gated at finalize.",
+  "reason": "Owner acting on own connection crosses no boundary and rotation commit is freeze-gated at finalize."
+ },
+ {
+  "verdict": "needs_validation",
+  "fingerprint": "convex-owner-self-resolves-financial-hold",
+  "title": "Account owner can self-resolve a financial-scope reconciliation hold",
+  "description": "resolveOwnerCase needs only owner identity, confirmation equal to caseRef and free text; the processor_difference admission is minted from the owner session. A partial Stripe refund opens an account-scope hold with no reversal booked; resolution unlocks spend.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/moneyReconciliationCases.ts",
+    "line": 75,
+    "scope": "moneyReconciliationCases.ts",
+    "description": "Account owner can self-resolve a financial-scope reconciliation hold"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/moneyReconciliationCases.ts",
+    "line": 75,
+    "description": "resolveOwnerCase needs only owner identity, confirmation equal to caseRef and free text; the processor_difference admission is minted from the owner session. A partial Stripe refund opens an account-scope hold with no re"
+   }
+  ],
+  "claimed_root_cause": "No independent verification of hold release.",
+  "blockers": [
+   "Whether any operator or ledger step reverses credit after a partial refund."
+  ],
+  "validation_plan": {
+   "local": "sandbox fixture with partial refund, resolveOwnerCase, then paid-call admission."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "convex-owner-x402-staging-ignores-offboarding-freeze",
+  "title": "Owner x402 staging creates a current publication during offboarding freeze",
+  "description": "stageOwnerX402CapabilityHandler, reuseExactStagedPublication and the staging publication ports have no freeze check, so a frozen provider can stage or patch a current publication and schedule a probe.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/lib/capabilitySupply/ownerStaging/admission.ts",
+    "line": 23,
+    "scope": "admission.ts",
+    "description": "Owner x402 staging creates a current publication during offboarding freeze"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/lib/capabilitySupply/ownerStaging/admission.ts",
+    "line": 23,
+    "description": "stageOwnerX402CapabilityHandler, reuseExactStagedPublication and the staging publication ports have no freeze check, so a frozen provider can stage or patch a current publication and schedule a probe."
+   }
+  ],
+  "root_cause": "Missing providerRouteabilityIsFrozen on the staging path while sibling publish and connection paths enforce it.",
+  "intended_behavior": "Freeze should block all new publication state.",
+  "conditions": [
+   {
+    "kind": "environmental_dependency",
+    "description": "stageOwnerX402Capability mutation by a frozen provider's owner with an existing exact catalog target and connection."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Principal described in the input condition, using the target's native interface; static white-box trace only.",
+   "payloads": [
+    "stageOwnerX402Capability mutation by a frozen provider's owner with an existing exact catalog target and connection."
+   ],
+   "instructions": [
+    "Read the cited source locations on origin/main.",
+    "Follow the trace from the entrypoint to the sink; no live request was sent."
+   ],
+   "observed_result": "Source trace confirms the described behaviour; no runtime execution was performed under the white-box rules."
+  },
+  "remediation": {
+   "strategy": "Add the freeze check in stageOwnerX402CapabilityHandler before reuse or publish."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "Needs the stated precondition and lower-trust access is limited."
+   },
+   "impact": {
+    "score": "low",
+    "reason": "Bounded impact as described; no cross-tenant read or unbounded spend demonstrated."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "medium",
+   "reason": "Verified by independent source reading; not executed."
+  }
+ },
+ {
+  "verdict": "rejected",
+  "fingerprint": "convex-period-cap-relies-on-formance-no-overdraft",
+  "title": "Reserve-time period cap compares per-call amount to limit only",
+  "description": "Local check lacks used and reserved subtraction.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/lib/capabilityExecution/callLifecycle/admissionRefusal.ts",
+    "line": 180,
+    "scope": "admissionRefusal.ts",
+    "description": "Reserve-time period cap compares per-call amount to limit only"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/lib/capabilityExecution/callLifecycle/admissionRefusal.ts",
+    "line": 180,
+    "description": "Local check lacks used and reserved subtraction."
+   }
+  ],
+  "claimed_root_cause": "The reserve template has no overdraft clause and schema digest drift fails closed",
+  "reason": "The reserve template has no overdraft clause and schema digest drift fails closed; ledger enforces the cap."
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "convex-provider-consequence-body-before-bearer",
+  "title": "Provider-consequence HTTP handlers buffer request bodies before authentication",
+  "description": "bearer() is a format check; boundedJson calls request.text() on the full body before the byte cap, for begin, attest, complete, abort and the x402 RPC. Platform body limits bound it; impact is wasted compute.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/lib/capabilityExecution/providerConsequence/http.ts",
+    "line": 63,
+    "scope": "http.ts",
+    "description": "Provider-consequence HTTP handlers buffer request bodies before authentication"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/lib/capabilityExecution/providerConsequence/http.ts",
+    "line": 63,
+    "description": "bearer() is a format check; boundedJson calls request.text() on the full body before the byte cap, for begin, attest, complete, abort and the x402 RPC. Platform body limits bound it; impact is wasted compute."
+   }
+  ],
+  "root_cause": "Body read precedes the token digest check.",
+  "intended_behavior": "Authenticate before reading bodies.",
+  "conditions": [
+   {
+    "kind": "environmental_dependency",
+    "description": "Unauthenticated POST with a well-formed 43 to 128 char bearer and a large chunked body."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Principal described in the input condition, using the target's native interface; static white-box trace only.",
+   "payloads": [
+    "Unauthenticated POST with a well-formed 43 to 128 char bearer and a large chunked body."
+   ],
+   "instructions": [
+    "Read the cited source locations on origin/main.",
+    "Follow the trace from the entrypoint to the sink; no live request was sent."
+   ],
+   "observed_result": "Source trace confirms the described behaviour; no runtime execution was performed under the white-box rules."
+  },
+  "remediation": {
+   "strategy": "Return 401 when no bearer before reading and cap bytes while streaming; rate-limit by IP."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "Needs the stated precondition and lower-trust access is limited."
+   },
+   "impact": {
+    "score": "low",
+    "reason": "Bounded impact as described; no cross-tenant read or unbounded spend demonstrated."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "medium",
+   "reason": "Verified by independent source reading; not executed."
+  }
+ },
+ {
+  "verdict": "rejected",
+  "fingerprint": "convex-provider-reversal-proof-unread",
+  "title": "Provider settlement reversal accepts a proof Convex never reads",
+  "description": "The optional proof is unread by Convex.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/lib/money/providerObligations/contracts.ts",
+    "line": 16,
+    "scope": "contracts.ts",
+    "description": "Provider settlement reversal accepts a proof Convex never reads"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/lib/money/providerObligations/contracts.ts",
+    "line": 16,
+    "description": "The optional proof is unread by Convex."
+   }
+  ],
+  "claimed_root_cause": "The proof is inside the signed command digest and single-use admission",
+  "reason": "The proof is inside the signed command digest and single-use admission; strict check is server side."
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "convex-public-tool-projection-ignores-freeze",
+  "title": "Frozen provider Tools shown as routeable in public search, detail and graph",
+  "description": "routeable is computed from qualification status alone; freeze only suppresses inspection_required. providerTools/projection.ts computes eligible && !frozen, so the public view is inconsistent. Calls and quotes are still refused.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/lib/capabilitySupply/tool/projection.ts",
+    "line": 184,
+    "scope": "projection.ts",
+    "description": "Frozen provider Tools shown as routeable in public search, detail and graph"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/lib/capabilitySupply/tool/projection.ts",
+    "line": 184,
+    "description": "routeable is computed from qualification status alone; freeze only suppresses inspection_required. providerTools/projection.ts computes eligible && !frozen, so the public view is inconsistent. Calls and quotes are still "
+   }
+  ],
+  "root_cause": "qualifySuppliedCandidate has no freeze reason and the public projection does not combine it with toolProviderRouteabilityIsFrozen.",
+  "intended_behavior": "Public routing signal should match the execution gate.",
+  "conditions": [
+   {
+    "kind": "environmental_dependency",
+    "description": "Public search or detail query for a Tool whose business has an open freeze case."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Principal described in the input condition, using the target's native interface; static white-box trace only.",
+   "payloads": [
+    "Public search or detail query for a Tool whose business has an open freeze case."
+   ],
+   "instructions": [
+    "Read the cited source locations on origin/main.",
+    "Follow the trace from the entrypoint to the sink; no live request was sent."
+   ],
+   "observed_result": "Source trace confirms the described behaviour; no runtime execution was performed under the white-box rules."
+  },
+  "remediation": {
+   "strategy": "Compute routeable = eligible && !routeabilityFrozen in tool/projection.ts and gate admittedToolRef in the graph."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "Needs the stated precondition and lower-trust access is limited."
+   },
+   "impact": {
+    "score": "low",
+    "reason": "Bounded impact as described; no cross-tenant read or unbounded spend demonstrated."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "medium",
+   "reason": "Verified by independent source reading; not executed."
+  }
+ },
+ {
+  "verdict": "needs_validation",
+  "fingerprint": "convex-quote-resolve-publishes-under-system-identity",
+  "title": "Quote resolve admits a buyer-chosen resource and publishes it under the system workload identity",
+  "description": "An unknown URL ref triggers liveResource and facilitator discovery reconcile under the workload principal, creating a system-owned published business and observed_external tool without provider consent.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/x402Directory.ts",
+    "line": 126,
+    "scope": "x402Directory.ts",
+    "description": "Quote resolve admits a buyer-chosen resource and publishes it under the system workload identity"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/x402Directory.ts",
+    "line": 126,
+    "description": "An unknown URL ref triggers liveResource and facilitator discovery reconcile under the workload principal, creating a system-owned published business and observed_external tool without provider consent."
+   }
+  ],
+  "claimed_root_cause": "Buyer-selected URL reaches a system-authority write.",
+  "blockers": [
+   "Whether this is intended observed_external policy and whether the endpoint inspector admission gates reject arbitrary hosts."
+  ],
+  "validation_plan": {
+   "local": "test resolve with an arbitrary host against the discovery admission.",
+   "deployment": "confirm product policy."
+  }
+ },
+ {
+  "verdict": "rejected",
+  "fingerprint": "convex-rate-evidence-version-unbound-amount",
+  "title": "Rate-evidence version branch skips provider-amount binding",
+  "description": "executable-rate version is not bound to sourceUsdcUnits.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/lib/money/managedCall/booking.ts",
+    "line": 79,
+    "scope": "booking.ts",
+    "description": "Rate-evidence version branch skips provider-amount binding"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/lib/money/managedCall/booking.ts",
+    "line": 79,
+    "description": "executable-rate version is not bound to sourceUsdcUnits."
+   }
+  ],
+  "claimed_root_cause": "No writer emits that version and sandbox pin plus recompute apply.",
+  "reason": "No writer emits that version and sandbox pin plus recompute apply."
+ },
+ {
+  "verdict": "rejected",
+  "fingerprint": "convex-reconnect-injects-payee-evidence",
+  "title": "Reconnect lets an agent inject x402 payee evidence refs",
+  "description": "Reconnect forwards evidenceRefs unfiltered.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/lib/capabilitySupply/ownerStaging/reuse.ts",
+    "line": 81,
+    "scope": "reuse.ts",
+    "description": "Reconnect lets an agent inject x402 payee evidence refs"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/lib/capabilitySupply/ownerStaging/reuse.ts",
+    "line": 81,
+    "description": "Reconnect forwards evidenceRefs unfiltered."
+   }
+  ],
+  "claimed_root_cause": "Domain reauthorize unions refs, so a second payee-claim ref makes oneEvidenceRef undefined and staging refuses.",
+  "reason": "Domain reauthorize unions refs, so a second payee-claim ref makes oneEvidenceRef undefined and staging refuses."
+ },
+ {
+  "verdict": "rejected",
+  "fingerprint": "convex-removal-dispute-csrf-origin-self-check",
+  "title": "Removal-dispute CSRF origin check compares admission origin to itself",
+  "description": "Same tautology as the source-write origin finding.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/lib/security/sourceWrite/admission.ts",
+    "line": 84,
+    "scope": "admission.ts",
+    "description": "Removal-dispute CSRF origin check compares admission origin to itself"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/lib/security/sourceWrite/admission.ts",
+    "line": 84,
+    "description": "Same tautology as the source-write origin finding."
+   }
+  ],
+  "claimed_root_cause": "Framework CSRF middleware runs first and the endpoint is anonymous so no ambient credential exists.",
+  "reason": "Framework CSRF middleware runs first and the endpoint is anonymous so no ambient credential exists."
+ },
+ {
+  "verdict": "needs_validation",
+  "fingerprint": "convex-resend-webhook-body-before-verify",
+  "title": "Resend webhook route reads and forwards the body before any gate",
+  "description": "request.text() and a Node action run before Svix verification, with no rate limit.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/http.ts",
+    "line": 43,
+    "scope": "http.ts",
+    "description": "Resend webhook route reads and forwards the body before any gate"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/http.ts",
+    "line": 43,
+    "description": "request.text() and a Node action run before Svix verification, with no rate limit."
+   }
+  ],
+  "claimed_root_cause": "No size cap before action.",
+  "blockers": [
+   "Convex body and argument limits."
+  ],
+  "validation_plan": {
+   "deployment": "check platform limits."
+  }
+ },
+ {
+  "verdict": "rejected",
+  "fingerprint": "convex-reserve-insufficient-balance-unmapped",
+  "title": "Formance period rejection path to insufficient_balance not traced",
+  "description": "No producer of insufficient_balance on reserve.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/lib/capabilityExecution/callLifecycle/admissionReservation.ts",
+    "line": 39,
+    "scope": "admissionReservation.ts",
+    "description": "Formance period rejection path to insufficient_balance not traced"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/lib/capabilityExecution/callLifecycle/admissionReservation.ts",
+    "line": 39,
+    "description": "No producer of insufficient_balance on reserve."
+   }
+  ],
+  "claimed_root_cause": "A rejected reserve bulk returns refused and abandon yields commercial_policy_unavailable",
+  "reason": "A rejected reserve bulk returns refused and abandon yields commercial_policy_unavailable; no fail-open."
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "convex-retire-does-not-close-owned-account",
+  "title": "Personal retire does not close the account, so a retired owner blocks all members",
+  "description": "Retire marks the principal retired but leaves the account and ownership active, so requireCurrentOwnerActive denies every member. The deletion eligibility rule is dead code with no caller. Fail-closed availability and lifecycle defect; Clerk self-deletion can trigger it.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/lib/principalAccount/personalAccount/retire.ts",
+    "line": 135,
+    "scope": "retire.ts",
+    "description": "Personal retire does not close the account, so a retired owner blocks all members"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/lib/principalAccount/personalAccount/retire.ts",
+    "line": 135,
+    "description": "Retire marks the principal retired but leaves the account and ownership active, so requireCurrentOwnerActive denies every member. The deletion eligibility rule is dead code with no caller. Fail-closed availability and li"
+   }
+  ],
+  "root_cause": "No last-owner check or ownership transfer or close in retire.",
+  "intended_behavior": "Workspace members keep access or the account closes cleanly.",
+  "conditions": [
+   {
+    "kind": "environmental_dependency",
+    "description": "Clerk user.deleted for the current owner of a populated workspace."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Principal described in the input condition, using the target's native interface; static white-box trace only.",
+   "payloads": [
+    "Clerk user.deleted for the current owner of a populated workspace."
+   ],
+   "instructions": [
+    "Read the cited source locations on origin/main.",
+    "Follow the trace from the entrypoint to the sink; no live request was sent."
+   ],
+   "observed_result": "Source trace confirms the described behaviour; no runtime execution was performed under the white-box rules."
+  },
+  "remediation": {
+   "strategy": "Enforce eligibility server-side and transfer or close the account before retiring an owner."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "medium",
+    "reason": "Needs the stated precondition and lower-trust access is limited."
+   },
+   "impact": {
+    "score": "medium",
+    "reason": "Bounded impact as described; no cross-tenant read or unbounded spend demonstrated."
+   },
+   "overall_severity": "medium"
+  },
+  "confidence": {
+   "score": "medium",
+   "reason": "Verified by independent source reading; not executed."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "convex-retire-leaves-admin-membership-active",
+  "title": "Personal account retire leaves the admin membership active",
+  "description": "retire never patches adminMemberships and resolveAdminAuthority does not consult principal lifecycle, so an unexpired JWT for the deleted Clerk user can still pass admin checks. Window is the JWT lifetime.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/lib/principalAccount/personalAccount/retire.ts",
+    "line": 135,
+    "scope": "retire.ts",
+    "description": "Personal account retire leaves the admin membership active"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/lib/principalAccount/personalAccount/retire.ts",
+    "line": 135,
+    "description": "retire never patches adminMemberships and resolveAdminAuthority does not consult principal lifecycle, so an unexpired JWT for the deleted Clerk user can still pass admin checks. Window is the JWT lifetime."
+   }
+  ],
+  "root_cause": "Admin membership not part of retire cascade.",
+  "intended_behavior": "Retired people hold no admin authority.",
+  "conditions": [
+   {
+    "kind": "environmental_dependency",
+    "description": "Admin request with a pre-deletion Clerk JWT."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Principal described in the input condition, using the target's native interface; static white-box trace only.",
+   "payloads": [
+    "Admin request with a pre-deletion Clerk JWT."
+   ],
+   "instructions": [
+    "Read the cited source locations on origin/main.",
+    "Follow the trace from the entrypoint to the sink; no live request was sent."
+   ],
+   "observed_result": "Source trace confirms the described behaviour; no runtime execution was performed under the white-box rules."
+  },
+  "remediation": {
+   "strategy": "End adminMemberships in retire or check principal lifecycle in readActiveAdminMembership."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "Needs the stated precondition and lower-trust access is limited."
+   },
+   "impact": {
+    "score": "low",
+    "reason": "Bounded impact as described; no cross-tenant read or unbounded spend demonstrated."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "medium",
+   "reason": "Verified by independent source reading; not executed."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "convex-retire-machine-agent-cap-and-owner-match",
+  "title": "Retire revokes machine agents with a silent 64 cap and skips agents lacking ownerTokenIdentifier",
+  "description": "Cascade breaks at 64 agents silently and skips agents whose ownerTokenIdentifier differs or is undefined, so survivors keep grants, credentials and refresh families, which can still rotate credentials. Call admission still fails on the inactive owner.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/lib/principalAccount/personalAccount/retireDependents.ts",
+    "line": 30,
+    "scope": "retireDependents.ts",
+    "description": "Retire revokes machine agents with a silent 64 cap and skips agents lacking ownerTokenIdentifier"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/lib/principalAccount/personalAccount/retireDependents.ts",
+    "line": 30,
+    "description": "Cascade breaks at 64 agents silently and skips agents whose ownerTokenIdentifier differs or is undefined, so survivors keep grants, credentials and refresh families, which can still rotate credentials. Call admission sti"
+   }
+  ],
+  "root_cause": "Bounded cascade without continuation or fallback to membership creator.",
+  "intended_behavior": "All dependent credentials revoked on retire.",
+  "conditions": [
+   {
+    "kind": "environmental_dependency",
+    "description": "Retire an owner with over 64 agents or agents without ownerTokenIdentifier."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Principal described in the input condition, using the target's native interface; static white-box trace only.",
+   "payloads": [
+    "Retire an owner with over 64 agents or agents without ownerTokenIdentifier."
+   ],
+   "instructions": [
+    "Read the cited source locations on origin/main.",
+    "Follow the trace from the entrypoint to the sink; no live request was sent."
+   ],
+   "observed_result": "Source trace confirms the described behaviour; no runtime execution was performed under the white-box rules."
+  },
+  "remediation": {
+   "strategy": "Page through all agents, reuse the machineCascade fallback, and fail loudly when work remains."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "medium",
+    "reason": "Needs the stated precondition and lower-trust access is limited."
+   },
+   "impact": {
+    "score": "medium",
+    "reason": "Bounded impact as described; no cross-tenant read or unbounded spend demonstrated."
+   },
+   "overall_severity": "medium"
+  },
+  "confidence": {
+   "score": "medium",
+   "reason": "Verified by independent source reading; not executed."
+  }
+ },
+ {
+  "verdict": "needs_validation",
+  "fingerprint": "convex-scheduled-chat-skips-session-ended-check",
+  "title": "Scheduled chat authorization skips the session-ended check",
+  "description": "Identity-free resolution skips requireCurrentInteractiveSession, and session.ended neither revokes credentials nor advances the cutoff, so a scheduled generation runs until credential expiry (about 60 s). Scheduled turns lack purchase tools.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/lib/principalAccount/interactiveAuthority/factResolution.ts",
+    "line": 110,
+    "scope": "factResolution.ts",
+    "description": "Scheduled chat authorization skips the session-ended check"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/lib/principalAccount/interactiveAuthority/factResolution.ts",
+    "line": 110,
+    "description": "Identity-free resolution skips requireCurrentInteractiveSession, and session.ended neither revokes credentials nor advances the cutoff, so a scheduled generation runs until credential expiry (about 60 s). Scheduled turns"
+   }
+  ],
+  "claimed_root_cause": "No identity to bind a session proof.",
+  "blockers": [
+   "Whether read tools re-check authority per call and real credential window."
+  ],
+  "validation_plan": {
+   "local": "schedule, apply session.ended, authorize before and after expiry."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "convex-secret-lifecycle-journal-replace-binding",
+  "title": "journal_replace skips the row-to-caller authority binding that getByIdempotency enforces",
+  "description": "replace() looks up the row by idempotencyRef and checks state and identity fields but not row.authority against the caller authority, unlike getByIdempotency. Requires the internal RPC bearer and a same-account snapshot covering the secret.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/lib/secrets/lifecycle/persistence.ts",
+    "line": 70,
+    "scope": "persistence.ts",
+    "description": "journal_replace skips the row-to-caller authority binding that getByIdempotency enforces"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/lib/secrets/lifecycle/persistence.ts",
+    "line": 70,
+    "description": "replace() looks up the row by idempotencyRef and checks state and identity fields but not row.authority against the caller authority, unlike getByIdempotency. Requires the internal RPC bearer and a same-account snapshot "
+   }
+  ],
+  "root_cause": "Missing authoritiesEqual and accountRef comparison in replace.",
+  "intended_behavior": "Journal rows are writable only under their own authority.",
+  "conditions": [
+   {
+    "kind": "environmental_dependency",
+    "description": "journal_replace with a reconcile-scoped snapshot against another operation's row on the same secret."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Principal described in the input condition, using the target's native interface; static white-box trace only.",
+   "payloads": [
+    "journal_replace with a reconcile-scoped snapshot against another operation's row on the same secret."
+   ],
+   "instructions": [
+    "Read the cited source locations on origin/main.",
+    "Follow the trace from the entrypoint to the sink; no live request was sent."
+   ],
+   "observed_result": "Source trace confirms the described behaviour; no runtime execution was performed under the white-box rules."
+  },
+  "remediation": {
+   "strategy": "Compare row.authority to the caller authority as getByIdempotency does."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "Needs the stated precondition and lower-trust access is limited."
+   },
+   "impact": {
+    "score": "low",
+    "reason": "Bounded impact as described; no cross-tenant read or unbounded spend demonstrated."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "medium",
+   "reason": "Verified by independent source reading; not executed."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "convex-secret-lifecycle-pointer-read-no-snapshot",
+  "title": "pointer_read returns secret pointer metadata without delegation snapshot binding",
+  "description": "readSecretPointer calls getActive with no requireSnapshot, returning secretRef, activeGeneration and revision to a holder of the RPC token who names the account. No secret material returned.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/lib/secrets/lifecycle/persistence.ts",
+    "line": 91,
+    "scope": "persistence.ts",
+    "description": "pointer_read returns secret pointer metadata without delegation snapshot binding"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/lib/secrets/lifecycle/persistence.ts",
+    "line": 91,
+    "description": "readSecretPointer calls getActive with no requireSnapshot, returning secretRef, activeGeneration and revision to a holder of the RPC token who names the account. No secret material returned."
+   }
+  ],
+  "root_cause": "requireSnapshot is called on every other lifecycle operation but not on pointer reads.",
+  "intended_behavior": "All lifecycle reads are snapshot-bound.",
+  "conditions": [
+   {
+    "kind": "environmental_dependency",
+    "description": "pointer_read RPC with the channel bearer, accountRef and secretRef."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Principal described in the input condition, using the target's native interface; static white-box trace only.",
+   "payloads": [
+    "pointer_read RPC with the channel bearer, accountRef and secretRef."
+   ],
+   "instructions": [
+    "Read the cited source locations on origin/main.",
+    "Follow the trace from the entrypoint to the sink; no live request was sent."
+   ],
+   "observed_result": "Source trace confirms the described behaviour; no runtime execution was performed under the white-box rules."
+  },
+  "remediation": {
+   "strategy": "Require a snapshot (with a scope a read can carry) before getActive."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "Needs the stated precondition and lower-trust access is limited."
+   },
+   "impact": {
+    "score": "low",
+    "reason": "Bounded impact as described; no cross-tenant read or unbounded spend demonstrated."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "medium",
+   "reason": "Verified by independent source reading; not executed."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "convex-source-read-admission-replayable",
+  "title": "Source read admissions are not single-use",
+  "description": "requireSourceRead never consumes the nonce, so a captured read admission replays for up to 5 minutes for agent list and read of provider connections. Convex queries cannot write, so the fix is a shorter window or moving the read.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/lib/security/sourceWrite/admission.ts",
+    "line": 5,
+    "scope": "admission.ts",
+    "description": "Source read admissions are not single-use"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/lib/security/sourceWrite/admission.ts",
+    "line": 5,
+    "description": "requireSourceRead never consumes the nonce, so a captured read admission replays for up to 5 minutes for agent list and read of provider connections. Convex queries cannot write, so the fix is a shorter window or moving "
+   }
+  ],
+  "root_cause": "Verify-only on the read path.",
+  "intended_behavior": "Limited replay.",
+  "conditions": [
+   {
+    "kind": "environmental_dependency",
+    "description": "Replay a captured list request within 5 minutes."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Principal described in the input condition, using the target's native interface; static white-box trace only.",
+   "payloads": [
+    "Replay a captured list request within 5 minutes."
+   ],
+   "instructions": [
+    "Read the cited source locations on origin/main.",
+    "Follow the trace from the entrypoint to the sink; no live request was sent."
+   ],
+   "observed_result": "Source trace confirms the described behaviour; no runtime execution was performed under the white-box rules."
+  },
+  "remediation": {
+   "strategy": "Shorten the read max age or serve these reads from a mutation that consumes the nonce."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "Needs the stated precondition and lower-trust access is limited."
+   },
+   "impact": {
+    "score": "low",
+    "reason": "Bounded impact as described; no cross-tenant read or unbounded spend demonstrated."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "medium",
+   "reason": "Verified by independent source reading; not executed."
+  }
+ },
+ {
+  "verdict": "needs_validation",
+  "fingerprint": "convex-strict-consequence-proof-first-factor-age",
+  "title": "Strict consequence proof ignores first-factor age when a second factor is present",
+  "description": "deriveStrictConsequenceProof anchors on the second factor, matching Clerk's strict preset; the MFA path uses max.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/lib/authority/consequence/proof.ts",
+    "line": 108,
+    "scope": "proof.ts",
+    "description": "Strict consequence proof ignores first-factor age when a second factor is present"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/lib/authority/consequence/proof.ts",
+    "line": 108,
+    "description": "deriveStrictConsequenceProof anchors on the second factor, matching Clerk's strict preset; the MFA path uses max."
+   }
+  ],
+  "claimed_root_cause": "Asymmetry between strict and MFA derivations.",
+  "blockers": [
+   "Product policy and Clerk behaviour."
+  ],
+  "validation_plan": {
+   "deployment": "decide whether strict consequences need fresh first factor."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "convex-stripe-inbox-identity-conflict-downgrades-applied",
+  "title": "Identity-conflict branch downgrades an applied inbox row to reconciliation_required",
+  "description": "ingest() patches any existing row, including applied, to reconciliation_required when digest, type or destination differ, and complete() then refuses to update it. Requires a differing body under one event id from Stripe.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/moneyStripeWebhookInbox.ts",
+    "line": 87,
+    "scope": "moneyStripeWebhookInbox.ts",
+    "description": "Identity-conflict branch downgrades an applied inbox row to reconciliation_required"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/moneyStripeWebhookInbox.ts",
+    "line": 87,
+    "description": "ingest() patches any existing row, including applied, to reconciliation_required when digest, type or destination differ, and complete() then refuses to update it. Requires a differing body under one event id from Stripe"
+   }
+  ],
+  "root_cause": "The mismatch branch does not check current state.",
+  "intended_behavior": "An applied event should stay applied.",
+  "conditions": [
+   {
+    "kind": "environmental_dependency",
+    "description": "Same stripeEventId delivered with a different payload digest."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Principal described in the input condition, using the target's native interface; static white-box trace only.",
+   "payloads": [
+    "Same stripeEventId delivered with a different payload digest."
+   ],
+   "instructions": [
+    "Read the cited source locations on origin/main.",
+    "Follow the trace from the entrypoint to the sink; no live request was sent."
+   ],
+   "observed_result": "Source trace confirms the described behaviour; no runtime execution was performed under the white-box rules."
+  },
+  "remediation": {
+   "strategy": "Leave applied rows untouched and record the conflict in a separate field."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "Needs the stated precondition and lower-trust access is limited."
+   },
+   "impact": {
+    "score": "low",
+    "reason": "Bounded impact as described; no cross-tenant read or unbounded spend demonstrated."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "medium",
+   "reason": "Verified by independent source reading; not executed."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "convex-stripe-reconciliation-required-silent",
+  "title": "Terminal reconciliation_required top-ups are never surfaced or redriven",
+  "description": "A non-retryable worker refusal marks the inbox row reconciliation_required; redelivery returns replayed with HTTP 200 so Stripe stops retrying, and listStuckForOperator has no callers or cron. The only recovery is owner-initiated fulfillReturn.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/moneyStripeWebhookInbox.ts",
+    "line": 85,
+    "scope": "moneyStripeWebhookInbox.ts",
+    "description": "Terminal reconciliation_required top-ups are never surfaced or redriven"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/moneyStripeWebhookInbox.ts",
+    "line": 85,
+    "description": "A non-retryable worker refusal marks the inbox row reconciliation_required; redelivery returns replayed with HTTP 200 so Stripe stops retrying, and listStuckForOperator has no callers or cron. The only recovery is owner-"
+   }
+  ],
+  "root_cause": "No alert consumer for the stuck-row query.",
+  "intended_behavior": "Paid top-ups needing reconciliation should reach an operator.",
+  "conditions": [
+   {
+    "kind": "environmental_dependency",
+    "description": "Verified Stripe checkout whose worker returns a non-retryable refusal."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Principal described in the input condition, using the target's native interface; static white-box trace only.",
+   "payloads": [
+    "Verified Stripe checkout whose worker returns a non-retryable refusal."
+   ],
+   "instructions": [
+    "Read the cited source locations on origin/main.",
+    "Follow the trace from the entrypoint to the sink; no live request was sent."
+   ],
+   "observed_result": "Source trace confirms the described behaviour; no runtime execution was performed under the white-box rules."
+  },
+  "remediation": {
+   "strategy": "Schedule an operator alert or cron over listStuckForOperator and surface the count in the operator digest."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "Needs the stated precondition and lower-trust access is limited."
+   },
+   "impact": {
+    "score": "low",
+    "reason": "Bounded impact as described; no cross-tenant read or unbounded spend demonstrated."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "medium",
+   "reason": "Verified by independent source reading; not executed."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "convex-treasury-environment-oracle",
+  "title": "Unauthenticated environment oracle in payments and treasury mutations",
+  "description": "setPaymentsPaused, setPaymentsAudience and changeThresholds return environment_mismatch before runAdminCommand's authority check, so an anonymous caller learns whether a supplied environment matches the deployment.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/adminTreasuryCommands.ts",
+    "line": 17,
+    "scope": "adminTreasuryCommands.ts",
+    "description": "Unauthenticated environment oracle in payments and treasury mutations"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/adminTreasuryCommands.ts",
+    "line": 17,
+    "description": "setPaymentsPaused, setPaymentsAudience and changeThresholds return environment_mismatch before runAdminCommand's authority check, so an anonymous caller learns whether a supplied environment matches the deployment."
+   }
+  ],
+  "root_cause": "treasuryCommandEnvironmentMatches runs before authority resolution, giving a distinct refusal code to unauthenticated callers.",
+  "intended_behavior": "Admin commands should reveal nothing to callers lacking admin authority.",
+  "conditions": [
+   {
+    "kind": "environmental_dependency",
+    "description": "Public mutation call with input.environment set to production and then sandbox, no identity."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Principal described in the input condition, using the target's native interface; static white-box trace only.",
+   "payloads": [
+    "Public mutation call with input.environment set to production and then sandbox, no identity."
+   ],
+   "instructions": [
+    "Read the cited source locations on origin/main.",
+    "Follow the trace from the entrypoint to the sink; no live request was sent."
+   ],
+   "observed_result": "Source trace confirms the described behaviour; no runtime execution was performed under the white-box rules."
+  },
+  "remediation": {
+   "strategy": "Move the environment check inside runAdminCommand after authority, or return one generic refusal for both cases."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "Needs the stated precondition and lower-trust access is limited."
+   },
+   "impact": {
+    "score": "low",
+    "reason": "Bounded impact as described; no cross-tenant read or unbounded spend demonstrated."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "medium",
+   "reason": "Verified by independent source reading; not executed."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "convex-url-quote-egress-before-authority-mode",
+  "title": "read_only key triggers unpaid outbound GET and directory publish via URL Quote",
+  "description": "admitCallableResolve checks only hasCurrentAgentGrant; resolveCallableRef then does a guarded unpaid GET and facilitator discovery publish. authorityMode is checked later and only for managed pricing. The GET carries no input or credentials; publish is documented behaviour of the system workload.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/lib/capabilityExecution/quotes/quoteAction.ts",
+    "line": 54,
+    "scope": "quoteAction.ts",
+    "description": "read_only key triggers unpaid outbound GET and directory publish via URL Quote"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/lib/capabilityExecution/quotes/quoteAction.ts",
+    "line": 54,
+    "description": "admitCallableResolve checks only hasCurrentAgentGrant; resolveCallableRef then does a guarded unpaid GET and facilitator discovery publish. authorityMode is checked later and only for managed pricing. The GET carries no "
+   }
+  ],
+  "root_cause": "No authority-mode check before URL resolution.",
+  "intended_behavior": "read_only keys should not cause egress or catalog writes.",
+  "conditions": [
+   {
+    "kind": "environmental_dependency",
+    "description": "Quote request for an https URL ref with a read_only key."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Principal described in the input condition, using the target's native interface; static white-box trace only.",
+   "payloads": [
+    "Quote request for an https URL ref with a read_only key."
+   ],
+   "instructions": [
+    "Read the cited source locations on origin/main.",
+    "Follow the trace from the entrypoint to the sink; no live request was sent."
+   ],
+   "observed_result": "Source trace confirms the described behaviour; no runtime execution was performed under the white-box rules."
+  },
+  "remediation": {
+   "strategy": "Require a non-read_only mode or an explicit capability before URL resolution."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "Needs the stated precondition and lower-trust access is limited."
+   },
+   "impact": {
+    "score": "low",
+    "reason": "Bounded impact as described; no cross-tenant read or unbounded spend demonstrated."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "medium",
+   "reason": "Verified by independent source reading; not executed."
+  }
+ },
+ {
+  "verdict": "rejected",
+  "fingerprint": "convex-x402-health-status-trusted-from-caller",
+  "title": "Health-check status is trusted from the caller at the Convex layer",
+  "description": "Convex does not re-derive status.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/lib/capabilitySupply/providerConnectionOwner/x402Health.ts",
+    "line": 38,
+    "scope": "x402Health.ts",
+    "description": "Health-check status is trusted from the caller at the Convex layer"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/lib/capabilitySupply/providerConnectionOwner/x402Health.ts",
+    "line": 38,
+    "description": "Convex does not re-derive status."
+   }
+  ],
+  "claimed_root_cause": "Admission is HMAC bound to status and minted only after the Next side derives it.",
+  "reason": "Admission is HMAC bound to status and minted only after the Next side derives it."
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "convex-x402-prepare-authorization-unbound",
+  "title": "x402 prepare_authorization accepts payee, amount and endpoint not bound to the issued ticket",
+  "description": "The prepare branch overwrites only identity fields; payTo, amountUnits, providerEndpoint and challenge fields are caller supplied and matchingOptionalIdentity does not cover them. The ticket claims carry no payee or amount. A journal bearer holder within the 30 second ticket window can obtain authorization for a different payee, bounded by spend caps and screening of the supplied payee.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "convex/lib/capabilityExecution/providerConsequence/httpX402.ts",
+    "line": 79,
+    "scope": "httpX402.ts",
+    "description": "x402 prepare_authorization accepts payee, amount and endpoint not bound to the issued ticket"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "convex/lib/capabilityExecution/providerConsequence/httpX402.ts",
+    "line": 79,
+    "description": "The prepare branch overwrites only identity fields; payTo, amountUnits, providerEndpoint and challenge fields are caller supplied and matchingOptionalIdentity does not cover them. The ticket claims carry no payee or amou"
+   }
+  ],
+  "root_cause": "Server never compares payment fields to the quoted requirement or ticket claims.",
+  "intended_behavior": "Payment authorization should match the quoted requirement.",
+  "conditions": [
+   {
+    "kind": "environmental_dependency",
+    "description": "prepare_authorization RPC with a valid journal token and a different payTo."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Principal described in the input condition, using the target's native interface; static white-box trace only.",
+   "payloads": [
+    "prepare_authorization RPC with a valid journal token and a different payTo."
+   ],
+   "instructions": [
+    "Read the cited source locations on origin/main.",
+    "Follow the trace from the entrypoint to the sink; no live request was sent."
+   ],
+   "observed_result": "Source trace confirms the described behaviour; no runtime execution was performed under the white-box rules."
+  },
+  "remediation": {
+   "strategy": "Verify payTo, amount, endpoint and challenge digest against the quoted requirement inside the prepare step."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "medium",
+    "reason": "Needs the stated precondition and lower-trust access is limited."
+   },
+   "impact": {
+    "score": "medium",
+    "reason": "Bounded impact as described; no cross-tenant read or unbounded spend demonstrated."
+   },
+   "overall_severity": "medium"
+  },
+  "confidence": {
+   "score": "medium",
+   "reason": "Verified by independent source reading; not executed."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "gh-react-doctor-floating-checkout",
+  "title": "actions/checkout pinned to a floating tag in a write-scoped workflow",
+  "description": "The job grants pull-requests, issues and statuses write; checkout@v5 is a mutable tag and persists the token in .git/config before a third-party action runs.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": ".github/workflows/react-doctor.yml",
+    "line": 29,
+    "scope": "react-doctor.yml",
+    "description": "actions/checkout pinned to a floating tag in a write-scoped workflow"
+   }
+  ],
+  "evidence": [
+   {
+    "file": ".github/workflows/react-doctor.yml",
+    "line": 29,
+    "description": "The job grants pull-requests, issues and statuses write; checkout@v5 is a mutable tag and persists the token in .git/config before a third-party action runs."
+   }
+  ],
+  "root_cause": "Mutable action reference and default credential persistence.",
+  "intended_behavior": "Privileged workflows pin actions to SHAs.",
+  "conditions": [
+   {
+    "kind": "environmental_dependency",
+    "description": "workflow_dispatch by a writer after an upstream tag move."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Principal described in the input condition, using the target's native interface; static white-box trace only.",
+   "payloads": [
+    "workflow_dispatch by a writer after an upstream tag move."
+   ],
+   "instructions": [
+    "Read the cited source locations on origin/main.",
+    "Follow the trace from the entrypoint to the sink; no live request was sent."
+   ],
+   "observed_result": "Source trace confirms the described behaviour; no runtime execution was performed under the white-box rules."
+  },
+  "remediation": {
+   "strategy": "Pin checkout to the SHA used elsewhere and set persist-credentials: false."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "Needs the stated precondition and lower-trust access is limited."
+   },
+   "impact": {
+    "score": "low",
+    "reason": "Bounded impact as described; no cross-tenant read or unbounded spend demonstrated."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "medium",
+   "reason": "Verified by independent source reading; not executed."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "src-agent-oauth-pending-grant-metadata",
+  "title": "Pending device grant metadata readable by any signed-in account holding its user code",
+  "description": "The owner check is skipped for ownerless grants, so any signed-in account with the user code or grantRef reads client name and grantRef. Matches device-flow design; user code is about 40 bits and rate limited.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "src/lib/server/agent-access-oauth/onboarding.ts",
+    "line": 20,
+    "scope": "onboarding.ts",
+    "description": "Pending device grant metadata readable by any signed-in account holding its user code"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/lib/server/agent-access-oauth/onboarding.ts",
+    "line": 20,
+    "description": "The owner check is skipped for ownerless grants, so any signed-in account with the user code or grantRef reads client name and grantRef. Matches device-flow design; user code is about 40 bits and rate limited."
+   }
+  ],
+  "root_cause": "Ownerless pending grants are readable by design.",
+  "intended_behavior": "Limited disclosure only.",
+  "conditions": [
+   {
+    "kind": "environmental_dependency",
+    "description": "readAgentOnboardingRequestServer with a user code."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Principal described in the input condition, using the target's native interface; static white-box trace only.",
+   "payloads": [
+    "readAgentOnboardingRequestServer with a user code."
+   ],
+   "instructions": [
+    "Read the cited source locations on origin/main.",
+    "Follow the trace from the entrypoint to the sink; no live request was sent."
+   ],
+   "observed_result": "Source trace confirms the described behaviour; no runtime execution was performed under the white-box rules."
+  },
+  "remediation": {
+   "strategy": "Document or bind pending grants to the first reader."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "Needs the stated precondition and lower-trust access is limited."
+   },
+   "impact": {
+    "score": "low",
+    "reason": "Bounded impact as described; no cross-tenant read or unbounded spend demonstrated."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "medium",
+   "reason": "Verified by independent source reading; not executed."
+  }
+ },
+ {
+  "verdict": "needs_validation",
+  "fingerprint": "src-anonymous-global-budget-exhaustion",
+  "title": "Rotating-IP traffic can exhaust the shared 24h anonymous global budget",
+  "description": "chat-anonymous-global is a fixed 5000 per 24h window; about 170 IPs at 30/h exhaust it and every guest gets 429. Documented spend-versus-availability trade-off; Retry-After is dropped by the proxy.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "src/modules/security/rate-limit-policy.ts",
+    "line": 49,
+    "scope": "rate-limit-policy.ts",
+    "description": "Rotating-IP traffic can exhaust the shared 24h anonymous global budget"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/modules/security/rate-limit-policy.ts",
+    "line": 49,
+    "description": "chat-anonymous-global is a fixed 5000 per 24h window; about 170 IPs at 30/h exhaust it and every guest gets 429. Documented spend-versus-availability trade-off; Retry-After is dropped by the proxy."
+   }
+  ],
+  "claimed_root_cause": "Single global fixed-window budget with no bot challenge.",
+  "blockers": [
+   "Deployed limiter window semantics."
+  ],
+  "validation_plan": {
+   "deployment": "confirm fixed-window reset behaviour of @convex-dev/rate-limiter in production."
+  }
+ },
+ {
+  "verdict": "needs_validation",
+  "fingerprint": "src-clerk-password-change-one-second-heuristic",
+  "title": "Password-change revocation depends on a 1-second timestamp equality heuristic",
+  "description": "user.updated revokes only when password_last_updated_at is within 1000 ms of updated_at; otherwise observe_only and no cutoff advance.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "src/lib/server/clerk-security-webhook.ts",
+    "line": 108,
+    "scope": "clerk-security-webhook.ts",
+    "description": "Password-change revocation depends on a 1-second timestamp equality heuristic"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/lib/server/clerk-security-webhook.ts",
+    "line": 108,
+    "description": "user.updated revokes only when password_last_updated_at is within 1000 ms of updated_at; otherwise observe_only and no cutoff advance."
+   }
+  ],
+  "claimed_root_cause": "Heuristic correlation of two timestamps.",
+  "blockers": [
+   "Real Clerk payload timing and whether Clerk ends other sessions."
+  ],
+  "validation_plan": {
+   "local": "unit test with 1001 ms skew.",
+   "deployment": "sample a real payload and check session policy."
+  }
+ },
+ {
+  "verdict": "needs_validation",
+  "fingerprint": "src-client-error-trusted-ingress-ip",
+  "title": "Client-error sink limiter bypass when VERCEL is unset",
+  "description": "Same trustedIngressIp issue on /api/observability/client-error (5/min) feeding Sentry.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "src/lib/server/rate-limit.ts",
+    "line": 168,
+    "scope": "rate-limit.ts",
+    "description": "Client-error sink limiter bypass when VERCEL is unset"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/lib/server/rate-limit.ts",
+    "line": 168,
+    "description": "Same trustedIngressIp issue on /api/observability/client-error (5/min) feeding Sentry."
+   }
+  ],
+  "claimed_root_cause": "Header trust depends on runtime.",
+  "blockers": [
+   "VERCEL defined in production runtime."
+  ],
+  "validation_plan": {
+   "deployment": "confirm VERCEL is set at runtime."
+  }
+ },
+ {
+  "verdict": "rejected",
+  "fingerprint": "src-daily-close-sign-no-admission",
+  "title": "Daily-close signature and statement writes lack source-write admission",
+  "description": "signOwnerDailyCloseServer sends a self-satisfied confirmation and no admission.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "src/lib/server/money-documents.functions.ts",
+    "line": 204,
+    "scope": "money-documents.functions.ts",
+    "description": "Daily-close signature and statement writes lack source-write admission"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/lib/server/money-documents.functions.ts",
+    "line": 204,
+    "description": "signOwnerDailyCloseServer sends a self-satisfied confirmation and no admission."
+   }
+  ],
+  "claimed_root_cause": "serverFn CSRF middleware blocks cross-site triggers and the render digest is owner-readable only.",
+  "reason": "serverFn CSRF middleware blocks cross-site triggers and the render digest is owner-readable only."
+ },
+ {
+  "verdict": "needs_validation",
+  "fingerprint": "src-data-export-no-rate-limit-or-cap",
+  "title": "Full-account data export has no rate limit or size cap",
+  "description": "The GET and HEAD route is not wrapped in withHttpRateLimit and pages unboundedly through agents, calls and invoices.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "src/lib/server/personal-data-export.functions.ts",
+    "line": 96,
+    "scope": "personal-data-export.functions.ts",
+    "description": "Full-account data export has no rate limit or size cap"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/lib/server/personal-data-export.functions.ts",
+    "line": 96,
+    "description": "The GET and HEAD route is not wrapped in withHttpRateLimit and pages unboundedly through agents, calls and invoices."
+   }
+  ],
+  "claimed_root_cause": "No limit wrapper or row cap.",
+  "blockers": [
+   "Cost for large accounts."
+  ],
+  "validation_plan": {
+   "local": "seeded large account measurement."
+  }
+ },
+ {
+  "verdict": "needs_validation",
+  "fingerprint": "src-delegation-replay-skips-ancestry-liveness",
+  "title": "Idempotent replay in admitConsequence returns a snapshot before the ancestry liveness recheck",
+  "description": "Replay returns before assertLiveAncestry; current consumers recheck the leaf and delegate() has no production caller.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "src/modules/authority/delegation/delegation.ts",
+    "line": 190,
+    "scope": "delegation.ts",
+    "description": "Idempotent replay in admitConsequence returns a snapshot before the ancestry liveness recheck"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/modules/authority/delegation/delegation.ts",
+    "line": 190,
+    "description": "Replay returns before assertLiveAncestry; current consumers recheck the leaf and delegate() has no production caller."
+   }
+  ],
+  "claimed_root_cause": "Replay precedes ancestry check.",
+  "blockers": [
+   "Recovery consumer and any depth greater than 1 creation path."
+  ],
+  "validation_plan": {
+   "local": "test replay after ancestor revoke in recovery path."
+  }
+ },
+ {
+  "verdict": "needs_validation",
+  "fingerprint": "src-device-code-consent-phishing",
+  "title": "Device-code approval lets a deceived user hand the poller an account credential",
+  "description": "Pending grants are ownerless and the consent page shows an attacker-chosen client name with an unverified badge; strict reverification gates approval.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "src/modules/agent-access/oauth-state.ts",
+    "line": 322,
+    "scope": "oauth-state.ts",
+    "description": "Device-code approval lets a deceived user hand the poller an account credential"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/modules/agent-access/oauth-state.ts",
+    "line": 322,
+    "description": "Pending grants are ownerless and the consent page shows an attacker-chosen client name with an unverified badge; strict reverification gates approval."
+   }
+  ],
+  "claimed_root_cause": "No out-of-band binding.",
+  "blockers": [
+   "Whether product accepts device-code phishing residual risk."
+  ],
+  "validation_plan": {
+   "deployment": "review verification page copy and consider verified-client binding."
+  }
+ },
+ {
+  "verdict": "rejected",
+  "fingerprint": "src-get-server-functions-side-effects",
+  "title": "GET server functions with side effects and no admission",
+  "description": "Data export GET records a notice.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "src/lib/server/personal-data-export.functions.ts",
+    "line": 98,
+    "scope": "personal-data-export.functions.ts",
+    "description": "GET server functions with side effects and no admission"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/lib/server/personal-data-export.functions.ts",
+    "line": 98,
+    "description": "Data export GET records a notice."
+   }
+  ],
+  "claimed_root_cause": "At most one deduplicated notice per day",
+  "reason": "At most one deduplicated notice per day; call-usage export is not imported anywhere."
+ },
+ {
+  "verdict": "needs_validation",
+  "fingerprint": "src-http-json-dot-segment-path-escape",
+  "title": "HTTP-JSON path parameter dot segments escape the published operation template",
+  "description": "requestTarget maps input into the path template without refusing . or .. so id=.. resolves to a sibling path on the provider host with the provider credential attached; x402-request.ts refuses these.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "src/modules/capability-supply/internal/route-transport-http-json.ts",
+    "line": 538,
+    "scope": "route-transport-http-json.ts",
+    "description": "HTTP-JSON path parameter dot segments escape the published operation template"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/modules/capability-supply/internal/route-transport-http-json.ts",
+    "line": 538,
+    "description": "requestTarget maps input into the path template without refusing . or .. so id=.. resolves to a sibling path on the provider host with the provider credential attached; x402-request.ts refuses these."
+   }
+  ],
+  "claimed_root_cause": "No dot-segment refusal in the http-json lane.",
+  "blockers": [
+   "Whether the provider inputSchema constrains the mapped field and whether privileged sibling routes exist."
+  ],
+  "validation_plan": {
+   "local": "unit test requestTarget with . and .. mappings and assert refusal.",
+   "deployment": "review published inputSchema path fields."
+  }
+ },
+ {
+  "verdict": "needs_validation",
+  "fingerprint": "src-jit-release-flag-nonmonotonic",
+  "title": "Non-monotonic release flag lets a post-release refusal abort a consequential journal row",
+  "description": "A refused DELETE (terminateSession) after the consequential tools/call resets releaseAttempted, so the success is replaced by a refusal and the row aborted. Double execution is blocked by lease settlement; the residual is a ledger gap.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "src/modules/capability-execution/call-worker/jitProviderConsequence.ts",
+    "line": 185,
+    "scope": "jitProviderConsequence.ts",
+    "description": "Non-monotonic release flag lets a post-release refusal abort a consequential journal row"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/modules/capability-execution/call-worker/jitProviderConsequence.ts",
+    "line": 185,
+    "description": "A refused DELETE (terminateSession) after the consequential tools/call resets releaseAttempted, so the success is replaced by a refusal and the row aborted. Double execution is blocked by lease settlement; the residual i"
+   }
+  ],
+  "claimed_root_cause": "releaseAttempted reset on pre-release refusal of a later request.",
+  "blockers": [
+   "Whether DNS rebinding between tools/call and DELETE is reachable."
+  ],
+  "validation_plan": {
+   "local": "harness with a resolver flipping after the first request."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "src-mcp-agent-key-double-clerk-verify",
+  "title": "Invalid-key requests trigger two Clerk apiKeys.verify calls per request",
+  "description": "verifyApiKeyCandidate fails and authenticateAgentAccess verifies the same secret again on protected paths, so each invalid key costs two Clerk calls, bounded by the 30/min anonymous IP bucket.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "src/lib/server/agent-access-auth.ts",
+    "line": 220,
+    "scope": "agent-access-auth.ts",
+    "description": "Invalid-key requests trigger two Clerk apiKeys.verify calls per request"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/lib/server/agent-access-auth.ts",
+    "line": 220,
+    "description": "verifyApiKeyCandidate fails and authenticateAgentAccess verifies the same secret again on protected paths, so each invalid key costs two Clerk calls, bounded by the 30/min anonymous IP bucket."
+   }
+  ],
+  "root_cause": "No memoisation between the two verifications.",
+  "intended_behavior": "One verification per request.",
+  "conditions": [
+   {
+    "kind": "environmental_dependency",
+    "description": "Requests with an invalid Bearer on a protected MCP method."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Principal described in the input condition, using the target's native interface; static white-box trace only.",
+   "payloads": [
+    "Requests with an invalid Bearer on a protected MCP method."
+   ],
+   "instructions": [
+    "Read the cited source locations on origin/main.",
+    "Follow the trace from the entrypoint to the sink; no live request was sent."
+   ],
+   "observed_result": "Source trace confirms the described behaviour; no runtime execution was performed under the white-box rules."
+  },
+  "remediation": {
+   "strategy": "Pass the failed result forward or cache per request."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "Needs the stated precondition and lower-trust access is limited."
+   },
+   "impact": {
+    "score": "low",
+    "reason": "Bounded impact as described; no cross-tenant read or unbounded spend demonstrated."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "medium",
+   "reason": "Verified by independent source reading; not executed."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "src-mcp-oauth-hop-ip-literal-ssrf",
+  "title": "IP-literal hosts in MCP OAuth metadata hops bypass the connect-time SSRF guard",
+  "description": "Only the initial serverUrl is pre-checked. resource_metadata, authorization_servers and registration_endpoint URLs from the owner's server go through createGuardedLookup, which Node skips for IP literals, so GET and a JSON POST can reach private or link-local literals. Blind SSRF with an authenticated provider owner precondition.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "src/modules/capability-supply/internal/mcp-source-discovery.ts",
+    "line": 79,
+    "scope": "mcp-source-discovery.ts",
+    "description": "IP-literal hosts in MCP OAuth metadata hops bypass the connect-time SSRF guard"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/modules/capability-supply/internal/mcp-source-discovery.ts",
+    "line": 79,
+    "description": "Only the initial serverUrl is pre-checked. resource_metadata, authorization_servers and registration_endpoint URLs from the owner's server go through createGuardedLookup, which Node skips for IP literals, so GET and a JS"
+   }
+  ],
+  "root_cause": "Connect-time guard relies on lookup, which is not invoked for IP-literal hosts.",
+  "intended_behavior": "All outbound provider fetches should be public-only.",
+  "conditions": [
+   {
+    "kind": "environmental_dependency",
+    "description": "MCP server returning 401 with resource_metadata=http://127.0.0.1:<port>/."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Principal described in the input condition, using the target's native interface; static white-box trace only.",
+   "payloads": [
+    "MCP server returning 401 with resource_metadata=http://127.0.0.1:<port>/."
+   ],
+   "instructions": [
+    "Read the cited source locations on origin/main.",
+    "Follow the trace from the entrypoint to the sink; no live request was sent."
+   ],
+   "observed_result": "Source trace confirms the described behaviour; no runtime execution was performed under the white-box rules."
+  },
+  "remediation": {
+   "strategy": "Validate resolved socket address in a custom connector or refuse non-public IP literals and require https for every discovery hop."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "Needs the stated precondition and lower-trust access is limited."
+   },
+   "impact": {
+    "score": "low",
+    "reason": "Bounded impact as described; no cross-tenant read or unbounded spend demonstrated."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "medium",
+   "reason": "Verified by independent source reading; not executed."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "src-money-documents-get-no-cache-control",
+  "title": "Financial document URL and statement GET responses lack no-store headers",
+  "description": "The money GET server functions set no cache-control while sibling owner GETs set private, no-store.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "src/lib/server/money-documents.functions.ts",
+    "line": 280,
+    "scope": "money-documents.functions.ts",
+    "description": "Financial document URL and statement GET responses lack no-store headers"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/lib/server/money-documents.functions.ts",
+    "line": 280,
+    "description": "The money GET server functions set no cache-control while sibling owner GETs set private, no-store."
+   }
+  ],
+  "root_cause": "Header omitted.",
+  "intended_behavior": "Owner financial responses should not be cached.",
+  "conditions": [
+   {
+    "kind": "environmental_dependency",
+    "description": "Authenticated GET of an owner document URL."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Principal described in the input condition, using the target's native interface; static white-box trace only.",
+   "payloads": [
+    "Authenticated GET of an owner document URL."
+   ],
+   "instructions": [
+    "Read the cited source locations on origin/main.",
+    "Follow the trace from the entrypoint to the sink; no live request was sent."
+   ],
+   "observed_result": "Source trace confirms the described behaviour; no runtime execution was performed under the white-box rules."
+  },
+  "remediation": {
+   "strategy": "Set cache-control: private, no-store on the four money GET handlers."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "Needs the stated precondition and lower-trust access is limited."
+   },
+   "impact": {
+    "score": "low",
+    "reason": "Bounded impact as described; no cross-tenant read or unbounded spend demonstrated."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "medium",
+   "reason": "Verified by independent source reading; not executed."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "src-oauth-admission-keyed-by-caller-values",
+  "title": "OAuth admission limits keyed by attacker-supplied values",
+  "description": "Keys include client_id, device_code, code or user_code supplied by the caller, so random values obtain fresh buckets and no per-IP aggregate applies. Availability and cost only.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "src/lib/server/rate-limit.ts",
+    "line": 157,
+    "scope": "rate-limit.ts",
+    "description": "OAuth admission limits keyed by attacker-supplied values"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/lib/server/rate-limit.ts",
+    "line": 157,
+    "description": "Keys include client_id, device_code, code or user_code supplied by the caller, so random values obtain fresh buckets and no per-IP aggregate applies. Availability and cost only."
+   }
+  ],
+  "root_cause": "Suffix is caller-chosen before any lookup.",
+  "intended_behavior": "Per-IP budget should apply.",
+  "conditions": [
+   {
+    "kind": "environmental_dependency",
+    "description": "Token or device endpoint requests with random device_code values."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Principal described in the input condition, using the target's native interface; static white-box trace only.",
+   "payloads": [
+    "Token or device endpoint requests with random device_code values."
+   ],
+   "instructions": [
+    "Read the cited source locations on origin/main.",
+    "Follow the trace from the entrypoint to the sink; no live request was sent."
+   ],
+   "observed_result": "Source trace confirms the described behaviour; no runtime execution was performed under the white-box rules."
+  },
+  "remediation": {
+   "strategy": "Add an IP-only aggregate bucket in front of suffix-keyed buckets."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "Needs the stated precondition and lower-trust access is limited."
+   },
+   "impact": {
+    "score": "low",
+    "reason": "Bounded impact as described; no cross-tenant read or unbounded spend demonstrated."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "medium",
+   "reason": "Verified by independent source reading; not executed."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "src-oauth-revoke-noop-for-device-tokens",
+  "title": "POST /oauth/revoke returns 200 without revoking device or non-offline access tokens",
+  "description": "Revoke looks only at refresh-family rows; access tokens issued for device and non-offline code grants have no searchable row, so revocation reports success while the key stays valid.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "src/lib/server/agent-access-oauth/token-family.ts",
+    "line": 45,
+    "scope": "token-family.ts",
+    "description": "POST /oauth/revoke returns 200 without revoking device or non-offline access tokens"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/lib/server/agent-access-oauth/token-family.ts",
+    "line": 45,
+    "description": "Revoke looks only at refresh-family rows; access tokens issued for device and non-offline code grants have no searchable row, so revocation reports success while the key stays valid."
+   }
+  ],
+  "root_cause": "No hash index for non-refresh access credentials.",
+  "intended_behavior": "RFC 7009 revoke should invalidate the token.",
+  "conditions": [
+   {
+    "kind": "environmental_dependency",
+    "description": "Revoke request carrying a device-flow access token and its client_id."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Principal described in the input condition, using the target's native interface; static white-box trace only.",
+   "payloads": [
+    "Revoke request carrying a device-flow access token and its client_id."
+   ],
+   "instructions": [
+    "Read the cited source locations on origin/main.",
+    "Follow the trace from the entrypoint to the sink; no live request was sent."
+   ],
+   "observed_result": "Source trace confirms the described behaviour; no runtime execution was performed under the white-box rules."
+  },
+  "remediation": {
+   "strategy": "Store an access token hash for every issued credential and revoke it, or return unsupported."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "Needs the stated precondition and lower-trust access is limited."
+   },
+   "impact": {
+    "score": "low",
+    "reason": "Bounded impact as described; no cross-tenant read or unbounded spend demonstrated."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "medium",
+   "reason": "Verified by independent source reading; not executed."
+  }
+ },
+ {
+  "verdict": "rejected",
+  "fingerprint": "src-preverified-api-key-skips-key-state-recheck",
+  "title": "Pre-verified API key path skips key-state re-check",
+  "description": "apiKeys.get check skipped when a verified candidate is passed.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "src/lib/server/agent-access-auth.ts",
+    "line": 249,
+    "scope": "agent-access-auth.ts",
+    "description": "Pre-verified API key path skips key-state re-check"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/lib/server/agent-access-auth.ts",
+    "line": 249,
+    "description": "apiKeys.get check skipped when a verified candidate is passed."
+   }
+  ],
+  "claimed_root_cause": "Clerk verify rejects revoked and expired keys in the same request and Convex binding re-checks lifecycle and narrows scopes.",
+  "reason": "Clerk verify rejects revoked and expired keys in the same request and Convex binding re-checks lifecycle and narrows scopes."
+ },
+ {
+  "verdict": "rejected",
+  "fingerprint": "src-procure-budget-gate-fails-open",
+  "title": "Procure budget gate fails open on unparsable price",
+  "description": "compareExactAmounts undefined skips the cap.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "src/modules/capability-execution/procure-engine.ts",
+    "line": 339,
+    "scope": "procure-engine.ts",
+    "description": "Procure budget gate fails open on unparsable price"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/modules/capability-execution/procure-engine.ts",
+    "line": 339,
+    "description": "compareExactAmounts undefined skips the cap."
+   }
+  ],
+  "claimed_root_cause": "The only quoteTool producer strictly parses price with exactAmountSchema and quoteSnapshot enforces AUD.",
+  "reason": "The only quoteTool producer strictly parses price with exactAmountSchema and quoteSnapshot enforces AUD."
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "src-procure-quote-refusal-terminalises-key",
+  "title": "Retryable quote refusal permanently terminalises the procurement idempotency key",
+  "description": "A quote refusal with retryable true completes the operation key as failed_terminal; same-key retries replay the stored refusal forever. The call-refusal branch deliberately does not terminalise. No money moves.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "src/modules/capability-execution/procure-engine.ts",
+    "line": 313,
+    "scope": "procure-engine.ts",
+    "description": "Retryable quote refusal permanently terminalises the procurement idempotency key"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/modules/capability-execution/procure-engine.ts",
+    "line": 313,
+    "description": "A quote refusal with retryable true completes the operation key as failed_terminal; same-key retries replay the stored refusal forever. The call-refusal branch deliberately does not terminalise. No money moves."
+   }
+  ],
+  "root_cause": "Quote refusal path uses finish() without a retryable exception.",
+  "intended_behavior": "Retryable refusals can be retried with the same key.",
+  "conditions": [
+   {
+    "kind": "environmental_dependency",
+    "description": "procure with a quote that returns inspection_unavailable, then retry."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Principal described in the input condition, using the target's native interface; static white-box trace only.",
+   "payloads": [
+    "procure with a quote that returns inspection_unavailable, then retry."
+   ],
+   "instructions": [
+    "Read the cited source locations on origin/main.",
+    "Follow the trace from the entrypoint to the sink; no live request was sent."
+   ],
+   "observed_result": "Source trace confirms the described behaviour; no runtime execution was performed under the white-box rules."
+  },
+  "remediation": {
+   "strategy": "Do not terminalise the key when retryable, matching the call refusal branch."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "medium",
+    "reason": "Needs the stated precondition and lower-trust access is limited."
+   },
+   "impact": {
+    "score": "medium",
+    "reason": "Bounded impact as described; no cross-tenant read or unbounded spend demonstrated."
+   },
+   "overall_severity": "medium"
+  },
+  "confidence": {
+   "score": "medium",
+   "reason": "Verified by independent source reading; not executed."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "src-provider-consequence-stale-customer-generation",
+  "title": "Rotated-out customer credential generation still executes for the ticket lifetime",
+  "description": "The customer pointer is read at issue time and fixedPointerStore returns the ticket's values, so a rotated-out generation is still decrypted and sent for up to 30 seconds. Old generations are not deleted.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "src/routes/api.internal.provider-consequence.ts",
+    "line": 231,
+    "scope": "api.internal.provider-consequence.ts",
+    "description": "Rotated-out customer credential generation still executes for the ticket lifetime"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/routes/api.internal.provider-consequence.ts",
+    "line": 231,
+    "description": "The customer pointer is read at issue time and fixedPointerStore returns the ticket's values, so a rotated-out generation is still decrypted and sent for up to 30 seconds. Old generations are not deleted."
+   }
+  ],
+  "root_cause": "No live pointer re-check on the customer secret at execute time.",
+  "intended_behavior": "Rotation should stop use of the old key promptly.",
+  "conditions": [
+   {
+    "kind": "environmental_dependency",
+    "description": "Ticket issued, owner rotates the credential, execute within 30 seconds."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Principal described in the input condition, using the target's native interface; static white-box trace only.",
+   "payloads": [
+    "Ticket issued, owner rotates the credential, execute within 30 seconds."
+   ],
+   "instructions": [
+    "Read the cited source locations on origin/main.",
+    "Follow the trace from the entrypoint to the sink; no live request was sent."
+   ],
+   "observed_result": "Source trace confirms the described behaviour; no runtime execution was performed under the white-box rules."
+  },
+  "remediation": {
+   "strategy": "Re-read the customer pointer at attest or execute and refuse when generation or revision changed."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "Needs the stated precondition and lower-trust access is limited."
+   },
+   "impact": {
+    "score": "low",
+    "reason": "Bounded impact as described; no cross-tenant read or unbounded spend demonstrated."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "medium",
+   "reason": "Verified by independent source reading; not executed."
+  }
+ },
+ {
+  "verdict": "needs_validation",
+  "fingerprint": "src-public-read-trusted-ingress-ip",
+  "title": "Public-read limiter keyed on client-controlled ingress header when VERCEL is unset",
+  "description": "Same trustedIngressIp branch applied to /api/businesses public-read (120/min).",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "src/lib/server/rate-limit.ts",
+    "line": 170,
+    "scope": "rate-limit.ts",
+    "description": "Public-read limiter keyed on client-controlled ingress header when VERCEL is unset"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/lib/server/rate-limit.ts",
+    "line": 170,
+    "description": "Same trustedIngressIp branch applied to /api/businesses public-read (120/min)."
+   }
+  ],
+  "claimed_root_cause": "Header trust depends on runtime.",
+  "blockers": [
+   "VERCEL set in every runtime and edge overwrite behaviour."
+  ],
+  "validation_plan": {
+   "deployment": "preview check as for the anonymous chat finding."
+  }
+ },
+ {
+  "verdict": "needs_validation",
+  "fingerprint": "src-recovery-money-before-canonical-reconcile",
+  "title": "Money settlement commits before the canonical reconcile gate",
+  "description": "persistX402Money commits before reconcilePublicExecution, and a canonical refusal does not undo money. Pre-checks mirror the canonical gate so only a concurrent writer reaches it.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "src/modules/capability-execution/call-worker/recovery/reconciliation.ts",
+    "line": 105,
+    "scope": "reconciliation.ts",
+    "description": "Money settlement commits before the canonical reconcile gate"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/modules/capability-execution/call-worker/recovery/reconciliation.ts",
+    "line": 105,
+    "description": "persistX402Money commits before reconcilePublicExecution, and a canonical refusal does not undo money. Pre-checks mirror the canonical gate so only a concurrent writer reaches it."
+   }
+  ],
+  "claimed_root_cause": "Ordering.",
+  "blockers": [
+   "Whether concurrent recovery can reach the window."
+  ],
+  "validation_plan": {
+   "local": "concurrent recovery harness."
+  }
+ },
+ {
+  "verdict": "needs_validation",
+  "fingerprint": "src-redaction-misses-bare-code-param",
+  "title": "Redaction misses a bare code= query parameter in client-error text",
+  "description": "redactSensitiveText keeps code= while filtering state=, so a reporter forwarding a redirect URL would send an OAuth code to Sentry. No in-repo sender exists.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "src/lib/observability/degrade-backend.ts",
+    "line": 8,
+    "scope": "degrade-backend.ts",
+    "description": "Redaction misses a bare code= query parameter in client-error text"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/lib/observability/degrade-backend.ts",
+    "line": 8,
+    "description": "redactSensitiveText keeps code= while filtering state=, so a reporter forwarding a redirect URL would send an OAuth code to Sentry. No in-repo sender exists."
+   }
+  ],
+  "claimed_root_cause": "Alias list lacks code.",
+  "blockers": [
+   "Whether any external reporter forwards raw redirect URLs."
+  ],
+  "validation_plan": {
+   "local": "unit test redactSensitiveText.",
+   "deployment": "check reporters."
+  }
+ },
+ {
+  "verdict": "needs_validation",
+  "fingerprint": "src-single-internal-rpc-bearer-three-channels",
+  "title": "One internal RPC bearer gates provider execution and secret lifecycle",
+  "description": "AE_SECRET_LIFECYCLE_RPC_TOKEN gates the provider-consequence route, the secret-lifecycle route and Convex lifecycle HTTP. Execute still needs a journal token and signed ticket; the lifecycle channel can write secret material given a matching delegation snapshot.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "src/routes/api.internal.provider-consequence.ts",
+    "line": 565,
+    "scope": "api.internal.provider-consequence.ts",
+    "description": "One internal RPC bearer gates provider execution and secret lifecycle"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/routes/api.internal.provider-consequence.ts",
+    "line": 565,
+    "description": "AE_SECRET_LIFECYCLE_RPC_TOKEN gates the provider-consequence route, the secret-lifecycle route and Convex lifecycle HTTP. Execute still needs a journal token and signed ticket; the lifecycle channel can write secret mate"
+   }
+  ],
+  "claimed_root_cause": "No per-channel credential separation.",
+  "blockers": [
+   "Whether a holder can obtain a valid delegation snapshot."
+  ],
+  "validation_plan": {
+   "local": "trace snapshot creation paths.",
+   "deployment": "confirm which processes hold the token."
+  }
+ },
+ {
+  "verdict": "rejected",
+  "fingerprint": "src-source-write-csrf-origin-self-referential",
+  "title": "Convex-side CSRF origin check compares admission origin to itself",
+  "description": "allowedOrigins is the admission's own origin.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "src/lib/server/source-write-admission.ts",
+    "line": 133,
+    "scope": "source-write-admission.ts",
+    "description": "Convex-side CSRF origin check compares admission origin to itself"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/lib/server/source-write-admission.ts",
+    "line": 133,
+    "description": "allowedOrigins is the admission's own origin."
+   }
+  ],
+  "claimed_root_cause": "TanStack createCsrfMiddleware runs before admission minting and rejects cross-site serverFn POSTs",
+  "reason": "TanStack createCsrfMiddleware runs before admission minting and rejects cross-site serverFn POSTs; removal dispute is anonymous. Residual is inert defense in depth."
+ },
+ {
+  "verdict": "needs_validation",
+  "fingerprint": "src-source-write-node-env-production-check",
+  "title": "Admission production check depends on NODE_ENV on the Convex deployment",
+  "description": "Without NODE_ENV=production and explicit keys, Convex derives keys from AE_SOURCE_WRITE_SECRET with public default key ids.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "src/modules/security/source-write-admission.ts",
+    "line": 591,
+    "scope": "source-write-admission.ts",
+    "description": "Admission production check depends on NODE_ENV on the Convex deployment"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/modules/security/source-write-admission.ts",
+    "line": 591,
+    "description": "Without NODE_ENV=production and explicit keys, Convex derives keys from AE_SOURCE_WRITE_SECRET with public default key ids."
+   }
+  ],
+  "claimed_root_cause": "Production detection by NODE_ENV only.",
+  "blockers": [
+   "Convex env values."
+  ],
+  "validation_plan": {
+   "deployment": "npx convex env list for names NODE_ENV and AE_SOURCE_WRITE_*."
+  }
+ },
+ {
+  "verdict": "needs_validation",
+  "fingerprint": "src-source-write-target-origin-unbound",
+  "title": "Admission target origin is not bound to a Convex-side canonical origin",
+  "description": "Convex compares admission.targetOrigin to caller-supplied args.sourceWriteRequest; cross-environment acceptance depends on shared key material.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "src/modules/security/source-write-admission.ts",
+    "line": 214,
+    "scope": "source-write-admission.ts",
+    "description": "Admission target origin is not bound to a Convex-side canonical origin"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/modules/security/source-write-admission.ts",
+    "line": 214,
+    "description": "Convex compares admission.targetOrigin to caller-supplied args.sourceWriteRequest; cross-environment acceptance depends on shared key material."
+   }
+  ],
+  "claimed_root_cause": "Origin binding is caller supplied.",
+  "blockers": [
+   "Whether preview or non-prod deployments share keys with production Convex."
+  ],
+  "validation_plan": {
+   "deployment": "compare AE_SOURCE_WRITE_KEY_* across scopes."
+  }
+ },
+ {
+  "verdict": "needs_validation",
+  "fingerprint": "src-trusted-ingress-ip-anonymous-chat",
+  "title": "Anonymous admission keys trust client-influenced IP headers when VERCEL is unset or the edge appends",
+  "description": "trustedIngressIp reads cf-connecting-ip, x-real-ip and x-vercel-forwarded-for from the client when VERCEL is unset, or the first x-vercel-forwarded-for value on Vercel.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "src/lib/server/rate-limit.ts",
+    "line": 170,
+    "scope": "rate-limit.ts",
+    "description": "Anonymous admission keys trust client-influenced IP headers when VERCEL is unset or the edge appends"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/lib/server/rate-limit.ts",
+    "line": 170,
+    "description": "trustedIngressIp reads cf-connecting-ip, x-real-ip and x-vercel-forwarded-for from the client when VERCEL is unset, or the first x-vercel-forwarded-for value on Vercel."
+   }
+  ],
+  "claimed_root_cause": "Header trust depends on platform behaviour.",
+  "blockers": [
+   "Whether Vercel overwrites client x-vercel-forwarded-for and VERCEL is always set."
+  ],
+  "validation_plan": {
+   "deployment": "send a forged header to a preview you control and inspect the value; confirm VERCEL=1 at runtime."
+  }
+ },
+ {
+  "verdict": "needs_validation",
+  "fingerprint": "src-unverified-client-provider-scope-uncapped",
+  "title": "Unverified dynamic client can obtain provider supply-manage authority without the approval cap",
+  "description": "modeForGrant leaves provider grants at spending_policy by design; connectionConnect accepts an attacker-chosen payee signed by that payee.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "src/lib/server/agent-access-oauth/protocol.ts",
+    "line": 267,
+    "scope": "protocol.ts",
+    "description": "Unverified dynamic client can obtain provider supply-manage authority without the approval cap"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/lib/server/agent-access-oauth/protocol.ts",
+    "line": 267,
+    "description": "modeForGrant leaves provider grants at spending_policy by design; connectionConnect accepts an attacker-chosen payee signed by that payee."
+   }
+  ],
+  "claimed_root_cause": "Deliberate exemption with unclear policy.",
+  "blockers": [
+   "Whether a bound connection can redirect payments for the owner's tools."
+  ],
+  "validation_plan": {
+   "local": "trace connectX402 binding to published tools."
+  }
+ },
+ {
+  "verdict": "rejected",
+  "fingerprint": "src-x402-connection-stores-no-environment",
+  "title": "x402 connection stores no environment",
+  "description": "Health check takes environment from the caller.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "src/modules/capability-supply/internal/supply-funnel/connections.ts",
+    "line": 232,
+    "scope": "connections.ts",
+    "description": "x402 connection stores no environment"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/modules/capability-supply/internal/supply-funnel/connections.ts",
+    "line": 232,
+    "description": "Health check takes environment from the caller."
+   }
+  ],
+  "claimed_root_cause": "Routing uses publication environment and inspection enforces the chain",
+  "reason": "Routing uses publication environment and inspection enforces the chain; effect is a misleading health label."
+ },
+ {
+  "verdict": "needs_validation",
+  "fingerprint": "src-x402-fresh-402-drops-offer-receipt",
+  "title": "Fresh 402 silently replaces committed offer-receipt requirement",
+  "description": "Fresh challenge selection ignores extensions, so a 402 without offer-receipt skips signed-offer and receipt verification and the result is still delivered. Money is bounded by amount and payee checks.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "src/modules/capability-supply/internal/route-transport-x402.ts",
+    "line": 121,
+    "scope": "route-transport-x402.ts",
+    "description": "Fresh 402 silently replaces committed offer-receipt requirement"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/modules/capability-supply/internal/route-transport-x402.ts",
+    "line": 121,
+    "description": "Fresh challenge selection ignores extensions, so a 402 without offer-receipt skips signed-offer and receipt verification and the result is still delivered. Money is bounded by amount and payee checks."
+   }
+  ],
+  "claimed_root_cause": "Extensions and offer digest not compared to the committed challenge.",
+  "blockers": [
+   "No bounded test run yet."
+  ],
+  "validation_plan": {
+   "local": "unit test with a committed offer-receipt and a fresh 402 without extensions."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "src-x402-recovery-unused-forces-outcome-unknown",
+  "title": "Proven-unused x402 authorization can never complete recovery",
+  "description": "After reconcileX402PaymentAttempt commits the spend as unused, persistX402Money still sees settlementStatus not settled, marks the managed call outcome_unknown and returns false, so recovery returns reconciliation_required on every retry.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "src/modules/capability-execution/call-worker/recovery/x402.ts",
+    "line": 404,
+    "scope": "x402.ts",
+    "description": "Proven-unused x402 authorization can never complete recovery"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/modules/capability-execution/call-worker/recovery/x402.ts",
+    "line": 404,
+    "description": "After reconcileX402PaymentAttempt commits the spend as unused, persistX402Money still sees settlementStatus not settled, marks the managed call outcome_unknown and returns false, so recovery returns reconciliation_requir"
+   }
+  ],
+  "root_cause": "Branch at line 404 is reached for the unused path and contradicts the intended release.",
+  "intended_behavior": "Proven unused authorizations should release spend and complete recovery.",
+  "conditions": [
+   {
+    "kind": "environmental_dependency",
+    "description": "Recovery of an authorization proven expired or cancelled."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Principal described in the input condition, using the target's native interface; static white-box trace only.",
+   "payloads": [
+    "Recovery of an authorization proven expired or cancelled."
+   ],
+   "instructions": [
+    "Read the cited source locations on origin/main.",
+    "Follow the trace from the entrypoint to the sink; no live request was sent."
+   ],
+   "observed_result": "Source trace confirms the described behaviour; no runtime execution was performed under the white-box rules."
+  },
+  "remediation": {
+   "strategy": "Handle expired_unused and authorization_cancelled by releasing the managed reservation and reconciling as released."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "medium",
+    "reason": "Needs the stated precondition and lower-trust access is limited."
+   },
+   "impact": {
+    "score": "medium",
+    "reason": "Bounded impact as described; no cross-tenant read or unbounded spend demonstrated."
+   },
+   "overall_severity": "medium"
+  },
+  "confidence": {
+   "score": "medium",
+   "reason": "Verified by independent source reading; not executed."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "tools-ae-chat-terminal-escape",
+  "title": "Remote chat text written raw to the terminal",
+  "description": "text-delta, reasoning and thread id values are written without sanitizeText, so model output with ESC/OSC sequences reaches the operator's terminal. Needs model-side source of escape bytes.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "tools/ae/commands/chat.ts",
+    "line": 19,
+    "scope": "chat.ts",
+    "description": "Remote chat text written raw to the terminal"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "tools/ae/commands/chat.ts",
+    "line": 19,
+    "description": "text-delta, reasoning and thread id values are written without sanitizeText, so model output with ESC/OSC sequences reaches the operator's terminal. Needs model-side source of escape bytes."
+   }
+  ],
+  "root_cause": "sanitizeText is not applied in renderChatEvent.",
+  "intended_behavior": "CLI output should strip control sequences.",
+  "conditions": [
+   {
+    "kind": "environmental_dependency",
+    "description": "SSE text-delta containing ESC ] 52 sequences."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Principal described in the input condition, using the target's native interface; static white-box trace only.",
+   "payloads": [
+    "SSE text-delta containing ESC ] 52 sequences."
+   ],
+   "instructions": [
+    "Read the cited source locations on origin/main.",
+    "Follow the trace from the entrypoint to the sink; no live request was sent."
+   ],
+   "observed_result": "Source trace confirms the described behaviour; no runtime execution was performed under the white-box rules."
+  },
+  "remediation": {
+   "strategy": "Pass all remote strings through sanitizeText."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "Needs the stated precondition and lower-trust access is limited."
+   },
+   "impact": {
+    "score": "low",
+    "reason": "Bounded impact as described; no cross-tenant read or unbounded spend demonstrated."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "medium",
+   "reason": "Verified by independent source reading; not executed."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "tools-ae-status-next-command-shell-injection",
+  "title": "nextCommand interpolates the origin into an export line with JSON.stringify",
+  "description": "A base URL host containing $() or backticks survives URL parsing and is placed in double quotes, which POSIX shells expand when the suggested line is run.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "tools/ae/commands/status.ts",
+    "line": 43,
+    "scope": "status.ts",
+    "description": "nextCommand interpolates the origin into an export line with JSON.stringify"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "tools/ae/commands/status.ts",
+    "line": 43,
+    "description": "A base URL host containing $() or backticks survives URL parsing and is placed in double quotes, which POSIX shells expand when the suggested line is run."
+   }
+  ],
+  "root_cause": "JSON.stringify is used instead of shellArgument.",
+  "intended_behavior": "Suggested commands should be shell-safe.",
+  "conditions": [
+   {
+    "kind": "environmental_dependency",
+    "description": "--base-url https://a$(id).example.invalid with AE_API_KEY set and origin unset."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Principal described in the input condition, using the target's native interface; static white-box trace only.",
+   "payloads": [
+    "--base-url https://a$(id).example.invalid with AE_API_KEY set and origin unset."
+   ],
+   "instructions": [
+    "Read the cited source locations on origin/main.",
+    "Follow the trace from the entrypoint to the sink; no live request was sent."
+   ],
+   "observed_result": "Source trace confirms the described behaviour; no runtime execution was performed under the white-box rules."
+  },
+  "remediation": {
+   "strategy": "Use shellArgument(origin) from continuation-command.ts."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "Needs the stated precondition and lower-trust access is limited."
+   },
+   "impact": {
+    "score": "low",
+    "reason": "Bounded impact as described; no cross-tenant read or unbounded spend demonstrated."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "medium",
+   "reason": "Verified by independent source reading; not executed."
+  }
+ },
+ {
+  "verdict": "needs_validation",
+  "fingerprint": "vercel-install-lifecycle-scripts-with-env",
+  "title": "Vercel install runs dependency lifecycle scripts with deployment env present",
+  "description": "installCommand runs npm ci without --ignore-scripts; the repo's own CI skips scripts where secrets are present.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": "vercel.json",
+    "line": 3,
+    "scope": "vercel.json",
+    "description": "Vercel install runs dependency lifecycle scripts with deployment env present"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "vercel.json",
+    "line": 3,
+    "description": "installCommand runs npm ci without --ignore-scripts; the repo's own CI skips scripts where secrets are present."
+   }
+  ],
+  "claimed_root_cause": "Install-time code in a secret-bearing build.",
+  "blockers": [
+   "Whether Vercel exposes project env to the install command and restricts egress."
+  ],
+  "validation_plan": {
+   "deployment": "review Vercel project env scopes and docs; test with a dummy variable in a preview."
+  }
+ },
+ {
+  "verdict": "rejected",
+  "fingerprint": "vercelignore-missing-env-patterns",
+  "title": ".vercelignore lacks .env patterns",
+  "description": "Local .env files could upload on a CLI deploy and be inlined if VITE_ prefixed.",
+  "trace": [
+   {
+    "kind": "sink",
+    "file": ".vercelignore",
+    "line": 1,
+    "scope": ".vercelignore",
+    "description": ".vercelignore lacks .env patterns"
+   }
+  ],
+  "evidence": [
+   {
+    "file": ".vercelignore",
+    "line": 1,
+    "description": "Local .env files could upload on a CLI deploy and be inlined if VITE_ prefixed."
+   }
+  ],
+  "claimed_root_cause": "Deploys are git integrated and no secret is read through VITE_ names.",
+  "reason": "Deploys are git integrated and no secret is read through VITE_ names."
+ }
+]
