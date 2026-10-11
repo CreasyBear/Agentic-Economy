@@ -4,6 +4,7 @@ import type { CSSProperties } from 'react'
 import type { ExactAmount } from '@/modules/money/public'
 
 import { EMAIL_COLORS } from '../brand'
+import { EmailPropMissingError } from './account-notice'
 import { bodyText, CtaButton, Layout } from '../layout'
 import { emailUrl } from '../links'
 import { TextOnlySeparator } from '../text-only'
@@ -24,6 +25,8 @@ const cell: CSSProperties = { ...bodyText, fontSize: 14, lineHeight: '20px', mar
 export default function StatementReadyEmail({ siteUrl, periodLabel, rows, total, timeZone }: StatementReadyProps) {
   // Zero calls in the month means no statement is sent (design doc P8); the loader skips, so reaching here is a bug.
   if (rows.length === 0) throw new Error('statement_no_calls')
+  // A missing total or row total is a skip, never a printed '--' (same typed error as account-notice.tsx).
+  if (total === undefined || rows.some((row) => row.total === undefined)) throw new EmailPropMissingError()
   const campaign = 'statement_ready'
   const shown = rows.slice(0, STATEMENT_ROW_CAP)
   const more = rows.length - shown.length
