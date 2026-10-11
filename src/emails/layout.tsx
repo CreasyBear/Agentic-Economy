@@ -3,7 +3,7 @@ import type { CSSProperties, ReactNode } from 'react'
 
 import { EMAIL_COLORS, EMAIL_FONT, EMAIL_LEGAL_LINES, EMAIL_SENDER_NAME, EMAIL_SUPPORT_ADDRESS, SETTINGS_PATH } from './brand'
 import { emailUrl } from './links'
-import { HeaderWithLogoSection } from './vendor/emailcn/header-with-logo'
+import { HeaderWithLogoSection, responsiveStyles } from './vendor/emailcn/header-with-logo'
 
 const { light, dark } = EMAIL_COLORS
 const ABN = '98 700 838 115'
@@ -11,13 +11,10 @@ const ABN_LOOKUP_URL = 'https://abr.business.gov.au/ABN/View?abn=98700838115'
 const FOOTER_LOGO_PATH = '/brand/email/aecon-symbol-chalk-gold-400.png'
 const FOREST_LOGO_PATH = '/brand/email/aecon-symbol-forest-400.png'
 
-/** Header responsive rules, from the vendored header-with-logo (its own style block is not rendered when only the Section is used), merged here so the head carries one style. Left-aligned with-text variant only. */
-const HEADER_CSS = `  .header-logo-text-stack { display: block !important; width: 100% !important; }
-  .header-logo-text-left-logo { padding-bottom: 24px !important; }`
-
 /** Light is the inline base. Classes carry !important so dark clients that honour the media query flip the palette; the header band and footer band are fixed and never swap. */
 const DARK_CSS = `
 :root { color-scheme: light dark; supported-color-schemes: light dark; }
+.ae-rule { border-bottom: 1px solid ${light.border}; }
 @media (prefers-color-scheme: dark) {
   .ae-bg { background-color: ${dark.page} !important; }
   .ae-text { color: ${dark.text} !important; }
@@ -35,8 +32,8 @@ const DARK_CSS = `
 @media only screen and (max-width: 599px) {
   .ae-pad { padding-left: 16px !important; padding-right: 16px !important; }
   .ae-hdr td[style*="padding:24px"] { padding: 24px 16px !important; }
-${HEADER_CSS}
-}`
+}
+${responsiveStyles}`
 
 export const bodyText: CSSProperties = { color: light.text, fontFamily: EMAIL_FONT, fontSize: 16, lineHeight: '24px', margin: '0 0 16px' }
 const reasonText: CSSProperties = { color: light.muted, fontFamily: EMAIL_FONT, fontSize: 13, lineHeight: '20px', margin: '16px 0 0' }

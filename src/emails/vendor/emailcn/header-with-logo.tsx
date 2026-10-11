@@ -41,7 +41,7 @@ export interface HeaderWithLogoProps {
 const fontFamily =
   'Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif';
 
-const responsiveStyles = [
+export const responsiveStyles = [
   "@media only screen and (max-width: 599px) {",
   "  .header-logo-text-stack { display: block !important; width: 100% !important; }",
   "  .header-logo-text-left-logo { padding-bottom: 24px !important; }",

@@ -18,7 +18,7 @@ export const STATEMENT_ROW_CAP = 25
 
 export const subject = ({ periodLabel }: StatementReadyProps) => `Your aecon statement for ${periodLabel}`
 
-const cell: CSSProperties = { ...bodyText, fontSize: 14, lineHeight: '20px', margin: 0, padding: '8px 0', borderBottom: `1px solid ${EMAIL_COLORS.light.border}` }
+const cell: CSSProperties = { ...bodyText, fontSize: 14, lineHeight: '20px', margin: 0, padding: '8px 0' }
 
 export default function StatementReadyEmail({ siteUrl, periodLabel, rows, total, timeZone }: StatementReadyProps) {
   // Zero calls in the month means no statement is sent (design doc P8); the loader skips, so reaching here is a bug.
