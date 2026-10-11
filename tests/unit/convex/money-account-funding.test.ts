@@ -676,6 +676,7 @@ describe('Account AUD funding through Formance', () => {
 
   it('locks only the affected Account for partial refunds and never prepares a posting', async () => {
     const backend = convexTestWithMarketComponents()
+    registerWorkpool(backend, 'notificationWorkpool')
     const fixture = await publishedBusinessOwner(backend, 'formance-funding-partial-refund')
     const commandRef = 'account-funding:partial-refund'
     const paymentId = 'pi_partial_refund'
@@ -1005,6 +1006,7 @@ describe('Account AUD funding through Formance', () => {
 
   it('refuses owner close of a processor_difference funding lock without source-write', async () => {
     const backend = convexTestWithMarketComponents()
+    registerWorkpool(backend, 'notificationWorkpool')
     const fixture = await publishedBusinessOwner(backend, 'formance-funding-lock-close')
     const commandRef = 'account-funding:lock-close'
     const paymentId = 'pi_lock_close'

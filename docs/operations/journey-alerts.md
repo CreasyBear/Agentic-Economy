@@ -129,3 +129,7 @@ A validation refusal is `refused` and is not in this ratio. `failed` is a commit
 | Threshold | above `0` |
 | Window | 60 minutes |
 | Minimum | 1 valid event |
+
+## Operator email
+
+Funding failures (not expiries) and newly opened reconciliation cases queue an operator email through `enqueueOperatorAlert`, which runs `sendOperatorAlert` on the notification workpool; `alertRef` is the Resend idempotency key. The Convex env must set `OPERATOR_EMAIL`, `RESEND_API_KEY` and `NOTIFICATION_FROM_EMAIL`. Alerts are best effort and carry refs only. A test delivery to Joel's address is still required before claiming coverage.

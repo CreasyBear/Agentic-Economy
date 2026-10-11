@@ -1,5 +1,6 @@
 import { financialEnvironmentMatches } from '../formance/contracts'
 import { canonicalDigest } from '../../../../src/modules/common/canonical-digest'
+import { enqueueOperatorAlert } from '../../../operatorDigest'
 import type { MutationCtx } from '../../../_generated/server'
 import { AUD_EXPONENT, compareExactAmounts, type StripeMoneyWebhookEvent } from '../../../../src/modules/money/public'
 import { eventRowFields, eventRowMatches } from '../../../moneyStripeEvents'
@@ -111,6 +112,11 @@ export async function prepareFundingRefundEvent(
         evidenceRefs: [event.stripeEventId, event.refundId, readback.evidenceRef],
         createdAt: event.observedAt,
         updatedAt: event.observedAt,
+      })
+      await enqueueOperatorAlert(ctx, {
+        alertRef: `case:${caseRef}`,
+        subject: 'Reconciliation case opened',
+        text: `Case ${caseRef} kind processor_difference reason funding_refund_not_full.`,
       })
     } else {
       await ctx.db.patch(existingCase._id, {
