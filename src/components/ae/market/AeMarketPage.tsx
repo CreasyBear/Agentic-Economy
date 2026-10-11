@@ -4,6 +4,7 @@ import { useRouter, useRouterState } from "@tanstack/react-router";
 
 import { AePublicPage } from "@/components/ae/layout/AePublicPage";
 // Static: the router already splits this route's component and fetches it beside the loader.
+import type { SourceFreshnessState } from "@/modules/common/freshness";
 import { AeX402Directory } from "@/components/ae/market/AeX402Directory";
 import { Alert } from "@/components/arc/alert/alert";
 import { Button } from "@/components/arc/button/button";
@@ -28,6 +29,8 @@ export type AeMarketPageProps = Readonly<{
     compareEntries: readonly MarketCompareEntry[];
     catalogue: X402DirectoryCatalogue;
     overview: X402DirectoryCatalogueOverview | undefined;
+    /** Server-computed x402 directory freshness; undefined while it could not be read. */
+    freshness?: SourceFreshnessState | undefined;
     providers: X402DirectoryProvidersPage | undefined;
     jevRecipient: Readonly<{ label: string; host: string }> | null;
     /** The page link's index cursor had expired, so this is page 1. */
@@ -96,6 +99,7 @@ export function AeMarketPage({ data, search }: AeMarketPageProps) {
         compareEntries={shownData.compareEntries}
         search={shownSearch}
         catalogue={shownData.catalogue}
+        {...(shownData.freshness === undefined ? {} : { freshness: shownData.freshness })}
         {...(shownData.overview === undefined ? {} : { overview: shownData.overview })}
         {...(shownData.jevRecipient === null ? {} : { jevRecipient: shownData.jevRecipient.label })}
         cursorReset={shownData.cursorReset === true}

@@ -74,6 +74,7 @@ const PROOF_FAILURE_BY_ACTION: {
   grant_promotional_credit: MFA_PROOF_FAILURES,
   issue_trial: MFA_PROOF_FAILURES,
   set_payments_paused: MFA_PROOF_FAILURES,
+  set_payments_audience: MFA_PROOF_FAILURES,
   change_treasury_thresholds: MFA_PROOF_FAILURES,
 }
 

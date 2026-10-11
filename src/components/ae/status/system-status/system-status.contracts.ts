@@ -61,6 +61,7 @@ export const probeLabels: Readonly<Record<ProbeId, string>> = {
   discovery: 'Machine discovery',
   release: 'Release identity',
   catalogue: 'Catalogue freshness',
+  payments: 'Paid calls',
 }
 
 export const probeOrder: readonly ProbeId[] = [
@@ -69,6 +70,7 @@ export const probeOrder: readonly ProbeId[] = [
   'discovery',
   'release',
   'catalogue',
+  'payments',
 ]
 
 export const statusPageDescription =

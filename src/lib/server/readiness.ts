@@ -12,6 +12,7 @@ import { readCapabilityToolSearch } from '@/modules/capability-supply/tool-sourc
 import type { SourceFreshnessState } from '@/modules/common/freshness'
 import { readDirectoryFreshnessField } from '@/modules/market/x402-directory-index.server'
 import { isMoneyRefusal } from '@/modules/money/public'
+import { readPlatformFundingConstraintsThroughSource, readPublicAvailabilityThroughSource } from '@/modules/money/server'
 import { isRecord } from '@/modules/common/is-record'
 import { PAYMENT_READINESS_CHECK_KEYS, PAYMENT_READINESS_GATING_KEYS, PAYMENT_READINESS_MAX_VALIDITY_MS, referenceRateFresh, type PaymentReadinessView } from '@/modules/money/payment-readiness'
 import { ALPHA_X402_PAYEE_SCREENING_POLICY } from '@/modules/money/x402-spend-admission'
@@ -120,11 +121,13 @@ export function readNamesOnlyReadinessDiagnostics(
 
 
 /**
- * Discovery and configured funding signals used by the CLI doctor. These do
- * not establish current paid-Call admission: production also requires the
- * backend payment-readiness evidence and purchase authority. Every field is
- * best-effort: a source outage or timeout degrades to the named unavailable
- * state, it never fails the request or flips the HTTP status.
+ * Discovery and configured funding signals used by the CLI doctor. `sellable`
+ * is true only when the catalogue, quoting and funding signals hold, funding
+ * constraints are available, and the admin paid-calls switch is open. It still
+ * does not establish paid-Call admission for a given buyer: production also
+ * requires the backend payment-readiness evidence and purchase authority.
+ * Every field is best-effort: a source outage or timeout degrades to the named
+ * unavailable state, it never fails the request or flips the HTTP status.
  */
 export type CommercialReadiness = Readonly<{
   /** x402 directory completion state (absent|failed|stale|fresh), from `readDirectoryFreshnessField`. */
@@ -133,7 +136,9 @@ export type CommercialReadiness = Readonly<{
   quoting: 'ready' | 'unavailable'
   /** Whether a money rail (Stripe test/live or the CDP/x402 custody bundle) is configured to settle a sale. */
   funding: 'configured' | 'missing'
-  /** catalogue in {fresh, stale} && quoting ready && funding configured. */
+  /** Public paid-calls availability, from the admin payments-audience switch (`/api/v1/availability`); `soon` when unreadable. */
+  paidCalls: 'open' | 'soon'
+  /** catalogue in {fresh, stale} && quoting ready && funding configured && funding constraints available && paidCalls open. */
   sellable: boolean
 }>
 
@@ -335,10 +340,16 @@ function withBoundedTimeout<T>(run: (signal: AbortSignal) => Promise<T>, timeout
 
 async function readCommercialReadiness(env: StringEnvironment, timeoutMs?: number): Promise<CommercialReadiness> {
   const bounded = boundedProbeTimeout(timeoutMs)
-  const [catalogue, quoting] = await Promise.all([probeCatalogue(bounded), probeQuoting(bounded)])
+  const [catalogue, quoting, constraintsOk, paidCalls] = await Promise.all([
+    probeCatalogue(bounded),
+    probeQuoting(bounded),
+    withBoundedTimeout(async () => (await readPlatformFundingConstraintsThroughSource()).kind === 'available', bounded, false),
+    withBoundedTimeout(async () => (await readPublicAvailabilityThroughSource()).paidCalls, bounded, 'soon' as const),
+  ])
   const funding = fundingState(env)
-  const sellable = (catalogue === 'fresh' || catalogue === 'stale') && quoting === 'ready' && funding === 'configured'
-  return { catalogue, quoting, funding, sellable }
+  const sellable =
+    (catalogue === 'fresh' || catalogue === 'stale') && quoting === 'ready' && funding === 'configured' && constraintsOk && paidCalls === 'open'
+  return { catalogue, quoting, funding, paidCalls, sellable }
 }
 
 /** x402 directory freshness, best-effort (shared with `/api/v1/catalogue-status`). */

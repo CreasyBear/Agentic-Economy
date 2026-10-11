@@ -127,7 +127,7 @@ describe('Arc public document compositions', () => {
   })
 
   it('preserves every published About fact, founder paragraph and destination', () => {
-    render(<AeAboutPage />)
+    render(<AeAboutPage availability="Trial credit for alpha users. Paid calls open soon." />)
     expect(screen.getByRole('heading', { level: 1, name: ABOUT.heading }).id).toBe('about-hero')
     expect(screen.getByText(ABOUT.subhead)).toBeTruthy()
     const image = document.querySelector('img')!
@@ -139,7 +139,7 @@ describe('Arc public document compositions', () => {
       expect(screen.getByRole('heading', { level: 3, name: feature.title })).toBeTruthy()
       expect(screen.getByText(feature.description)).toBeTruthy()
     }
-    expect(screen.getByText(ABOUT.ctaDescription)).toBeTruthy()
+    expect(screen.getByText(/Paid calls open soon/)).toBeTruthy()
     expect(screen.getByRole('link', { name: 'ABN 98 700 838 115 (opens in a new tab)' }).getAttribute('target')).toBe('_blank')
     expect(screen.getByRole('link', { name: 'support@aecon.ai' }).getAttribute('href')).toBe('mailto:support@aecon.ai')
     expect(screen.getByRole('link', { name: ABOUT.ctaPrimary }).getAttribute('href')).toBe('/market')

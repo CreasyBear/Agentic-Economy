@@ -23,6 +23,21 @@ export async function readPaymentsAudience(ctx: Pick<QueryCtx, 'db'>, environmen
   return row?.paymentsOpenTo ?? (environment === 'production' ? 'admins' : 'everyone')
 }
 
+/** Funding start: trial access never unlocks Stripe funding; only the audience switch (or an Admin under 'admins') does. */
+export async function readFundingStartRefusal(
+  ctx: Pick<QueryCtx, 'db'>,
+  environment: PaymentEnvironment,
+  input: Readonly<{ admin: boolean }>,
+): Promise<Extract<PaymentAdmissionResult, { kind: 'refused' }>['code'] | null> {
+  const audience = await readPaymentsAudience(ctx, environment)
+  if (audience === 'none') return 'payments_paused'
+  if (environment === 'production' && (await readPaymentReadiness(ctx, environment, Date.now())).kind !== 'ready') {
+    return 'payments_not_ready'
+  }
+  if (audience === 'everyone') return null
+  return input.admin ? null : 'payments_admins_only'
+}
+
 /** An active canonical human identity and active Admin membership establish the launch role. */
 async function readActiveClerkHuman(ctx: Pick<QueryCtx, 'db'>, principalRef: string) {
   const principal = await ctx.db.query('principals')

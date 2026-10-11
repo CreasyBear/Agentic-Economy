@@ -9,6 +9,7 @@ export type BuildDiscoveryFileOptions = {
   canonicalBaseUrl: string
   routingBaseUrl?: string
   now?: number
+  availabilityStatement?: string
 }
 
 export type DiscoveryFileBuildResult = {

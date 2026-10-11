@@ -1,9 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router'
 
+import { availabilityStatement } from '@/content/availability-copy'
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { discoveryTextResponse } from '@/lib/http/discovery-response'
 import { methodNotAllowed } from '@/lib/server/method-guard'
 import { buildPublicAgentSkillMarkdown } from '@/modules/discovery/public'
+import { readPublicAvailabilityThroughSource } from '@/modules/money/server'
 
 export const Route = createFileRoute('/SKILL.md')({
   staticData: {
@@ -27,15 +29,25 @@ export const Route = createFileRoute('/SKILL.md')({
   },
 })
 
-export function handlePublicAgentSkillRequest(request: Request, head = false): Response {
+/** Same source as the other public pages; an unreadable source reads as 'soon'. */
+const readPaidCalls = () =>
+  Promise.race([
+    readPublicAvailabilityThroughSource().then((a) => a.paidCalls, () => 'soon' as const),
+    new Promise<'soon'>((resolve) => setTimeout(resolve, 2000, 'soon')),
+  ])
+
+export async function handlePublicAgentSkillRequest(request: Request, head = false): Promise<Response> {
   const { baseUrl } = resolveCanonicalBaseUrl(request)
-  const body = buildPublicAgentSkillMarkdown({ canonicalBaseUrl: baseUrl })
+  const body = buildPublicAgentSkillMarkdown({
+    canonicalBaseUrl: baseUrl,
+    availabilityStatement: availabilityStatement(await readPaidCalls()),
+  })
   const response = discoveryTextResponse(body, 'text/markdown; charset=utf-8')
   return head ? new Response(null, { status: response.status, headers: response.headers }) : response
 }
 
 /** Nitro's explicit route keeps `.md` out of the dev asset fallback. */
-export default function handlePublicAgentSkillNitroRequest(event: { req: Request }): Response {
+export default function handlePublicAgentSkillNitroRequest(event: { req: Request }): Response | Promise<Response> {
   if (event.req.method === 'GET') return handlePublicAgentSkillRequest(event.req)
   if (event.req.method === 'HEAD') return handlePublicAgentSkillRequest(event.req, true)
   return methodNotAllowed(['GET', 'HEAD'])

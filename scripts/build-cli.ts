@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { chmod, mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -6,10 +7,20 @@ import { build } from "esbuild";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const outputFile = resolve(repositoryRoot, "packages/cli/dist/ae.js");
-// A release pipeline may pin this to an immutable source revision. Keeping the
-// local default stable makes the checked-in download reproducible after the
-// commit that adds it instead of creating a self-referential archive digest.
-const buildRevision = process.env.AE_SOURCE_REVISION?.trim() || "development";
+// A release pipeline may pin this to an immutable source revision; otherwise
+// report the checked-out commit so `ae --version` names a real revision.
+const gitRevision = () => {
+  try {
+    return execFileSync("git", ["rev-parse", "--short=12", "HEAD"], {
+      cwd: repositoryRoot,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch {
+    return "";
+  }
+};
+const buildRevision = process.env.AE_SOURCE_REVISION?.trim() || gitRevision() || "development";
 
 await mkdir(dirname(outputFile), { recursive: true });
 await build({

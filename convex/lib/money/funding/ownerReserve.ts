@@ -1,7 +1,8 @@
 import { financialEnvironmentMatches } from '../formance/contracts'
 
 import type { MutationCtx } from '../../../_generated/server'
-import { resolveBusinessActor } from '../../../authz'
+import { readCurrentActiveAdminMembership, resolveBusinessActor } from '../../../authz'
+import { readFundingStartRefusal } from '../treasury/paymentAdmission'
 import { admitInteractiveOwnerConsequence } from '../../authority/consequence/owner'
 import { readCommercialPolicyGate } from '../../../moneyCommercialPolicy'
 import { resolveAndBindLegalCustomer } from '../legalCustomer/binding'
@@ -55,6 +56,10 @@ export async function reserveHandler(
       ? { kind: 'accepted', command: fundingCommandView(prior) }
       : refused('funding_idempotency_conflict')
   }
+  const gate = await readFundingStartRefusal(ctx, args.environment, {
+    admin: await readCurrentActiveAdminMembership(ctx) !== undefined,
+  })
+  if (gate !== null) return refused(gate)
   const now = Date.now()
   const policy = await readCommercialPolicyGate(ctx.db, {
     environment: args.environment,

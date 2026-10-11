@@ -17,7 +17,7 @@ const balance: AccountFundingBalance = { kind: 'available', accountRef: 'account
 describe('sourced Credit profile composition', () => {
   it('keeps exact known credit and restrictions visible after a failed balance refresh', () => {
     const onCreditRefresh = vi.fn()
-    render(<CreditFundPanel accountBalance={{ ...balance, locked: true }} unavailable={{ balance: true }} onCreditRefresh={onCreditRefresh} />)
+    render(<CreditFundPanel paidCalls="open" accountBalance={{ ...balance, locked: true }} unavailable={{ balance: true }} onCreditRefresh={onCreditRefresh} />)
     expect(screen.getByRole('region', { name: 'Account credit' })).toBeInTheDocument()
     expect(screen.getByText('A$12.00')).toBeInTheDocument()
     expect(screen.getByText('A$10.00')).toBeInTheDocument()
@@ -33,7 +33,7 @@ describe('sourced Credit profile composition', () => {
 
   it('offers one balance recovery action without inferring credit when the source is unavailable', () => {
     const onCreditRefresh = vi.fn()
-    render(<CreditFundPanel onCreditRefresh={onCreditRefresh} />)
+    render(<CreditFundPanel paidCalls="open" onCreditRefresh={onCreditRefresh} />)
     const region = screen.getByRole('region', { name: 'Account credit' })
     expect(within(region).getAllByRole('button')).toHaveLength(1)
     expect(within(region).getByRole('alert')).toHaveTextContent('No balance is being inferred')
@@ -44,7 +44,7 @@ describe('sourced Credit profile composition', () => {
 
   it('shows no invented zero credit or payment control while both sources are first loading', () => {
     const begin = vi.fn()
-    render(<CreditFundPanel balanceLoading constraintsLoading accountFundingPort={{ begin, read: vi.fn() }} />)
+    render(<CreditFundPanel paidCalls="open" balanceLoading constraintsLoading accountFundingPort={{ begin, read: vi.fn() }} />)
     expect(screen.getByRole('heading', { name: 'Loading credit' })).toBeInTheDocument()
     expect(screen.getByRole('status', { name: 'Loading funding amounts' })).toBeInTheDocument()
     expect(screen.queryByRole('button')).toBeNull()

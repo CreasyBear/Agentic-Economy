@@ -1,4 +1,5 @@
 import { assertFinancialEnvironment, financialEnvironmentMatches } from '../formance/contracts'
+import { readFundingStartRefusal } from '../treasury/paymentAdmission'
 import { v, type Infer } from 'convex/values'
 
 import type { Doc } from '../../../_generated/dataModel'
@@ -128,6 +129,8 @@ export async function reserveAgentHandoffHandler(
       ? { kind: 'accepted', command: fundingCommandView(prior) }
       : refused('funding_idempotency_conflict')
   }
+  const gate = await readFundingStartRefusal(ctx, args.environment, { admin: false })
+  if (gate !== null) return refused(gate)
   const now = Date.now()
   if (args.checkoutExpiresAt < now + 30 * 60_000 || args.checkoutExpiresAt > now + 60 * 60_000 + 5_000) {
     return refused('funding_amount_invalid')

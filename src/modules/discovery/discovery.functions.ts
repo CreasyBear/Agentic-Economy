@@ -94,12 +94,16 @@ function getPublicDiscoverySourcePort(): PublicDiscoverySourcePort {
   return {
     llms: async (options) => {
       const slugs = await readAllDiscoveryBusinessSlugs('llms')
+      // availabilityStatement stays out of the Convex args so this ships before any Convex deploy.
+      const { availabilityStatement, ...queryOptions } = options
       const result = await callPublicSourceQuery(readLlmsTxtQuery, {
-        ...options,
+        ...queryOptions,
         totalBusinesses: slugs.length,
       })
       return {
-        body: result.body,
+        body: availabilityStatement
+          ? result.body.replace('\n\n', `\n\n> Availability: ${availabilityStatement}\n\n`)
+          : result.body,
         urls: [...buildOfferingLlmsUrlsFromSlugs(slugs, options)],
       }
     },

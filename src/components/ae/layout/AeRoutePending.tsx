@@ -19,7 +19,7 @@ export function RoutePending({
 }
 
 export function inferOperatorSkeletonPreset(pathname: string): OperatorRouteSkeletonPreset {
-  if (pathname === '/owner/workspace') return 'overview-cards'
+  if (pathname === '/owner/settings/workspace') return 'overview-cards'
 
   if (pathname.includes('/settings') || pathname.endsWith('/new')) return 'form-record'
 

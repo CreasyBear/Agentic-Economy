@@ -13,6 +13,7 @@ import { internal } from '../../../_generated/api'
 import { readTreasuryControlState } from './treasury'
 
 const pauseRef = makeFunctionReference<'mutation', AdminCommandWireArgs<'set_payments_paused'>, AdminCommandReceipt<'set_payments_paused'>>('adminTreasuryCommands:setPaymentsPaused')
+const audienceRef = makeFunctionReference<'mutation', AdminCommandWireArgs<'set_payments_audience'>, AdminCommandReceipt<'set_payments_audience'>>('adminTreasuryCommands:setPaymentsAudience')
 const thresholdsRef = makeFunctionReference<'mutation', AdminCommandWireArgs<'change_treasury_thresholds'>, AdminCommandReceipt<'change_treasury_thresholds'>>('adminTreasuryCommands:changeThresholds')
 
 async function pauseCommand(
@@ -112,6 +113,36 @@ describe('admin treasury controls', () => {
     })
     expect(await approver.mutation(pauseRef, approved)).toMatchObject({ kind: 'completed', code: 'payments_resumed' })
     expect((await backend.run((ctx) => readTreasuryControlState(ctx, 'production'))).launch).toMatchObject({ paymentsOpenTo: 'admins', resumePaymentsOpenTo: 'admins', revision: 2 })
+  })
+
+  it('widens audience only via second owner and narrows immediately without a no-op revision bump', async () => {
+    const backend = convexTestWithMarketComponents()
+    await seedResumeReadiness(backend)
+    const admin = await ownerAdmin(backend, 'user_audience-proposer')
+    const approver = await ownerAdmin(backend, 'user_audience-approver')
+    const audienceCommand = async (a: ConvexFixtureAdmin, key: string, audience: 'admins' | 'everyone', approval: { kind: 'execute' } | { kind: 'propose' } | { kind: 'approve'; proposalRef: string }, digest?: string) => {
+      const state = await a.run((ctx) => readTreasuryControlState(ctx, 'production'))
+      const identity = await a.run(ctx => ctx.auth.getUserIdentity())
+      if (identity === null) throw new Error('fixture_admin_identity_missing')
+      return withSourceWrite('admin_operator', {
+        action: 'set_payments_audience' as const, input: { environment: 'production' as const, audience },
+        reasonCode: audience === 'everyone' ? 'launch_open' as const : 'launch_close' as const,
+        operationKey: key, correlationId: `${key}:correlation`, evidenceRefs: ['evidence:treasury:operator'],
+        expectedStateDigest: digest ?? state.launchStateDigest, approval,
+        proof: { reverificationId: `${key}:proof`, firstFactorAgeMinutes: 0, secondFactorAgeMinutes: 0, subject: identity.subject, evidenceObservedAt: Date.now() },
+      })
+    }
+    expect(await admin.mutation(audienceRef, await audienceCommand(admin, 'aud:direct', 'everyone', { kind: 'execute' }))).toMatchObject({ kind: 'refused', code: 'approval_required' })
+    const propose = await audienceCommand(admin, 'aud:propose', 'everyone', { kind: 'propose' })
+    const proposal = await admin.mutation(audienceRef, propose)
+    if (proposal.kind !== 'proposed') throw new Error('proposal_expected')
+    const approve = await audienceCommand(approver, 'aud:approve', 'everyone', { kind: 'approve', proposalRef: proposal.proposalRef }, propose.expectedStateDigest)
+    expect(await approver.mutation(audienceRef, approve)).toMatchObject({ kind: 'completed', code: 'payments_audience_changed' })
+    expect((await backend.run((ctx) => readTreasuryControlState(ctx, 'production'))).launch).toMatchObject({ paymentsOpenTo: 'everyone', resumePaymentsOpenTo: 'everyone', revision: 1 })
+    expect(await admin.mutation(audienceRef, await audienceCommand(admin, 'aud:narrow', 'admins', { kind: 'execute' }))).toMatchObject({ kind: 'completed', code: 'payments_audience_changed' })
+    expect((await backend.run((ctx) => readTreasuryControlState(ctx, 'production'))).launch).toMatchObject({ paymentsOpenTo: 'admins', resumePaymentsOpenTo: 'admins', revision: 2 })
+    await admin.mutation(audienceRef, await audienceCommand(admin, 'aud:noop', 'admins', { kind: 'execute' }))
+    expect((await backend.run((ctx) => readTreasuryControlState(ctx, 'production'))).launch.revision).toBe(2)
   })
 
   it('preserves an already open everyone audience through pause and resume', async () => {

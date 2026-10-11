@@ -27,6 +27,7 @@ const creditReads = vi.hoisted(() => ({
   documents: vi.fn(), reconciliation: vi.fn(), obligations: vi.fn(),
   statement: vi.fn(), dailyClose: vi.fn(), sign: vi.fn(), render: vi.fn(), documentUrl: vi.fn(), capture: vi.fn(),
 }))
+vi.mock('convex/react', () => ({ useQuery: () => ({ paidCalls: 'open' }) }))
 vi.mock('@tanstack/react-start', async (importOriginal) => ({
   ...await importOriginal<typeof import('@tanstack/react-start')>(),
   useServerFn: (fn: unknown) => fn,

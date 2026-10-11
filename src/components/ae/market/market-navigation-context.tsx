@@ -1,6 +1,6 @@
 import { createContext, use, type ReactNode } from 'react'
 
-export type MarketPath = '/market' | '/owner/market'
+export type MarketPath = '/market'
 
 const MarketNavigationContext = createContext<MarketPath>('/market')
 

@@ -121,6 +121,7 @@ export const ADMIN_APPROVAL_ACTION_LABELS = {
   set_business_suppression: 'Set Business suppression',
   change_commercial_policy: 'Change commercial policy',
   set_payments_paused: 'Pause or resume payments',
+  set_payments_audience: 'Turn paid calls on or off',
   grant_promotional_credit: 'Grant promotional credit',
   issue_trial: 'Approve A$10 trial',
   grant_admin_membership: 'Grant Admin membership',

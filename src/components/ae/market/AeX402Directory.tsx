@@ -5,6 +5,7 @@ import { ArrowLeftIcon, ArrowRightIcon, HeartIcon, Loader2Icon, XIcon } from 'lu
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 import { Alert } from '@/components/arc/alert/alert'
+import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { Badge } from '@/components/arc/badge/badge'
 import { Button } from '@/components/arc/button/button'
 import { EmptyState } from '@/components/arc/empty-state/empty-state'
@@ -17,6 +18,7 @@ import { actionLinkClassName } from '@/components/ae/shared/action-link/actionLi
 import { PUBLIC_SURFACE } from '@/content/brand-copy'
 import { recordProductJourney } from '@/lib/observability/product-journey'
 import { cn } from '@/lib/utils'
+import type { SourceFreshnessState } from '@/modules/common/freshness'
 import { SEARCH_QUERY_MAX_LENGTH } from '@/modules/common/search-query'
 import type { DirectoryExplorerFilterPatch } from '@/modules/market/directory-filters.contracts'
 import { toSavedDirectoryRowModel } from '@/modules/market/directory-card.view-model'
@@ -64,6 +66,8 @@ type AeX402DirectoryProps = Readonly<{
   activeView?: NonNullable<MarketReturnSearch['view']>
   pendingView?: NonNullable<MarketReturnSearch['view']>
   catalogue?: X402DirectoryCatalogue
+  /** Server-computed directory freshness (same value as registry list); the notice shows for any state but 'fresh'. */
+  freshness?: SourceFreshnessState
   overview?: X402DirectoryCatalogueOverview
   providers?: X402DirectoryProvidersPage
   jevRecipient?: string
@@ -142,7 +146,7 @@ function ResultsSkeleton() {
   return <ul className="ae-browse-skeleton" aria-hidden="true">{[0, 1, 2, 3, 4, 5, 6, 7].map(index => <li key={index}><div className="ae-browse-skeleton-media" /><Skeleton lines={3} /></li>)}</ul>
 }
 
-function DirectoryMarketplace({ canonicalSearch: rankedSource, landingRows, loading = false, page, compareEntries, search, workspace = false, defaultLayout = 'grid', activeView, pendingView, catalogue, overview, providers, jevRecipient, cursorReset = false }: AeX402DirectoryProps) {
+function DirectoryMarketplace({ canonicalSearch: rankedSource, landingRows, loading = false, page, compareEntries, search, workspace = false, defaultLayout = 'grid', activeView, pendingView, catalogue, overview, providers, freshness, jevRecipient, cursorReset = false }: AeX402DirectoryProps) {
   const navigate = useNavigate()
   const router = useRouter()
   const marketPath = useMarketPath()
@@ -162,6 +166,7 @@ function DirectoryMarketplace({ canonicalSearch: rankedSource, landingRows, load
   const sourceInput = useMemo(() => directoryInput({ query, offset, network, provider, maxUsdPrice }), [query, offset, network, provider, maxUsdPrice])
   const coverage = catalogue?.kind === 'ok' ? catalogue.coverage : overview?.kind === 'ok' ? overview.coverage : providers?.kind === 'ok' ? providers.coverage : undefined
   const indexed = catalogue?.kind === 'ok' && catalogue.source === 'index'
+  const catalogueStale = freshness !== undefined && freshness !== 'fresh'
   const filterValues = directoryCatalogueSearchValues(search)
   const browse = !Object.entries(filterValues).some(([key, value]) => !['sort', 'indexCursor', 'offset'].includes(key) && value !== undefined && value !== false)
 
@@ -398,6 +403,7 @@ function DirectoryMarketplace({ canonicalSearch: rankedSource, landingRows, load
       {rowsLead ? <div className="ae-browse-rows"><Await promise={landingRows} fallback={<LandingRowsSkeleton grid={false} />}>{rows => <AeToolRows rows={rows} controls={cardControls} />}</Await></div> : null}
       {rankedSection()}
       {search.query === undefined && search.provider !== undefined ? <div className="mb-8"><DirectoryProviderHeader provider={search.provider} entries={loadedItems} /></div> : null}
+      {catalogueStale ? <AeAlert tone="info" title="Catalogue may be out of date." className="ae-browse-alert">Prices and availability can have changed.</AeAlert> : null}
       <section className="ae-browse-section" aria-labelledby="market-keyword-results">
         {/* The page heading already says "All tools"; only best matches need a second visible title here. */}
         <h2 id="market-keyword-results" className={revealed && !empty ? 'ae-browse-section-title' : 'sr-only'}>{revealed ? 'All keyword matches' : 'Results'}</h2>

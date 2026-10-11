@@ -30,7 +30,7 @@ describe('agent door page', () => {
     })
     render(
       <RouterContextProvider router={router}>
-        <AeAgentDoorPage canonicalBaseUrl="https://ae.example" />
+        <AeAgentDoorPage canonicalBaseUrl="https://ae.example" availability="Paid calls open soon." />
       </RouterContextProvider>,
     )
 
@@ -42,7 +42,7 @@ describe('agent door page', () => {
     expect(screen.getByRole('region', { name: 'Agent connection' }).getAttribute('tabindex')).toBe('-1')
     expect(screen.getByText(AGENT_PAGE.subhead)).toBeTruthy()
     expect(screen.getByRole('group', { name: 'Choose your Agent app' })).toBeTruthy()
-    const connectAgent = screen.getByRole('link', { name: 'Start setup' })
+    const connectAgent = screen.getByRole('link', { name: 'Connect an Agent' })
     expect(connectAgent.getAttribute('href')).toBe('#agent-setup')
     expect(screen.queryByRole('button', { name: 'Copy setup commands' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Codex' }))

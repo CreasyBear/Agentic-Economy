@@ -38,6 +38,7 @@ const issueTrial = sourceMutation<AdminWireArgs<'issue_trial'>, AdminCommandRece
 const grantPromotionalCredit = sourceMutation<AdminWireArgs<'grant_promotional_credit'>, AdminCommandReceipt<'grant_promotional_credit'>>('moneyPromotionalCredit:grant')
 
 const setPaymentsPaused = sourceMutation<AdminWireArgs<'set_payments_paused'>, AdminCommandReceipt<'set_payments_paused'>>('adminTreasuryCommands:setPaymentsPaused')
+const setPaymentsAudience = sourceMutation<AdminWireArgs<'set_payments_audience'>, AdminCommandReceipt<'set_payments_audience'>>('adminTreasuryCommands:setPaymentsAudience')
 const changeTreasuryThresholds = sourceMutation<AdminWireArgs<'change_treasury_thresholds'>, AdminCommandReceipt<'change_treasury_thresholds'>>('adminTreasuryCommands:changeThresholds')
 const reviewCallContent = sourceMutation<AdminWireArgs<'review_call_content'>, CallContentReview>('adminCallContent:review')
 
@@ -71,6 +72,9 @@ export const submitAdminCommandServer = createServerFn({ method: 'POST' })
           break
         case 'set_payments_paused':
           receipt = await callSourceMutation(setPaymentsPaused, { ...data, ...evidence, sourceWrite, sourceWriteRequest })
+          break
+        case 'set_payments_audience':
+          receipt = await callSourceMutation(setPaymentsAudience, { ...data, ...evidence, sourceWrite, sourceWriteRequest })
           break
         case 'change_treasury_thresholds':
           receipt = await callSourceMutation(changeTreasuryThresholds, { ...data, ...evidence, sourceWrite, sourceWriteRequest })

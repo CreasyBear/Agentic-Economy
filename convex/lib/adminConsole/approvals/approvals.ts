@@ -26,6 +26,7 @@ const PROPOSABLE_BY_ACTION = {
   grant_promotional_credit: true,
   issue_trial: true,
   set_payments_paused: true,
+  set_payments_audience: true,
   change_treasury_thresholds: false,
 } satisfies Record<AdminCommandAction, boolean>
 
@@ -210,6 +211,7 @@ async function needsSecondApproval(
 ): Promise<boolean> {
   if (!isProposableAction(args.action)) return false
   if (args.action === 'set_payments_paused' && 'paused' in args.input) return !args.input.paused
+  if (args.action === 'set_payments_audience' && 'audience' in args.input) return args.input.audience === 'everyone'
   if (args.action === 'grant_admin_membership' && 'role' in args.input
     && args.input.role === 'owner_admin') return true
   if (args.action !== 'grant_admin_membership' && args.action !== 'revoke_admin_membership') return true

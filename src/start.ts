@@ -7,6 +7,7 @@ import { applySecurityHeadersToResponse, resolveCspModeFromEnv } from '@/lib/htt
 import { createSourceWriteAdmissionMiddleware } from '@/lib/server/source-write-admission'
 import { apiRequestBoundaryResponse } from '@/lib/server/api-request-boundary'
 
+import { AECON_MARKETING_URL } from '@/content/brand-assets'
 import { negotiateAgentPage } from '@/lib/http/agent-content-negotiation'
 import { respondWithAgentPageMarkdown } from '@/lib/server/agent-page-markdown'
 import { clerkMiddlewareConfigured } from '@/lib/deployment/environment'
@@ -99,6 +100,15 @@ export const observabilityRequestMiddleware = createMiddleware().server(async (c
     throw error
   }
 })
+// Marketing pages live on the marketing site; exact match keeps /developers/api and /developers/discovery here.
+const marketingRedirectPaths = new Set(['/pricing', '/launch', '/developers'])
+const marketingRedirectMiddleware = createMiddleware().server((ctx) => {
+  const { method, url } = ctx.request
+  const { pathname } = new URL(url)
+  return (method === 'GET' || method === 'HEAD') && marketingRedirectPaths.has(pathname)
+    ? Response.redirect(`${AECON_MARKETING_URL}${pathname}`, 308)
+    : ctx.next()
+})
 const csrfMiddleware = createCsrfMiddleware({
   filter: (ctx) => ctx.handlerType === 'serverFn',
 })
@@ -136,6 +146,7 @@ export const startInstance = createStart(() => ({
     requestCorrelationMiddleware,
     apiRequestBoundaryMiddleware,
     observabilityRequestMiddleware,
+    marketingRedirectMiddleware,
     securityHeadersRequestMiddleware,
     agentContentNegotiationMiddleware,
     csrfMiddleware,

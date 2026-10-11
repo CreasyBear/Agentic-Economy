@@ -150,11 +150,7 @@ export function resolveAppDestination(
   if (ownsPath(pathname, '/owner/credit') || ownsPath(pathname, '/fund')) return 'credit'
   if (ownsPath(pathname, '/owner/operations') && (hash === '#earnings' || hash === 'earnings')) return 'earnings'
   if (ownsPath(pathname, '/owner/operations') || ownsPath(pathname, '/owner/supply')) return 'tools'
-  if (
-    ownsPath(pathname, '/owner/settings')
-    || ownsPath(pathname, '/owner/team')
-    || ownsPath(pathname, '/owner/workspace')
-  ) return 'settings'
+  if (ownsPath(pathname, '/owner/settings')) return 'settings'
   if (pathname === '/support') return 'support'
   if (pathname === '/status') return 'status'
   return null

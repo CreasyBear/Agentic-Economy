@@ -76,6 +76,8 @@ function approvalSheet(command: AdminCommandRequest, proposalRef: string, onOpen
   switch (command.action) {
     case 'set_payments_paused':
       return <TreasuryPaymentApproval key={proposalRef} command={command} proposalRef={proposalRef} onOpenChange={onOpenChange} />
+    case 'set_payments_audience':
+      return <TreasuryAudienceApproval key={proposalRef} command={command} proposalRef={proposalRef} onOpenChange={onOpenChange} />
     case 'change_treasury_thresholds':
       return null
     case 'set_business_suppression':
@@ -129,4 +131,25 @@ function TreasuryPaymentApproval({ command, proposalRef, onOpenChange }: {
     currentStateDigest={view.controls.launchStateDigest} initialReasonCode={command.reasonCode}
     targetRefs={[{ label: 'Payment environment', value: command.input.environment },
       { label: 'Payments after approval', value: command.input.paused ? 'Paused' : audience === 'admins' ? 'Open to admins' : 'Open to everyone' }]} />
+}
+
+/** Same stale-digest guard as TreasuryPaymentApproval, for the audience switch: the second owner sees the audience that will apply. */
+function TreasuryAudienceApproval({ command, proposalRef, onOpenChange }: {
+  command: Extract<AdminCommandRequest, { action: 'set_payments_audience' }>
+  proposalRef: string
+  onOpenChange: (open: boolean) => void
+}) {
+  const view = useQuery(api.adminConsoleTreasury.read, {})
+  if (view === undefined) return <p role="status">Loading the payment audience for review…</p>
+  if (view.kind !== 'ready' || view.environment !== command.input.environment
+    || view.controls.launchStateDigest !== command.expectedStateDigest) {
+    return <AeAlert tone="danger" role="alert" title="The payment state has changed or is unavailable.">
+      <a className="underline underline-offset-4" href="/admin/treasury">Review Treasury before proposing again.</a>
+    </AeAlert>
+  }
+  return <AdminActionSheet open onOpenChange={onOpenChange} action={command.action} input={command.input}
+    approval={{ kind: 'approve', proposalRef }} initialEvidenceRefs={command.evidenceRefs}
+    currentStateDigest={view.controls.launchStateDigest} initialReasonCode={command.reasonCode}
+    targetRefs={[{ label: 'Payment environment', value: command.input.environment },
+      { label: 'Paid calls after approval', value: command.input.audience === 'everyone' ? 'On' : 'Off' }]} />
 }

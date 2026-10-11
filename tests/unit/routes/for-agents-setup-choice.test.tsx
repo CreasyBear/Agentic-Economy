@@ -13,9 +13,10 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
-const { readCanonicalBaseUrlServer } = vi.hoisted(() => ({ readCanonicalBaseUrlServer: vi.fn() }))
+const { readCanonicalBaseUrlServer, readAvailabilityServer } = vi.hoisted(() => ({ readCanonicalBaseUrlServer: vi.fn(), readAvailabilityServer: vi.fn() }))
 
 vi.mock('@/lib/server/canonical-url.functions', () => ({ readCanonicalBaseUrlServer }))
+vi.mock('@/lib/server/availability.functions', () => ({ readAvailabilityServer }))
 
 import { Route } from '@/routes/for-agents'
 
@@ -38,6 +39,7 @@ afterEach(() => {
 
 beforeEach(() => {
   readCanonicalBaseUrlServer.mockResolvedValue('https://ae.example/')
+  readAvailabilityServer.mockResolvedValue('soon')
 })
 
 describe('public Agent app setup choice', () => {
@@ -132,7 +134,7 @@ function renderForAgents(...initialEntries: string[]) {
       getParentRoute: () => rootRoute,
       path: '/for-agents',
       validateSearch: (search: Record<string, unknown>) => forAgentsSearchValidator(search),
-      loader: () => (Route.options.loader as () => Promise<string>)(),
+      loader: () => (Route.options.loader as () => Promise<{ canonicalBaseUrl: string; availability: string }>)(),
       component: forAgentsRouteComponent,
     }),
     createRoute({

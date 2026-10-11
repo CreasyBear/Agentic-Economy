@@ -1,6 +1,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { getRequest } from '@tanstack/react-start/server'
 
+import { availabilityStatement } from '@/content/availability-copy'
 import { degrade } from '@/lib/observability/degrade'
 import { readReleaseSourceRevision } from '@/lib/deployment/environment'
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
@@ -17,7 +18,7 @@ import { readCatalogueFreshness } from '@/modules/market/x402-directory-index.se
  * the shared deployment release-identity reader.
  */
 
-export type ProbeId = 'site' | 'market' | 'discovery' | 'release' | 'catalogue'
+export type ProbeId = 'site' | 'market' | 'discovery' | 'release' | 'catalogue' | 'payments'
 export type ProbeState = 'operational' | 'degraded'
 export type ProbeOutcome = Readonly<{ id: ProbeId; state: ProbeState; detail: string; requestRef?: string }>
 export type StatusProbesResult = Readonly<{ checks: readonly ProbeOutcome[]; checkedAt: string }>
@@ -34,6 +35,7 @@ export const readStatusProbesServer = createServerFn().handler(async (): Promise
     runProbe('discovery', requestRef, () => probeDiscovery(request)),
     runProbe('release', requestRef, probeRelease),
     runProbe('catalogue', requestRef, () => probeCatalogue(now)),
+    runProbe('payments', requestRef, probePayments),
   ])
   return { checks, checkedAt: `${formatTimestamp(now, 'UTC')} UTC` }
 })
@@ -66,9 +68,9 @@ async function probeSite(): Promise<ProbeAssessment> {
 
 async function probeMarket(): Promise<ProbeAssessment> {
   const readiness = await readServerReadiness()
-  return readiness.status === 'ready'
+  return readiness.status === 'ready' && readiness.commercial.quoting === 'ready'
     ? { state: 'operational', detail: 'Tool search and new Calls are ready.' }
-    : { state: 'degraded', detail: 'New Calls may fail. Check existing Calls before retrying.' }
+    : { state: 'degraded', detail: 'Tool search is unavailable. New Calls may fail. Check existing Calls before retrying.' }
 }
 
 async function probeDiscovery(request: Request): Promise<ProbeAssessment> {
@@ -96,6 +98,12 @@ async function probeCatalogue(now: number): Promise<ProbeAssessment> {
     : { state: 'degraded', detail: 'The catalogue is stale, absent, or its last refresh failed. Tool listings may be out of date.' }
 }
 
+/** A closed paid-calls switch is expected pre-launch, so both values report operational. */
+async function probePayments(): Promise<ProbeAssessment> {
+  const { commercial } = await readServerReadiness()
+  return { state: 'operational', detail: availabilityStatement(commercial.paidCalls) }
+}
+
 function unreachableDetail(id: ProbeId): string {
   switch (id) {
     case 'site':
@@ -108,6 +116,8 @@ function unreachableDetail(id: ProbeId): string {
       return 'Release identity could not be reached. New Calls should wait.'
     case 'catalogue':
       return 'Catalogue freshness could not be checked. Tool listings may be out of date.'
+    case 'payments':
+      return 'Paid calls availability could not be checked.'
   }
 }
 

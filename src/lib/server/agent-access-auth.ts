@@ -118,7 +118,7 @@ const AUTH_SOURCE_UNAVAILABLE = {
 } as const satisfies AgentAccessRefusal
 
 /** Authentication failures carry recovery, while source outages never masquerade as bad keys. */
-export function authRefusalProblem(request: Request, refusal: AgentAccessRefusal, requiredScope?: string, requiredMode?: AgentAccessAuthorityMode, correlationId?: string): Response {
+export function authRefusalProblem(request: Request, refusal: AgentAccessRefusal, requiredScope?: string, requiredMode?: AgentAccessAuthorityMode, correlationId?: string, hint?: string): Response {
   const base = resolveCanonicalBaseUrl(request).baseUrl
   const requestId = correlationId ?? currentRequestCorrelationId() ?? readRequestCorrelationId(request)
   const unavailable = refusal.status === 503
@@ -135,7 +135,7 @@ export function authRefusalProblem(request: Request, refusal: AgentAccessRefusal
   return withRequestCorrelationHeader(problem({
     ...failure,
     status: refusal.status,
-    detail,
+    detail: unavailable || hint === undefined ? detail : `${detail} ${hint}`,
     retryable: unavailable,
     extras: {
       requestId,

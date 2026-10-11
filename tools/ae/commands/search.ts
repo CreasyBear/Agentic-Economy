@@ -59,6 +59,7 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
     throw new CliFailure('The market returned an invalid tool search result.', {
       kind: 'UNAVAILABLE',
       code: 'tool-search-result-invalid',
+      detail: parsedResult.error.issues.slice(0, 3).map(issue => `${issue.path.join('.')}: ${issue.message}`).join('; '),
     })
   }
 
@@ -103,6 +104,7 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
     return
   }
   heading(`Market Tools for "${result.query}" (${outcome.durationMs}ms)`)
+  if (result.freshness !== undefined && result.freshness.state !== 'fresh') line(`  Catalogue may be out of date (${result.freshness.state}). Results can be incomplete.`)
   if (result.recipient !== undefined) line(`  Ranking: ${result.recipient.label} (${result.recipient.host}) receives ${result.recipient.data}.`)
   line(`  ${result.kind} · scope: ${result.assessed.source}/${result.assessed.scope} · ${result.assessed.coverage} coverage (${result.assessed.examined} examined)`)
   if (result.kind === 'noMatch') line('  No suitable Tools found in the assessed sources.')

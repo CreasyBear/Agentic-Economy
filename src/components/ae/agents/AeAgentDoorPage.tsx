@@ -1,3 +1,5 @@
+import { Link } from '@tanstack/react-router'
+
 import {
   AeAssistantInstallFunnel,
   type AeAssistantInstallFunnelProps,
@@ -11,9 +13,9 @@ import './AgentDoorComposition.css'
 type AeAgentDoorPageProps = Readonly<Pick<
   AeAssistantInstallFunnelProps,
   'setupApp' | 'onSetupAppChange'
-> & { canonicalBaseUrl: string }>
+> & { canonicalBaseUrl: string; availability: string }>
 
-export function AeAgentDoorPage({ canonicalBaseUrl, setupApp, onSetupAppChange }: AeAgentDoorPageProps) {
+export function AeAgentDoorPage({ canonicalBaseUrl, availability, setupApp, onSetupAppChange }: AeAgentDoorPageProps) {
   return (
     <div className="arc-market arc-agent-door">
       <section role="region" aria-label={AGENT_PAGE.heading}>
@@ -40,11 +42,14 @@ export function AeAgentDoorPage({ canonicalBaseUrl, setupApp, onSetupAppChange }
             )}
           />
         </RouterLinkBoundary>
+        <p>
+          {AGENT_PAGE.trialLead} <Link to="/trial">{AGENT_PAGE.trialLabel}</Link>
+        </p>
       </section>
       <AeSiteFaq
         labelledBy="agent-faq"
         title={AGENT_PAGE.faqHeading}
-        questions={AGENT_PAGE.faqQuestions}
+        questions={AGENT_PAGE.faqFor(availability)}
         statusLinkLead={AGENT_PAGE.faqStatusLinkLead}
         statusLinkLabel={AGENT_PAGE.faqStatusLinkLabel}
       />

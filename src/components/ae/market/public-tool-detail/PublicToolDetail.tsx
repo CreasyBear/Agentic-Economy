@@ -62,7 +62,7 @@ export function PublicToolDetail({ result, baseUrl, search, onSearchChange }: Pu
   const alternativeHref = alternativeToolSearchHref(listing, `${tool.contract.capabilityId} ${tool.summary}`)
   const run: ToolRun = routeable ? { kind: 'callable', toolRef: tool.toolRef }
     : !recipientUnverified && tool.availability.posture === 'setup_required'
-      ? { kind: 'elsewhere', label: 'Connect an agent', href: `/agent-access?resumeTool=${encodeURIComponent(tool.toolRef)}`, reason: 'This tool runs once an agent is connected to your account.' }
+      ? { kind: 'elsewhere', label: 'Connect an agent', href: '/for-agents', reason: 'This tool runs once an agent is connected to your account.' }
       : { kind: 'elsewhere', label: 'See similar tools', href: alternativeHref, reason: recipientUnverified ? `The provider hasn’t said who receives your input, so ${BRAND_NAME} won’t run it.` : posture === undefined ? 'We couldn’t confirm whether this tool can run right now.' : 'This tool can’t run right now.' }
   const price = priceWithoutUnit(view.price?.label)
   const priceNote = sourcePriceNote(listing, price)

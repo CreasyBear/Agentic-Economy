@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, notFound, redirect } from '@tanstack/react-router'
 import { useCallback } from 'react'
 
 import { PublicToolDetail } from '@/components/ae/market/public-tool-detail/PublicToolDetail'
@@ -9,7 +9,9 @@ import { degrade } from '@/lib/observability/degrade'
 import { readCanonicalBaseUrlServer } from '@/lib/server/canonical-url.functions'
 import { isPublicToolRef } from '@/modules/capability-supply/public'
 import { toolDisplayTitle } from '@/modules/market/tool-view-model'
+import { directoryProviderKey } from '@/modules/market/x402-directory-index'
 import {
+  readDirectoryToolDetailRouteServer,
   readPublicToolDetailRouteServer,
   type PublicToolDetailRouteResult,
 } from '@/modules/market/tool-detail-route.functions'
@@ -19,8 +21,14 @@ export { PublicToolDetail } from '@/components/ae/market/public-tool-detail/Publ
 export const Route = createFileRoute('/tools/$toolRef')({
   validateSearch: validateToolPageSearch,
   loader: async ({ params }) => {
+    // Registry listings render on the provider-host route; resolve the bare id there.
+    if (/^registry:[a-f0-9]{64}$/u.test(params.toolRef)) {
+      const { metadata } = await readDirectoryToolDetailRouteServer({ data: { id: params.toolRef } })
+      if (metadata.kind !== 'found' && metadata.kind !== 'found_upstream') throw notFound({ data: { kind: 'not_found', toolRef: params.toolRef } })
+      throw redirect({ to: '/tools/$providerHost/$slug', params: { providerHost: directoryProviderKey(metadata.item.entry.provider), slug: params.toolRef }, replace: true })
+    }
     if (!isPublicToolRef(params.toolRef)) {
-      return { result: { kind: 'invalid_ref' as const, toolRef: params.toolRef }, evidence: undefined, baseUrl: undefined }
+      throw notFound({ data: { kind: 'invalid_ref', toolRef: params.toolRef } })
     }
     const [result, baseUrl] = await Promise.all([
       readPublicToolDetailRouteServer({ data: { toolRef: params.toolRef } })
@@ -29,6 +37,7 @@ export const Route = createFileRoute('/tools/$toolRef')({
       readCanonicalBaseUrlServer()
         .catch(cause => degrade(cause, undefined, { site: 'toolCanonicalUrl', reason: 'source_unavailable' })),
     ])
+    if (result.kind === 'not_found') throw notFound({ data: result })
     const evidence = result.kind === 'found' ? result.evidence : undefined
     return { result, evidence, baseUrl }
   },
@@ -49,6 +58,7 @@ export const Route = createFileRoute('/tools/$toolRef')({
   },
   pendingComponent: ToolPageSkeleton,
   errorComponent: ToolDetailError,
+  notFoundComponent: ToolDetailNotFound,
   component: ToolDetailRoute,
 })
 
@@ -63,4 +73,10 @@ function ToolDetailRoute() {
 function ToolDetailError() {
   const { toolRef } = Route.useParams()
   return <PublicToolDetail result={{ kind: 'source_unavailable', toolRef }} baseUrl={undefined} />
+}
+
+function ToolDetailNotFound({ data }: { data?: unknown }) {
+  const { toolRef } = Route.useParams()
+  const result = (data ?? { kind: 'invalid_ref', toolRef }) as Extract<PublicToolDetailRouteResult, { kind: 'invalid_ref' | 'not_found' }>
+  return <PublicToolDetail result={result} baseUrl={undefined} />
 }

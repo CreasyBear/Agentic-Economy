@@ -90,7 +90,6 @@ function show(search: Props['search'] = { offset: 20 }, items = entries, extra: 
   const router = createRouter({ defaultViewTransition: true, routeTree: root.addChildren([
     marketRoute,
     createRoute({ getParentRoute: () => root, path: '/t/new' }),
-    createRoute({ getParentRoute: () => root, path: '/owner/market', validateSearch: validateMarketSearch }),
     createRoute({ getParentRoute: () => root, path: '/tools/$providerHost/$slug' }),
   ]), history: createMemoryHistory({ initialEntries: [`${extra.marketPath ?? '/market'}?${new URLSearchParams(Object.entries(search).filter(([, value]) => value !== undefined).map(([key, value]) => [key, Array.isArray(value) ? JSON.stringify(value) : String(value)]))}`] }) })
   void router.load()
@@ -166,7 +165,7 @@ describe('native x402 catalogue', () => {
     listSavedToolsForOwner.mockReturnValue(new Promise(() => {}))
     const compare = entries[0]!.resource
     const search = { view: 'tools' as const, provider: 'example.com', network: 'eip155:8453', maxUsdPrice: 0.005, layout: 'grid' as const, compare }
-    const { router } = show(search, entries, { marketPath: '/owner/market', providers: providersFixture() })
+    const { router } = show(search, entries, { marketPath: '/market', providers: providersFixture() })
     const viewUrl = (name: string | RegExp) => {
       const link = within(browseNav()).getByRole('link', { name })
       expect(link.tagName).toBe('A')
@@ -174,7 +173,7 @@ describe('native x402 catalogue', () => {
     }
 
     const tools = viewUrl('Tools')
-    expect(tools.pathname).toBe('/owner/market')
+    expect(tools.pathname).toBe('/market')
     expect(tools.searchParams.get('provider')).toBe('example.com')
     expect(tools.searchParams.get('network')).toBe('eip155:8453')
     expect(tools.searchParams.get('maxUsdPrice')).toBe('0.005')
@@ -182,7 +181,7 @@ describe('native x402 catalogue', () => {
     expect(tools.searchParams.get('layout')).toBe('grid')
 
     const providers = viewUrl('Providers')
-    expect(providers.pathname).toBe('/owner/market')
+    expect(providers.pathname).toBe('/market')
     expect(providers.searchParams.get('view')).toBe('providers')
     expect(providers.searchParams.get('compare')).toBe(compare)
     expect(providers.searchParams.get('layout')).toBe('grid')
@@ -190,7 +189,7 @@ describe('native x402 catalogue', () => {
     expect(providers.searchParams.has('network')).toBe(false)
 
     const saved = viewUrl(/Saved/)
-    expect(saved.pathname).toBe('/owner/market')
+    expect(saved.pathname).toBe('/market')
     expect(saved.searchParams.get('view')).toBe('saved')
     expect(saved.searchParams.get('compare')).toBe(compare)
     expect(saved.searchParams.get('layout')).toBe('grid')
@@ -199,7 +198,7 @@ describe('native x402 catalogue', () => {
 
     await waitFor(() => expect(listSavedToolsForOwner).toHaveBeenCalledTimes(1))
     fireEvent.click(within(browseNav()).getByRole('link', { name: /Saved/ }), { button: 0, ctrlKey: true })
-    expect(router.state.location.pathname).toBe('/owner/market')
+    expect(router.state.location.pathname).toBe('/market')
     expect(router.state.location.search.view).toBe('tools')
 
     fireEvent.click(within(browseNav()).getByRole('link', { name: /Saved/ }))
@@ -469,9 +468,9 @@ it('does not call an URL selection unavailable while its loader hydration is pen
   expect(screen.queryByText('Selected Tool unavailable')).toBeNull()
 })
 it('keeps workspace pagination on the owner market path', () => {
-  show({ offset: 20, network: 'eip155:8453' }, entries, { workspace: true, marketPath: '/owner/market' })
+  show({ offset: 20, network: 'eip155:8453' }, entries, { workspace: true, marketPath: '/market' })
   expect(screen.getByRole('heading', { level: 2, name: 'All tools' })).toBeTruthy()
-  expect(screen.getByRole('link', { name: 'Next' }).getAttribute('href')).toContain('/owner/market')
+  expect(screen.getByRole('link', { name: 'Next' }).getAttribute('href')).toContain('/market')
 })
 it('returns focus to Compare after dismissing the comparison dialog', async () => {
   show({ offset: 20, layout: 'table' })

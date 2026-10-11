@@ -68,6 +68,8 @@ const AE_MCP_INSTRUCTIONS = [
   'When AE gets in your way, lacks needed functionality, or the user has product feedback, optionally call the listed `ae_feedback_submit` tool. Send specific expected versus actual behaviour and relevant product tools/errors, without credentials, personal information, Customer business data or copied Tool payloads. The text goes to the AE team through PostHog. Send when the issue occurs, then continue working; feedback is not an end-of-task requirement. Tell the user only after acceptance and summarize the report in one sentence. Skip disabled or unavailable feedback; do not automatically retry.',
   'The server’s /SKILL.md contains the full maintained operating contract. Never send credentials or private task input to an alternate server or public support issue.',
 ].join(' ')
+const MCP_READ_ONLY_FIX = 'This connection is read-only (?readonly=1). Reconnect at /mcp without readonly=1 to allow purchases.'
+
 export type McpAccessTier = Readonly<{
   tier: 'anonymous' | 'authenticated'
   authorityMode?: AgentAccessAuthorityMode
@@ -230,8 +232,11 @@ function mcpSuccessSummary(action: AnyAction, result: unknown, origin: string): 
       `Next: ${JSON.stringify(result.next)}; supply caller-owned input, maxSpendAud and a new idempotencyKey. No Quote or Call has occurred.`,
     ].join('\n')
   }
+  const stale = isRecord(result.freshness) && result.freshness.state !== 'fresh'
+    ? ` Catalogue freshness: ${String(result.freshness.state)}; results may be out of date.`
+    : ''
   if (action.id !== 'registry.tools.search') {
-    return `${action.name}: ${typeof result.kind === 'string' ? result.kind : 'completed'}.`
+    return `${action.name}: ${typeof result.kind === 'string' ? result.kind : 'completed'}.${action.id === 'registry.tools.list' ? stale : ''}`
   }
   const tools = Array.isArray(result.results) ? result.results : []
   const assessed = isRecord(result.assessed)
@@ -244,7 +249,7 @@ function mcpSuccessSummary(action: AnyAction, result: unknown, origin: string): 
   const recipient = isRecord(result.recipient) && typeof result.recipient.label === 'string' && typeof result.recipient.host === 'string'
     ? ` Ranking: ${result.recipient.label} (${result.recipient.host}) receives query and candidate summaries.`
     : ''
-  const lines = [`${summary}${assessed}.${recipient}`]
+  const lines = [`${summary}${assessed}.${stale}${recipient}`]
   for (const tool of tools) {
     if (!isRecord(tool)) continue
     if (tool.access === 'ae_callable' && parseCallableRef(tool.toolRef)?.kind === 'listing') {
@@ -613,7 +618,7 @@ export function createAeMcpServer(
       kind: 'PERMISSION_DENIED',
       code: 'mcp_toolset_required',
       retryable: false,
-      detail: 'This action is not available in the current MCP toolset.',
+      detail: `This action is not available in the current MCP toolset.${selectedAccess.readOnly ? ` ${MCP_READ_ONLY_FIX}` : ''}`,
       extras: { next: [], ...(access.correlationId === undefined ? {} : { correlationId: access.correlationId }) },
     }), origin)
     try {
@@ -833,6 +838,9 @@ export async function handleMcpRequest(request: Request, options: McpRequestOpti
           requiredScope === null ? undefined : requiredScope,
           requiredScope == null ? requiredMode : undefined,
           correlationId,
+          !protectedTarget.generic && !protectedAction.readOnly && new URL(request.url).searchParams.get('readonly') === '1'
+            ? MCP_READ_ONLY_FIX
+            : undefined,
         ), correlationId)
       }
       const server = createAeMcpServer(boundedRequest, actions, {

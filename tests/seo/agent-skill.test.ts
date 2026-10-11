@@ -11,14 +11,16 @@ const productionBaseUrl = 'https://app.aecon.ai'
 describe('public agent skill', () => {
   it('serves the packaged skill with URLs derived from the canonical base', async () => {
     for (const accept of ['*/*', 'application/json', 'text/markdown', 'text/plain', 'text/html']) {
-      const response = handlePublicAgentSkillRequest(new Request(`${productionBaseUrl}/SKILL.md`, {
+      const response = await handlePublicAgentSkillRequest(new Request(`${productionBaseUrl}/SKILL.md`, {
         headers: { Accept: accept },
       }))
       expect(response.status).toBe(200)
       expect(response.headers.get('Content-Type')).toContain('text/markdown')
       expect(await response.text()).toContain('/for-agents')
     }
-    expect(buildPublicAgentSkillMarkdown({ canonicalBaseUrl: productionBaseUrl })).toBe(packagedSkill)
+    expect(buildPublicAgentSkillMarkdown({ canonicalBaseUrl: productionBaseUrl })).toBe(
+      packagedSkill,
+    )
     const local = buildPublicAgentSkillMarkdown({ canonicalBaseUrl: 'http://127.0.0.1:3024/' })
     expect(local).toContain('http://127.0.0.1:3024/for-agents')
     expect(local).not.toContain(productionBaseUrl)
@@ -56,14 +58,14 @@ describe('public agent skill', () => {
   })
 
   it('answers HEAD with discovery headers and rejects unsupported methods', async () => {
-    const response = handlePublicAgentSkillNitroRequest({
+    const response = await handlePublicAgentSkillNitroRequest({
       req: new Request('https://ae.example/SKILL.md', { method: 'HEAD' }),
     })
     expect(response.status).toBe(200)
     expect(response.headers.get('Content-Type')).toContain('text/markdown')
     expect(await response.text()).toBe('')
-    expect(handlePublicAgentSkillNitroRequest({
+    expect((await handlePublicAgentSkillNitroRequest({
       req: new Request('https://ae.example/SKILL.md', { method: 'POST' }),
-    }).status).toBe(405)
+    })).status).toBe(405)
   })
 })

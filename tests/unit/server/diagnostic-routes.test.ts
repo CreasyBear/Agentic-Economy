@@ -46,6 +46,17 @@ const toolSearchMocks = vi.hoisted(() => ({
 }))
 vi.mock('@/modules/capability-supply/tool-source', () => toolSearchMocks)
 
+// `sellable` also follows funding constraints and the paid-calls switch.
+const moneySourceMocks = vi.hoisted(() => ({
+  constraints: vi.fn(async () => ({ kind: 'available' })),
+  availability: vi.fn(async () => ({ paidCalls: 'open' })),
+}))
+vi.mock('@/modules/money/server', async importOriginal => ({
+  ...await importOriginal<typeof import('@/modules/money/server')>(),
+  readPlatformFundingConstraintsThroughSource: moneySourceMocks.constraints,
+  readPublicAvailabilityThroughSource: moneySourceMocks.availability,
+}))
+
 import { handleHealthRequest } from '@/routes/api.health'
 import { handleReadyRequest, Route as ReadyRoute } from '@/routes/api.ready'
 import { handleClientErrorRequest, Route as ClientErrorRoute } from '@/routes/api.observability.client-error'
@@ -317,7 +328,7 @@ describe('operational diagnostics routes', () => {
     expect(body).toEqual({
       status: 'ready',
       checks: { config: 'ready', convex: 'ready' },
-      commercial: { catalogue: 'absent', quoting: 'unavailable', funding: 'missing', sellable: false },
+      commercial: { catalogue: 'absent', quoting: 'unavailable', funding: 'missing', paidCalls: 'open', sellable: false },
       deployment: { paymentEnvironment: 'sandbox', convexOrigin: 'https://convex.example' },
     })
     const serialized = JSON.stringify(body)
@@ -438,7 +449,7 @@ describe('operational diagnostics routes', () => {
         config: 'ready',
         convex: { status: 'failed', code: 'convex_probe_failed' },
       },
-      commercial: { catalogue: 'absent', quoting: 'unavailable', funding: 'missing', sellable: false },
+      commercial: { catalogue: 'absent', quoting: 'unavailable', funding: 'missing', paidCalls: 'open', sellable: false },
       deployment: { paymentEnvironment: 'sandbox', convexOrigin: 'https://convex.example' },
     })
     const serialized = JSON.stringify(body)
@@ -776,7 +787,28 @@ describe('operational diagnostics routes', () => {
         fetch: readyFetch(),
       })
 
-      expect(result.commercial).toEqual({ catalogue: 'fresh', quoting: 'ready', funding: 'configured', sellable: true })
+      expect(result.commercial).toEqual({ catalogue: 'fresh', quoting: 'ready', funding: 'configured', paidCalls: 'open', sellable: true })
+    })
+
+    it.each([
+      ['funding constraints are unavailable', () => moneySourceMocks.constraints.mockResolvedValueOnce({ kind: 'unavailable' }), 'open'],
+      ['paid calls are still soon', () => moneySourceMocks.availability.mockResolvedValueOnce({ paidCalls: 'soon' }), 'soon'],
+      ['the paid-calls read fails', () => moneySourceMocks.availability.mockRejectedValueOnce(new Error('down')), 'soon'],
+    ] as const)('derives sellable false when %s', async (_name, arrange, paidCalls) => {
+      setPublicSourceTransportForTests({
+        query: vi.fn(async () => directoryStatus({ completedAt: Date.now() - 3_600_000, refreshState: 'complete' })),
+        mutation: vi.fn(),
+        action: vi.fn(),
+      } as never)
+      toolSearchMocks.readCapabilityToolSearch.mockResolvedValueOnce(readyToolSearchResult)
+      arrange()
+
+      const result = await readServerReadiness({
+        env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://convex.example', ...stripeOnlyEnv() },
+        fetch: readyFetch(),
+      })
+
+      expect(result.commercial).toEqual({ catalogue: 'fresh', quoting: 'ready', funding: 'configured', paidCalls, sellable: false })
     })
 
     it('derives sellable true for a stale-but-usable catalogue', async () => {
@@ -792,7 +824,7 @@ describe('operational diagnostics routes', () => {
         fetch: readyFetch(),
       })
 
-      expect(result.commercial).toEqual({ catalogue: 'stale', quoting: 'ready', funding: 'configured', sellable: true })
+      expect(result.commercial).toEqual({ catalogue: 'stale', quoting: 'ready', funding: 'configured', paidCalls: 'open', sellable: true })
     })
 
     it('derives sellable false when the catalogue refresh has failed even though quoting and funding are ready', async () => {
@@ -808,7 +840,7 @@ describe('operational diagnostics routes', () => {
         fetch: readyFetch(),
       })
 
-      expect(result.commercial).toEqual({ catalogue: 'failed', quoting: 'ready', funding: 'configured', sellable: false })
+      expect(result.commercial).toEqual({ catalogue: 'failed', quoting: 'ready', funding: 'configured', paidCalls: 'open', sellable: false })
     })
 
     it('derives sellable false when no routeable Tool can be quoted even though the catalogue and funding are ready', async () => {
@@ -823,7 +855,7 @@ describe('operational diagnostics routes', () => {
         fetch: readyFetch(),
       })
 
-      expect(result.commercial).toEqual({ catalogue: 'fresh', quoting: 'unavailable', funding: 'configured', sellable: false })
+      expect(result.commercial).toEqual({ catalogue: 'fresh', quoting: 'unavailable', funding: 'configured', paidCalls: 'open', sellable: false })
     })
 
     it('derives sellable false when no money rail is configured even though the catalogue and quoting are ready', async () => {
@@ -836,7 +868,7 @@ describe('operational diagnostics routes', () => {
 
       const result = await readServerReadiness({ env: { NODE_ENV: 'test', AE_DEPLOYMENT_ENVIRONMENT: 'development', CONVEX_URL: 'https://convex.example' }, fetch: readyFetch() })
 
-      expect(result.commercial).toEqual({ catalogue: 'fresh', quoting: 'ready', funding: 'missing', sellable: false })
+      expect(result.commercial).toEqual({ catalogue: 'fresh', quoting: 'ready', funding: 'missing', paidCalls: 'open', sellable: false })
     })
 
     it('projects commercial in the /api/ready body alongside the unchanged config/convex checks contract', async () => {
@@ -858,7 +890,7 @@ describe('operational diagnostics routes', () => {
         status: 'ready',
         deployment: { paymentEnvironment: 'sandbox', convexOrigin: 'https://convex.example' },
         checks: { config: 'ready', convex: 'ready' },
-        commercial: { catalogue: 'fresh', quoting: 'ready', funding: 'configured', sellable: true },
+        commercial: { catalogue: 'fresh', quoting: 'ready', funding: 'configured', paidCalls: 'open', sellable: true },
       })
     })
   })
@@ -903,14 +935,14 @@ describe('production aggregate payment readiness', () => {
     paymentView = undefined
     body = await (await handleReadyRequest(request(), { env: sellableInputs(), fetch: readyFetch(), nodeMajor: 22 })).json()
     expect(body.checks.payments).toEqual({ status: 'failed', code: 'payments_unavailable' })
-    expect(body.commercial).toEqual({ catalogue: 'fresh', quoting: 'ready', funding: 'configured', sellable: false })
+    expect(body.commercial).toEqual({ catalogue: 'fresh', quoting: 'ready', funding: 'configured', paidCalls: 'open', sellable: false })
   })
   it('forces sellable false when production config fails, leaving the probed rails unchanged', async () => {
     const env = sellableInputs()
     env.CLERK_JWT_ISSUER_DOMAIN = 'not-a-url'
     const result = await readServerReadiness({ env, fetch: readyFetch(), nodeMajor: 22 })
     expect(result.checks.config).toEqual({ status: 'failed', code: 'deployment_manifest_invalid' })
-    expect(result.commercial).toEqual({ catalogue: 'fresh', quoting: 'ready', funding: 'configured', sellable: false })
+    expect(result.commercial).toEqual({ catalogue: 'fresh', quoting: 'ready', funding: 'configured', paidCalls: 'open', sellable: false })
   })
   it('keeps /api/ready 200 on a stale AUD reference rate but degrades quoting and sellable', async () => {
     const view = readyPaymentView()

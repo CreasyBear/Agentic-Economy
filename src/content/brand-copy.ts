@@ -52,7 +52,9 @@ export const AGENT_PAGE = {
   eyebrow: 'Connections',
   heading: 'Connect your Agent.',
   subhead: 'We’re building one AUD account for your Agent’s paid Tools, with a Spending policy and purchase records.',
-  primaryCta: 'Start setup',
+  primaryCta: 'Connect an Agent',
+  trialLead: 'Have a trial invitation?',
+  trialLabel: 'Activate it',
   faqHeading: 'Before you connect',
   faqQuestions: [
     {
@@ -67,9 +69,13 @@ export const AGENT_PAGE = {
     },
     {
       question: 'When can I connect an Agent?',
-      answer:
-        'Agentic Economy is pre-launch. Public access, funding and purchases are not open yet. The status page tracks availability.',
+      answer: 'The status page tracks availability.',
     },
+  ],
+  /** FAQ list whose last answer (availability) opens with the live availability statement. */
+  faqFor: (availability: string) => [
+    ...AGENT_PAGE.faqQuestions.slice(0, -1),
+    { question: 'When can I connect an Agent?', answer: `${availability} The status page tracks availability.` },
   ],
   faqStatusLinkLead: 'For current availability, visit our',
   faqStatusLinkLabel: 'status page',
@@ -136,7 +142,6 @@ export const ABOUT = {
     },
   ],
   ctaHeading: 'Building it. Sharing the journey.',
-  ctaDescription: 'Agentic Economy is pre-launch.',
   operatorLine: {
     prefix: 'Operated in Australia',
     separator: ' · ',

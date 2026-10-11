@@ -57,6 +57,7 @@ export type AdminCommandAction =
   | 'grant_promotional_credit'
   | 'issue_trial'
   | 'set_payments_paused'
+  | 'set_payments_audience'
   | 'change_treasury_thresholds'
 
 export const ADMIN_ACTION_PERMISSION = {
@@ -70,11 +71,13 @@ export const ADMIN_ACTION_PERMISSION = {
   grant_promotional_credit: 'grant_promotional_credit',
   issue_trial: 'grant_promotional_credit',
   set_payments_paused: 'manage_commercial_policy',
+  set_payments_audience: 'manage_commercial_policy',
   change_treasury_thresholds: 'manage_commercial_policy',
 } as const satisfies Record<AdminCommandAction, AdminAction>
 
 export type AdminProposableAction =
   | 'set_payments_paused'
+  | 'set_payments_audience'
   | 'set_business_suppression'
   | 'change_commercial_policy'
   | 'grant_admin_membership'
@@ -98,12 +101,14 @@ export type AdminReasonCodeByAction = {
   grant_promotional_credit: 'onboarding' | 'correction'
   issue_trial: 'onboarding'
   set_payments_paused: 'operational_pause' | 'operational_resume' | 'correction'
+  set_payments_audience: 'launch_open' | 'launch_close' | 'correction'
   change_treasury_thresholds: 'threshold_update' | 'correction'
 }
 
 export type AdminActionInput = {
   review_call_content: { callRef: string }
   set_payments_paused: { environment: 'sandbox' | 'production'; paused: boolean }
+  set_payments_audience: { environment: 'sandbox' | 'production'; audience: 'admins' | 'everyone' }
   change_treasury_thresholds: { environment: 'sandbox' | 'production'; lowWaterUnits: string; targetFloatUnits: string }
   set_business_suppression: {
     businessId: string
@@ -158,6 +163,7 @@ export type AdminActionInput = {
 export type AdminSuccessCodeByAction = {
   review_call_content: 'call_content_reviewed'
   set_payments_paused: 'payments_paused' | 'payments_resumed'
+  set_payments_audience: 'payments_audience_changed'
   change_treasury_thresholds: 'treasury_thresholds_changed'
   set_business_suppression: 'business_suppressed' | 'business_unsuppressed'
   close_removal_dispute: 'dispute_closed'
@@ -187,6 +193,7 @@ export type SharedAdminRefusalCode =
 export type AdminActionRefusalCodes = {
   review_call_content: 'call_not_found' | 'content_expired' | 'review_expired'
   set_payments_paused: 'environment_mismatch' | 'payments_not_ready' | import('@/modules/money/treasury-report').TreasuryResumeRefusalCode
+  set_payments_audience: 'environment_mismatch' | 'payments_not_ready' | import('@/modules/money/treasury-report').TreasuryResumeRefusalCode
   change_treasury_thresholds: 'environment_mismatch' | 'treasury_thresholds_invalid'
   set_business_suppression: 'business_not_found' | 'suppression_unchanged'
   close_removal_dispute: 'dispute_not_found' | 'dispute_already_closed'

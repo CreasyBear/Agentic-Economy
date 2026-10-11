@@ -106,13 +106,26 @@ export const registryToolsListAction = defineAction({
     const scope = marketToolsCursorScope(freshness)
     const cursor = decodeMarketToolsCursor(data.cursor, scope)
     const filters = sourceFilters(data.filters)
-    const projected = projectToolListChoices(await readCapabilityToolSearch({
+    const readPage = (limit: number, after?: typeof cursor) => readCapabilityToolSearch({
       query: '',
-      limit: data.limit,
+      limit,
       ...(data.source === undefined ? {} : { source: data.source }),
-      ...(cursor === undefined ? {} : { cursor }),
+      ...(after === undefined ? {} : { cursor: after }),
       ...(filters === undefined ? {} : { filters }),
-    }), data.filters)
+    })
+    // Health filtering drops rows after the page is cut, so ask for only the
+    // shortfall until the page is full; the last page's cursor stays exact.
+    let projected = projectToolListChoices(await readPage(data.limit, cursor), data.filters)
+    // Bounded: at most 5 extra reads, and stop when a page adds nothing.
+    for (let extra = 0; extra < 5 && projected.kind === 'ok' && projected.items.length < data.limit && projected.pagination.hasMore
+      && projected.pagination.nextCursor !== undefined; extra++) {
+      const more = projectToolListChoices(await readPage(data.limit - projected.items.length, projected.pagination.nextCursor), data.filters)
+      if (more.kind !== 'ok') break
+      const items = [...projected.items, ...more.items]
+      const partialResults = projected.partialResults === true || more.partialResults === true ? true : more.partialResults
+      projected = { ...more, items, count: items.length, ...(partialResults === undefined ? {} : { partialResults }) }
+      if (more.items.length === 0 && more.pagination.nextCursor === undefined) break
+    }
     return projected.kind === 'unavailable'
       ? projected
       : { ...projected, pagination: opaquePagination(projected.pagination, scope), freshness }

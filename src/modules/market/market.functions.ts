@@ -45,6 +45,13 @@ export const readMarketChatRecipientServer = createServerFn({ method: 'GET' })
     return await awaitMarketRead(() => callPublicSourceQuery(chatRecipientQuery, {}, { signal }), signal)
   })
 
+/** The x402 directory's own freshness state, the same value registry list and the developer routes return. */
+export const readMarketCatalogueFreshnessServer = createServerFn({ method: 'GET' })
+  .handler(async () => {
+    const { readDirectoryFreshnessField } = await import('./x402-directory-index.server')
+    return (await readDirectoryFreshnessField(Date.now(), { signal: AbortSignal.any([getRequest().signal, AbortSignal.timeout(MARKET_SOURCE_TIMEOUT_MS)]) })).state
+  })
+
 /** Catalogue stays authoritative; disclosure and head metadata are independent. */
 export async function loadMarketPageRouteData(deps: MarketSearch, options: MarketRouteReadOptions = {}) {
   const deadline = AbortSignal.timeout(MARKET_READ_TIMEOUT_MS)
@@ -52,14 +59,15 @@ export async function loadMarketPageRouteData(deps: MarketSearch, options: Marke
   const read = <T>(fetch: () => Promise<T>) => awaitMarketRead(fetch, signal)
   const showHosts = marketUsesHostDirectory(deps)
   const showDirectory = resolveMarketView(deps) !== 'discover' && !showHosts
-  const [data, canonicalBaseUrl, jevRecipient, chatRecipient] = await Promise.all([
+  const [data, canonicalBaseUrl, jevRecipient, chatRecipient, freshness] = await Promise.all([
     loadMarketRouteData(deps, options),
     read(() => readCanonicalBaseUrlServer({ signal })).catch(cause => { if (options.signal?.aborted) throw cause; return degrade(cause, undefined, { site: 'marketCanonicalUrl', reason: 'source_unavailable' }) }),
     showHosts ? null : read(() => readMarketDiscoveryRecipientServer({ signal })).catch(cause => { if (options.signal?.aborted) throw cause; return degrade(cause, null, { site: 'marketDiscoveryRecipient', reason: 'source_unavailable' }) }),
     showDirectory ? read(() => readMarketChatRecipientServer({ signal })).catch(cause => { if (options.signal?.aborted) throw cause; return degrade(cause, null, { site: 'marketChatRecipient', reason: 'source_unavailable' }) }) : null,
+    read(() => readMarketCatalogueFreshnessServer()).catch(cause => { if (options.signal?.aborted) throw cause; return degrade(cause, undefined, { site: 'marketCatalogueFreshness', reason: 'source_unavailable' }) }),
   ])
   options.signal?.throwIfAborted()
-  return { ...data, canonicalBaseUrl, jevRecipient, chatRecipient }
+  return { ...data, canonicalBaseUrl, jevRecipient, chatRecipient, freshness }
 }
 
 /** Convex derives the account from the signed-in session and rechecks current authority. */

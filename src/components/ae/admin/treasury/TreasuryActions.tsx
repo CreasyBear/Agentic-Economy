@@ -17,6 +17,8 @@ export function TreasuryActions({ view }: { view: AdminTreasuryView }) {
   const state = useTreasuryActions(view)
   const thresholdAction = state.action === 'thresholds'
   const resume = state.action === 'resume'
+  const audienceOn = state.action === 'audience_on'
+  const audienceAction = audienceOn || state.action === 'audience_off'
   const approvalRequired = resume && state.receipt?.kind === 'refused' && state.receipt.code === 'approval_required'
   const propose = resume && state.review.resumeRequiresApproval
   const refused = state.receipt?.kind === 'refused' ? ADMIN_REFUSAL_PRESENTATION[state.receipt.code] : null
@@ -38,25 +40,28 @@ export function TreasuryActions({ view }: { view: AdminTreasuryView }) {
       <Button type="button" variant={state.paused ? 'primary' : 'secondary'} disabled={!view.controls.canManage || locked} onClick={() => state.open(state.paused ? 'resume' : 'pause')}>
         {state.paused ? (view.controls.resumeRequiresApproval ? 'Propose resuming payments' : 'Resume payments') : 'Pause payments'}
       </Button>
+      <Button type="button" variant="secondary" disabled={!view.controls.canManage || locked} onClick={() => state.open(state.paidCallsOn ? 'audience_off' : 'audience_on')}>{state.paidCallsOn ? 'Turn off paid calls' : 'Turn on paid calls'}</Button>
       <Button type="button" variant="secondary" disabled={!view.controls.canManage || locked} onClick={() => state.open('thresholds')}>Edit thresholds</Button>
     </div>
     {!view.controls.canManage ? <p className="text-sm text-muted-foreground">An Admin owner can change payment controls and thresholds.</p> : null}
-    {state.receipt?.kind === 'completed' ? <AeAlert tone="info" title={state.receipt.action === 'change_treasury_thresholds' ? 'Treasury thresholds saved' : state.receipt.code === 'payments_paused' ? 'Payments paused' : 'Payments resumed'} role="status"><a href="/admin/audit-events" className="underline underline-offset-4">View the audit record</a></AeAlert> : null}
+    {state.receipt?.kind === 'completed' ? <AeAlert tone="info" title={state.receipt.action === 'change_treasury_thresholds' ? 'Treasury thresholds saved' : state.receipt.action === 'set_payments_audience' ? 'Paid calls turned off' : state.receipt.code === 'payments_paused' ? 'Payments paused' : 'Payments resumed'} role="status"><a href="/admin/audit-events" className="underline underline-offset-4">View the audit record</a></AeAlert> : null}
     {state.receipt?.kind === 'proposed' ? <AeAlert tone="info" title="Awaiting another Admin owner" role="status">
-      <p>Payments remain paused until the proposal is approved. Expires {formatTimestamp(state.receipt.expiresAt)}.</p>
+      <p>{state.receipt.action === 'set_payments_audience' ? 'Paid calls stay off until the proposal is approved.' : 'Payments remain paused until the proposal is approved.'} Expires {formatTimestamp(state.receipt.expiresAt)}.</p>
       <AeCopyReference label="proposal reference" value={state.receipt.proposalRef} />
       <a href="/admin/audit-events" className="underline underline-offset-4">Open the proposal in Audit</a>
     </AeAlert> : null}
     <Dialog open={state.action !== null} onOpenChange={open => { if (!open) state.close() }}>
       <DialogContent className="arc-market" showCloseButton={!locked}>
         <DialogHeader>
-          <DialogTitle>{thresholdAction ? 'Edit treasury thresholds' : resume ? (propose ? 'Propose resuming payments' : 'Resume payments?') : 'Pause new purchases?'}</DialogTitle>
-          <DialogDescription>{thresholdAction ? 'Save fixed USDC amounts. This replaces the automatic runway-day thresholds.' : resume ? `Restore new purchases for ${audienceLabel(current.resumePaymentsOpenTo)}. ${propose || approvalRequired ? 'Another Admin owner must approve this proposal.' : 'Accepted Calls keep their existing authority.'}` : 'New purchases will pause. Accepted Calls will continue or reconcile.'}</DialogDescription>
+          <DialogTitle>{audienceAction ? (audienceOn ? 'Turn on paid calls?' : 'Turn off paid calls?') : thresholdAction ? 'Edit treasury thresholds' : resume ? (propose ? 'Propose resuming payments' : 'Resume payments?') : 'Pause new purchases?'}</DialogTitle>
+          <DialogDescription>{audienceAction ? (audienceOn ? 'Full Stripe funding and paid calls open to everyone.' : 'Paid calls close. Alpha users keep trial credit only.') : thresholdAction ? 'Save fixed USDC amounts. This replaces the automatic runway-day thresholds.' : resume ? `Restore new purchases for ${audienceLabel(current.resumePaymentsOpenTo)}. ${propose || approvalRequired ? 'Another Admin owner must approve this proposal.' : 'Accepted Calls keep their existing authority.'}` : 'New purchases will pause. Accepted Calls will continue or reconcile.'}</DialogDescription>
         </DialogHeader>
         <p className="text-sm font-medium">{view.environment === 'production' ? 'Production · Base' : 'Sandbox · Base Sepolia'}</p>
         <div className="grid gap-intra rounded-sm border border-border p-related">
           <h3 className="text-sm font-medium">Current settings</h3>
-          {thresholdAction ? <AeFactList density="compact" facts={current.thresholds.kind === 'fixed' ? [
+          {audienceAction ? <AeFactList density="compact" facts={[
+            { label: 'Paid calls', value: (current.paymentsOpenTo === 'none' ? current.resumePaymentsOpenTo : current.paymentsOpenTo) === 'everyone' ? 'On' : 'Off, trial credit only' },
+          ]} /> : thresholdAction ? <AeFactList density="compact" facts={current.thresholds.kind === 'fixed' ? [
             { label: 'Current low-water mark', value: treasuryMoney(current.thresholds.lowWaterUnits) },
             { label: 'Current target float', value: treasuryMoney(current.thresholds.targetFloatUnits) },
           ] : [
@@ -77,7 +82,7 @@ export function TreasuryActions({ view }: { view: AdminTreasuryView }) {
         {state.pending ? <AeInlineState state="saving" label="Submitting" description="Complete MFA if prompted. Waiting for the command receipt." /> : null}
         <DialogFooter>
           <Button type="button" variant="secondary" disabled={locked} onClick={state.close}>Cancel</Button>
-          {state.targetChanged ? <Button type="button" onClick={state.reviewCurrent}>Review current settings</Button> : approvalRequired ? <Button type="button" disabled={locked || !view.controls.canManage} onClick={state.proposeResume}>Submit proposal</Button> : retryable ? <Button type="button" disabled={state.pending || !view.controls.canManage} onClick={state.retry}>{state.unknown ? 'Recover command result' : 'Retry command'}</Button> : <Button type="button" disabled={state.pending || !view.controls.canManage || (refused?.retry === 'no')} onClick={() => void state.submit()}>{thresholdAction ? 'Save fixed thresholds' : propose ? 'Submit proposal' : resume ? 'Resume payments' : 'Pause payments'}</Button>}
+          {state.targetChanged ? <Button type="button" onClick={state.reviewCurrent}>Review current settings</Button> : approvalRequired ? <Button type="button" disabled={locked || !view.controls.canManage} onClick={state.proposeResume}>Submit proposal</Button> : retryable ? <Button type="button" disabled={state.pending || !view.controls.canManage} onClick={state.retry}>{state.unknown ? 'Recover command result' : 'Retry command'}</Button> : <Button type="button" disabled={state.pending || !view.controls.canManage || (refused?.retry === 'no')} onClick={() => void state.submit()}>{audienceAction ? (audienceOn ? 'Submit proposal' : 'Turn off paid calls') : thresholdAction ? 'Save fixed thresholds' : propose ? 'Submit proposal' : resume ? 'Resume payments' : 'Pause payments'}</Button>}
         </DialogFooter>
       </DialogContent>
     </Dialog>

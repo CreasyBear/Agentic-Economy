@@ -70,13 +70,9 @@ import { Route as OperatorAdminSearchRouteImport } from './routes/_operator/admi
 import { Route as OperatorAdminTreasuryRouteImport } from './routes/_operator/admin.treasury'
 import { Route as OperatorAgentAccessAuthorizeRouteImport } from './routes/_operator/agent-access.authorize'
 import { Route as OperatorCallsCallRefRouteImport } from './routes/_operator/calls.$callRef'
-import { Route as OperatorOwnerIndexRouteImport } from './routes/_operator/owner.index'
 import { Route as OperatorOwnerCreditRouteImport } from './routes/_operator/owner.credit'
-import { Route as OperatorOwnerMarketRouteImport } from './routes/_operator/owner.market'
 import { Route as OperatorOwnerOperationsRouteImport } from './routes/_operator/owner.operations'
 import { Route as OperatorOwnerSettingsRouteImport } from './routes/_operator/owner.settings'
-import { Route as OperatorOwnerTeamRouteImport } from './routes/_operator/owner.team'
-import { Route as OperatorOwnerWorkspaceRouteImport } from './routes/_operator/owner.workspace'
 import { Route as OperatorPlansPlanRefRouteImport } from './routes/_operator/plans.$planRef'
 import { Route as ApiAdminMetricsExportRouteImport } from './routes/api.admin.metrics-export'
 import { Route as ApiBusinessesSlugRouteImport } from './routes/api.businesses.$slug'
@@ -93,6 +89,7 @@ import { Route as ApiOwnerDataExportRouteImport } from './routes/api.owner.data-
 import { Route as ApiResendWebhookRouteImport } from './routes/api.resend.webhook'
 import { Route as ApiStripeWebhookRouteImport } from './routes/api.stripe.webhook'
 import { Route as ApiV1AccountRouteImport } from './routes/api.v1.account'
+import { Route as ApiV1AvailabilityRouteImport } from './routes/api.v1.availability'
 import { Route as ApiV1BusinessesRouteImport } from './routes/api.v1.businesses'
 import { Route as ApiV1CallsRouteImport } from './routes/api.v1.calls'
 import { Route as ApiV1CatalogueStatusRouteImport } from './routes/api.v1.catalogue-status'
@@ -486,19 +483,9 @@ const OperatorCallsCallRefRoute = OperatorCallsCallRefRouteImport.update({
   path: '/calls/$callRef',
   getParentRoute: () => OperatorRoute,
 } as any)
-const OperatorOwnerIndexRoute = OperatorOwnerIndexRouteImport.update({
-  id: '/owner/',
-  path: '/owner/',
-  getParentRoute: () => OperatorRoute,
-} as any)
 const OperatorOwnerCreditRoute = OperatorOwnerCreditRouteImport.update({
   id: '/owner/credit',
   path: '/owner/credit',
-  getParentRoute: () => OperatorRoute,
-} as any)
-const OperatorOwnerMarketRoute = OperatorOwnerMarketRouteImport.update({
-  id: '/owner/market',
-  path: '/owner/market',
   getParentRoute: () => OperatorRoute,
 } as any)
 const OperatorOwnerOperationsRoute = OperatorOwnerOperationsRouteImport.update({
@@ -509,16 +496,6 @@ const OperatorOwnerOperationsRoute = OperatorOwnerOperationsRouteImport.update({
 const OperatorOwnerSettingsRoute = OperatorOwnerSettingsRouteImport.update({
   id: '/owner/settings',
   path: '/owner/settings',
-  getParentRoute: () => OperatorRoute,
-} as any)
-const OperatorOwnerTeamRoute = OperatorOwnerTeamRouteImport.update({
-  id: '/owner/team',
-  path: '/owner/team',
-  getParentRoute: () => OperatorRoute,
-} as any)
-const OperatorOwnerWorkspaceRoute = OperatorOwnerWorkspaceRouteImport.update({
-  id: '/owner/workspace',
-  path: '/owner/workspace',
   getParentRoute: () => OperatorRoute,
 } as any)
 const OperatorPlansPlanRefRoute = OperatorPlansPlanRefRouteImport.update({
@@ -603,6 +580,11 @@ const ApiStripeWebhookRoute = ApiStripeWebhookRouteImport.update({
 const ApiV1AccountRoute = ApiV1AccountRouteImport.update({
   id: '/api/v1/account',
   path: '/api/v1/account',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1AvailabilityRoute = ApiV1AvailabilityRouteImport.update({
+  id: '/api/v1/availability',
+  path: '/api/v1/availability',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiV1BusinessesRoute = ApiV1BusinessesRouteImport.update({
@@ -1115,11 +1097,8 @@ export interface FileRoutesByFullPath {
   '/agent-access/authorize': typeof OperatorAgentAccessAuthorizeRoute
   '/calls/$callRef': typeof OperatorCallsCallRefRoute
   '/owner/credit': typeof OperatorOwnerCreditRoute
-  '/owner/market': typeof OperatorOwnerMarketRoute
   '/owner/operations': typeof OperatorOwnerOperationsRouteWithChildren
   '/owner/settings': typeof OperatorOwnerSettingsRouteWithChildren
-  '/owner/team': typeof OperatorOwnerTeamRoute
-  '/owner/workspace': typeof OperatorOwnerWorkspaceRoute
   '/plans/$planRef': typeof OperatorPlansPlanRefRoute
   '/api/admin/metrics-export': typeof ApiAdminMetricsExportRoute
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
@@ -1136,6 +1115,7 @@ export interface FileRoutesByFullPath {
   '/api/resend/webhook': typeof ApiResendWebhookRoute
   '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/api/v1/account': typeof ApiV1AccountRouteWithChildren
+  '/api/v1/availability': typeof ApiV1AvailabilityRoute
   '/api/v1/businesses': typeof ApiV1BusinessesRouteWithChildren
   '/api/v1/calls': typeof ApiV1CallsRouteWithChildren
   '/api/v1/catalogue-status': typeof ApiV1CatalogueStatusRoute
@@ -1148,7 +1128,6 @@ export interface FileRoutesByFullPath {
   '/owner/receipts/$id': typeof OwnerReceiptsIdRoute
   '/tools/$providerHost/$slug': typeof ToolsProviderHostSlugRoute
   '/admin/': typeof OperatorAdminIndexRoute
-  '/owner/': typeof OperatorOwnerIndexRoute
   '/admin/agents/$principalRef': typeof OperatorAdminAgentsPrincipalRefRoute
   '/admin/calls/$callRef': typeof OperatorAdminCallsCallRefRoute
   '/admin/providers/$slug': typeof OperatorAdminProvidersSlugRoute
@@ -1282,11 +1261,8 @@ export interface FileRoutesByTo {
   '/agent-access/authorize': typeof OperatorAgentAccessAuthorizeRoute
   '/calls/$callRef': typeof OperatorCallsCallRefRoute
   '/owner/credit': typeof OperatorOwnerCreditRoute
-  '/owner/market': typeof OperatorOwnerMarketRoute
   '/owner/operations': typeof OperatorOwnerOperationsRouteWithChildren
   '/owner/settings': typeof OperatorOwnerSettingsRouteWithChildren
-  '/owner/team': typeof OperatorOwnerTeamRoute
-  '/owner/workspace': typeof OperatorOwnerWorkspaceRoute
   '/plans/$planRef': typeof OperatorPlansPlanRefRoute
   '/api/admin/metrics-export': typeof ApiAdminMetricsExportRoute
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
@@ -1303,6 +1279,7 @@ export interface FileRoutesByTo {
   '/api/resend/webhook': typeof ApiResendWebhookRoute
   '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/api/v1/account': typeof ApiV1AccountRouteWithChildren
+  '/api/v1/availability': typeof ApiV1AvailabilityRoute
   '/api/v1/businesses': typeof ApiV1BusinessesRouteWithChildren
   '/api/v1/calls': typeof ApiV1CallsRouteWithChildren
   '/api/v1/catalogue-status': typeof ApiV1CatalogueStatusRoute
@@ -1315,7 +1292,6 @@ export interface FileRoutesByTo {
   '/owner/receipts/$id': typeof OwnerReceiptsIdRoute
   '/tools/$providerHost/$slug': typeof ToolsProviderHostSlugRoute
   '/admin': typeof OperatorAdminIndexRoute
-  '/owner': typeof OperatorOwnerIndexRoute
   '/admin/agents/$principalRef': typeof OperatorAdminAgentsPrincipalRefRoute
   '/admin/calls/$callRef': typeof OperatorAdminCallsCallRefRoute
   '/admin/providers/$slug': typeof OperatorAdminProvidersSlugRoute
@@ -1451,11 +1427,8 @@ export interface FileRoutesById {
   '/_operator/agent-access/authorize': typeof OperatorAgentAccessAuthorizeRoute
   '/_operator/calls/$callRef': typeof OperatorCallsCallRefRoute
   '/_operator/owner/credit': typeof OperatorOwnerCreditRoute
-  '/_operator/owner/market': typeof OperatorOwnerMarketRoute
   '/_operator/owner/operations': typeof OperatorOwnerOperationsRouteWithChildren
   '/_operator/owner/settings': typeof OperatorOwnerSettingsRouteWithChildren
-  '/_operator/owner/team': typeof OperatorOwnerTeamRoute
-  '/_operator/owner/workspace': typeof OperatorOwnerWorkspaceRoute
   '/_operator/plans/$planRef': typeof OperatorPlansPlanRefRoute
   '/api/admin/metrics-export': typeof ApiAdminMetricsExportRoute
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
@@ -1472,6 +1445,7 @@ export interface FileRoutesById {
   '/api/resend/webhook': typeof ApiResendWebhookRoute
   '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/api/v1/account': typeof ApiV1AccountRouteWithChildren
+  '/api/v1/availability': typeof ApiV1AvailabilityRoute
   '/api/v1/businesses': typeof ApiV1BusinessesRouteWithChildren
   '/api/v1/calls': typeof ApiV1CallsRouteWithChildren
   '/api/v1/catalogue-status': typeof ApiV1CatalogueStatusRoute
@@ -1484,7 +1458,6 @@ export interface FileRoutesById {
   '/owner/receipts/$id': typeof OwnerReceiptsIdRoute
   '/tools/$providerHost/$slug': typeof ToolsProviderHostSlugRoute
   '/_operator/admin/': typeof OperatorAdminIndexRoute
-  '/_operator/owner/': typeof OperatorOwnerIndexRoute
   '/_operator/admin/agents/$principalRef': typeof OperatorAdminAgentsPrincipalRefRoute
   '/_operator/admin/calls/$callRef': typeof OperatorAdminCallsCallRefRoute
   '/_operator/admin/providers/$slug': typeof OperatorAdminProvidersSlugRoute
@@ -1620,11 +1593,8 @@ export interface FileRouteTypes {
     | '/agent-access/authorize'
     | '/calls/$callRef'
     | '/owner/credit'
-    | '/owner/market'
     | '/owner/operations'
     | '/owner/settings'
-    | '/owner/team'
-    | '/owner/workspace'
     | '/plans/$planRef'
     | '/api/admin/metrics-export'
     | '/api/businesses/$slug'
@@ -1641,6 +1611,7 @@ export interface FileRouteTypes {
     | '/api/resend/webhook'
     | '/api/stripe/webhook'
     | '/api/v1/account'
+    | '/api/v1/availability'
     | '/api/v1/businesses'
     | '/api/v1/calls'
     | '/api/v1/catalogue-status'
@@ -1653,7 +1624,6 @@ export interface FileRouteTypes {
     | '/owner/receipts/$id'
     | '/tools/$providerHost/$slug'
     | '/admin/'
-    | '/owner/'
     | '/admin/agents/$principalRef'
     | '/admin/calls/$callRef'
     | '/admin/providers/$slug'
@@ -1787,11 +1757,8 @@ export interface FileRouteTypes {
     | '/agent-access/authorize'
     | '/calls/$callRef'
     | '/owner/credit'
-    | '/owner/market'
     | '/owner/operations'
     | '/owner/settings'
-    | '/owner/team'
-    | '/owner/workspace'
     | '/plans/$planRef'
     | '/api/admin/metrics-export'
     | '/api/businesses/$slug'
@@ -1808,6 +1775,7 @@ export interface FileRouteTypes {
     | '/api/resend/webhook'
     | '/api/stripe/webhook'
     | '/api/v1/account'
+    | '/api/v1/availability'
     | '/api/v1/businesses'
     | '/api/v1/calls'
     | '/api/v1/catalogue-status'
@@ -1820,7 +1788,6 @@ export interface FileRouteTypes {
     | '/owner/receipts/$id'
     | '/tools/$providerHost/$slug'
     | '/admin'
-    | '/owner'
     | '/admin/agents/$principalRef'
     | '/admin/calls/$callRef'
     | '/admin/providers/$slug'
@@ -1955,11 +1922,8 @@ export interface FileRouteTypes {
     | '/_operator/agent-access/authorize'
     | '/_operator/calls/$callRef'
     | '/_operator/owner/credit'
-    | '/_operator/owner/market'
     | '/_operator/owner/operations'
     | '/_operator/owner/settings'
-    | '/_operator/owner/team'
-    | '/_operator/owner/workspace'
     | '/_operator/plans/$planRef'
     | '/api/admin/metrics-export'
     | '/api/businesses/$slug'
@@ -1976,6 +1940,7 @@ export interface FileRouteTypes {
     | '/api/resend/webhook'
     | '/api/stripe/webhook'
     | '/api/v1/account'
+    | '/api/v1/availability'
     | '/api/v1/businesses'
     | '/api/v1/calls'
     | '/api/v1/catalogue-status'
@@ -1988,7 +1953,6 @@ export interface FileRouteTypes {
     | '/owner/receipts/$id'
     | '/tools/$providerHost/$slug'
     | '/_operator/admin/'
-    | '/_operator/owner/'
     | '/_operator/admin/agents/$principalRef'
     | '/_operator/admin/calls/$callRef'
     | '/_operator/admin/providers/$slug'
@@ -2123,6 +2087,7 @@ export interface RootRouteChildren {
   ApiResendWebhookRoute: typeof ApiResendWebhookRoute
   ApiStripeWebhookRoute: typeof ApiStripeWebhookRoute
   ApiV1AccountRoute: typeof ApiV1AccountRouteWithChildren
+  ApiV1AvailabilityRoute: typeof ApiV1AvailabilityRoute
   ApiV1BusinessesRoute: typeof ApiV1BusinessesRouteWithChildren
   ApiV1CallsRoute: typeof ApiV1CallsRouteWithChildren
   ApiV1CatalogueStatusRoute: typeof ApiV1CatalogueStatusRoute
@@ -2598,25 +2563,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OperatorCallsCallRefRouteImport
       parentRoute: typeof OperatorRoute
     }
-    '/_operator/owner/': {
-      id: '/_operator/owner/'
-      path: '/owner'
-      fullPath: '/owner/'
-      preLoaderRoute: typeof OperatorOwnerIndexRouteImport
-      parentRoute: typeof OperatorRoute
-    }
     '/_operator/owner/credit': {
       id: '/_operator/owner/credit'
       path: '/owner/credit'
       fullPath: '/owner/credit'
       preLoaderRoute: typeof OperatorOwnerCreditRouteImport
-      parentRoute: typeof OperatorRoute
-    }
-    '/_operator/owner/market': {
-      id: '/_operator/owner/market'
-      path: '/owner/market'
-      fullPath: '/owner/market'
-      preLoaderRoute: typeof OperatorOwnerMarketRouteImport
       parentRoute: typeof OperatorRoute
     }
     '/_operator/owner/operations': {
@@ -2631,20 +2582,6 @@ declare module '@tanstack/react-router' {
       path: '/owner/settings'
       fullPath: '/owner/settings'
       preLoaderRoute: typeof OperatorOwnerSettingsRouteImport
-      parentRoute: typeof OperatorRoute
-    }
-    '/_operator/owner/team': {
-      id: '/_operator/owner/team'
-      path: '/owner/team'
-      fullPath: '/owner/team'
-      preLoaderRoute: typeof OperatorOwnerTeamRouteImport
-      parentRoute: typeof OperatorRoute
-    }
-    '/_operator/owner/workspace': {
-      id: '/_operator/owner/workspace'
-      path: '/owner/workspace'
-      fullPath: '/owner/workspace'
-      preLoaderRoute: typeof OperatorOwnerWorkspaceRouteImport
       parentRoute: typeof OperatorRoute
     }
     '/_operator/plans/$planRef': {
@@ -2757,6 +2694,13 @@ declare module '@tanstack/react-router' {
       path: '/api/v1/account'
       fullPath: '/api/v1/account'
       preLoaderRoute: typeof ApiV1AccountRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/availability': {
+      id: '/api/v1/availability'
+      path: '/api/v1/availability'
+      fullPath: '/api/v1/availability'
+      preLoaderRoute: typeof ApiV1AvailabilityRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/v1/businesses': {
@@ -3422,14 +3366,10 @@ interface OperatorRouteChildren {
   OperatorAdminTreasuryRoute: typeof OperatorAdminTreasuryRoute
   OperatorCallsCallRefRoute: typeof OperatorCallsCallRefRoute
   OperatorOwnerCreditRoute: typeof OperatorOwnerCreditRoute
-  OperatorOwnerMarketRoute: typeof OperatorOwnerMarketRoute
   OperatorOwnerOperationsRoute: typeof OperatorOwnerOperationsRouteWithChildren
   OperatorOwnerSettingsRoute: typeof OperatorOwnerSettingsRouteWithChildren
-  OperatorOwnerTeamRoute: typeof OperatorOwnerTeamRoute
-  OperatorOwnerWorkspaceRoute: typeof OperatorOwnerWorkspaceRoute
   OperatorPlansPlanRefRoute: typeof OperatorPlansPlanRefRoute
   OperatorAdminIndexRoute: typeof OperatorAdminIndexRoute
-  OperatorOwnerIndexRoute: typeof OperatorOwnerIndexRoute
   OperatorAdminAgentsPrincipalRefRoute: typeof OperatorAdminAgentsPrincipalRefRoute
   OperatorAdminCallsCallRefRoute: typeof OperatorAdminCallsCallRefRoute
   OperatorAdminProvidersSlugRoute: typeof OperatorAdminProvidersSlugRoute
@@ -3453,14 +3393,10 @@ const OperatorRouteChildren: OperatorRouteChildren = {
   OperatorAdminTreasuryRoute: OperatorAdminTreasuryRoute,
   OperatorCallsCallRefRoute: OperatorCallsCallRefRoute,
   OperatorOwnerCreditRoute: OperatorOwnerCreditRoute,
-  OperatorOwnerMarketRoute: OperatorOwnerMarketRoute,
   OperatorOwnerOperationsRoute: OperatorOwnerOperationsRouteWithChildren,
   OperatorOwnerSettingsRoute: OperatorOwnerSettingsRouteWithChildren,
-  OperatorOwnerTeamRoute: OperatorOwnerTeamRoute,
-  OperatorOwnerWorkspaceRoute: OperatorOwnerWorkspaceRoute,
   OperatorPlansPlanRefRoute: OperatorPlansPlanRefRoute,
   OperatorAdminIndexRoute: OperatorAdminIndexRoute,
-  OperatorOwnerIndexRoute: OperatorOwnerIndexRoute,
   OperatorAdminAgentsPrincipalRefRoute: OperatorAdminAgentsPrincipalRefRoute,
   OperatorAdminCallsCallRefRoute: OperatorAdminCallsCallRefRoute,
   OperatorAdminProvidersSlugRoute: OperatorAdminProvidersSlugRoute,
@@ -3684,6 +3620,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiResendWebhookRoute: ApiResendWebhookRoute,
   ApiStripeWebhookRoute: ApiStripeWebhookRoute,
   ApiV1AccountRoute: ApiV1AccountRouteWithChildren,
+  ApiV1AvailabilityRoute: ApiV1AvailabilityRoute,
   ApiV1BusinessesRoute: ApiV1BusinessesRouteWithChildren,
   ApiV1CallsRoute: ApiV1CallsRouteWithChildren,
   ApiV1CatalogueStatusRoute: ApiV1CatalogueStatusRoute,
