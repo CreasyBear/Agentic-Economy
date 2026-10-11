@@ -9,15 +9,18 @@ export type NoticeKind =
   | 'key_issued' | 'key_revoked' | 'account_paused' | 'account_restored'
   | 'role_changed' | 'team_membership_changed' | 'email_changed' | 'data_request_received'
   | 'welcome' | 'provider_live' | 'provider_offboarded'
+  | 'deletion_requested' | 'deletion_completed' | 'first_call_done' | 'week_one_wrap' | 'auto_topup_failed'
+  | 'card_changed' | 'first_call_failed' | 'deletion_cancelled' | 'deletion_final_reminder'
 
 /** Money arrives already formatted by the loader (moneyNoticeAmount), so no amount is retyped here. */
-export type NoticeProps = { siteUrl: string; amount?: string; taskRef?: string; role?: string; when?: string; toolRef?: string }
+export type NoticeProps = { siteUrl: string; amount?: string; taskRef?: string; role?: string; when?: string; toolRef?: string; calls?: string; spent?: string; balance?: string }
 
 type Notice = {
   subject: (props: NoticeProps) => string
   /** Adds what the subject could not fit. Never repeats it. */
   preheader: (props: NoticeProps) => string
   body: (props: NoticeProps) => string
+  /** Empty label means no button: the one text-only email (deletion completed). */
   label: string
   path: string | ((props: NoticeProps) => string)
   campaign: string
@@ -122,6 +125,60 @@ const NOTICES: Record<NoticeKind, Notice> = {
     body: ({ when }) => `Your account data was downloaded${when === undefined ? '' : ` on ${when}`}. If this wasn't you, contact support@aecon.ai.`,
     label: 'Review settings', path: '/owner/settings/privacy', campaign: 'data_export',
   },
+  deletion_requested: {
+    subject: () => 'Confirm deleting your aecon account',
+    preheader: () => 'Nothing is deleted until you confirm.',
+    body: () => "You asked to delete your aecon account. Confirm to go ahead. If this wasn't you, contact support@aecon.ai.",
+    label: 'Confirm deletion', path: '/owner/settings/privacy', campaign: 'deletion_requested',
+  },
+  deletion_completed: {
+    subject: () => 'Your aecon account was deleted',
+    preheader: () => 'Your account is closed.',
+    body: () => 'Your aecon account is closed. If you did not ask for this, contact support@aecon.ai.',
+    label: '', path: '/', campaign: 'deletion_completed',
+  },
+  first_call_done: {
+    subject: ({ amount }) => `Your first aecon call: charged ${money(amount)}`,
+    preheader: () => 'See exactly what was charged and why.',
+    body: ({ amount, taskRef }) => `Your agent made its first call${taskRef === undefined ? '' : `, ${taskRef}`}. It was charged ${money(amount)}. The receipt shows each line.`,
+    label: 'View call', path: '/owner/operations', campaign: 'first_call_done',
+  },
+  week_one_wrap: {
+    subject: ({ calls }) => `Your first week on aecon: ${calls ?? '--'} calls`,
+    preheader: ({ spent, balance }) => `${money(spent)} spent. Balance ${money(balance)}.`,
+    body: ({ calls, spent, balance }) => `Your agent made ${calls ?? '--'} calls this week and spent ${money(spent)}. Your balance is ${money(balance)}.`,
+    label: 'View statement', path: '/owner/settings/receipts', campaign: 'week_one_wrap',
+  },
+  auto_topup_failed: {
+    subject: () => "Your automatic top-up didn't go through",
+    preheader: () => 'Add a working card before your credit runs out.',
+    body: ({ amount }) => `We couldn't charge your card for the ${money(amount)} automatic top-up, so no credit was added. Update your card to keep calls running.`,
+    label: 'Update card', path: '/owner/credit', campaign: 'auto_topup_failed',
+  },
+  card_changed: {
+    subject: () => 'A payment card was changed on your aecon account',
+    preheader: ({ when }) => `Changed ${when ?? '--'}.`,
+    body: () => "A payment card was added or removed on your account. If this wasn't you, contact support@aecon.ai.",
+    label: 'Review payment methods', path: '/owner/credit', campaign: 'card_changed',
+  },
+  first_call_failed: {
+    subject: () => "Your agent's first call didn't complete",
+    preheader: () => "Check the call details and your agent's key.",
+    body: ({ taskRef }) => `Call ${taskRef ?? '--'} did not complete. Check the call details and your agent's key, then try again.`,
+    label: 'View call', path: '/owner/operations', campaign: 'first_call_failed',
+  },
+  deletion_cancelled: {
+    subject: () => 'Your aecon account deletion was cancelled',
+    preheader: () => 'Nothing was deleted.',
+    body: () => 'Deletion was cancelled and your aecon account is kept as it was.',
+    label: 'View account', path: '/owner', campaign: 'deletion_cancelled',
+  },
+  deletion_final_reminder: {
+    subject: () => 'Your aecon account will be deleted soon',
+    preheader: ({ when }) => `Cancel before ${when ?? '--'} to keep it.`,
+    body: ({ when }) => `Your aecon account will be deleted after ${when ?? '--'}. Cancel before then to keep it.`,
+    label: 'Cancel deletion', path: '/owner/settings/privacy', campaign: 'deletion_final_reminder',
+  },
 }
 
 export const subject = (kind: NoticeKind, props: NoticeProps) => NOTICES[kind].subject(props)
@@ -138,7 +195,7 @@ export default function AccountNoticeEmail({ kind, ...props }: NoticeProps & { k
       {/* Structure from emailcn notification-default (vendored at ../vendor/emailcn/notification-default.tsx): heading, then one button. Its export is a full document and cannot nest in Layout, so the pieces are composed here. No actor row: aecon notices have no actor. */}
       <Text className="ae-text" style={{ ...bodyText, fontSize: 22, fontWeight: 500, lineHeight: '28px' }}>{notice.subject(props)}</Text>
       <Text className="ae-text" style={bodyText}>{notice.body(props)}</Text>
-      <CtaButton href={emailUrl(props.siteUrl, typeof notice.path === 'string' ? notice.path : notice.path(props), { campaign: notice.campaign, content: 'cta' })}>{notice.label}</CtaButton>
+      {notice.label === '' ? null : <CtaButton href={emailUrl(props.siteUrl, typeof notice.path === 'string' ? notice.path : notice.path(props), { campaign: notice.campaign, content: 'cta' })}>{notice.label}</CtaButton>}
     </Layout>
   )
 }

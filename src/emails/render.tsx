@@ -63,6 +63,15 @@ function build(input: EmailInput): { element: ReactElement; subject: string } {
     case 'welcome':
     case 'provider_live':
     case 'provider_offboarded':
+    case 'deletion_requested':
+    case 'deletion_completed':
+    case 'first_call_done':
+    case 'week_one_wrap':
+    case 'auto_topup_failed':
+    case 'card_changed':
+    case 'first_call_failed':
+    case 'deletion_cancelled':
+    case 'deletion_final_reminder':
       return { element: <AccountNotice kind={input.eventKind} {...input.props} />, subject: noticeSubject(input.eventKind, input.props) }
   }
 }
