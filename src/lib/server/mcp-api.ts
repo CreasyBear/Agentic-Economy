@@ -68,6 +68,8 @@ const AE_MCP_INSTRUCTIONS = [
   'When AE gets in your way, lacks needed functionality, or the user has product feedback, optionally call the listed `ae_feedback_submit` tool. Send specific expected versus actual behaviour and relevant product tools/errors, without credentials, personal information, Customer business data or copied Tool payloads. The text goes to the AE team through PostHog. Send when the issue occurs, then continue working; feedback is not an end-of-task requirement. Tell the user only after acceptance and summarize the report in one sentence. Skip disabled or unavailable feedback; do not automatically retry.',
   'The server’s /SKILL.md contains the full maintained operating contract. Never send credentials or private task input to an alternate server or public support issue.',
 ].join(' ')
+const MCP_READ_ONLY_FIX = 'This connection is read-only (?readonly=1). Reconnect at /mcp without readonly=1 to allow purchases.'
+
 export type McpAccessTier = Readonly<{
   tier: 'anonymous' | 'authenticated'
   authorityMode?: AgentAccessAuthorityMode
@@ -604,6 +606,13 @@ export function createAeMcpServer(
       kind: 'INVALID_ARGUMENT', code: 'mcp_tool_not_found', retryable: false,
       detail: 'Unknown MCP tool. Call tools/list and select a listed tool.',
     }), origin)
+    if (!admittedIds.has(action.id)) return mcpToolError(buildProblem({
+      kind: 'PERMISSION_DENIED',
+      code: 'mcp_toolset_required',
+      retryable: false,
+      detail: `This action is not available in the current MCP toolset.${selectedAccess.readOnly ? ` ${MCP_READ_ONLY_FIX}` : ''}`,
+      extras: { next: [], ...(access.correlationId === undefined ? {} : { correlationId: access.correlationId }) },
+    }), origin)
     const input = await action.schema.safeParseAsync(callRequest.params.arguments ?? {})
     if (!input.success) return mcpToolError(buildProblem({
       kind: 'INVALID_ARGUMENT', code: 'input_invalid', retryable: false,
@@ -612,13 +621,6 @@ export function createAeMcpServer(
     context.mcpReq.signal.throwIfAborted()
     const data: unknown = input.data
     const startedAt = Date.now()
-    if (!admittedIds.has(action.id)) return mcpToolError(buildProblem({
-      kind: 'PERMISSION_DENIED',
-      code: 'mcp_toolset_required',
-      retryable: false,
-      detail: 'This action is not available in the current MCP toolset.',
-      extras: { next: [], ...(access.correlationId === undefined ? {} : { correlationId: access.correlationId }) },
-    }), origin)
     try {
       const rollout = package5SupplyActionRolloutDecision(action.id, data, access.rolloutEnvironment)
       if (!rollout.enabled) {
@@ -802,7 +804,10 @@ export async function handleMcpRequest(request: Request, options: McpRequestOpti
     const legacyFailure = await legacyMcpParameterFailure(boundedRequest)
     if (legacyFailure !== undefined) return withRequestCorrelationHeader(legacyFailure, correlationId)
     const protectedTarget = await actionRequiringAuthenticationForRequest(boundedRequest, actions)
-    if (protectedTarget !== undefined) {
+    // A read-only connection never buys: skip sign-in so the call reaches the toolset refusal that names the fix.
+    const readOnlyBuy = protectedTarget !== undefined && !protectedTarget.generic && !protectedTarget.action.readOnly
+      && new URL(request.url).searchParams.get('readonly') === '1'
+    if (protectedTarget !== undefined && !readOnlyBuy) {
       const protectedAction = protectedTarget.action
       const requiredMode = requiredModeForAction(protectedAction)
       const genericAdmission = protectedTarget.generic || !isAnonymousMcpRequest(boundedRequest)
