@@ -233,6 +233,29 @@ async function observeResult(record: CallRecoveryRecord, result: CallMachineResu
   })
 }
 
+/** AUD amount in micro units: exact price units scaled to exponent 6, or a decimal like procure's maxSpendAud. */
+const toMicro = (units: string, exponent: number): bigint => exponent <= 6 ? BigInt(units) * 10n ** BigInt(6 - exponent) : BigInt(units) / 10n ** BigInt(exponent - 6)
+const decimalToMicro = (value: string): bigint => {
+  const [whole = '0', frac = ''] = value.split('.')
+  return BigInt(whole) * 1_000_000n + BigInt(frac.padEnd(6, '0'))
+}
+
+/** A re-quote may never charge more than the Quote the caller first saw, unless --max-spend allows it. */
+export function assertRequoteWithinCeiling(first: ToolQuoteResult & { kind: 'committed' }, fresh: ToolQuoteResult & { kind: 'committed' }, maxSpend?: string): void {
+  if (fresh.price.currency !== first.price.currency) throw new CliFailure('The new Quote uses a different currency; not paying it.', { kind: 'FAILED_PRECONDITION', code: 'price_changed' })
+  const was = toMicro(first.price.units, first.price.exponent)
+  const now = toMicro(fresh.price.units, fresh.price.exponent)
+  if (now <= was) return
+  if (maxSpend !== undefined) {
+    if (!/^\d+(?:\.\d{1,6})?$/u.test(maxSpend)) throw new CliFailure('--max-spend must be an AUD amount like 1.50.', { kind: 'INVALID_ARGUMENT', code: 'call-max-spend' })
+    if (now <= decimalToMicro(maxSpend)) return
+  }
+  const show = (q: typeof first) => `${q.price.units} × 10^-${q.price.exponent} ${q.price.currency}`
+  throw new CliFailure(`price_changed: the new Quote (${show(fresh)}) is higher than the first (${show(first)}). Not paying it; raise --max-spend to accept.`, {
+    kind: 'FAILED_PRECONDITION', code: 'price_changed', detail: { firstPrice: first.price, newPrice: fresh.price },
+  })
+}
+
 async function submitOrReadCall(record: CallRecoveryRecord, options: CliOptions, requote?: () => Promise<void>): Promise<void> {
   const startedAt = Date.now()
   try {
@@ -462,8 +485,10 @@ export async function runCallCommand(
   }
   const idempotencyKey = resolveIdempotencyKey(options)
   // One automatic re-quote, only for a refusal that never reached signing; the retry gets its own Call identity.
-  await submit(listingQuote ?? await resolveToolQuote(toolRef, quoteInputData, apiKey, options), idempotencyKey, async () => {
+  const first = listingQuote ?? await resolveToolQuote(toolRef, quoteInputData, apiKey, options)
+  await submit(first, idempotencyKey, async () => {
     const fresh = await resolveToolQuote(toolRef, quoteInputData, apiKey, options)
+    assertRequoteWithinCeiling(first, fresh, options.maxSpend)
     await submit(fresh, recoveryRequest.idempotencyKey === undefined ? resolveIdempotencyKey(options) : `${idempotencyKey}:requote`)
   })
 }
