@@ -1,3 +1,4 @@
+import { toast } from 'sonner'
 import { createClientOnlyFn } from '@tanstack/react-start'
 
 import { captureRouteException } from '@/lib/observability/capture-route-exception'
@@ -37,19 +38,19 @@ export function isViteStaleChunkError(error: unknown): error is Error {
     && VITE_STALE_CHUNK_ERROR_MESSAGES.some((message) => error.message.includes(message))
 }
 
-/**
- * Claims the single automatic stale-chunk reload allowed in this tab's
- * cooldown window. Storage failures block recovery because reloading without
- * a durable claim could trap the page in a reload loop.
- */
-export function attemptViteStaleChunkReload(
-  error: unknown,
-  options: StaleChunkReloadOptions = {},
-): boolean {
-  if (!isViteStaleChunkError(error)) {
-    return false
-  }
+const CONVEX_SKEW_ERROR_MESSAGES = [
+  'Could not find public function',
+  'ArgumentValidationError',
+  'Object is missing the required field',
+] as const
 
+export function isConvexSkewError(error: unknown): error is Error {
+  return error instanceof Error
+    && CONVEX_SKEW_ERROR_MESSAGES.some((message) => `${error.name}: ${error.message}`.includes(message))
+}
+
+/** Claims the one action allowed per tab cooldown window; storage failure blocks it to avoid loops. */
+function claimReloadSlot(options: StaleChunkReloadOptions, site: string): boolean {
   const now = options.now?.() ?? Date.now()
 
   try {
@@ -67,8 +68,43 @@ export function attemptViteStaleChunkReload(
     }
 
     storage.setItem(STALE_CHUNK_RELOAD_TIMESTAMP_KEY, String(now))
+    return true
   } catch (cause) {
-    return degrade(cause, false, { site: 'attemptViteStaleChunkReload', reason: 'source_unavailable' })
+    return degrade(cause, false, { site, reason: 'source_unavailable' })
+  }
+}
+
+/** Client/backend version skew: a non-blocking reload prompt, once per cooldown window. */
+export function promptConvexSkewReload(
+  error: unknown,
+  options: StaleChunkReloadOptions & { notify?: typeof toast.message } = {},
+): boolean {
+  if (!isConvexSkewError(error) || !claimReloadSlot(options, 'promptConvexSkewReload')) {
+    return false
+  }
+  const reload = options.reload ?? (() => window.location.reload())
+  ;(options.notify ?? toast.message)('A new version is available', {
+    duration: Infinity,
+    action: { label: 'Reload', onClick: reload },
+  })
+  return true
+}
+
+/**
+ * Claims the single automatic stale-chunk reload allowed in this tab's
+ * cooldown window. Storage failures block recovery because reloading without
+ * a durable claim could trap the page in a reload loop.
+ */
+export function attemptViteStaleChunkReload(
+  error: unknown,
+  options: StaleChunkReloadOptions = {},
+): boolean {
+  if (!isViteStaleChunkError(error)) {
+    return false
+  }
+
+  if (!claimReloadSlot(options, 'attemptViteStaleChunkReload')) {
+    return false
   }
 
   const reload = options.reload ?? (() => window.location.reload())

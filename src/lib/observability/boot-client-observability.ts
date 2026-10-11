@@ -7,6 +7,8 @@ import {
   securePrivateRecordLocation,
 } from '@/lib/observability/private-route-safety'
 
+import { promptConvexSkewReload } from '@/lib/observability/stale-chunk-reload'
+
 let initialized = false
 
 export const bootClientObservability = createClientOnlyFn((router: AnyRouter) => {
@@ -27,6 +29,9 @@ export const bootClientObservability = createClientOnlyFn((router: AnyRouter) =>
   }
 
   initialized = true
+  window.addEventListener('unhandledrejection', (event) => {
+    promptConvexSkewReload(event.reason)
+  })
   const config = readObservabilityClientConfig()
   if (!config.enabled) return
 

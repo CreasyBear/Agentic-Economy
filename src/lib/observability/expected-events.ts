@@ -4,7 +4,7 @@ type Crumb = { category: string; level: 'info'; message: string }
 
 /** Expected outcomes: refusals, auth walls, 4xx, stale clients, degraded fallbacks. They are
  * breadcrumbs on the next real error and counters, never issues (alert on symptoms, not causes). */
-const EXPECTED_MESSAGE = /thread_busy|turn_fenced|ArgumentValidationError|Could not find public function|InvalidCursor|AbortError: .*(?:transition|skipped)|View transition|^unauthenticated$/iu
+const EXPECTED_MESSAGE = /thread_busy|turn_fenced|ArgumentValidationError|Could not find public function|Object is missing the required field|InvalidCursor|AbortError: .*(?:transition|skipped)|View transition|^unauthenticated$/iu
 
 function read(value: unknown, key: string): unknown {
   return value !== null && typeof value === 'object' ? (value as Record<string, unknown>)[key] : undefined

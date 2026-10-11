@@ -5,7 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vite
 
 import {
   attemptViteStaleChunkReload,
+  isConvexSkewError,
   isViteStaleChunkError,
+  promptConvexSkewReload,
   SENTRY_FLUSH_TIMEOUT_BEFORE_RELOAD_MS,
   SENTRY_IMPORT_TIMEOUT_BEFORE_RELOAD_MS,
   STALE_CHUNK_RELOAD_COOLDOWN_MS,
@@ -319,5 +321,26 @@ describe('attemptViteStaleChunkReload', () => {
     expect(storage.getItem).not.toHaveBeenCalled()
     expect(storage.setItem).not.toHaveBeenCalled()
     expect(reload).not.toHaveBeenCalled()
+  })
+})
+
+describe('promptConvexSkewReload', () => {
+  beforeEach(() => window.sessionStorage.clear())
+
+  it('prompts once per cooldown for skew errors and ignores others', () => {
+    const notify = vi.fn()
+    const reload = vi.fn()
+    const run = (error: unknown, now = NOW) =>
+      promptConvexSkewReload(error, { notify: notify as never, reload, now: () => now, storage: window.sessionStorage })
+    const skew = new Error('[Request ID: x] Server Error: Could not find public function for x')
+
+    expect(isConvexSkewError(new Error('ArgumentValidationError: bad'))).toBe(true)
+    expect(run(new Error('unrelated'))).toBe(false)
+    expect(run(skew)).toBe(true)
+    expect(window.sessionStorage.getItem(STALE_CHUNK_RELOAD_TIMESTAMP_KEY)).toBe(String(NOW))
+    expect(run(skew, NOW + 1000)).toBe(false)
+    expect(notify).toHaveBeenCalledTimes(1)
+    notify.mock.calls[0]![1].action.onClick()
+    expect(reload).toHaveBeenCalledTimes(1)
   })
 })
