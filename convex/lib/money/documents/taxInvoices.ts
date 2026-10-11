@@ -291,7 +291,7 @@ export async function readFundingTaxDocuments(ctx: ReadCtx, command: FundingComm
  * enqueueEmail dedupes on the command ref, so a replayed attachment is a no-op. */
 export async function enqueueIssuedFundingReceipt(ctx: MutationCtx, row: Doc<'moneyDocuments'>): Promise<void> {
   const [transactionRef] = row.sourceTransactionRefs
-  if (row.kind !== 'tax_invoice' || transactionRef === undefined) return
+  if (transactionRef === undefined) return
   const command = await ctx.db.query('moneyFundingCommands')
     .withIndex('by_appliedTransactionRef', q => q.eq('appliedTransactionRef', transactionRef)).unique()
   if (command !== null) await enqueueFundingReceiptHandler(ctx, { commandRef: command.commandRef })

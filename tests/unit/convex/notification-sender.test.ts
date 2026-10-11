@@ -326,7 +326,7 @@ describe('sendOperatorDigest', () => {
     expect(sendEmail).toHaveBeenCalledTimes(1)
     const [, request] = sendEmail.mock.calls[0] ?? []
     expect(JSON.parse(String(request?.body))).toMatchObject({
-      subject: 'aecon stalled accounts, 2026-10-10',
+      subject: 'aecon stalled accounts, 10 Oct 2026',
       text: expect.stringContaining('Signed up, not funded: 0 total'),
     })
   })
