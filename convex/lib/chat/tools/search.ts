@@ -171,11 +171,11 @@ async function executeChatSearch(
     while (true) {
       const source = admitted.result
       const presented: ToolSearchResult | null = assessedSource === source ? assessedPresentation
-        : source.kind === 'ok' && source.items.length > 0
+        : source.kind === 'ok' && source.items.length > 0 && searchTurn !== undefined
           ? await ctx.runAction(internal.capabilityToolCatalog.presentSearch, {
               result: serializeToolSearchResult(source), query: data.query,
               ...(request === undefined ? {} : { request }),
-              ...(searchTurn === undefined ? {} : { modelCostBinding: searchTurn }),
+              modelCostBinding: searchTurn,
             }).then(value => deserializeToolSearchResult(value.result)).catch(cause => {
               degradeBackend(cause, undefined, { site: 'chatToolSearchRerank', reason: 'source_unavailable' })
               return source

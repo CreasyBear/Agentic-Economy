@@ -169,6 +169,8 @@ function nativeReadResult(functionName: string): unknown {
   }
 }
 
+const RERANK_TURN = { turnRef: 'turn_12345678-1234-1234-1234-123456789abc', threadId: 'thread-one', promptMessageId: 'prompt-two' }
+
 describe('Tool chat Agent tools', () => {
   it('offers the clarification choices as a provider-representable three-item array', () => {
     const schema = z.toJSONSchema(chatClarifyInputSchema, { io: 'input' })
@@ -559,7 +561,7 @@ describe('Tool chat Agent tools', () => {
       }
       throw new Error(`Unexpected action: ${name}`)
     })
-    const agent = createChatAgent(mockModel(), AUTHORITY)
+    const agent = createChatAgent(mockModel(), AUTHORITY, undefined, RERANK_TURN)
     const ctx = toolCtx({ runAction: runAction as ToolCtx['runAction'] })
 
     const result = await invokeTool(
@@ -582,6 +584,25 @@ describe('Tool chat Agent tools', () => {
     ])
   })
 
+  it('anonymous search never calls presentSearch; a turn search does with modelCostBinding', async () => {
+    const source = serializeToolSearchResult({ ...misorderedSearchResult('crypto'), items: [TOOL_CRYPTO_TX] })
+    const run = (turn?: typeof RERANK_TURN) => {
+      const runAction = vi.fn(async (reference: unknown, _args?: unknown) => getFunctionName(reference as never) === 'capabilityToolCatalog:searchInternal'
+        ? source : { result: source, use: 'registry.tools.search' })
+      const call = invokeTool(createChatAgent(mockModel(), undefined, undefined, turn), 'registry.tools.search',
+        toolCtx({ runAction: runAction as ToolCtx['runAction'] }), { query: ERC20_QUERY },
+        [{ role: 'user', content: 'Find a crypto tool' }])
+      return { runAction, call }
+    }
+    const anon = run()
+    await anon.call
+    expect(anon.runAction.mock.calls.map(([r]) => getFunctionName(r as never))).not.toContain('capabilityToolCatalog:presentSearch')
+    const turn = run(RERANK_TURN)
+    await turn.call
+    const present = turn.runAction.mock.calls.find(([r]) => getFunctionName(r as never) === 'capabilityToolCatalog:presentSearch')
+    expect(present?.[1]).toMatchObject({ modelCostBinding: RERANK_TURN })
+  })
+
   it('keeps testnet and degraded Tools out of an ordinary chat recommendation', async () => {
     const testnet = { ...TOOL_TIMEZONE, payment: {
       protocol: 'x402' as const, scheme: 'exact' as const, network: 'eip155:84532', asset: 'USDC', currency: 'USDC',
@@ -598,14 +619,14 @@ describe('Tool chat Agent tools', () => {
     const runAction = vi.fn(async reference => getFunctionName(reference) === 'capabilityToolCatalog:searchInternal'
       ? serializeToolSearchResult(source) : { result: presented, use: 'registry.tools.compare' })
     const result = await invokeTool(
-      createChatAgent(mockModel()), 'registry.tools.search',
+      createChatAgent(mockModel(), undefined, undefined, RERANK_TURN), 'registry.tools.search',
       toolCtx({ runAction: runAction as ToolCtx['runAction'] }),
       { query: 'weather' }, [{ role: 'user', content: 'Compare weather choices for Sydney' }],
     ) as { kind: string; results: readonly { toolRef: string; network: string; verification: string }[] }
     expect(result.kind).toBe('match')
     expect(result.results.map(item => item.toolRef)).toEqual([TOOL_CRYPTO_TX.toolRef])
     const explicitTestnet = await invokeTool(
-      createChatAgent(mockModel()), 'registry.tools.search',
+      createChatAgent(mockModel(), undefined, undefined, RERANK_TURN), 'registry.tools.search',
       toolCtx({ runAction: runAction as ToolCtx['runAction'] }),
       { query: 'weather' }, [{ role: 'user', content: 'Show testnet weather choices' }],
     ) as { kind: string; results: readonly { toolRef: string }[] }
@@ -735,7 +756,7 @@ describe('Tool chat Agent tools', () => {
       }), use: 'registry.tools.search' }
       throw new Error(`Unexpected action: ${name}`)
     })
-    const result = await invokeTool(createChatAgent(mockModel()), 'registry.tools.search', toolCtx({
+    const result = await invokeTool(createChatAgent(mockModel(), undefined, undefined, RERANK_TURN), 'registry.tools.search', toolCtx({
       runAction: runAction as ToolCtx['runAction'],
       runQuery: vi.fn(async reference => getFunctionName(reference) === 'marketListingEvidence:selectionEvidenceInternal'
         ? [] : { kind: 'ok', page: [], isDone: true, continueCursor: '',
