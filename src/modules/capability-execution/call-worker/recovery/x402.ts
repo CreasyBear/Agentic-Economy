@@ -402,6 +402,14 @@ async function persistX402Money(
     return false
   }
   if (submitted.settlementStatus !== 'settled') {
+    if (verifiedSettlement !== 'settled') {
+      const released = await ctx.runAction(internal.moneyManagedCallLifecycle.releaseUnusedAuthorization, {
+        callRef: submitted.invocationRef,
+        evidenceDigest: submitted.digest,
+        now: observedAt,
+      })
+      return released.kind === 'accepted'
+    }
     await ctx.runMutation(internal.moneyManagedCallLifecycle.markOutcomeUnknown, {
       callRef: submitted.invocationRef,
       evidenceDigest: submitted.digest,
