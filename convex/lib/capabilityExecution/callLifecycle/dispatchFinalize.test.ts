@@ -4,6 +4,7 @@ import { convexTestWithMarketComponents } from '../../../../tests/helpers/convex
 const enqueueAccountNotice = vi.hoisted(() => vi.fn())
 vi.mock('../../principalAccount/notifications/enqueue', () => ({ enqueueAccountNotice }))
 
+import { emitJourneyEvent } from '../../journey/events'
 import { callFundingSource, journeyForFinalization } from './dispatchFinalize'
 
 const completed = { state: 'completed', result: { kind: 'completed', receipt: { receiptRef: 'r' } } } as never
@@ -32,6 +33,20 @@ describe('journeyForFinalization funding source', () => {
       expect((await events('activated'))?.props).toEqual({ funding_source: 'real' })
       expect(enqueueAccountNotice).toHaveBeenCalledTimes(1)
       expect(enqueueAccountNotice).toHaveBeenCalledWith(ctx, { eventKind: 'first_call_done', accountRef: 'acct', sourceEventRef: 'c' })
+    })
+  })
+
+  it('enqueues first_call_failed on the first refusal after agent_connected', async () => {
+    enqueueAccountNotice.mockClear()
+    const backend = convexTestWithMarketComponents()
+    const refused = { state: 'refused', result: { kind: 'refused', code: 'x' } } as never
+    const call = (callRef: string, ownerId: string) => ({ callRef, ownerId, environment: 'production', promotionalCreditAllocation: undefined }) as never
+    await backend.run(async (ctx) => {
+      await journeyForFinalization(ctx, call('c0', 'noagent'), refused, 1)
+      expect(enqueueAccountNotice).not.toHaveBeenCalled()
+      await emitJourneyEvent(ctx, 'acct2', 'agent_connected')
+      await journeyForFinalization(ctx, call('c1', 'acct2'), refused, 1)
+      expect(enqueueAccountNotice).toHaveBeenCalledWith(ctx, { eventKind: 'first_call_failed', accountRef: 'acct2', sourceEventRef: 'c1' })
     })
   })
 })
