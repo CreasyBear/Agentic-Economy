@@ -65,6 +65,12 @@ async function readWaitStatus(
         ...(error.code !== undefined && { code: error.code }),
         ...(error.status !== undefined && { status: error.status }),
         ...(error.requestId !== undefined && { requestId: error.requestId }),
+        ...(error.instance !== undefined && { instance: error.instance }),
+        ...(error.next !== undefined && { next: error.next }),
+        ...(error.detail !== undefined && { detail: error.detail }),
+        ...(error.retryable !== undefined && { retryable: error.retryable }),
+        ...(error.retryAfter !== undefined && { retryAfter: error.retryAfter }),
+        exitCode: error.exitCode,
         suggestion: 'List your recent calls with ae history.',
         nextCommand: cliContinuation(options, ['ae', 'history']),
       })
