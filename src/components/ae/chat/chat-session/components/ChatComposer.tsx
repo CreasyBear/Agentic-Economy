@@ -34,5 +34,8 @@ export function ChatComposer({ prompt, busy, disabled, error, errorReference, br
       </div>
       <p id="tool-chat-limit" className="arc-chat-character-count">{promptLength >= 1_800 ? `${formatCount(promptLength)} / 2,000` : ''}</p>
     </div>
-    } /><AlphaLearningNotice /></>
+    } /><p className="text-xs text-muted-foreground">
+      Your message and Tool summaries are sent to OpenRouter (openrouter.ai) to pick and run Tools.{' '}
+      <a href="/privacy" className="underline underline-offset-2">Privacy</a>
+    </p><AlphaLearningNotice /></>
 }
