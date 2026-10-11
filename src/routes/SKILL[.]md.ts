@@ -30,7 +30,11 @@ export const Route = createFileRoute('/SKILL.md')({
 })
 
 /** Same source as the other public pages; an unreadable source reads as 'soon'. */
-const readPaidCalls = () => readPublicAvailabilityThroughSource().then((a) => a.paidCalls, () => 'soon' as const)
+const readPaidCalls = () =>
+  Promise.race([
+    readPublicAvailabilityThroughSource().then((a) => a.paidCalls, () => 'soon' as const),
+    new Promise<'soon'>((resolve) => setTimeout(resolve, 2000, 'soon')),
+  ])
 
 export async function handlePublicAgentSkillRequest(request: Request, head = false): Promise<Response> {
   const { baseUrl } = resolveCanonicalBaseUrl(request)

@@ -19,7 +19,7 @@ describe('public agent skill', () => {
       expect(await response.text()).toContain('/for-agents')
     }
     expect(buildPublicAgentSkillMarkdown({ canonicalBaseUrl: productionBaseUrl })).toBe(
-      packagedSkill.replace('{{availability}}', 'Alpha users get trial credit. Paid calls open soon.'),
+      packagedSkill,
     )
     const local = buildPublicAgentSkillMarkdown({ canonicalBaseUrl: 'http://127.0.0.1:3024/' })
     expect(local).toContain('http://127.0.0.1:3024/for-agents')

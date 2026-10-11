@@ -5,7 +5,7 @@ description: Discover Tools, buy bounded services with authorized Calls and reco
 
 # Agentic Economy
 
-{{availability}}
+Alpha users get trial credit. Paid calls open soon.
 
 Use https://app.aecon.ai/mcp?readonly=1 to discover and read account data without buying or writing.
 

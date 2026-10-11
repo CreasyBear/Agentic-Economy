@@ -7,12 +7,12 @@ export const PublicAgentSkillPath = '/SKILL.md' as const
 
 const packagedSkillBaseUrl = 'https://app.aecon.ai'
 
-/** The public route and native plugin distribute the same maintained instructions. */
+/** The packaged file carries the pre-launch availability line; the route swaps in the live one. */
 export function buildPublicAgentSkillMarkdown(options: {
   canonicalBaseUrl: string
   availabilityStatement?: string
 }): string {
   return agentSkillMarkdown
-    .replace('{{availability}}', options.availabilityStatement ?? availabilityStatement('soon'))
+    .replace(availabilityStatement('soon'), options.availabilityStatement ?? availabilityStatement('soon'))
     .replaceAll(packagedSkillBaseUrl, trimTrailingSlashes(options.canonicalBaseUrl))
 }
