@@ -50,27 +50,27 @@ const NOTICES: Record<NoticeKind, Notice> = {
   key_issued: {
     subject: () => 'A new agent key was created',
     body: () => 'A new agent key was created for your account. If you did not create it, revoke it now.',
-    label: 'Review keys', path: '/owner/settings/agent', campaign: 'key_issued',
+    label: 'Review keys', path: '/owner/settings/agent-keys', campaign: 'key_issued',
   },
   key_revoked: {
     subject: () => 'An agent key was revoked',
     body: () => 'An agent key on your account was revoked. Agents using that key can no longer make Tool calls.',
-    label: 'Review keys', path: '/owner/settings/agent', campaign: 'key_revoked',
+    label: 'Review keys', path: '/owner/settings/agent-keys', campaign: 'key_revoked',
   },
   account_paused: {
     subject: () => 'Your aecon account is paused',
     body: () => 'Your aecon account is paused, so Tasks cannot run. See why and what you can do next.',
-    label: 'See why', path: '/owner', campaign: 'account_paused',
+    label: 'See why', path: '/owner/credit', campaign: 'account_paused',
   },
   account_restored: {
     subject: () => 'Your aecon account is active again',
     body: () => 'Your aecon account is active again. Tasks can run as before.',
-    label: 'Open dashboard', path: '/owner', campaign: 'account_restored',
+    label: 'Open dashboard', path: '/owner/credit', campaign: 'account_restored',
   },
   role_changed: {
     subject: ({ role }) => `Your role is now ${role ?? '--'}`,
     body: ({ role }) => `Your role on this account is now ${role ?? '--'}. Open the workspace to see what that lets you do.`,
-    label: 'Open workspace', path: '/owner/workspace', campaign: 'role_changed',
+    label: 'Open workspace', path: '/owner/settings/workspace', campaign: 'role_changed',
   },
   team_membership_changed: {
     subject: () => 'Team membership changed',
@@ -85,7 +85,7 @@ const NOTICES: Record<NoticeKind, Notice> = {
   welcome: {
     subject: () => 'Welcome to aecon',
     body: () => 'Your account is ready. Finish setting it up to make your first Tool call.',
-    label: 'Set up your account', path: '/owner', campaign: 'welcome',
+    label: 'Set up your account', path: '/for-agents', campaign: 'welcome',
   },
   provider_live: {
     subject: () => 'Your Tool is live',
