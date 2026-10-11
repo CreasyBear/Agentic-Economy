@@ -102,6 +102,15 @@ export const receiveResendWebhook = internalAction({
         ...(event.type === 'email.bounced' ? { permanent: event.permanentBounce } : {}),
       })
     }
+    // Funnel anchor (design doc section 7): email_sent(kind) to the product event, joined on the owner account.
+    if (event.type === 'email.sent') {
+      await captureEmailEvent('email_sent', {
+        stream: result.stream,
+        kind: result.eventKind,
+        env: process.env.AE_DEPLOYMENT_ENVIRONMENT?.trim() || 'unknown',
+        ...(result.accountRef === undefined ? {} : { account_ref: result.accountRef }),
+      })
+    }
     return 'applied'
   },
 })

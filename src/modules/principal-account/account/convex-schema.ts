@@ -208,6 +208,9 @@ export const notificationDeliveryValue = v.object({
   vendorCode: v.optional(v.string()),
   lastFailureCode: v.optional(v.string()),
   lastEventAt: v.optional(v.number()),
+  /** First Resend open and click. Directional only: Apple Mail Privacy Protection inflates opens, so no state moves on them. */
+  openedAt: v.optional(v.number()),
+  clickedAt: v.optional(v.number()),
   workId: v.optional(v.string()),
   createdAt: v.number(),
   updatedAt: v.number(),

@@ -40,7 +40,7 @@ export const resendEventArgs = {
 /** Stream and kind come back so the webhook action can label its PostHog event; they are 'unknown' when no delivery row matches. */
 export const resendEventResult = v.union(
   v.object({ outcome: v.literal('duplicate') }),
-  v.object({ outcome: v.literal('applied'), stream: v.string(), eventKind: v.string() }),
+  v.object({ outcome: v.literal('applied'), stream: v.string(), eventKind: v.string(), accountRef: v.optional(v.string()) }),
 )
 
 /** A replayed svix-id is a duplicate and changes nothing. Delivery states move only up the rank order, so a late
@@ -73,7 +73,15 @@ export async function applyResendEventHandler(
   if (delivery !== null && target !== null && notificationDeliveryStateRank[delivery.state] < notificationDeliveryStateRank[target]) {
     await ctx.db.patch(delivery._id, { state: target, lastEventAt: now, updatedAt: now })
   }
-  return { outcome: 'applied', stream: delivery?.stream ?? 'unknown', eventKind: delivery?.eventKind ?? 'unknown' }
+  // Opens and clicks are stored once, on the first sighting, and never move the delivery state.
+  if (delivery !== null && args.type === 'email.opened' && delivery.openedAt === undefined) await ctx.db.patch(delivery._id, { openedAt: now, lastEventAt: now })
+  if (delivery !== null && args.type === 'email.clicked' && delivery.clickedAt === undefined) await ctx.db.patch(delivery._id, { clickedAt: now, lastEventAt: now })
+  return {
+    outcome: 'applied',
+    stream: delivery?.stream ?? 'unknown',
+    eventKind: delivery?.eventKind ?? 'unknown',
+    ...(delivery === null ? {} : { accountRef: delivery.accountRef }),
+  }
 }
 
 export const readNotificationContextArgs = { deliveryId: v.id('notificationDeliveries') }
