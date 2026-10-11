@@ -46,7 +46,7 @@ export function useInviteTeamMember(transferRequested = false, accountRef?: stri
 
   function observeInvitations(view: TeamAccessView) {
     if (unconfirmed === undefined || view.accountRef !== unconfirmed.accountRef || !view.canManageInvitations) return
-    const observed = view.invitations.find(invitation => invitation.email.toLowerCase() === unconfirmed.email.toLowerCase())
+    const observed = view.invitations.find(invitation => !invitation.expired && invitation.email.toLowerCase() === unconfirmed.email.toLowerCase())
     if (observed !== undefined) {
       if (observed.role !== `org:${unconfirmed.role}`) { setError('A pending invitation has a different role. Review or cancel it before inviting again.'); return }
       setMessage(`A pending invitation to ${unconfirmed.email} is confirmed. The member appears after accepting.`)
