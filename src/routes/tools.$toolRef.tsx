@@ -67,7 +67,8 @@ function ToolDetailError() {
   return <PublicToolDetail result={{ kind: 'source_unavailable', toolRef }} baseUrl={undefined} />
 }
 
-// Same body as before, but thrown via notFound() so the HTTP status is 404 (reference: $slug.tsx notFoundComponent).
 function ToolDetailNotFound({ data }: { data?: unknown }) {
-  return <PublicToolDetail result={data as Extract<PublicToolDetailRouteResult, { kind: 'invalid_ref' | 'not_found' }>} baseUrl={undefined} />
+  const { toolRef } = Route.useParams()
+  const result = (data ?? { kind: 'invalid_ref', toolRef }) as Extract<PublicToolDetailRouteResult, { kind: 'invalid_ref' | 'not_found' }>
+  return <PublicToolDetail result={result} baseUrl={undefined} />
 }
