@@ -3,7 +3,6 @@ import type { PostHog } from 'posthog-js'
 
 import { readObservabilityClientConfig } from '@/lib/observability/config'
 import { buildFunnelEventProperties, type FunnelCaptureInput } from '@/lib/observability/funnel-event-props'
-import { getOrCreatePseudonymousSessionId } from '@/lib/observability/funnel-attribution'
 import { protectPostHogEvent } from './posthog-event-safety'
 import {
   isTelemetryAllowedForCurrentRoute,
@@ -68,6 +67,53 @@ export function captureClientProductEvent(event: string, properties?: Record<str
   }).catch(() => {})
 }
 
+/** Joins this browser's anonymous events to the signed-in account's journey digest. */
+export function identifyPostHogAccount(distinctId: string): void {
+  if (!productAnalyticsAllowed()) return
+  void ensurePostHogClient().then((ready) => {
+    if (ready && posthogClient !== undefined && posthogClient.get_distinct_id() !== distinctId) posthogClient.identify(distinctId)
+  }).catch(() => {})
+}
+
+export type AttributionTouch = {
+  source?: string; medium?: string; campaign?: string; content?: string; term?: string
+  referrer?: string; landingPath?: string; clickId?: string; at: number
+}
+
+/** Maps PostHog campaign props (`$initial_*` for first touch, `$session_entry_*` for last) to a stored touch. Path only, never the query. */
+export function buildAttributionTouch(props: Record<string, unknown>, prefix: '$initial_' | '$session_entry_', at: number): AttributionTouch | undefined {
+  const str = (key: string): string | undefined => {
+    const value = props[prefix + key]
+    return typeof value === 'string' && value !== '' && value !== '$direct' ? value.slice(0, 200) : undefined
+  }
+  const url = str('current_url') ?? str('url')
+  let pathname = str('pathname')
+  if (pathname === undefined && url !== undefined) try { pathname = new URL(url).pathname } catch { /* ignore */ }
+  const landingPath = pathname === undefined ? undefined : safeTelemetryPath({ pathname })
+  const touch = {
+    source: str('utm_source'), medium: str('utm_medium'), campaign: str('utm_campaign'),
+    content: str('utm_content'), term: str('utm_term'), referrer: str('referring_domain'),
+    landingPath, clickId: str('gclid') ?? str('fbclid') ?? str('msclkid'),
+  }
+  const present = Object.entries(touch).filter(([, value]) => value !== undefined)
+  return present.length === 0 ? undefined : { ...Object.fromEntries(present), at }
+}
+
+/** First touch from PostHog's persisted initial person info; last touch from this session's entry props. */
+export async function readPostHogAttribution(): Promise<{ firstTouch?: AttributionTouch; lastTouch?: AttributionTouch } | undefined> {
+  if (!productAnalyticsAllowed() || !(await ensurePostHogClient()) || posthogClient === undefined) return undefined
+  // Session start stamps both touches; the server overrides firstTouch.at with the account's createdAt.
+  const at = posthogClient.sessionManager?.checkAndGetSessionAndWindowId(true).sessionStartTimestamp ?? Date.now()
+  const firstTouch = buildAttributionTouch(posthogClient.persistence?.get_initial_props() ?? {}, '$initial_', at)
+  const lastTouch = buildAttributionTouch(posthogClient.sessionPropsManager?.getSessionProps() ?? {}, '$session_entry_', at)
+  return firstTouch === undefined && lastTouch === undefined ? undefined : { ...(firstTouch && { firstTouch }), ...(lastTouch && { lastTouch }) }
+}
+
+/** Sign-out starts a fresh anonymous identity so the next visitor on this browser is not attributed to the account. */
+export function resetPostHogAccount(): void {
+  posthogClient?.reset()
+}
+
 function ensurePostHogClient(router?: AnyRouter): Promise<boolean> {
   if (typeof window === 'undefined') {
     return Promise.resolve(false)
@@ -88,7 +134,8 @@ function ensurePostHogClient(router?: AnyRouter): Promise<boolean> {
         capture_pageview: false,
         capture_pageleave: false,
         autocapture: false,
-        persistence: 'sessionStorage',
+        persistence: 'localStorage+cookie',
+        cross_subdomain_cookie: /(^|\.)aecon\.ai$/.test(window.location.hostname),
         disable_session_recording: true,
         before_send: protectPostHogEvent,
         loaded: (ph) => {
@@ -98,7 +145,6 @@ function ensurePostHogClient(router?: AnyRouter): Promise<boolean> {
           })
         },
       })
-      posthog.identify(getOrCreatePseudonymousSessionId())
       registerPostHogPageviews(posthog, router)
       posthogClient = posthog
       initialized = true

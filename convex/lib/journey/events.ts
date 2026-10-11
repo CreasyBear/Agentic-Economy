@@ -16,6 +16,8 @@ async function accountEvent(ctx: JourneyCtx, accountRef: string, name: JourneyEv
     .first()
 }
 
+const NEW_ACCOUNT_MS = 7 * 24 * 60 * 60 * 1000
+
 /** Writes one journey milestone. Returns false when the event already exists. */
 export async function emitJourneyEvent(
   ctx: JourneyCtx,
@@ -30,10 +32,16 @@ export async function emitJourneyEvent(
   if (existing !== null) return false
   const createdAt = Date.now()
   const props: Record<string, number | string> = { ...opts.props }
-  if (name === 'activated') {
-    const signedUp = await accountEvent(ctx, accountRef, 'signed_up')
-    if (signedUp !== null) props.msSinceSignup = createdAt - signedUp.createdAt
+  const account = await ctx.db.query('accounts').withIndex('by_accountRef', q => q.eq('accountRef', accountRef)).unique()
+  const touch = account?.firstTouch
+  if (touch !== undefined) {
+    if (touch.source !== undefined) props.first_source = touch.source
+    if (touch.medium !== undefined) props.first_medium = touch.medium
+    if (touch.campaign !== undefined) props.first_campaign = touch.campaign
   }
+  const signedUp = await accountEvent(ctx, accountRef, 'signed_up')
+  props.isNewAccount = name === 'signed_up' || (signedUp !== null && createdAt - signedUp.createdAt < NEW_ACCOUNT_MS) ? 'true' : 'false'
+  if (name === 'activated' && signedUp !== null) props.msSinceSignup = createdAt - signedUp.createdAt
   if (name === 'retained_w1') {
     const activated = await accountEvent(ctx, accountRef, 'activated')
     if (activated !== null) props.msSinceActivated = createdAt - activated.createdAt

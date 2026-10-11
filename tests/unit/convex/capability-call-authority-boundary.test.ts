@@ -231,6 +231,7 @@ class AuthorityMemoryDb {
         if (matched.length > 1) throw new Error('expected_unique')
         return matched[0] ?? null
       },
+      first: async () => rows()[0] ?? null,
       take: async (limit: number) => rows().slice(0, limit),
     }
     return query
