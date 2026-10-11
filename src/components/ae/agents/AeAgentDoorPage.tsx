@@ -49,9 +49,7 @@ export function AeAgentDoorPage({ canonicalBaseUrl, availability, setupApp, onSe
       <AeSiteFaq
         labelledBy="agent-faq"
         title={AGENT_PAGE.faqHeading}
-        questions={AGENT_PAGE.faqQuestions.map((item) => item.question === AGENT_PAGE.faqAvailabilityQuestion
-          ? { ...item, answer: `${availability} ${item.answer}` }
-          : item)}
+        questions={AGENT_PAGE.faqFor(availability)}
         statusLinkLead={AGENT_PAGE.faqStatusLinkLead}
         statusLinkLabel={AGENT_PAGE.faqStatusLinkLabel}
       />

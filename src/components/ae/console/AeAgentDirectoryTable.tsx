@@ -199,7 +199,7 @@ export function AeAgentDirectoryTable({
       <div className="arc-market arc-agent-directory">
         <AeEmptyState
           title="No agent is connected yet"
-          description="Start setup from the agent and approve the request to create access you can revoke."
+          description="Connect an Agent from the agent and approve the request to create access you can revoke."
           action={
             <a
               href={missingAgentNextAction.href}

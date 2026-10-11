@@ -69,12 +69,14 @@ export const AGENT_PAGE = {
     },
     {
       question: 'When can I connect an Agent?',
-      answer:
-        'The status page tracks availability.',
+      answer: 'The status page tracks availability.',
     },
   ],
-  /** The availability FAQ answer opens with the live availability statement. */
-  faqAvailabilityQuestion: 'When can I connect an Agent?',
+  /** FAQ list whose last answer (availability) opens with the live availability statement. */
+  faqFor: (availability: string) => [
+    ...AGENT_PAGE.faqQuestions.slice(0, -1),
+    { question: 'When can I connect an Agent?', answer: `${availability} The status page tracks availability.` },
+  ],
   faqStatusLinkLead: 'For current availability, visit our',
   faqStatusLinkLabel: 'status page',
 } as const
