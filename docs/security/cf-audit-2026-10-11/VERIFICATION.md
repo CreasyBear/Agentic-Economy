@@ -20,8 +20,10 @@ Review findings on the earlier fix commits were each checked against the code an
 | T2 review: endpoint compare stricter than call-time rule (origin and pathname for GET, full href otherwise) | fixed | 935486a4c |
 | T2 review: asset and network bound to the Quote | fixed | 935486a4c |
 | T5 proven-unused x402 recovery completes | fixed | fb784e7a3 |
-| T6 retryable Quote refusals leave the idempotency key open | fixed | ec9e1be12 |
+| T6 retryable Quote refusals must not terminalise the idempotency key | not fixed: attempt ec9e1be12 reverted in 177041190. Leaving the key open makes every retry throw `ProcureInProgressError`, because a replay with no Quote is treated as unresolved. Needs a key-release mutation in `capabilityProcure`; deferred. | none |
 | cli-release: no install scripts in build, checksum passed as build job output | fixed | 09d27f2b1 |
 | Personal retire ends memberships, agent grants, delegations, org bindings (shared `endAccountDependents`) | fixed | 6dac0b5e5 |
+| Lint (unused param) and Convex API kind snapshot follow earlier fixes | fixed | aae36b56a |
+| Owner-open check regressed capability-quotes test; now fails open when owner principal rows are missing | fixed | 9718cda00 |
 
 Notes. The Quote does not record whether a GET Tool is query-mapped, so every GET Tool is compared on origin and pathname. The retire test now asserts the account's memberships end; delegation and org binding behaviour is covered by the shared helper that workspace close already used.
