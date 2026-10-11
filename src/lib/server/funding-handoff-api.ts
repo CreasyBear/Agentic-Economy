@@ -122,7 +122,7 @@ export function createFundingHandoffService(
     config: async () => {
       const live = await readPlatformFundingConstraintsThroughSource()
       if (live.kind !== 'available') {
-        throw new Error('funding_constraints_unavailable')
+        throw new Error(`funding_constraints_unavailable:${live.code}`)
       }
       const constraints = readFundingConstraints(
         commercialPolicyControlsFromFundingProjection(live),

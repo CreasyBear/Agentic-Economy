@@ -29,7 +29,8 @@ export async function handleFundingConstraintsRequest(request: Request, head = f
           status: 503,
           kind: 'UNAVAILABLE',
           code: 'funding_constraints_unavailable',
-          retryable: true,
+          retryable: live.retryable,
+          extras: { reason: live.code },
         })
       }
       const constraints = readFundingConstraints(
