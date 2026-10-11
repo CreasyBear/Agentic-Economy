@@ -161,3 +161,35 @@ Low
 18. CI: SHA-pin actions in both workflows, move secrets to step-level env, confirm production environment reviewers.
 19. Build: replace the nitro nightly with a stable release or document its review.
 20. Hardening: block `::/96` in the network guard; use the guarded dispatcher in `fetchCatalogPage` and fix its comment.
+
+## Fix status
+
+Hashes are on branch `codex/security-audit` (PR #398).
+
+| Finding | Status | Commit |
+| --- | --- | --- |
+| M1 Stripe stranded top-up | fixed | 88610e5c1 |
+| M2 MCP OAuth authorization URL | fixed | 87f6a2f1e, da0c50857 |
+| M3 Dynamic OAuth clients | fixed: labelled unverified, return host first, authority capped at approval_required, issued key carries the capped mode scope. Provider supply-manage grants keep their implied mode (no mode scope exists to rewrite, and they spend nothing as a customer) | 8f0abf643, bda0dae77 |
+| M4 Provider text steering paid Calls | fixed: approval decided at Call time in `chatCall.call` from the stored quote's Tool and the latest user message (full text, no 500-char cut); Plans refuse unless every Tool is named | b59f31ad9, 2fe02659b, 7ab7c4391 |
+| L1 Refresh replay returns secret | fixed (reuse revokes the family) | 9f2a438ff, 57540baa6 |
+| L2 Discovery markdown | fixed | 668af139c |
+| L3 Windows opener | fixed | 661f13b84 |
+| L4 `ae call` re-quote | fixed | 7b54c2515 |
+| L5 Terminal text | fixed: sanitised inside `line`, `heading`, `table`; bidi controls stripped | 0a48b3cf2, 214e1bbd1 |
+| L6 Config lock | fixed | f7864332b, 52f1712ed |
+| L7 Catalog search limit | fixed: metered by principal or thread (`rateKey`, internal only) or user identity; anonymous callers get no live fan-out and share no bucket | c41eaaf4a, 9420c8f55 |
+| L8 Provider-consequence channel | fixed | bc1cbd19c |
+| L9 Unsubscribe tokens | fixed: kid and 90-day expiry; legacy tokens without kid or exp stay valid until 2026-12-15, then delete the `legacy` branch in `unsubscribe.ts` | a40710162, 161b723ea |
+| L10 Log redaction | fixed: object causes redacted too | e3bf32671, 1cd8ab227, 214e1bbd1 |
+| L11 Anonymous chat spend | fixed | d18ff3111 |
+| L12 MCP anonymous bucket | fixed: every credentialed request is admitted per-IP (`mcp-anonymous`) before any Clerk call; a verified key is then also charged to `public-read`; the verified result is reused, not verified twice | e306f6d91, c89b825f2 |
+| L13 Funding-session read | fixed | f357884ce |
+| L14, L15 CI secrets and pins | fixed; the workflow YAML was malformed (step env keys unindented) and is repaired. All six SHA pins verified against upstream tags with `git ls-remote` (checkout v6, setup-node v4.4.0, cache v4.3.0, upload-artifact v4.6.2, download-artifact v4.3.0, cosign-installer v4.0.0) | 12ed818af, 9e93a8f4c |
+| L16 nitro nightly | fixed | 57e3e2719 |
+| D2 `::/96` | fixed | 53d7ecc55 |
+
+Decisions recorded, no code change:
+
+- **OAuth authority cap and who can pay.** Every OAuth client is dynamically registered, so there is no first-party client id to exempt. OAuth grants for customer access are capped at `approval_required`, including the `ae connect` device flow. Autonomous spend within a policy needs an API key carrying the `spending_policy` scope. Not changed here; flipping it is a decision for the owner.
+- **Refresh lost-response retries (not restored).** The server stores only the successor token hash and mints a fresh random successor per exchange, so a retry can never present "the identical successor hash" and the lost raw token cannot be redelivered. Recovery would need deterministic successor derivation, a design change. Client authors should treat a lost refresh response as a re-consent.
