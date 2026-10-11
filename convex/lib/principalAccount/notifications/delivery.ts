@@ -208,8 +208,11 @@ async function readAccountNoticeContext(ctx: QueryCtx, delivery: Doc<'notificati
     if (command.actorPrincipalRef !== delivery.recipientPrincipalRef) return skip('recipient_changed')
     // Resolved before send: a later success, or for a stuck payment any settled state.
     if (command.state === 'succeeded' || (delivery.eventKind === 'task_stuck' && command.state === 'failed')) return skip('payment_resolved')
-    const amount = moneyNoticeAmount({ currency: command.currency, units: command.principalUnits, exponent: command.exponent })
+    const amount = moneyNoticeAmount({ currency: command.currency, units: command.totalUnits, exponent: command.exponent })
     if (amount !== undefined) props.amount = amount
+  }
+  if (delivery.eventKind === 'data_request_received') {
+    props.when = new Intl.DateTimeFormat('en-AU', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Australia/Perth', timeZoneName: 'short' }).format(new Date(delivery.createdAt))
   }
   return {
     kind: 'ready',

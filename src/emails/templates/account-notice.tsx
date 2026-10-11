@@ -11,7 +11,7 @@ export type NoticeKind =
   | 'welcome' | 'provider_live' | 'provider_offboarded'
 
 /** Money arrives already formatted by the loader (moneyNoticeAmount), so no amount is retyped here. */
-export type NoticeProps = { siteUrl: string; amount?: string; taskRef?: string; role?: string; toolRef?: string }
+export type NoticeProps = { siteUrl: string; amount?: string; taskRef?: string; role?: string; when?: string; toolRef?: string }
 
 type Notice = {
   subject: (props: NoticeProps) => string
@@ -46,8 +46,8 @@ const NOTICES: Record<NoticeKind, Notice> = {
   },
   task_stuck: {
     subject: ({ amount }) => (amount === undefined ? "We're still confirming your payment" : `We're still confirming your ${amount} payment`),
-    preheader: () => 'Check the receipt before paying again.',
-    body: () => "Your payment hasn't been confirmed yet, so no credit was added. Check your receipts before you pay again. We'll email you once it is confirmed or fails.",
+    preheader: () => 'No credit has been added yet.',
+    body: () => "Check the receipt before paying again. Your payment hasn't been confirmed yet, so no credit was added. We'll email you once it is confirmed or fails.",
     label: 'View receipt', path: '/owner/credit', campaign: 'payment_stuck',
   },
   credit_exhausted: {
@@ -59,19 +59,19 @@ const NOTICES: Record<NoticeKind, Notice> = {
   key_issued: {
     subject: () => 'A new aecon key was created',
     preheader: () => "If this wasn't you, revoke the key now.",
-    body: () => "A new agent key was created on your account. If this wasn't you, revoke it now or contact support@aecon.ai.",
+    body: () => "A new agent key was created on your account. We send one notice every 10 minutes, so more keys may have been created since. If this wasn't you, revoke them now or contact support@aecon.ai.",
     label: 'Review keys', path: '/owner/settings/agent', campaign: 'key_issued',
   },
   key_revoked: {
     subject: () => 'An aecon key was revoked',
     preheader: () => 'Agents using it can no longer make calls.',
-    body: () => 'An agent key on your account was revoked. Agents using that key can no longer make calls.',
+    body: () => 'An agent key on your account was revoked. We send one notice every 10 minutes, so more keys may have been revoked since. Agents using a revoked key can no longer make calls.',
     label: 'Review keys', path: '/owner/settings/agent', campaign: 'key_revoked',
   },
   account_paused: {
     subject: () => 'Your aecon account is paused',
-    preheader: () => 'Calls are on hold. Here is why.',
-    body: () => 'Your aecon account is paused, so calls cannot run. See why and what to do next.',
+    preheader: () => 'Calls are on hold for a security review.',
+    body: () => 'Your aecon account was paused for a security review, so calls cannot run. Contact support@aecon.ai to find out what to do next.',
     label: 'View account', path: '/owner', campaign: 'account_paused',
   },
   account_restored: {
@@ -119,7 +119,7 @@ const NOTICES: Record<NoticeKind, Notice> = {
   data_request_received: {
     subject: () => 'Your aecon data export was downloaded',
     preheader: () => "If this wasn't you, contact support@aecon.ai.",
-    body: () => "Your account data was exported and downloaded. If this wasn't you, contact support@aecon.ai.",
+    body: ({ when }) => `Your account data was downloaded${when === undefined ? '' : ` on ${when}`}. If this wasn't you, contact support@aecon.ai.`,
     label: 'Review settings', path: '/owner/settings/privacy', campaign: 'data_export',
   },
 }
