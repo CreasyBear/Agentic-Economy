@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, notFound } from '@tanstack/react-router'
 import { useCallback } from 'react'
 
 import { PublicToolDetail } from '@/components/ae/market/public-tool-detail/PublicToolDetail'
@@ -20,7 +20,7 @@ export const Route = createFileRoute('/tools/$toolRef')({
   validateSearch: validateToolPageSearch,
   loader: async ({ params }) => {
     if (!isPublicToolRef(params.toolRef)) {
-      return { result: { kind: 'invalid_ref' as const, toolRef: params.toolRef }, evidence: undefined, baseUrl: undefined }
+      throw notFound({ data: { kind: 'invalid_ref', toolRef: params.toolRef } })
     }
     const [result, baseUrl] = await Promise.all([
       readPublicToolDetailRouteServer({ data: { toolRef: params.toolRef } })
@@ -29,6 +29,7 @@ export const Route = createFileRoute('/tools/$toolRef')({
       readCanonicalBaseUrlServer()
         .catch(cause => degrade(cause, undefined, { site: 'toolCanonicalUrl', reason: 'source_unavailable' })),
     ])
+    if (result.kind === 'not_found') throw notFound({ data: result })
     const evidence = result.kind === 'found' ? result.evidence : undefined
     return { result, evidence, baseUrl }
   },
@@ -49,6 +50,7 @@ export const Route = createFileRoute('/tools/$toolRef')({
   },
   pendingComponent: ToolPageSkeleton,
   errorComponent: ToolDetailError,
+  notFoundComponent: ToolDetailNotFound,
   component: ToolDetailRoute,
 })
 
@@ -63,4 +65,9 @@ function ToolDetailRoute() {
 function ToolDetailError() {
   const { toolRef } = Route.useParams()
   return <PublicToolDetail result={{ kind: 'source_unavailable', toolRef }} baseUrl={undefined} />
+}
+
+// Same body as before, but thrown via notFound() so the HTTP status is 404 (reference: $slug.tsx notFoundComponent).
+function ToolDetailNotFound({ data }: { data?: unknown }) {
+  return <PublicToolDetail result={data as Extract<PublicToolDetailRouteResult, { kind: 'invalid_ref' | 'not_found' }>} baseUrl={undefined} />
 }
