@@ -79,6 +79,11 @@ const catalogueStatusSchema = z.strictObject({
   lastError: z.string().optional(),
 })
 
+const availabilitySchema = z.strictObject({
+  paidCalls: z.enum(['open', 'soon']).describe('Whether paid calls are open to buyers.'),
+  statement: z.string().describe('Human-readable availability statement.'),
+})
+
 const marketMetricsSchema = z.strictObject({
   window: marketWindowSchema,
   generatedAt: z.string(),
@@ -176,6 +181,10 @@ export const OPENAPI_SUPPLEMENTAL_ROUTES: readonly OpenApiSupplementalRoute[] = 
   {
     operationId: 'platform.catalogueStatus', summary: 'Read x402 directory catalogue freshness', method: 'GET', path: '/api/v1/catalogue-status',
     tags: ['Platform'], outputSchema: catalogueStatusSchema, problemKinds: ['UNAVAILABLE', 'RESOURCE_EXHAUSTED'],
+  },
+  {
+    operationId: 'platform.availability', summary: 'Read whether paid calls are open', method: 'GET', path: '/api/v1/availability',
+    tags: ['Platform'], outputSchema: availabilitySchema, problemKinds: ['UNAVAILABLE', 'RESOURCE_EXHAUSTED'],
   },
   {
     operationId: 'platform.marketMetrics', summary: 'Read the public market metrics projection', method: 'GET', path: '/api/v1/market-metrics',
