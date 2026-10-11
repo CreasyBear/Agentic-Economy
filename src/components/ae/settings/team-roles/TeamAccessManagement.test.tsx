@@ -9,7 +9,7 @@ vi.mock('@/lib/client/useTypedReverification', () => ({ useTypedReverification: 
 vi.mock('@/components/arc/button/button', () => ({ Button: ({ children, ...props }: { children: ReactNode; onClick?: () => void; disabled?: boolean }) => <button type="button" {...props}>{children}</button> }))
 vi.mock('@/lib/observability/capture-client-exception', () => ({ captureClientExceptionOnClient: vi.fn() }))
 import { TeamAccessManagement } from './TeamAccessManagement'
-const first: TeamAccessView = { accountRef: 'account:1', accountRevision: 4, ownershipRevision: 2, canManageMembers: true, canManageInvitations: true,
+const first: TeamAccessView = { accountRef: 'account:1', accountRevision: 4, ownershipRevision: 2, ownerName: 'Ada Owner', canManageMembers: true, canManageInvitations: true,
   members: [{ membershipRef: 'membership:1', revision: 1, userId: 'user_one', name: 'First member', role: 'member', upstreamUpdatedAt: 10 }],
   invitations: [], membersComplete: false, nextMemberOffset: 100, invitationsComplete: true, nextInvitationOffset: null }
 const next: TeamAccessView = { ...first, membersComplete: true, nextMemberOffset: null,
@@ -64,4 +64,11 @@ it('hands an unconfirmed access change back to observation without leaving an un
   expect(screen.getByRole('button', { name: 'Remove member' })).toHaveProperty('disabled', true)
   await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Refresh team access' })))
   expect(boundary.change).toHaveBeenCalledTimes(1)
+})
+it('names the workspace owner when a role change is forbidden', async () => {
+  boundary.change.mockResolvedValueOnce({ kind: 'refused', code: 'forbidden' })
+  render(<TeamAccessManagement accountRef="account:1" />)
+  fireEvent.click(await screen.findByRole('button', { name: 'Remove member' }))
+  fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Confirm change' }))
+  await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Only Ada Owner (workspace owner) can change roles. Ask them.'))
 })

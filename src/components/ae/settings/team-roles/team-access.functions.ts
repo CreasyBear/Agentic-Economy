@@ -29,7 +29,7 @@ export const readTeamAccessServer = createServerFn({ method: 'GET' })
   const upstream = organizationId === null || !canManageMembers ? null : await organizations.getOrganizationMembershipList({ organizationId, limit: 100, offset: memberOffset })
   return {
     accountRef: directory.accountRef, accountRevision: directory.accountRevision, ownershipRevision: directory.owner.revision,
-    canManageMembers, canManageInvitations: organizationId !== null,
+    ownerName: directory.owner.displayName, canManageMembers, canManageInvitations: organizationId !== null,
     members: directory.members.flatMap(member => {
       const recorded = upstream?.data.find(row => row.publicUserData?.userId === member.clerkUserId)
       // A missing or drifting identity record is a barrier, never speculative access.

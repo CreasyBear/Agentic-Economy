@@ -8,7 +8,7 @@ vi.mock('./team-roles.functions', () => ({ inviteTeamMemberServer: boundary.invi
 vi.mock('@/lib/observability/capture-client-exception', () => ({ captureClientExceptionOnClient: vi.fn() }))
 import { useInviteTeamMember } from './useInviteTeamMember'
 const event = { preventDefault: vi.fn() } as unknown as FormEvent<HTMLFormElement>
-const view: TeamAccessView = { accountRef: 'account:original', accountRevision: 4, ownershipRevision: 2, canManageMembers: true, canManageInvitations: true,
+const view: TeamAccessView = { accountRef: 'account:original', accountRevision: 4, ownershipRevision: 2, ownerName: 'Ada Owner', canManageMembers: true, canManageInvitations: true,
   members: [], invitations: [], membersComplete: true, nextMemberOffset: null, invitationsComplete: true, nextInvitationOffset: null }
 beforeEach(() => { vi.resetAllMocks(); boundary.invite.mockRejectedValue(new Error('response lost')) })
 it('freezes email and role after uncertainty and only observes same-account confirmed pending invitations', async () => {

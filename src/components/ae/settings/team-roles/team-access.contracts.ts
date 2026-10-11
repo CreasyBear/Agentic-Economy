@@ -6,7 +6,7 @@ export type TeamAccessMember = Readonly<{
 }>
 export type TeamAccessView = Readonly<{
   accountRef: string; accountRevision: number; ownershipRevision: number
-  canManageMembers: boolean; canManageInvitations: boolean
+  ownerName: string; canManageMembers: boolean; canManageInvitations: boolean
   members: readonly TeamAccessMember[]; invitations: readonly PendingTeamInvitation[]
   membersComplete: boolean; nextMemberOffset: number | null
   invitationsComplete: boolean; nextInvitationOffset: number | null
