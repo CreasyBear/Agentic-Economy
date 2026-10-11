@@ -156,8 +156,8 @@ describe('sendDeliveryEmail', () => {
     await backend.action(internal.notificationDelivery.sendDeliveryEmail, { deliveryId })
     expect(sendEmail).toHaveBeenCalledTimes(2)
     const sent = sendEmail.mock.calls.map(([, init]) => ({
-      to: JSON.parse(String(init?.body)).to,
-      key: (init?.headers as Record<string, string>)['Idempotency-Key'],
+      to: JSON.parse(String((init as RequestInit).body)).to,
+      key: ((init as RequestInit).headers as Record<string, string>)['Idempotency-Key'],
     }))
     expect(sent).toEqual([
       { to: ['owner@example.test'], key: deliveryRef },
