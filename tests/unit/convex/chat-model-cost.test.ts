@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { api, internal } from '../../../convex/_generated/api'
 import { convexTestWithMarketComponents, publishedBusinessOwner } from '../../helpers/convex-fixtures'
 import type { ChatModelCostBinding, ChatModelCostBegin, ChatModelCostObserve } from '@/modules/chat/model-cost'
+import { startedTurn } from '../../helpers/started-turn'
 
 beforeEach(() => { vi.useFakeTimers() })
 afterEach(() => { vi.clearAllTimers(); vi.useRealTimers() })
@@ -10,9 +11,9 @@ async function fixture() {
   const backend = convexTestWithMarketComponents()
   const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'model-cost-owner')
   const start = async (key: string) => {
-    const turn = await owner.mutation(api.chatTurns.startTurn, {
+    const turn = startedTurn(await owner.mutation(api.chatTurns.startTurn, {
       principal: { kind: 'clerk' }, clientTurnId: key, prompt: 'Find a weather Tool',
-    })
+    }))
     // The fixture owns no inference. Retain the actual native prompt/turn and
     // cancel only their background generation/deadline before testing storage.
     await backend.run(async ctx => {

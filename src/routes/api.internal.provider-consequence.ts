@@ -457,7 +457,8 @@ function x402RuntimeFactory(
       readX402PaymentAuthorizationByDigest: async (prepared) => await readAuthorization(prepared, true),
       beforeX402PaymentAuthorizationRead: async () => true,
       markX402PaymentPossiblySubmitted: async (event: X402PaymentAttemptEvent) => {
-        await x402Rpc(request, origin, 'mark_possibly_submitted', { ...event })
+        const marked = await x402Rpc(request, origin, 'mark_possibly_submitted', { ...event })
+        if (marked !== null && marked !== undefined) return false
       },
       observeX402PaymentAttempt: async (event) => {
         await x402Rpc(request, origin, 'observe_attempt', { ...event })

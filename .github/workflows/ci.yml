@@ -1,9 +1,9 @@
 name: CI
 
+# Manual only: the local gate (npm run gate) is the merge check. GitHub Actions
+# minutes are limited on this private repo, so full CI runs on demand.
 on:
-  pull_request:
-  push:
-    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read

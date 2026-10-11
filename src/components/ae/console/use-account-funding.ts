@@ -8,7 +8,7 @@ import {
   quoteAudAccountFunding,
   type CreditPaymentSession,
 } from '@/modules/money/public'
-import type { AccountFundingPort } from '@/modules/money/account-funding.contracts'
+import { accountFundingBeginEnvelopeSchema, type AccountFundingPort } from '@/modules/money/account-funding.contracts'
 import type {
   AccountFundingConstraints,
 } from '@/modules/money/server'
@@ -272,11 +272,16 @@ export function useAccountFunding({
     idempotencyKey.current = nextIdempotencyKey
     dispatch({ type: 'operation_started', operation: 'starting' })
     try {
-      const result = await port.begin({
+      const raw = await port.begin({
         amount: { currency: 'AUD', units: units.toString(), exponent: AUD_EXPONENT },
         expectedPolicyDigest: constraints.policyDigest,
         idempotencyKey: nextIdempotencyKey,
       })
+      if (!accountFundingBeginEnvelopeSchema.safeParse(raw).success) {
+        dispatch({ type: 'error_changed', errorMessage: 'Account funding returned an unreadable response. No payment was confirmed; try again.' })
+        return
+      }
+      const result = raw
       if (result.kind === 'outcome_unknown') {
         const locator = { commandRef: result.commandRef, idempotencyKey: nextIdempotencyKey }
         dispatch({ type: 'payment_outcome_unknown', recovery: locator })
@@ -303,8 +308,8 @@ export function useAccountFunding({
       if (result.session.kind === 'hosted_redirect' && result.session.checkoutUrl !== undefined) {
         try {
           redirectToCheckout(result.session.checkoutUrl)
-        } catch (cause) {
-          captureClientExceptionOnClient(cause)
+        } catch {
+          // A blocked redirect is expected: the preserved attempt and Continue secure payment link are the fallback.
           dispatch({
             type: 'error_changed',
             errorMessage: 'Secure checkout could not be opened. This payment attempt is preserved; continue the same payment below.',
@@ -347,8 +352,8 @@ export function useAccountFunding({
     if (!isCheckoutResumable(session) || pending || checking) return
     try {
       redirectToCheckout(session.checkoutUrl)
-    } catch (cause) {
-      captureClientExceptionOnClient(cause)
+    } catch {
+      // A blocked redirect is expected: the Continue secure payment link remains the fallback.
       dispatch({
         type: 'error_changed',
         errorMessage: 'Secure checkout could not be opened. This payment attempt is preserved; try continuing it again.',

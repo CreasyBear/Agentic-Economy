@@ -2,6 +2,7 @@ import * as Sentry from '@sentry/react'
 import type { AnyRouter } from '@tanstack/react-router'
 
 import { readObservabilityClientConfig } from '@/lib/observability/config'
+import { routeExpectedEvent } from '@/lib/observability/expected-events'
 import {
   isTelemetryAllowedForCurrentRoute,
   sanitizeTelemetryError,
@@ -16,7 +17,7 @@ export function initSentryClient(router?: AnyRouter): boolean {
   if (!isTelemetryAllowedForCurrentRoute() || initialized) return initialized
 
   const config = readObservabilityClientConfig()
-  if (!config.enabled || config.sentryDsn === undefined) {
+  if (!config.sentryEnabled || config.sentryDsn === undefined) {
     return false
   }
 
@@ -30,8 +31,9 @@ export function initSentryClient(router?: AnyRouter): boolean {
     ...(config.release === undefined ? {} : { release: config.release }),
     integrations,
     tracesSampleRate: import.meta.env.PROD ? 0.1 : 1,
-    beforeSend(event) {
-      return sanitizeTelemetryEvent(event)
+    beforeSend(event, hint) {
+      const safe = sanitizeTelemetryEvent(event)
+      return safe === null ? null : routeExpectedEvent(safe, hint, Sentry.addBreadcrumb, false)
     },
     beforeSendTransaction(event) {
       return sanitizeTelemetryEvent(event)

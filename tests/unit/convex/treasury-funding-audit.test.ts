@@ -250,7 +250,7 @@ describe('fresh Stripe treasury funding audit', () => {
   it('preserves known native drift when Stripe client construction throws, without logging provider text', async () => {
     const { source, settlement, booking } = fixture()
     const orphan = native({ ...booking, commandRef: 'funding-reversal:re_orphan', idempotencyKey: 'funding-reversal:re_orphan' }, 'reversal', '2')
-    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const log = vi.spyOn(console, 'warn').mockImplementation(() => {})
     sdk.construct.mockImplementationOnce(() => { throw new Error('unsafe_constructor_provider_content') })
     expect(await auditTreasuryFunding([source], [settlement, orphan], 'sandbox')).toMatchObject({ kind: 'mismatch', code: 'treasury_funding_native_orphan' })
     expect(log).toHaveBeenCalled()

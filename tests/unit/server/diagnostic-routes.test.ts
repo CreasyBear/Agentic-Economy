@@ -937,6 +937,25 @@ describe('production aggregate payment readiness', () => {
     expect(body.checks.payments).toEqual({ status: 'failed', code: 'payments_unavailable' })
     expect(body.commercial).toEqual({ catalogue: 'fresh', quoting: 'ready', funding: 'configured', paidCalls: 'open', sellable: false })
   })
+  it('reports 200 with payments disabled when the audience switch is closed, even with a stale view', async () => {
+    paymentView = { ...readyPaymentView(), kind: 'not_ready', code: 'readiness_expired', paymentsDisabled: true } as never
+    const response = await handleReadyRequest(request(), { env: sellableInputs(), fetch: readyFetch(), nodeMajor: 22 })
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({ status: 'ready', checks: { config: 'ready', convex: 'ready', payments: 'disabled' },
+      commercial: { sellable: false } })
+  })
+  it('still returns 503 payments_unavailable on a stale view with the switch open', async () => {
+    paymentView = { ...readyPaymentView(), expiresAt: Date.now(), paymentsDisabled: false } as never
+    const response = await handleReadyRequest(request(), { env: sellableInputs(), fetch: readyFetch(), nodeMajor: 22 })
+    expect(response.status).toBe(503)
+    expect((await response.json()).checks.payments).toEqual({ status: 'failed', code: 'payments_unavailable' })
+  })
+  it('returns 503 when convex fails even with payments disabled', async () => {
+    paymentView = { ...readyPaymentView(), paymentsDisabled: true } as never
+    const failing = vi.fn(async () => new Response(null, { status: 500 }))
+    const response = await handleReadyRequest(request(), { env: sellableInputs(), fetch: failing, nodeMajor: 22 })
+    expect(response.status).toBe(503)
+  })
   it('forces sellable false when production config fails, leaving the probed rails unchanged', async () => {
     const env = sellableInputs()
     env.CLERK_JWT_ISSUER_DOMAIN = 'not-a-url'
@@ -1033,6 +1052,8 @@ describe('production aggregate payment readiness', () => {
       },
       mutation: vi.fn(), action: vi.fn(),
     } as never)
+    // Production defaults the audience switch to 'admins' (payments off); open it so readiness is gated.
+    await backend.run(async ctx => { await ctx.db.insert('platformLaunch', { environment: 'production', paymentsOpenTo: 'everyone', resumePaymentsOpenTo: 'everyone', revision: 1, updatedAt: 1 }) })
     const options = { env, fetch: readyFetch(), nodeMajor: 22 }
     const initial = await handleReadyRequest(request(), options)
     expect(initial.status).toBe(503)

@@ -1,13 +1,15 @@
 import type { QueryCtx } from '../../../_generated/server'
 import type { ObjectType } from 'convex/values'
 import { resolveTrustedChatAuthority } from '../../capabilityExecution/callLifecycle/chatCallAuthority'
-import { resolveOwnerChatActor } from '../threads/listing'
+import { isChatSignedOut, resolveOwnerChatActor } from '../threads/listing'
 import { publicChatTurn } from './errors'
 import { ownerReadableActor, requirePrincipalTurn, readTurnStreams } from './handlers'
 import { unresolvedTurnCallRefs } from './recovery'
 import type { readTurnArgs, readDeltasArgs, authorizePayableToolArgs } from './contracts'
 
-export const ownerChatGrantStatusHandler = async (ctx: QueryCtx) => ({ enabled: await resolveOwnerChatActor(ctx) !== null })
+export const ownerChatGrantStatusHandler = async (ctx: QueryCtx) => ({
+  enabled: !await isChatSignedOut(ctx) && await resolveOwnerChatActor(ctx) !== null,
+})
 
 export const readTurnHandler = async (ctx: QueryCtx, args: ObjectType<typeof readTurnArgs>) => publicChatTurn(async () => {
     const actor = await ownerReadableActor(ctx, args.principal, args.turnRef, args, false)

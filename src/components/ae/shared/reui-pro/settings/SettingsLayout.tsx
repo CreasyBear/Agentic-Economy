@@ -13,7 +13,7 @@ import { Field, FieldContent, FieldDescription, FieldGroup } from '@/components/
  */
 export function SettingsScrollView({ children }: { children: ReactNode }) {
   return <ScrollArea.Root className="min-w-0">
-    <ScrollArea.Viewport className="w-full rounded-none outline-none focus-visible:ring-2 focus-visible:ring-ring">
+    <ScrollArea.Viewport className="w-full outline-none focus-visible:ring-2 focus-visible:ring-ring">
       <ScrollArea.Content>{children}</ScrollArea.Content>
     </ScrollArea.Viewport>
     <ScrollArea.Scrollbar orientation="horizontal" className="flex h-2.5 touch-none flex-col border-t border-t-transparent p-px transition-colors select-none">

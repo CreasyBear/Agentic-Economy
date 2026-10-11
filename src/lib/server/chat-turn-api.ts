@@ -19,7 +19,7 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { productionMoneyManifestReady } from '@/lib/deployment/env-schema'
 import { projectStreamJourneyProblem, type CallEvent, type ChatTurnFailureReason, type TurnEvent, type WorkState } from '@/modules/actions/contract'
 
-const startTurn = sourceMutation<Record<string, unknown>, TurnSnapshot>('chatTurns:startTurn')
+const startTurn = sourceMutation<Record<string, unknown>, TurnSnapshot | TurnNotStarted>('chatTurns:startTurn')
 const cancelTurn = sourceMutation<Record<string, unknown>, CancelResult>('chatTurns:cancelTurn')
 const readTurn = sourceQuery<Record<string, unknown>, TurnSnapshot>('chatTurns:readTurn')
 const readDeltas = sourceQuery<Record<string, unknown>, TurnDeltas>('chatTurns:readDeltas')
@@ -41,6 +41,7 @@ type TurnSnapshot = Readonly<{
   deadlineAt?: number; cancelRequestedAt?: number; failureReason?: ChatTurnFailureReason; failureCallRefs?: readonly string[]
   callRefs?: readonly string[]; inFlightCallRefs?: readonly string[]
 }>
+type TurnNotStarted = Readonly<{ kind: 'not_started'; code: 'turn_fenced' }>
 type CancelResult = Readonly<{ kind: 'stopped' | 'in_flight'; turnRef: string; inFlightEffects: readonly { callRef: string }[] }>
 type StreamMessage = Readonly<{ streamId: string; status: 'streaming' | 'finished' | 'aborted' }>
 type StreamDelta = Readonly<{ streamId: string; start: number; end: number; parts: readonly unknown[] }>
@@ -51,7 +52,7 @@ type TurnDeltas = Readonly<{
 }>
 type StreamArgs = Readonly<{ kind: 'list' }> | Readonly<{ kind: 'deltas'; cursors: readonly { streamId: string; cursor: number }[] }>
 export type ChatTurnSource = Readonly<{
-  start(input: Readonly<{ prompt: string; threadId?: string; clientTurnId: string }>): Promise<TurnSnapshot>
+  start(input: Readonly<{ prompt: string; threadId?: string; clientTurnId: string }>): Promise<TurnSnapshot | TurnNotStarted>
   cancel(turnRef: string): Promise<CancelResult>
   read(turnRef: string): Promise<TurnSnapshot>
   deltas(turnRef: string, streamArgs: StreamArgs): Promise<TurnDeltas>
@@ -119,7 +120,6 @@ function sourceProblem(error: unknown, request: Request, correlationId: string):
   if (error instanceof ConvexError && typeof error.data === 'object' && error.data !== null && 'code' in error.data) {
     switch (error.data.code) {
       case 'turn_conflict': return problem({ status: 409, kind: 'ALREADY_EXISTS', code: 'turn_conflict' })
-      case 'turn_fenced': return problem({ status: 409, kind: 'FAILED_PRECONDITION', code: 'turn_fenced' })
       case 'turn_invalid': return problem({ status: 400, kind: 'INVALID_ARGUMENT', code: 'turn_invalid' })
       case 'turn_not_found': return problem({ status: 404, kind: 'NOT_FOUND', code: 'turn_not_found' })
       case 'unauthenticated': return authRefusalProblem(request, { kind: 'refused', status: 401, reason: 'authentication_required' }, 'market_tools:call', undefined, correlationId)
@@ -243,6 +243,7 @@ export async function handleChatTurnPost(request: Request, options: ChatTurnOpti
         try {
           const source = options.source?.(principal) ?? sourceFor(request, bounded.text, correlationId, principal)
           const turn = await source.start({ prompt: parsed.data.prompt, clientTurnId: parsed.data.clientTurnId, ...(parsed.data.threadId === undefined ? {} : { threadId: parsed.data.threadId }) })
+          if ('kind' in turn) return withRequestCorrelationHeader(problem({ status: 409, kind: 'FAILED_PRECONDITION', code: turn.code }), correlationId)
           return streamTurn(request, turn, source, correlationId)
         } catch (error) { return withRequestCorrelationHeader(sourceProblem(error, request, correlationId), correlationId) }
       })

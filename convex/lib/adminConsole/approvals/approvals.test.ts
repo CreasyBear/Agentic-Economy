@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { resolveAdminAuthority } from '../../../authz'
 import {
@@ -30,6 +30,8 @@ const COMMAND_REASON = 'policy_violation'
 const COMMAND_EVIDENCE = ['evidence:approval-test']
 const EXPECTED_STATE_DIGEST = 'sha256:before-approval'
 const ISSUER = 'https://identity.example'
+
+afterEach(() => { vi.useRealTimers() })
 
 describe('admin command second approval', () => {
   it('executes without approval when exactly one owner admin is active', async () => {
@@ -66,6 +68,34 @@ describe('admin command second approval', () => {
     })
   })
 
+  it('pages open proposals with a stable now when the wall clock advances', async () => {
+    const backend = convexTestWithMarketComponents()
+    await seedOwner(backend, 'user_proposer')
+    await seedOwner(backend, 'user_approver')
+    await createProposal(backend, 'user_proposer')
+    await backend.run(async (ctx) => {
+      const { _id, _creationTime, ...row } = (await ctx.db.query('adminApprovalProposals').collect())[0]!
+      await ctx.db.insert('adminApprovalProposals', { ...row, proposalRef: 'admin-proposal:second' })
+    })
+    vi.useFakeTimers()
+    const first = await backend.run((ctx) => listOpenApprovalProposals(ctx, false, { numItems: 1, cursor: null }, NOW))
+    vi.setSystemTime(NOW + 2 * DAY_MS)
+    const second = await backend.run((ctx) => listOpenApprovalProposals(ctx, false, { numItems: 1, cursor: first.continueCursor }, NOW))
+    expect(first.page).toHaveLength(1)
+    expect(second.page).toHaveLength(1)
+    expect(second.page[0]?.proposalRef).not.toBe(first.page[0]?.proposalRef)
+  })
+
+  it('restarts from the first page when the cursor is invalid', async () => {
+    const paginate = vi.fn()
+      .mockRejectedValueOnce(new Error('InvalidCursor: cursor is from a different query'))
+      .mockResolvedValueOnce({ page: [], isDone: true, continueCursor: '' })
+    const query = { withIndex: () => ({ order: () => ({ paginate }) }) }
+    const ctx = { db: { query: () => query } } as never
+    await listOpenApprovalProposals(ctx, false, { numItems: 5, cursor: 'stale' }, NOW)
+    expect(paginate.mock.calls.map(call => call[0].cursor)).toEqual(['stale', null])
+  })
+
   it('persists one immutable proposal and its audit event', async () => {
     const backend = convexTestWithMarketComponents()
     await seedOwner(backend, 'user_proposer')
@@ -85,7 +115,7 @@ describe('admin command second approval', () => {
     expect(result.receipt.proposalRef).toMatch(/^admin-proposal:/u)
 
     const stored = await backend.run(async (ctx) => ({
-      proposals: (await listOpenApprovalProposals(ctx, true, { numItems: 50, cursor: null })).page,
+      proposals: (await listOpenApprovalProposals(ctx, true, { numItems: 50, cursor: null }, NOW)).page,
       rows: await ctx.db.query('adminApprovalProposals').collect(),
       audits: await ctx.db
         .query('auditEvents')

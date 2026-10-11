@@ -10,7 +10,11 @@ import { RESPONSE_RECOVERY_FIRST_DELAY_MS } from './responseRecovery'
 import { resolveX402SpendReservation } from './spendResolution'
 
 export const markX402PaymentPossiblySubmittedArgs = { ...x402PaymentEventArgs }
-export const markX402PaymentPossiblySubmittedReturns = v.null()
+// A mismatched attribution is expected refusal data, not a fault: the caller halts the payment on it.
+export const markX402PaymentPossiblySubmittedReturns = v.union(
+  v.null(),
+  v.object({ kind: v.literal('attribution_mismatch') }),
+)
 
 export type MarkPossiblySubmittedArgs = EventArgs & {
   settlementStatus?: 'settled' | 'not_settled' | 'unknown'
@@ -55,11 +59,9 @@ export type ObserveArgs = EventArgs & {
 export async function markX402PaymentPossiblySubmittedHandler(
   ctx: MutationCtx,
   args: MarkPossiblySubmittedArgs,
-): Promise<null> {
+): Promise<null | { kind: 'attribution_mismatch' }> {
   const row = await loadByCustody(ctx, args.custodyRef)
-  if (row === null || !eventAttributionValid(row, args as EventArgs)) {
-    throw new Error('x402_payment_attempt_attribution_invalid')
-  }
+  if (row === null || !eventAttributionValid(row, args as EventArgs)) return { kind: 'attribution_mismatch' }
   if (
     args.settlementStatus !== undefined
     && row.settlementStatus !== undefined

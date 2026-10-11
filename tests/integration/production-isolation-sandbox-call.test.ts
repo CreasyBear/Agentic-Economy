@@ -6,6 +6,7 @@ import { withSourceWrite } from '../helpers/source-write-admission'
 import {
   formanceSnapshot, observeHealthyReadiness, prepareSubjects, publishCurrentTool, seedAgent,
 } from '../helpers/quote-fixtures'
+import { startedTurn } from '../helpers/started-turn'
 
 afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs() })
 
@@ -37,10 +38,10 @@ it('retains a valid sandbox Quote and performs no Call work when invoked in prod
   })
   vi.useFakeTimers()
   vi.setSystemTime(Date.now())
-  const turn = await backend.mutation(api.chatTurns.startTurn, await withSourceWrite('protected_action', {
+  const turn = startedTurn(await backend.mutation(api.chatTurns.startTurn, await withSourceWrite('protected_action', {
     principal: { kind: 'agent_key' as const, ...buyer.principal }, clientTurnId: suffix,
     prompt: 'Call the quoted Tool', operationKey: `${suffix}:turn`, correlationId: `${suffix}:turn`,
-  }))
+  })))
   expect(await backend.mutation(internal.chatTurns.finishTurn, {
     turnRef: turn.turnRef, promptMessageId: turn.promptMessageId, state: 'working',
   })).toBe(true)

@@ -1,3 +1,4 @@
+import { startedTurn } from '../helpers/started-turn'
 import { listMessages, listUIMessages, mockModel, saveMessage, saveMessages } from '@convex-dev/agent'
 import { getFunctionName } from 'convex/server'
 import type { ActionCtx } from '../../convex/_generated/server'
@@ -36,14 +37,14 @@ async function drainExpectedUnavailableGenerations(
   }
 }
 
-async function startManuallyGeneratedTurn<T extends { promptMessageId: string }>(
+async function startManuallyGeneratedTurn<R extends { promptMessageId: string } | { kind: 'not_started' }>(
   backend: ConvexFixtureBackend,
-  start: () => Promise<T>,
-): Promise<T> {
+  start: () => Promise<R>,
+): Promise<Extract<R, { promptMessageId: string }>> {
   // Hold generation and its deadline while this fixture supplies a mock model.
   vi.useFakeTimers()
   try {
-    const turn = await start()
+    const turn = startedTurn(await start()) as unknown as Extract<R, { promptMessageId: string }>
     await backend.run(async ctx => {
       const jobs = await ctx.db.system.query('_scheduled_functions').take(100)
       const scheduled = jobs.filter(job => ['chatGenerate:generate', 'chatTurns:finishTurn'].includes(job.name)

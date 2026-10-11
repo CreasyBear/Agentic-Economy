@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { X402DirectoryEntry, X402DirectoryPage } from '@/modules/market/x402-directory'
+import { jevBreaker } from '@/modules/decision-engine/public'
 import { rerankX402DirectoryPage } from '@/modules/market/x402-directory-reranker'
 import { mockJevFetch } from '../../helpers/tool-search-rerank-fixtures'
 
@@ -22,7 +23,7 @@ const page: Extract<X402DirectoryPage, { kind: 'ok' }> = {
 const options = { openrouterApiKey: 'test-key' }
 const answers = (a: number, b: number) => ({ match_0: { type: 'noul', noul: a }, match_1: { type: 'noul', noul: b } })
 
-afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks() })
+afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); jevBreaker.reset() })
 
 describe('Bazaar search semantic ordering', () => {
   it('ranks supplied entries and preserves their facts and pagination', async () => {

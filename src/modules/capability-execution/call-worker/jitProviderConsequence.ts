@@ -270,7 +270,7 @@ export function createJitProviderConsequenceBoundary(
               },
               markX402PaymentPossiblySubmitted: async (event) => {
                 releaseAttempted = true
-                await x402Runtime.markX402PaymentPossiblySubmitted(event)
+                return await x402Runtime.markX402PaymentPossiblySubmitted(event)
               },
             }
             observation = await invokePreparedRouteTransport(x402Preparation.prepared, {

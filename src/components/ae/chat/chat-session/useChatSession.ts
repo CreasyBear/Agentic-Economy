@@ -295,6 +295,13 @@ export function useChatSession({
           },
         })
         if (!mountedRef.current || requestGenerationRef.current !== requestGeneration) return { kind: 'submitted' }
+        if ('kind' in result && result.code === 'turn_fenced') {
+          setError('This conversation is already responding. Wait a moment and try again.')
+          setRecovery('thread_busy')
+          setStatus('')
+          updateRetryableClientTurn(null)
+          return { kind: 'not_submitted', reason: 'thread_busy' }
+        }
         if ('kind' in result) {
           const unavailable = result.code === 'source_unavailable'
           setError(unavailable

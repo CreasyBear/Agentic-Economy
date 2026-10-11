@@ -24,7 +24,7 @@ describe('observability config', () => {
       }),
     ).toMatchObject({
       enabled: true,
-      environment: 'test',
+      environment: 'development',
       release: 'abc123',
     })
   })

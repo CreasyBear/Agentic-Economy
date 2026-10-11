@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { convexTest } from 'convex-test'
-import rateLimiterTest from '@convex-dev/rate-limiter/test'
+import { register as registerRateLimiter } from '@convex-dev/rate-limiter/test'
 import { api } from '../../convex/_generated/api'
 import schema from '../../convex/schema'
 import { capabilityToolId, createPublicToolRef } from '@/modules/capability-supply/public'
@@ -48,18 +48,16 @@ describe('native admitted Tool catalogue', () => {
 
   it('honours AE network and normalized location filters across catalogue sources', async () => {
     const backend = convexTest(schema, convexModules)
+    registerRateLimiter(backend)
     const fixture = await admitDiscoveredToolFixture(backend)
     const detail = await backend.query(api.capabilitySupplyTools.detail, { toolRef: fixture.toolRef })
     if (detail.kind !== 'found') throw new Error('fixture_missing')
-    // Live upstream sources need a metered caller.
-    rateLimiterTest.register(backend)
-    const metered = backend.withIdentity({ tokenIdentifier: 'test|catalog-filter' })
     sdk.list.mockResolvedValue({ items: [fixture.paymentRequired], pagination: { offset: 0, total: 1 } })
     for (const source of ['current', 'coinbase'] as const) {
-      const excluded = await metered.action(api.capabilityToolCatalog.search, { source, query: '', filters: { networkId: 'missing-network' } })
+      const excluded = await backend.withIdentity({ issuer: 'https://ae.test', subject: 'catalog-reader' }).action(api.capabilityToolCatalog.search, { source, query: '', filters: { networkId: 'missing-network' } })
       expect(excluded.kind === 'no_candidates' || (excluded.kind === 'ok' && excluded.items.length === 0)).toBe(true)
       for (const location of [detail.tool.business.name.toLowerCase(), ` ${detail.tool.business.name.toUpperCase()} `]) {
-        const result = await metered.action(api.capabilityToolCatalog.search, { source, query: '', filters: { location, networkId: 'ae:public' } })
+        const result = await backend.withIdentity({ issuer: 'https://ae.test', subject: 'catalog-reader' }).action(api.capabilityToolCatalog.search, { source, query: '', filters: { location, networkId: 'ae:public' } })
         expect(result.kind).toBe('ok')
         if (result.kind !== 'ok') throw new Error('expected_filtered_tools')
         expect(result.items.map((tool) => tool.toolRef)).toEqual([fixture.toolRef])

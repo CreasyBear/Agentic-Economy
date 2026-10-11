@@ -8,15 +8,16 @@ import { chatModelCostHooks } from '../../../convex/lib/chat/generate/modelCost'
 import { openRouterModel } from '@/modules/model-gateway/public'
 import type { ChatModelCostBinding } from '@/modules/chat/model-cost'
 import { convexTestWithMarketComponents, publishedBusinessOwner } from '../../helpers/convex-fixtures'
+import { startedTurn } from '../../helpers/started-turn'
 
 async function trackedTurn() {
   const backend = convexTestWithMarketComponents()
   const { owner } = await publishedBusinessOwner(backend, 'model-cost-hooks-owner')
   vi.useFakeTimers()
   try {
-    const binding = await owner.mutation(api.chatTurns.startTurn, {
+    const binding = startedTurn(await owner.mutation(api.chatTurns.startTurn, {
       principal: { kind: 'clerk' }, clientTurnId: 'model-cost-hooks', prompt: 'A private test question',
-    })
+    }))
     await backend.run(async ctx => {
       const jobs = await ctx.db.system.query('_scheduled_functions').take(100)
       for (const job of jobs) {
@@ -149,7 +150,7 @@ describe('durable chat cost hooks through the installed SDK', () => {
 
   it('retains a pending record when completion storage is unavailable and keeps the usable answer', async () => {
     const { backend, binding } = await trackedTurn()
-    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const error = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     const fetch = vi.fn<typeof globalThis.fetch>(async () => streamingResponse(0.01))
     await backend.action(async ctx => {
       const unavailable = new Proxy(ctx, {

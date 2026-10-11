@@ -996,7 +996,7 @@ describe('stalled step notification deliveries', () => {
 
   it('reports an operator digest the workpool gave up on', async () => {
     const backend = await createNotificationBackend()
-    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const error = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     await backend.mutation(internal.operatorDigest.completeDigest, { workId: 'work_1' as WorkId, context: null, result: { kind: 'failed', error: 'resend_503' } })
     await backend.mutation(internal.operatorDigest.completeDigest, { workId: 'work_2' as WorkId, context: null, result: { kind: 'success', returnValue: null } })
     const degraded = error.mock.calls.filter(([prefix]) => prefix === '[ae.degraded]')

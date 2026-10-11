@@ -77,7 +77,7 @@ export type RouteTransportRuntime = Readonly<{
   ) => Promise<string | undefined>
   markX402PaymentPossiblySubmitted?: (
     event: X402PaymentAttemptEvent,
-  ) => Promise<void> | void
+  ) => Promise<void | false> | void | false
   observeX402PaymentAttempt?: (
     event: X402PaymentAttemptEvent &
       Readonly<{

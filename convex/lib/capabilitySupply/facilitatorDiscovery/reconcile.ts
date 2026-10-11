@@ -7,8 +7,8 @@ import { reconcileArgs, reconcileResult } from './contracts'
 import { preservePublicationIdentity } from './identity'
 import { currentPublication } from './publicationLifecycle'
 import { reconcileDraft } from './publication'
+import { RECONCILE_CHUNK_SIZE as MAX_RECONCILE_ITEMS } from './readyItems'
 
-const MAX_RECONCILE_ITEMS = 100
 const MAX_RECONCILE_ITEM_BYTES = 262_144
 const MAX_SEEN_PUBLICATION_REFS = 2_000
 const MAX_PUBLICATION_REF_LENGTH = 240

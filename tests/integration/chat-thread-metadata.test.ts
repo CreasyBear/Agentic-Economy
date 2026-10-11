@@ -128,6 +128,21 @@ describe('durable chat thread metadata', () => {
     },
   )
 
+  it('signed-out chat reads return empty typed results instead of throwing', async () => {
+    const backend = convexTestWithMarketComponents()
+    const opts = { cursor: null, numItems: 20 }
+    expect(await backend.query(api.chatThreads.listThreads, { now: Date.now(), paginationOpts: opts }))
+      .toMatchObject({ page: [], isDone: true })
+    expect(await backend.query(api.chatThreads.searchThreads, { query: 'x', now: Date.now(), paginationOpts: opts }))
+      .toMatchObject({ page: [], isDone: true })
+    expect(await backend.query(api.chatMessages.listMessages, { threadId: 't', paginationOpts: opts }))
+      .toMatchObject({ page: [], streams: { kind: 'list', messages: [] } })
+    expect(await backend.query(api.chatTurns.ownerChatGrantStatus, {})).toEqual({ enabled: false })
+    expect(await backend.query(api.chatCall.readOwnerChatCards, { threadId: 't' })).toEqual([])
+    expect(await backend.query(api.moneyAccountFunding.listOwnerInvoiceHistory, { paginationOpts: opts }))
+      .toMatchObject({ page: [], isDone: true })
+  })
+
   it('lists only the owner threads in updated order with native bounded pagination', async () => {
     const backend = convexTestWithMarketComponents()
     const { owner } = await publishedBusinessOwner(backend, 'chat-owner')

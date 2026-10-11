@@ -1,4 +1,4 @@
-import { ErrorBoundary } from '@sentry/react'
+import { AeObservabilityErrorBoundary } from '@/components/ae/feedback/AeObservabilityErrorBoundary'
 import { useState } from 'react'
 import { AeCopyReference } from '@/components/ae/data/AeCopyReference'
 import { AeRecordSheet } from '@/components/ae/layout/AeRecordSheet'
@@ -15,12 +15,12 @@ import { useAdminCommandObservation, useAdminCommandRecovery } from './useAdminC
  * sheet-14 EventView/FactGroup. Existing AE drawer keeps focus, dismissal and portals.
  * All records come from scoped recovery identities and current receipt reads. */
 export function AdminCommandRecoveryPanel() {
-  return <ErrorBoundary fallback={({ resetError }) => <section className="arc-market grid gap-3 rounded-lg border border-border p-4" aria-label="Command recovery unavailable">
+  return <AeObservabilityErrorBoundary fallback={({ resetError }) => <section className="arc-market grid gap-3 rounded-lg border border-border p-4" aria-label="Command recovery unavailable">
     <p role="status" className="text-sm text-muted-foreground">Command recovery could not be read. Saved recovery identities are retained.</p>
     <Button type="button" variant="secondary" onClick={resetError}>Check command recovery</Button>
   </section>}>
     <AdminCommandRecoveryContent />
-  </ErrorBoundary>
+  </AeObservabilityErrorBoundary>
 }
 
 function AdminCommandRecoveryContent() {
@@ -39,12 +39,12 @@ function AdminCommandRecoveryContent() {
     </div>
     <ul className="min-w-0 divide-y divide-border rounded-lg border border-border">
       {recovery.entries.map(identity => <li key={`${scope}:${identity.action}:${identity.operationKey}`} className="min-w-0 px-4 py-3">
-        <ErrorBoundary fallback={({ resetError }) => <div className="flex flex-wrap items-center justify-between gap-3">
+        <AeObservabilityErrorBoundary fallback={({ resetError }) => <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0"><p className="text-sm font-medium">{ADMIN_ACTION_COPY[identity.action]}</p><p role="status" className="text-sm text-muted-foreground">The receipt is unavailable. The recovery identity is retained.</p></div>
           <Button type="button" variant="secondary" onClick={resetError}>Check receipt</Button>
         </div>}>
           <RecoveryRecord scope={scope} identity={identity} />
-        </ErrorBoundary>
+        </AeObservabilityErrorBoundary>
       </li>)}
     </ul>
   </section>

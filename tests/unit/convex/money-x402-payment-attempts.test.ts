@@ -397,6 +397,16 @@ describe('money x402 payment authorization attempt', () => {
       .rejects.toThrow('x402_payment_attempt_reconciliation_required')
   })
 
+  it.each([
+    ['unknown custody', () => ({ ...eventArgs(), custodyRef: 'custody:unknown' })],
+    ['mismatched attribution', () => ({ ...eventArgs(), payTo: '0xother' })],
+  ])('returns a typed attribution_mismatch instead of throwing for %s, leaving the attempt untouched', async (_name, args) => {
+    const db = memoryDbWithPayment(signedAttemptRow({ paymentSigningClaimedAt: 1 }))
+    const before = structuredClone(db.rows('moneyX402PaymentAttempts'))
+    await expect(markPossiblySubmitted({ db }, args())).resolves.toEqual({ kind: 'attribution_mismatch' })
+    expect(db.rows('moneyX402PaymentAttempts')).toEqual(before)
+  })
+
   it('replays a committed mark after its response is lost without changing safe evidence', async () => {
     const db = memoryDbWithPayment(signedAttemptRow({ paymentSigningClaimedAt: 1 }))
     db.loseAcknowledgementAfterNextPatch()
