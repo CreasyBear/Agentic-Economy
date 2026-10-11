@@ -86,6 +86,16 @@ describe('admin command second approval', () => {
     expect(second.page[0]?.proposalRef).not.toBe(first.page[0]?.proposalRef)
   })
 
+  it('restarts from the first page when the cursor is invalid', async () => {
+    const paginate = vi.fn()
+      .mockRejectedValueOnce(new Error('InvalidCursor: cursor is from a different query'))
+      .mockResolvedValueOnce({ page: [], isDone: true, continueCursor: '' })
+    const query = { withIndex: () => ({ order: () => ({ paginate }) }) }
+    const ctx = { db: { query: () => query } } as never
+    await listOpenApprovalProposals(ctx, false, { numItems: 5, cursor: 'stale' }, NOW)
+    expect(paginate.mock.calls.map(call => call[0].cursor)).toEqual(['stale', null])
+  })
+
   it('persists one immutable proposal and its audit event', async () => {
     const backend = convexTestWithMarketComponents()
     await seedOwner(backend, 'user_proposer')
