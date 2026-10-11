@@ -79,6 +79,7 @@ describe('Stripe money provider adapter', () => {
       mode: 'payment',
       ui_mode: 'hosted_page',
       submit_type: 'pay',
+      payment_method_options: { card: { request_three_d_secure: 'automatic' } },
       client_reference_id: hostedRequest.commandRef,
       success_url: hostedRequest.successReturnRef,
       cancel_url: hostedRequest.cancelReturnRef,
