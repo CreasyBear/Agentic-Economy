@@ -57,7 +57,8 @@ beforeEach(async () => {
 })
 afterEach(async () => { await close(); rmSync(directory, { recursive: true, force: true }) })
 
-describe('durable Plan run recovery', () => {
+// Each test spawns 1-4 real CLI child processes (0.4-1.3s alone); under parallel CI load that exceeds the 5s default.
+describe('durable Plan run recovery', { timeout: 30_000 }, () => {
   it('retains exact micro-units and key before response loss; reads quoted Plan before same-command replay', async () => {
     onPurchase = (_path, request, response) => { expect(stored(files()[0]!.slice(5, -5)).command).toEqual(request); response.destroy() }
     const first = await plan()
