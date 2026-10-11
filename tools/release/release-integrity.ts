@@ -44,18 +44,15 @@ export function assertGeneratedSnapshotUnchanged(
   if (drift.length > 0) throw new Error(`generated_artifact_drift:${drift.join('|')}`)
 }
 
-export function assertPinnedNitroNightly(
+export function assertPinnedNitro(
   packageManifest: unknown,
   packageLock: unknown,
 ): string {
   const manifest = object(packageManifest, 'package_manifest')
   const devDependencies = object(manifest.devDependencies, 'package_manifest_dev_dependencies')
   const requested = string(devDependencies.nitro, 'nitro_dependency')
-  const match = /^npm:nitro-nightly@([^\s~^*|<>=]+)$/u.exec(requested)
-  if (match === null) throw new Error('nitro_nightly_must_be_exactly_pinned')
-  const requestedVersion = match[1]!
-  if (!/^\d+\.\d+\.\d+-[0-9A-Za-z.-]+$/u.test(requestedVersion)) {
-    throw new Error('nitro_nightly_version_must_be_an_immutable_version')
+  if (!/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/u.test(requested)) {
+    throw new Error('nitro_must_be_an_exact_published_version')
   }
 
   const lock = object(packageLock, 'package_lock')
@@ -63,16 +60,19 @@ export function assertPinnedNitroNightly(
   const root = object(packages[''], 'package_lock_root')
   const rootDevDependencies = object(root.devDependencies, 'package_lock_root_dev_dependencies')
   if (rootDevDependencies.nitro !== requested) {
-    throw new Error('nitro_nightly_root_lock_spec_mismatch')
+    throw new Error('nitro_root_lock_spec_mismatch')
   }
 
   const lockedNitro = object(packages['node_modules/nitro'], 'package_lock_nitro')
-  if (lockedNitro.name !== 'nitro-nightly' || lockedNitro.version !== requestedVersion) {
-    throw new Error('nitro_nightly_lock_version_mismatch')
+  if (lockedNitro.version !== requested) {
+    throw new Error('nitro_lock_version_mismatch')
   }
-  string(lockedNitro.integrity, 'nitro_nightly_lock_integrity')
-  string(lockedNitro.resolved, 'nitro_nightly_lock_resolution')
-  return requestedVersion
+  const resolved = string(lockedNitro.resolved, 'nitro_lock_resolution')
+  if (resolved !== `https://registry.npmjs.org/nitro/-/nitro-${requested}.tgz`) {
+    throw new Error('nitro_lock_must_resolve_from_the_npm_registry')
+  }
+  string(lockedNitro.integrity, 'nitro_lock_integrity')
+  return requested
 }
 
 function exactPackFileSet(packageManifest: JsonObject): readonly string[] {
