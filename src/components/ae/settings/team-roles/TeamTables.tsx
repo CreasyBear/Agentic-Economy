@@ -72,7 +72,7 @@ export function TeamInvitationsTable({ invitations, complete, renderActions, act
       columns={[
         { key: 'email', label: 'Invitee' },
         { key: 'role', label: 'Role', render: (_value, invitation) => invitation.role === 'org:admin' ? 'Admin' : 'Member' },
-        { key: 'expiresAt', label: 'Expires', numeric: false, render: (_value, invitation) => <RecordTime at={invitation.expiresAt} /> },
+        { key: 'expiresAt', label: 'Expires', numeric: false, render: (_value, invitation) => invitation.expired ? <span>Expired <RecordTime at={invitation.expiresAt} /></span> : <RecordTime at={invitation.expiresAt} /> },
         { key: 'actions', label: 'Actions', sortable: false, render: (_value, invitation) => renderActions(invitation) },
       ]}
     />

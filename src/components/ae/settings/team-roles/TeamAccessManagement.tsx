@@ -17,6 +17,8 @@ type Decision = Readonly<{ kind: 'member'; member: TeamAccessMember; action: 'ad
 const refusalCopy = {
   stale: 'Access changed since this page was read. Refresh the team before making another change.',
   mfa_reverification_required: 'Verify with two-factor authentication to change access.',
+  invitation_expired: 'This invitation has expired. Resend it to the same address, or invite the right person.',
+  invitation_closed: 'This invitation was already accepted or cancelled. Refresh the team to see its current state.',
   last_admin: 'The identity organisation must retain an admin. Promote another member first.',
   last_owner: 'The workspace owner cannot be removed. Transfer ownership first.',
   source_unavailable: 'The change could not be confirmed. Refresh the team and pending invitations before trying again.',
@@ -154,8 +156,11 @@ export function TeamAccessManagement({ onRecordedRead, accountRef, members = [],
       <p role="status">{readFailed ? 'Team management is unavailable.' : 'Reading current team access…'}</p>
     </div> : view.canManageInvitations ? <TeamInvitationsTable invitations={view.invitations} complete={view.invitationsComplete}
       renderActions={item => <div className="flex flex-wrap gap-2">
-        <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={event => choose({ kind: 'invitation', invitation: item, action: 'resend' }, event)}>Resend invitation</Button>
-        <Button type="button" variant="ghost" size="sm" className="text-destructive" disabled={disabled} onClick={event => choose({ kind: 'invitation', invitation: item, action: 'cancel' }, event)}>Cancel invitation</Button>
+        <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={event => choose({ kind: 'invitation', invitation: item, action: 'resend' }, event)}>{item.expired ? 'Expired, resend to the same address' : 'Resend invitation'}</Button>
+        {item.expired ? null : <>
+          <Button type="button" variant="ghost" size="sm" className="text-destructive" disabled={disabled} onClick={event => choose({ kind: 'invitation', invitation: item, action: 'cancel' }, event)}>Cancel invitation</Button>
+          <Button type="button" variant="ghost" size="sm" disabled={disabled} onClick={event => choose({ kind: 'invitation', invitation: item, action: 'cancel' }, event)}>Wrong address? Cancel and invite the right one</Button>
+        </>}
       </div>}
       footer={view.nextInvitationOffset !== null ? <Button type="button" variant="outline" disabled={disabled} onClick={() => void loadMore('invitations')}>Load more invitations</Button> : undefined} />
       : <div className="grid gap-3"><h2 className="text-lg font-medium">Invitations unavailable</h2><p className="text-sm text-muted-foreground">{inviteReason ?? 'Pending invitations are available to account owners and admins after the Business identity organisation is set up.'}</p></div>}

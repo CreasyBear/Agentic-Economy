@@ -1,5 +1,5 @@
 export type PendingTeamInvitation = Readonly<{
-  invitationId: string; email: string; role: 'org:admin' | 'org:member'; updatedAt: number; expiresAt: number
+  invitationId: string; email: string; role: 'org:admin' | 'org:member'; updatedAt: number; expiresAt: number; expired: boolean
 }>
 export type TeamAccessMember = Readonly<{
   membershipRef: string; revision: number; userId: string; name: string; role: 'admin' | 'member'; upstreamUpdatedAt: number
@@ -12,5 +12,5 @@ export type TeamAccessView = Readonly<{
   invitationsComplete: boolean; nextInvitationOffset: number | null
 }>
 export type TeamAccessResult = Readonly<{ kind: 'accepted' }> | Readonly<{
-  kind: 'refused'; code: 'forbidden' | 'stale' | 'mfa_reverification_required' | 'last_admin' | 'last_owner' | 'source_unavailable'
+  kind: 'refused'; code: 'forbidden' | 'stale' | 'mfa_reverification_required' | 'last_admin' | 'last_owner' | 'invitation_expired' | 'invitation_closed' | 'source_unavailable'
 }>

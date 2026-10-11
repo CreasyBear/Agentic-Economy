@@ -25,7 +25,7 @@ export const readTeamAccessServer = createServerFn({ method: 'GET' })
   const { session, directory, organizationId } = await context()
   const canManageMembers = organizationId !== null && directory.owner.clerkUserId === session.userId
   const organizations = clerkClient().organizations
-  const invitations = organizationId === null ? null : await organizations.getOrganizationInvitationList({ organizationId, status: ['pending'], limit: 100, offset: invitationOffset })
+  const invitations = organizationId === null ? null : await organizations.getOrganizationInvitationList({ organizationId, status: ['pending', 'expired'], limit: 100, offset: invitationOffset })
   const upstream = organizationId === null || !canManageMembers ? null : await organizations.getOrganizationMembershipList({ organizationId, limit: 100, offset: memberOffset })
   return {
     accountRef: directory.accountRef, accountRevision: directory.accountRevision, ownershipRevision: directory.owner.revision,
@@ -39,7 +39,7 @@ export const readTeamAccessServer = createServerFn({ method: 'GET' })
       }]
     }),
     invitations: invitations?.data.flatMap(row => row.role === 'org:admin' || row.role === 'org:member' ? [{
-      invitationId: row.id, email: row.emailAddress, role: row.role, updatedAt: row.updatedAt, expiresAt: row.expiresAt,
+      invitationId: row.id, email: row.emailAddress, role: row.role, updatedAt: row.updatedAt, expiresAt: row.expiresAt, expired: row.status === 'expired',
     }] : []) ?? [],
     membersComplete: upstream === null || memberOffset + upstream.data.length >= upstream.totalCount,
     nextMemberOffset: upstream !== null && memberOffset + upstream.data.length < upstream.totalCount ? memberOffset + upstream.data.length : null,
@@ -98,10 +98,13 @@ export const manageTeamInvitationServer = createServerFn({ method: 'POST' })
         || directory.owner.revision !== data.ownershipRevision) return { kind: 'refused', code: 'stale' }
       const organizations = clerkClient().organizations
       const invitation = await organizations.getOrganizationInvitation({ organizationId, invitationId: data.invitationId })
-      if (invitation.status !== 'pending' || invitation.updatedAt !== data.expectedUpdatedAt
+      const expired = invitation.status === 'expired'
+      if (expired && data.action === 'cancel') return { kind: 'refused', code: 'invitation_expired' }
+      if (invitation.status === 'accepted' || invitation.status === 'revoked') return { kind: 'refused', code: 'invitation_closed' }
+      if ((invitation.status !== 'pending' && !expired) || invitation.updatedAt !== data.expectedUpdatedAt
         || (invitation.role !== 'org:admin' && invitation.role !== 'org:member')) return { kind: 'refused', code: 'stale' }
       // Revoke the exact original before replacement; failure never leaves two active invitations.
-      await organizations.revokeOrganizationInvitation({ organizationId, invitationId: invitation.id, requestingUserId: session.userId })
+      if (!expired) await organizations.revokeOrganizationInvitation({ organizationId, invitationId: invitation.id, requestingUserId: session.userId })
       if (data.action === 'resend') await organizations.createOrganizationInvitation({
         organizationId, inviterUserId: session.userId, emailAddress: invitation.emailAddress,
         role: invitation.role, redirectUrl: '/owner/settings/team',
