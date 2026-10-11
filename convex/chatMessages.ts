@@ -13,6 +13,7 @@ import { internalQuery, query } from './_generated/server'
 import { internalMutation } from './usageTrackedMutation'
 import { normalizedTurnPrompt, reserveAndStartTurn } from './lib/chat/turns/handlers'
 import { requireChatOwner, requireOwnedChatThread } from './chatThreads'
+import { isChatSignedOut, EMPTY_CHAT_PAGE } from './lib/chat/threads/listing'
 import { chatThreadBelongsToPrincipal } from './lib/chat/threads/ownership'
 import {
   interactiveAuthorityContextValue,
@@ -148,6 +149,7 @@ export const listMessages = query({
     streams: chatStreamsValue,
   }),
   handler: async (ctx, args) => {
+    if (await isChatSignedOut(ctx)) return { ...EMPTY_CHAT_PAGE, streams: { kind: 'list' as const, messages: [] } }
     await requireOwnedChatThread(ctx, args.threadId)
     const paginationOpts = validatePaginationOpts(args.paginationOpts)
     const [messages, streams] = await Promise.all([

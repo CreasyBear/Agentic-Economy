@@ -12,7 +12,7 @@ import { components } from './_generated/api'
 import type { Doc } from './_generated/dataModel'
 import { internalMutation, mutation, query } from './_generated/server'
 import type { QueryCtx } from './_generated/server'
-import { requireChatOwner } from './lib/chat/threads/listing'
+import { requireChatOwner, isChatSignedOut, EMPTY_CHAT_PAGE } from './lib/chat/threads/listing'
 import { deleteChatThreadShares } from '../src/modules/chat-sharing/convex'
 import { chatThreadBelongsToPrincipal } from './lib/chat/threads/ownership'
 import {
@@ -108,8 +108,9 @@ export const listThreads = query({
     now: v.number(),
   },
   returns: paginationResultValidator(threadSummary),
-  handler: async (ctx, args) =>
-    listChatThreads(ctx, await requireChatOwner(ctx), args),
+  handler: async (ctx, args) => await isChatSignedOut(ctx)
+    ? EMPTY_CHAT_PAGE
+    : listChatThreads(ctx, await requireChatOwner(ctx), args),
 })
 
 export const searchThreads = query({
@@ -119,8 +120,9 @@ export const searchThreads = query({
     now: v.number(),
   },
   returns: paginationResultValidator(threadSummary),
-  handler: async (ctx, args) =>
-    searchChatThreads(ctx, await requireChatOwner(ctx), args),
+  handler: async (ctx, args) => await isChatSignedOut(ctx)
+    ? EMPTY_CHAT_PAGE
+    : searchChatThreads(ctx, await requireChatOwner(ctx), args),
 })
 
 export const renameThread = mutation({
