@@ -85,6 +85,33 @@ async function matchingStoredAttempt(
     && attempt.credentialRef === row.paymentSecretRef
 }
 
+function sameUrl(a: unknown, b: unknown): boolean {
+  if (typeof a !== 'string' || typeof b !== 'string') return false
+  try { return new URL(a).href === new URL(b).href } catch { return false }
+}
+
+// prepare_authorization may only commit the payee, amount and endpoint the
+// Quote observed and the caller consented to; caller-supplied values must match.
+async function matchingQuotedRequirement(
+  ctx: MutationCtx,
+  args: Record<string, unknown>,
+  quoteRef: string | undefined,
+): Promise<boolean> {
+  if (quoteRef === undefined) return false
+  const quote = await ctx.db.query('capabilityQuotes')
+    .withIndex('by_quoteRef', (query) => query.eq('quoteRef', quoteRef)).unique()
+  if (quote === null || quote.x402RequirementJson === undefined) return false
+  let committed: { endpoint?: { url?: unknown }, requirement?: { payTo?: unknown, amountUnits?: unknown } }
+  try { committed = JSON.parse(quote.x402RequirementJson) } catch { return false }
+  const { payTo, amountUnits } = committed.requirement ?? {}
+  return typeof payTo === 'string'
+    && typeof args.payTo === 'string'
+    && args.payTo.toLowerCase() === payTo.toLowerCase()
+    && typeof amountUnits === 'string'
+    && args.amountUnits === amountUnits
+    && sameUrl(args.providerEndpoint, committed.endpoint?.url)
+}
+
 export async function authorizeProviderConsequenceX402RpcHandler(
   ctx: MutationCtx,
   input: {
@@ -120,6 +147,8 @@ export async function authorizeProviderConsequenceX402RpcHandler(
     || call.grantRef !== row.grantRef
     || call.grantGeneration !== row.grantGeneration
     || call.principalId !== row.actorPrincipalRef) return { kind: 'unavailable' as const }
+  if (input.operation === 'prepare_authorization'
+    && !await matchingQuotedRequirement(ctx, args, call.quoteRef)) return { kind: 'unavailable' as const }
   return {
     kind: 'authorized' as const,
     callRef: row.callRef,
