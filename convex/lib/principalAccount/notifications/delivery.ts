@@ -138,9 +138,12 @@ async function readMoneyNoticeContext(ctx: QueryCtx, delivery: Doc<'notification
     const exact = [principalUnits, serviceFeeUnits, taxUnits, totalUnits].map((units) => moneyNoticeAmount({ currency: command.currency, units, exponent }))
     if (exact.includes(undefined)) return skip('amount_unsafe')
     amount = exact[0]
-    // The invoice number and date are the issued tax document's own; an unissued invoice is not sent as one.
+    // The invoice number and date are the issued tax document's own. A withheld invoice sends the plain receipt; rendering or retryable states wait.
     const invoice = (await readFundingTaxDocuments(ctx, command, Date.now())).taxInvoice
-    if (invoice.kind !== 'issued') return skip('tax_invoice_not_issued')
+    if (invoice.kind === 'withheld') {
+      props = { principalUnits, serviceFeeUnits, taxUnits, totalUnits, exponent, plain: 1, confirmedAt: new Date(delivery.createdAt).toISOString() }
+    } else if (invoice.kind !== 'issued') return skip('tax_invoice_not_issued')
+    else {
     const taxFacts = await ctx.db.query('moneyCustomerTaxFacts')
       .withIndex('by_accountRef', (query) => query.eq('accountRef', delivery.accountRef)).unique()
     props = {
@@ -148,6 +151,7 @@ async function readMoneyNoticeContext(ctx: QueryCtx, delivery: Doc<'notification
       invoiceNumber: invoice.documentNumber, confirmedAt: new Date(invoice.issuedAt).toISOString(),
       ...(taxFacts?.abn ? { buyerAbn: taxFacts.abn } : {}),
       ...(taxFacts?.legalName ? { buyerName: taxFacts.legalName } : {}),
+    }
     }
   } else {
     const call = await ctx.db.query('capabilityCalls')

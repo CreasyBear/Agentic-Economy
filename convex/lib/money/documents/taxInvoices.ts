@@ -317,7 +317,7 @@ async function retryUnattached(ctx: MutationCtx, row: Doc<'moneyDocuments'>, sna
  * original parties, tax, issue date and file pair. Existing snapshots do not
  * depend on today's customer profile or current tax rate. On violation return
  * a specific withheld result without changing financial or approval records. */
-async function issueDocuments(ctx: MutationCtx, command: FundingCommand): Promise<IssuanceResult> {
+async function issueInvoiceDocuments(ctx: MutationCtx, command: FundingCommand): Promise<IssuanceResult> {
   const now = Date.now()
   if (command.environment !== deploymentPaymentEnvironment(env)) return { taxInvoice: withheld('environment_mismatch') }
   let row = await readInvoice(ctx, command)
@@ -345,6 +345,15 @@ async function issueDocuments(ctx: MutationCtx, command: FundingCommand): Promis
     }
   }
   return await readFundingTaxDocuments(ctx, command, now)
+}
+
+/** A funded load always gets one email: a withheld invoice sends the plain receipt under the same command-keyed dedupe as the tax invoice email. */
+async function issueDocuments(ctx: MutationCtx, command: FundingCommand): Promise<IssuanceResult> {
+  const result = await issueInvoiceDocuments(ctx, command)
+  if (result.taxInvoice.kind === 'withheld' && command.state !== 'reversed' && command.appliedTransactionRef !== undefined) {
+    await enqueueFundingReceiptHandler(ctx, { commandRef: command.commandRef })
+  }
+  return result
 }
 
 export async function issueOwnerFundingTaxInvoiceHandler(

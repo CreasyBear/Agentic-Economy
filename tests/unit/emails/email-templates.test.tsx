@@ -125,6 +125,15 @@ describe('phase 2 notices', () => {
     expect(email.text).not.toMatch(/unsubscribe/iu)
   })
 
+  it('renders the withheld-invoice variant as a plain receipt with no GST line or invoice wording', async () => {
+    const base = byName('funding receipt')
+    const email = await renderEmail({ ...base, props: { ...base.props, plain: 1 } } as typeof base)
+    expect(email.subject).toBe('Receipt for your A$22.00 aecon top-up')
+    expect(email.text).toContain('Receipt')
+    expect(email.text).toContain('Credit amount')
+    expect(email.text).not.toMatch(/gst|tax invoice/iu)
+  })
+
   it('names the refunded amount, that it went back to Credit and not the card, and the Task id', async () => {
     const email = await renderEmail(byName('task refunded'))
     expect(email.subject).toBe('Refunded A$0.42 for a failed call')
