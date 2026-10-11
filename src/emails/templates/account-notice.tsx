@@ -45,15 +45,15 @@ const NOTICES: Record<NoticeKind, Notice> = {
     label: 'View receipt', path: '/owner/operations', campaign: 'task_refunded',
   },
   task_stuck: {
-    subject: () => "We're still confirming a payment",
-    preheader: () => 'Check the receipt before paying again.',
+    subject: () => 'A call is taking longer than expected',
+    preheader: () => 'Check the receipt for its status.',
     body: () => "A call has been running for over an hour. We're still checking it and will tell you if it is refunded.",
     label: 'View receipt', path: '/owner/operations', campaign: 'task_stuck',
   },
   credit_exhausted: {
     subject: () => 'Your aecon credit has run out',
     preheader: () => 'Calls are paused until you add credit.',
-    body: () => 'Your credit is at A$0.00, so new calls will fail until you add credit.',
+    body: () => 'Your credit has run out, so new calls will fail until you add credit.',
     label: 'Add credit', path: '/owner/credit', campaign: 'credit_exhausted',
   },
   key_issued: {
@@ -135,7 +135,8 @@ export default function AccountNoticeEmail({ kind, ...props }: NoticeProps & { k
       campaign={notice.campaign}
       reason="You get this because of activity on your account. Required account mail cannot be turned off."
     >
-      <Text className="ae-text" style={{ ...bodyText, fontSize: 22, fontWeight: 500, lineHeight: '30px' }}>{notice.subject(props)}</Text>
+      {/* Structure from emailcn notification-default (vendored at ../vendor/emailcn/notification-default.tsx): heading, then one button. Its export is a full document and cannot nest in Layout, so the pieces are composed here. No actor row: aecon notices have no actor. */}
+      <Text className="ae-text" style={{ ...bodyText, fontSize: 22, fontWeight: 500, lineHeight: '28px' }}>{notice.subject(props)}</Text>
       <Text className="ae-text" style={bodyText}>{notice.body(props)}</Text>
       <CtaButton href={emailUrl(props.siteUrl, typeof notice.path === 'string' ? notice.path : notice.path(props), { campaign: notice.campaign, content: 'cta' })}>{notice.label}</CtaButton>
     </Layout>
