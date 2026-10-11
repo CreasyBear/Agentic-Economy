@@ -41,6 +41,7 @@ export {
   readAccountFundingConstraintsThroughSource,
   readAccountFundingThroughSource,
   readPlatformFundingConstraintsThroughSource,
+  readPublicAvailabilityThroughSource,
 } from './internal/account-funding-http'
 export {
   paymentBindingSchema,

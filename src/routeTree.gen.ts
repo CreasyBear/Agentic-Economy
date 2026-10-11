@@ -91,6 +91,7 @@ import { Route as ApiObservabilityClientErrorRouteImport } from './routes/api.ob
 import { Route as ApiOwnerDataExportRouteImport } from './routes/api.owner.data-export'
 import { Route as ApiStripeWebhookRouteImport } from './routes/api.stripe.webhook'
 import { Route as ApiV1AccountRouteImport } from './routes/api.v1.account'
+import { Route as ApiV1AvailabilityRouteImport } from './routes/api.v1.availability'
 import { Route as ApiV1BusinessesRouteImport } from './routes/api.v1.businesses'
 import { Route as ApiV1CallsRouteImport } from './routes/api.v1.calls'
 import { Route as ApiV1CatalogueStatusRouteImport } from './routes/api.v1.catalogue-status'
@@ -590,6 +591,11 @@ const ApiStripeWebhookRoute = ApiStripeWebhookRouteImport.update({
 const ApiV1AccountRoute = ApiV1AccountRouteImport.update({
   id: '/api/v1/account',
   path: '/api/v1/account',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1AvailabilityRoute = ApiV1AvailabilityRouteImport.update({
+  id: '/api/v1/availability',
+  path: '/api/v1/availability',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiV1BusinessesRoute = ApiV1BusinessesRouteImport.update({
@@ -1116,6 +1122,7 @@ export interface FileRoutesByFullPath {
   '/api/owner/data-export': typeof ApiOwnerDataExportRoute
   '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/api/v1/account': typeof ApiV1AccountRouteWithChildren
+  '/api/v1/availability': typeof ApiV1AvailabilityRoute
   '/api/v1/businesses': typeof ApiV1BusinessesRouteWithChildren
   '/api/v1/calls': typeof ApiV1CallsRouteWithChildren
   '/api/v1/catalogue-status': typeof ApiV1CatalogueStatusRoute
@@ -1280,6 +1287,7 @@ export interface FileRoutesByTo {
   '/api/owner/data-export': typeof ApiOwnerDataExportRoute
   '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/api/v1/account': typeof ApiV1AccountRouteWithChildren
+  '/api/v1/availability': typeof ApiV1AvailabilityRoute
   '/api/v1/businesses': typeof ApiV1BusinessesRouteWithChildren
   '/api/v1/calls': typeof ApiV1CallsRouteWithChildren
   '/api/v1/catalogue-status': typeof ApiV1CatalogueStatusRoute
@@ -1446,6 +1454,7 @@ export interface FileRoutesById {
   '/api/owner/data-export': typeof ApiOwnerDataExportRoute
   '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/api/v1/account': typeof ApiV1AccountRouteWithChildren
+  '/api/v1/availability': typeof ApiV1AvailabilityRoute
   '/api/v1/businesses': typeof ApiV1BusinessesRouteWithChildren
   '/api/v1/calls': typeof ApiV1CallsRouteWithChildren
   '/api/v1/catalogue-status': typeof ApiV1CatalogueStatusRoute
@@ -1612,6 +1621,7 @@ export interface FileRouteTypes {
     | '/api/owner/data-export'
     | '/api/stripe/webhook'
     | '/api/v1/account'
+    | '/api/v1/availability'
     | '/api/v1/businesses'
     | '/api/v1/calls'
     | '/api/v1/catalogue-status'
@@ -1776,6 +1786,7 @@ export interface FileRouteTypes {
     | '/api/owner/data-export'
     | '/api/stripe/webhook'
     | '/api/v1/account'
+    | '/api/v1/availability'
     | '/api/v1/businesses'
     | '/api/v1/calls'
     | '/api/v1/catalogue-status'
@@ -1941,6 +1952,7 @@ export interface FileRouteTypes {
     | '/api/owner/data-export'
     | '/api/stripe/webhook'
     | '/api/v1/account'
+    | '/api/v1/availability'
     | '/api/v1/businesses'
     | '/api/v1/calls'
     | '/api/v1/catalogue-status'
@@ -2085,6 +2097,7 @@ export interface RootRouteChildren {
   ApiOwnerDataExportRoute: typeof ApiOwnerDataExportRoute
   ApiStripeWebhookRoute: typeof ApiStripeWebhookRoute
   ApiV1AccountRoute: typeof ApiV1AccountRouteWithChildren
+  ApiV1AvailabilityRoute: typeof ApiV1AvailabilityRoute
   ApiV1BusinessesRoute: typeof ApiV1BusinessesRouteWithChildren
   ApiV1CallsRoute: typeof ApiV1CallsRouteWithChildren
   ApiV1CatalogueStatusRoute: typeof ApiV1CatalogueStatusRoute
@@ -2704,6 +2717,13 @@ declare module '@tanstack/react-router' {
       path: '/api/v1/account'
       fullPath: '/api/v1/account'
       preLoaderRoute: typeof ApiV1AccountRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/availability': {
+      id: '/api/v1/availability'
+      path: '/api/v1/availability'
+      fullPath: '/api/v1/availability'
+      preLoaderRoute: typeof ApiV1AvailabilityRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/v1/businesses': {
@@ -3622,6 +3642,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiOwnerDataExportRoute: ApiOwnerDataExportRoute,
   ApiStripeWebhookRoute: ApiStripeWebhookRoute,
   ApiV1AccountRoute: ApiV1AccountRouteWithChildren,
+  ApiV1AvailabilityRoute: ApiV1AvailabilityRoute,
   ApiV1BusinessesRoute: ApiV1BusinessesRouteWithChildren,
   ApiV1CallsRoute: ApiV1CallsRouteWithChildren,
   ApiV1CatalogueStatusRoute: ApiV1CatalogueStatusRoute,

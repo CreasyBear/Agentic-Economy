@@ -3,6 +3,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { productionMoneyManifestReady } from '@/lib/deployment/env-schema'
 import { setResponseHeader } from '@tanstack/react-start/server'
 import { z } from 'zod'
+import type { PaidCallsAvailability } from '@/content/availability-copy'
 
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
@@ -254,6 +255,10 @@ const fulfillReturnedFundingAction = sourceAction<
     | { kind: 'refused'; code: string; retryable: boolean }
   >
 >('moneyStripeWebhookWorker:fulfillReturn')
+const readPublicAvailabilityQuery = sourceQuery<
+  Record<string, never>,
+  { paidCalls: PaidCallsAvailability }
+>('platformLaunch:readPublicAvailability')
 const readOwnerFundingConstraintsQuery = sourceQuery<
   { environment: FundingEnvironment; now: number },
   AccountFundingConstraints
@@ -322,6 +327,10 @@ export async function readPlatformFundingConstraintsThroughSource(
     environment: providerContext.environment,
     now: Date.now(),
   })
+}
+
+export async function readPublicAvailabilityThroughSource(): Promise<{ paidCalls: PaidCallsAvailability }> {
+  return await callPublicSourceQuery(readPublicAvailabilityQuery, {})
 }
 
 function fundingEnvironmentFromRuntime(

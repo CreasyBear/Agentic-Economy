@@ -30,3 +30,15 @@ export const readOwnerPaymentAccess = query({
     return { kind: 'refused' as const, code: 'payments_admins_only' as const }
   },
 })
+
+/** The one public availability value: paid calls open only under the same two gates as readOwnerPaymentAccess. */
+export const readPublicAvailability = query({
+  args: {},
+  returns: v.object({ paidCalls: v.union(v.literal('open'), v.literal('soon')) }),
+  handler: async (ctx) => {
+    const environment = deploymentPaymentEnvironment(env)
+    if (environment === undefined || await readPaymentsAudience(ctx, environment) !== 'everyone') return { paidCalls: 'soon' as const }
+    if (environment === 'production' && (await readPaymentReadiness(ctx, environment, Date.now())).kind !== 'ready') return { paidCalls: 'soon' as const }
+    return { paidCalls: 'open' as const }
+  },
+})
