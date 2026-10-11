@@ -2,7 +2,6 @@ import { createFileRoute } from '@tanstack/react-router'
 
 import { methodNotAllowed } from '@/lib/server/method-guard'
 import { problem } from '@/lib/server/problem'
-import { sendGuardedHttpRequest } from '@/modules/network-guard/server'
 
 export const Route = createFileRoute('/api/unsubscribe')({
   server: {
@@ -34,6 +33,8 @@ async function forwardUnsubscribe(request: Request, method: 'GET' | 'POST'): Pro
   if (origin === null) return problem({ kind: 'UNAVAILABLE', code: 'unsubscribe_unavailable', detail: 'The Convex site origin for unsubscribe links is not configured.' })
   const target = `${origin}/notifications/unsubscribe?t=${encodeURIComponent(token)}`
   if (method === 'GET') return new Response(null, { status: 302, headers: { Location: target, 'Cache-Control': 'no-store' } })
+  // Dynamic so node:dns stays out of the client route tree (route-client-bundle-safety.test.ts).
+  const { sendGuardedHttpRequest } = await import('@/modules/network-guard/server')
   const upstream = await sendGuardedHttpRequest(new Request(target, { method: 'POST' }))
   return new Response(await upstream.text(), { status: upstream.status, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } })
 }
