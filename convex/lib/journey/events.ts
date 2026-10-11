@@ -40,7 +40,7 @@ export async function emitJourneyEvent(
     if (touch.campaign !== undefined) props.first_campaign = touch.campaign
   }
   const signedUp = await accountEvent(ctx, accountRef, 'signed_up')
-  props.isNewAccount = signedUp !== null && createdAt - signedUp.createdAt < NEW_ACCOUNT_MS ? 'true' : 'false'
+  props.isNewAccount = name === 'signed_up' || (signedUp !== null && createdAt - signedUp.createdAt < NEW_ACCOUNT_MS) ? 'true' : 'false'
   if (name === 'activated' && signedUp !== null) props.msSinceSignup = createdAt - signedUp.createdAt
   if (name === 'retained_w1') {
     const activated = await accountEvent(ctx, accountRef, 'activated')

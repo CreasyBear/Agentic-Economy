@@ -126,7 +126,7 @@ export function buildOfferingLlmsTxt(
     `- ${DiscoveryListingBoundaryLine}`,
     '',
     'Privacy and correction:',
-    `- ${canonicalBaseUrl}/privacy/remove-business`,
+    `- ${llmsPageLink(canonicalBaseUrl, '/privacy/remove-business')}`,
     '',
   ]
   return {

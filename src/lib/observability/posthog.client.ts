@@ -87,11 +87,12 @@ export function buildAttributionTouch(props: Record<string, unknown>, prefix: '$
     return typeof value === 'string' && value !== '' && value !== '$direct' ? value.slice(0, 200) : undefined
   }
   const url = str('current_url') ?? str('url')
-  let landingPath = str('pathname')
-  if (landingPath === undefined && url !== undefined) try { landingPath = new URL(url).pathname } catch { /* ignore */ }
+  let pathname = str('pathname')
+  if (pathname === undefined && url !== undefined) try { pathname = new URL(url).pathname } catch { /* ignore */ }
+  const landingPath = pathname === undefined ? undefined : safeTelemetryPath({ pathname })
   const touch = {
     source: str('utm_source'), medium: str('utm_medium'), campaign: str('utm_campaign'),
-    content: str('utm_content'), term: str('utm_term'), referrer: str('referring_domain') ?? str('referrer'),
+    content: str('utm_content'), term: str('utm_term'), referrer: str('referring_domain'),
     landingPath, clickId: str('gclid') ?? str('fbclid') ?? str('msclkid'),
   }
   const present = Object.entries(touch).filter(([, value]) => value !== undefined)
@@ -101,7 +102,8 @@ export function buildAttributionTouch(props: Record<string, unknown>, prefix: '$
 /** First touch from PostHog's persisted initial person info; last touch from this session's entry props. */
 export async function readPostHogAttribution(): Promise<{ firstTouch?: AttributionTouch; lastTouch?: AttributionTouch } | undefined> {
   if (!productAnalyticsAllowed() || !(await ensurePostHogClient()) || posthogClient === undefined) return undefined
-  const at = Date.now()
+  // Session start stamps both touches; the server overrides firstTouch.at with the account's createdAt.
+  const at = posthogClient.sessionManager?.checkAndGetSessionAndWindowId(true).sessionStartTimestamp ?? Date.now()
   const firstTouch = buildAttributionTouch(posthogClient.persistence?.get_initial_props() ?? {}, '$initial_', at)
   const lastTouch = buildAttributionTouch(posthogClient.sessionPropsManager?.getSessionProps() ?? {}, '$session_entry_', at)
   return firstTouch === undefined && lastTouch === undefined ? undefined : { ...(firstTouch && { firstTouch }), ...(lastTouch && { lastTouch }) }
@@ -133,7 +135,7 @@ function ensurePostHogClient(router?: AnyRouter): Promise<boolean> {
         capture_pageleave: false,
         autocapture: false,
         persistence: 'localStorage+cookie',
-        cross_subdomain_cookie: true,
+        cross_subdomain_cookie: /(^|\.)aecon\.ai$/.test(window.location.hostname),
         disable_session_recording: true,
         before_send: protectPostHogEvent,
         loaded: (ph) => {
