@@ -3950,6 +3950,12 @@
   {
     "visibility": "internal",
     "module": "notifications",
+    "method": "enqueuePaymentStuck",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "notifications",
     "method": "enqueueStalledStepEmails",
     "kind": "mutation"
   },
@@ -3988,6 +3994,12 @@
     "module": "notifications",
     "method": "readUsageAlertHistory",
     "kind": "query"
+  },
+  {
+    "visibility": "public",
+    "module": "notifications",
+    "method": "recordDataExportRequested",
+    "kind": "mutation"
   },
   {
     "visibility": "internal",
