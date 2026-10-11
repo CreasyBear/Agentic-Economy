@@ -19,6 +19,7 @@ jobs:
       contents: read
     outputs:
       version: ${{ steps.tag.outputs.version }}
+      sha256: ${{ steps.pack.outputs.sha256 }}
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -43,7 +44,10 @@ jobs:
         run: npm install --global npm@11.5.1 --ignore-scripts
 
       - name: Frozen dependency install
-        run: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Rebuild esbuild
+        run: npm rebuild esbuild
 
       - name: Install the source-proof Chromium browser
         run: npm exec -- playwright install --with-deps chromium
@@ -58,6 +62,7 @@ jobs:
         run: npm run gate
 
       - name: Pack and verify the one release archive
+        id: pack
         env:
           VERSION: ${{ steps.tag.outputs.version }}
         shell: bash
@@ -74,6 +79,7 @@ jobs:
             AE_CLI_PACKAGE_EXPECTED_SHA256="$(sha256sum "agentic-economy-cli-$VERSION.tgz" | cut -d ' ' -f1)" \
             npm --prefix "$GITHUB_WORKSPACE" run test:cli-package
           sha256sum --check SHA256SUMS
+          echo "sha256=$(sha256sum "agentic-economy-cli-$VERSION.tgz" | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
 
       - name: Upload the release archive and checksums
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -97,9 +103,15 @@ jobs:
           name: cli-release
           path: ${{ runner.temp }}/cli-release
 
-      - name: Verify the archive checksum
+      - name: Verify the archive checksum against the build job output
         working-directory: ${{ runner.temp }}/cli-release
-        run: sha256sum --check SHA256SUMS
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          EXPECTED_SHA256: ${{ needs.build.outputs.sha256 }}
+        run: |
+          actual=$(sha256sum "agentic-economy-cli-$VERSION.tgz" | cut -d ' ' -f1)
+          [[ -n "$EXPECTED_SHA256" && "$actual" == "$EXPECTED_SHA256" ]] || { echo "Archive checksum does not match the build job output" >&2; exit 1; }
+          sha256sum --check SHA256SUMS
 
       - name: Install Cosign
         uses: sigstore/cosign-installer@faadad0cce49287aee09b3a48701e75088a2c6ad # v4.0.0
