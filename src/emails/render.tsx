@@ -3,6 +3,7 @@ import type { ReactElement } from 'react'
 
 import AccountNotice, { subject as noticeSubject, type NoticeKind, type NoticeProps } from './templates/account-notice'
 import AgentApproval, { subject as approvalSubject, type AgentApprovalProps } from './templates/agent-approval'
+import FundingReceipt, { subject as fundingSubject, type FundingReceiptProps } from './templates/funding-receipt'
 import OperatorDigest, { subject as digestSubject, type OperatorDigestProps } from './templates/operator-digest'
 import StalledStepEmail, { subject as stalledSubject, type StalledStep, type StalledStepProps } from './templates/stalled-step'
 import StatementReady, { subject as statementSubject, type StatementReadyProps } from './templates/statement-ready'
@@ -14,8 +15,9 @@ export type EmailInput =
   | { eventKind: 'stalled_not_funded' | 'stalled_no_agent' | 'stalled_never_called'; props: StalledStepProps }
   | { eventKind: UsageAlertKind; props: UsageAlertProps }
   | { eventKind: 'invoice_ready'; props: StatementReadyProps }
+  | { eventKind: 'funding_receipt'; props: FundingReceiptProps }
   | { eventKind: 'operator_digest'; props: OperatorDigestProps }
-  | { eventKind: NoticeKind; props: NoticeProps }
+  | { eventKind: Exclude<NoticeKind, 'funding_receipt'>; props: NoticeProps }
 
 export type RenderedEmail = { subject: string; html: string; text: string }
 
@@ -45,6 +47,7 @@ function build(input: EmailInput): { element: ReactElement; subject: string } {
     case 'operator_digest':
       return { element: <OperatorDigest {...input.props} />, subject: digestSubject(input.props) }
     case 'funding_receipt':
+      return { element: <FundingReceipt {...input.props} />, subject: fundingSubject() }
     case 'funding_failed':
     case 'task_refunded':
     case 'task_stuck':
