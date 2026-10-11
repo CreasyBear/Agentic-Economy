@@ -5,12 +5,44 @@ import { brandNonEmpty } from '../../../../src/modules/common/ids'
 import { verifyCustomerRequestServiceAssertion, type CustomerRequestServiceAssertion } from '../../../../src/modules/agent-access/service-auth-envelope'
 import { createPackage3AuditEvent } from '../../../../src/modules/observability/public'
 import { CLERK_USER_PROVIDER_NAMESPACE } from '../../../../src/modules/principal-account/external-identity/public'
+import { internal } from '../../../_generated/api'
 import { env, type MutationCtx } from '../../../_generated/server'
+import { enqueueAccountNotice } from '../notifications/enqueue'
 import { InteractiveAuthorityError } from '../../../interactiveAuthority'
 import { persistAuditEvent } from '../../security/audit/persistence'
 import { serviceAssertion } from '../../../serviceAssertion'
 import { resolveAccountRefForPrincipal } from './identity'
 import { revokeMachineAgentsForCreator } from './retireDependents'
+
+const DAY_MS = 24 * 60 * 60 * 1000
+/** Deletion grace period, defined once. The reminder goes out 3 days before it ends. */
+export const DELETION_GRACE_MS = 14 * DAY_MS
+export const DELETION_REMINDER_LEAD_MS = 3 * DAY_MS
+
+export const deletionNoticeArgs = {
+  principalRef: v.string(),
+  accountRef: v.string(),
+  notice: v.union(v.literal('final_reminder'), v.literal('completed')),
+}
+
+/** Tell the owner now, then schedule the final reminder and the completion notice. */
+export async function scheduleDeletionNotices(ctx: MutationCtx, input: { principalRef: string; accountRef: string }, now: number): Promise<void> {
+  await enqueueAccountNotice(ctx, { eventKind: 'deletion_requested', accountRef: input.accountRef, sourceEventRef: `${input.principalRef}:deletion_requested` })
+  await ctx.scheduler.runAfter(DELETION_GRACE_MS - DELETION_REMINDER_LEAD_MS, internal.personalAccount.sendDeletionNotice, { ...input, notice: 'final_reminder' })
+  await ctx.scheduler.runAfter(DELETION_GRACE_MS, internal.personalAccount.sendDeletionNotice, { ...input, notice: 'completed' })
+}
+
+/** Scheduled step: if the principal is no longer retired the deletion was cancelled, so send the cancelled notice instead. */
+export async function sendDeletionNoticeHandler(ctx: MutationCtx, args: Infer<ReturnType<typeof v.object<typeof deletionNoticeArgs>>>): Promise<null> {
+  const principal = await ctx.db.query('principals').withIndex('by_principalRef', (index) => index.eq('principalRef', args.principalRef)).unique()
+  const cancelled = principal !== null && principal.lifecycle !== 'retired'
+  await enqueueAccountNotice(ctx, {
+    eventKind: cancelled ? 'deletion_cancelled' : args.notice === 'completed' ? 'deletion_completed' : 'deletion_final_reminder',
+    accountRef: args.accountRef,
+    sourceEventRef: `${args.principalRef}:deletion_${cancelled ? 'cancelled' : args.notice}`,
+  })
+  return null
+}
 
 const RETIRED_PERSONAL_DISPLAY_NAME = 'Deleted User'
 const digestPattern = /^sha256:[0-9a-f]{64}$/u
@@ -183,6 +215,7 @@ export const retirePersonalAccountForServerHandler = async (ctx: MutationCtx, ar
     })
     if (!audit.valid) throw new Error(`personal_account_retire_audit_invalid:${audit.reason}`)
     await persistAuditEvent(ctx.db, audit.event)
+    await scheduleDeletionNotices(ctx, { principalRef: principal.principalRef, accountRef }, now)
 
     return { kind: 'accepted', status: 'applied', eventRef }
 }
