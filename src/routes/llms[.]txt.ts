@@ -35,7 +35,10 @@ export async function handleDurableLlmsTxtRequest(request: Request, head = false
   const canonicalBaseUrl = resolveCanonicalBaseUrl(request).baseUrl
   let result
   try {
-    const paidCalls = await readPublicAvailabilityThroughSource().then((a) => a.paidCalls, () => 'soon' as const)
+    const paidCalls = await Promise.race([
+      readPublicAvailabilityThroughSource().then((a) => a.paidCalls, () => 'soon' as const),
+      new Promise<'soon'>((resolve) => setTimeout(resolve, 2000, 'soon')),
+    ])
     result = await readPublicLlmsTxt({
       availabilityStatement: availabilityStatement(paidCalls),
       canonicalBaseUrl,
