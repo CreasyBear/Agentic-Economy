@@ -1,5 +1,4 @@
-import { degradeBackend } from '@/lib/observability/degrade-backend'
-import { filteredTelemetryValue, redactSensitiveText, redactShareTokenPath } from '@/lib/observability/redact-sensitive-text'
+import { degradeBackend, filteredTelemetryValue, redactSensitiveText, redactShareTokenPath } from '@/lib/observability/degrade-backend'
 
 const shareTokenPathPattern = /^\/s\/[0-9a-f]{64}\/?$/i
 
