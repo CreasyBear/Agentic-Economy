@@ -117,7 +117,7 @@ export function createPurchaseTools(authority: TrustedChatAuthority & { kind: 'a
       [CHAT_TOOL_NAME_MAP.canonicalToProvider['tool.quote']]: createTool({
         description: descriptionFor(toolQuoteContract),
         inputSchema: chatToolQuoteInputSchema as z.ZodType<ToolQuoteInput>,
-        execute: async (ctx: ToolCtx, input: ToolQuoteInput, options?: { messages?: readonly ModelMessage[] }) => {
+        execute: async (ctx: ToolCtx, input: ToolQuoteInput) => {
           const denied = reserve('tool.quote')
           if (denied !== null) return denied
           const toolRef = await callableToolRef(ctx, input.toolRef)
