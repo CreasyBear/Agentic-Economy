@@ -15,11 +15,19 @@ describe('catalogue search admission and fan-out', () => {
   it('refuses a call the limiter rejects before any upstream request', async () => {
     const runMutation = vi.fn().mockResolvedValue({ ok: false, retryAfter: 1000 })
     const runQuery = vi.fn()
-    const result = await searchHandler({ runQuery, runMutation, auth: { getUserIdentity: async () => null } }, { source: 'coinbase', query: '' })
-    expect(runMutation).toHaveBeenCalledWith(expect.anything(), { name: 'public-read', key: 'catalog-search:anonymous' })
+    const result = await searchHandler({ runQuery, runMutation, auth: { getUserIdentity: async () => ({ tokenIdentifier: 'tok_1' }) } }, { source: 'coinbase', query: '' })
+    expect(runMutation).toHaveBeenCalledWith(expect.anything(), { name: 'public-read', key: 'catalog-search:tok_1' })
     expect(result).toMatchObject({ kind: 'unavailable' })
     expect(sdk.list).not.toHaveBeenCalled()
     expect(runQuery).not.toHaveBeenCalled()
+  })
+
+  it('refuses anonymous live fan-out without touching a shared bucket or upstream', async () => {
+    const runMutation = vi.fn()
+    const result = await searchHandler({ runQuery: vi.fn(), runMutation, auth: { getUserIdentity: async () => null } }, { source: 'coinbase', query: '' })
+    expect(result).toMatchObject({ kind: 'unavailable' })
+    expect(runMutation).not.toHaveBeenCalled()
+    expect(sdk.list).not.toHaveBeenCalled()
   })
 
   it('bounds per-reference detail lookups to one page', async () => {
@@ -32,7 +40,7 @@ describe('catalogue search admission and fan-out', () => {
       if (name === 'capabilitySupplyTools:detailInternal') details.push(args.toolRef ?? '')
       return { kind: 'not_found', schemaVersion: 'registry-tools:v3', toolRef: 'x', navigation: [] }
     })
-    await searchHandler({ runQuery, runMutation: vi.fn().mockResolvedValue({ ok: true }), auth: { getUserIdentity: async () => null } }, { source: 'coinbase', query: '' })
+    await searchHandler({ runQuery, runMutation: vi.fn().mockResolvedValue({ ok: true }), auth: { getUserIdentity: async () => ({ tokenIdentifier: 'tok_1' }) } }, { source: 'coinbase', query: '' })
     expect(details.length).toBeLessThanOrEqual(20)
   })
 })

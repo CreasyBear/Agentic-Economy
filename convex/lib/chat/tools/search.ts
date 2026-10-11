@@ -307,9 +307,11 @@ export function createSearchTools(
         const deniedSearch = reserveSearch('registry.tools.list', 'list', data.cursor, latestUserRequest(options.messages))
         if (deniedSearch !== null) return deniedSearch
         const filters = operationSourceFilters(data.filters)
+        const rateKey = ctx.userId ?? ctx.threadId
         const result = await ctx.runAction(internal.capabilityToolCatalog.searchInternal, {
           query: '',
           limit: data.limit,
+          ...(rateKey === undefined ? {} : { rateKey }),
           ...(data.source === undefined ? {} : { source: data.source }),
           ...(data.cursor === undefined ? {} : { cursor: data.cursor }),
           ...(filters === undefined ? {} : { filters }),

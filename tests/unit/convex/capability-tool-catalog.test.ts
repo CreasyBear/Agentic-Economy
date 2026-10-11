@@ -22,7 +22,7 @@ describe('SDK-backed catalogue discovery', () => {
       pagination: { offset: 0, total: 1 },
     })
     const runMutation = vi.fn().mockResolvedValue({ ok: true })
-    const auth = { getUserIdentity: async () => null }
+    const auth = { getUserIdentity: async () => ({ tokenIdentifier: 'tok_1' }) }
     const runQuery = vi.fn(async (reference: unknown) => {
       if (getFunctionName(reference as never) === 'capabilityToolCatalogData:sourceSnapshot') {
         return { toolRefs: [], incomplete: true }

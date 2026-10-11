@@ -92,7 +92,10 @@ async function decorate(ctx: ActionCtx, result: ToolSearchResult): Promise<ToolS
 }
 
 const catalogSearchArgs = v.object(searchArgs)
-const searchHandler = async (ctx: ActionCtx, args: Infer<typeof catalogSearchArgs>): Promise<ToolSearchWireResult> => {
+// Internal callers (the chat agent) run without a user identity, so they name the principal or thread to meter.
+// The public action has no rateKey: a client-chosen key would let it dodge the limit.
+const internalCatalogSearchArgs = v.object({ ...searchArgs, rateKey: v.optional(v.string()) })
+const searchHandler = async (ctx: ActionCtx, args: Infer<typeof catalogSearchArgs>, rateKey?: string): Promise<ToolSearchWireResult> => {
   const parsed = toolSearchInputSchema.safeParse(args)
   const normalized = parsed.success ? normalizeToolSearchInput({ ...parsed.data, limit: parsed.data.limit ?? 20 }) : undefined
   if (normalized === undefined) return serializeToolSearchResult(unavailable('query_invalid'))
@@ -103,9 +106,11 @@ const searchHandler = async (ctx: ActionCtx, args: Infer<typeof catalogSearchArg
   }
   if ((input.source === 'payai' && input.query.trim().length > 0) || (input.query.trim().length > 0 && input.cursor !== undefined)) return serializeToolSearchResult(unavailable('query_invalid'))
   if (input.cursor !== undefined && (!/^(0|[1-9]\d*)$/u.test(input.cursor) || !Number.isSafeInteger(Number(input.cursor)))) return serializeToolSearchResult(unavailable('query_invalid'))
-  // Upstream sources are public and unauthenticated, so bound the fan-out per caller (OWASP API4:2023).
-  const identity = await ctx.auth.getUserIdentity()
-  const admission = await ctx.runMutation(internal.rateLimit.admit, { name: 'public-read', key: identity === null ? 'catalog-search:anonymous' : `catalog-search:${identity.tokenIdentifier}` })
+  // Upstream sources are public and unauthenticated, so the live fan-out needs a metered caller (OWASP API4:2023).
+  // Anonymous callers share no bucket: one of them could drain it for everyone.
+  const meterKey = rateKey ?? (await ctx.auth.getUserIdentity())?.tokenIdentifier
+  if (meterKey === undefined) return serializeToolSearchResult(unavailable('source_unavailable'))
+  const admission = await ctx.runMutation(internal.rateLimit.admit, { name: 'public-read', key: `catalog-search:${meterKey}` })
   if (!admission.ok) return serializeToolSearchResult(unavailable('source_unavailable'))
   let page: Awaited<ReturnType<typeof fetchCatalogPage>>
   try { page = await fetchCatalogPage(input) } catch (cause) { return degradeBackend(cause, serializeToolSearchResult(unavailable('source_unavailable')), { site: 'search', reason: 'source_unavailable' }) }
@@ -121,8 +126,12 @@ const searchHandler = async (ctx: ActionCtx, args: Infer<typeof catalogSearchArg
   return serializeToolSearchResult(await decorate(ctx, { kind: 'ok', schemaVersion: 'registry-tools:v3', query: input.query, items, ranking: [], pagination: { limit: page.limit, hasMore: page.nextCursor !== undefined, ...(page.nextCursor === undefined ? {} : { nextCursor: page.nextCursor }) }, ...(page.partialResults || snapshot.incomplete || candidates.length < page.items.length ? { partialResults: true } : {}), navigation }))
 }
 
-export const search = action({ args: catalogSearchArgs, returns: publicSearchReturns, handler: searchHandler })
-export const searchInternal = internalAction({ args: catalogSearchArgs, returns: publicSearchReturns, handler: searchHandler })
+export const search = action({ args: catalogSearchArgs, returns: publicSearchReturns, handler: async (ctx, args) => await searchHandler(ctx, args) })
+export const searchInternal = internalAction({
+  args: internalCatalogSearchArgs,
+  returns: publicSearchReturns,
+  handler: async (ctx, { rateKey, ...args }) => await searchHandler(ctx, args, rateKey),
+})
 
 
 const presentSearchReturns = v.object({
