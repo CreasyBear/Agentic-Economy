@@ -32,6 +32,7 @@ export async function runListCommand(args: readonly string[], options: CliOption
   }
   heading(`Current Tools (${outcome.durationMs}ms)`)
   line(`  ${parsed.data.count} shown`)
+  if (parsed.data.freshness !== undefined && parsed.data.freshness.state !== 'fresh') line(`  Catalogue may be out of date (${parsed.data.freshness.state}). Results can be incomplete.`)
   for (const [index, tool] of parsed.data.items.entries()) {
     line(`  ${index + 1}. ${tool.provider.name} — ${tool.title}`)
     line(`     ${tool.healthStatus} · ${tool.priceLabel}`)
