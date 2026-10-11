@@ -17,6 +17,7 @@ import { canonicalAgentRecord } from '../../helpers/agent-directory-fixture'
 
 const routerNavigate = vi.hoisted(() => vi.fn())
 
+vi.mock('convex/react', () => ({ useQuery: () => ({ paidCalls: 'open' }) }))
 vi.mock('@/lib/ui/toast', () => ({
   toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
 }))

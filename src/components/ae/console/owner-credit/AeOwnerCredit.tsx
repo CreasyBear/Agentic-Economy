@@ -1,3 +1,6 @@
+import { useQuery } from 'convex/react'
+
+import { api } from '../../../../../convex/_generated/api'
 import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ae/shared/base-ui/tabs/tabs'
 
@@ -19,6 +22,7 @@ function sectionFromHash(hash: string): OwnerCreditSectionId {
 }
 
 export function AeOwnerCredit(props: AeOwnerCreditProps) {
+  const availability = useQuery(api.platformLaunch.readPublicAvailability, {})
   const reconciliationCases = props.reconciliationCases ?? []
   const openReconciliation = reconciliationCases.filter((item) => item.status === 'open').length
   const defaultSection = sectionFromHash(typeof window === 'undefined' ? '' : window.location.hash)
@@ -40,7 +44,7 @@ export function AeOwnerCredit(props: AeOwnerCreditProps) {
           ))}
         </TabsList>
         <TabsContent value="fund" className="arc-credit-tabs__content">
-          <CreditFundPanel {...props} />
+          <CreditFundPanel {...props} {...(availability === undefined ? {} : { paidCalls: availability.paidCalls })} />
         </TabsContent>
         <TabsContent value="ledger" className="arc-credit-tabs__content">
           <CreditLedgerPanel {...props} />
