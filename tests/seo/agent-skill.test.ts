@@ -18,7 +18,8 @@ describe('public agent skill', () => {
       expect(response.headers.get('Content-Type')).toContain('text/markdown')
       expect(await response.text()).toContain('/for-agents')
     }
-    expect(buildPublicAgentSkillMarkdown({ canonicalBaseUrl: productionBaseUrl })).toBe(
+    const production = buildPublicAgentSkillMarkdown({ canonicalBaseUrl: productionBaseUrl })
+    expect(production.replaceAll(/\?utm_source=aecon&utm_medium=agent&utm_campaign=install&utm_content=skill_md/gu, '')).toBe(
       packagedSkill,
     )
     const local = buildPublicAgentSkillMarkdown({ canonicalBaseUrl: 'http://127.0.0.1:3024/' })

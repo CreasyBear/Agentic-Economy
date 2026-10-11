@@ -87,12 +87,12 @@ export function buildOfferingLlmsUrlsFromSlugs(
   ])]
 }
 
-/** Compact Tool-first assistant index. Business pages remain human-readable supporting facts. */
 /** Human-followed page links carry UTMs; endpoints that clients call stay bare. */
 function llmsPageLink(baseUrl: string, path: string): string {
   return withUtm(`${baseUrl}${path}`, { source: 'aecon', medium: 'agent', campaign: 'install', content: 'llms_txt' })
 }
 
+/** Compact Tool-first assistant index. Business pages remain human-readable supporting facts. */
 export function buildOfferingLlmsTxt(
   businesses: readonly PublicBusinessCatalogApiV2Dto[],
   options: BuildDiscoveryFileOptions & { totalBusinesses?: number },
