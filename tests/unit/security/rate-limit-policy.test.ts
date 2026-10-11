@@ -4,7 +4,15 @@ import { setPublicSourceTransportForTests } from '@/lib/server/convex-source'
 import * as convexSource from '@/lib/server/convex-source'
 import { SOURCE_READ_TIMEOUT_MS } from '@/lib/bounded-read'
 
+import { HOUR_MS, RATE_LIMIT_NAMES, RATE_LIMIT_POLICY } from '@/modules/security/rate-limit-policy'
 import { anonymousChatAdmissionKey, rateLimitedResponse, requestAdmissionKey, setHttpRateLimitAdmissionForTests, withHttpRateLimit } from '@/lib/server/rate-limit'
+describe('funding-checkout policy', () => {
+  it('allows 5 checkout creations per hour per key', () => {
+    expect(RATE_LIMIT_NAMES).toContain('funding-checkout')
+    expect(RATE_LIMIT_POLICY['funding-checkout']).toEqual({ kind: 'fixed window', rate: 5, period: HOUR_MS })
+  })
+})
+
 // The Convex limiter owns quota state. HTTP admission exposes only success and
 // retry delay, so HTTP must not invent a remaining balance from policy capacity.
 describe('HTTP admission quota headers', () => {
