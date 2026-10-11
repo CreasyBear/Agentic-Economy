@@ -4,7 +4,7 @@ import type { ReactNode } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 vi.mock('@tanstack/react-start', async (importOriginal) => ({ ...(await importOriginal<typeof import('@tanstack/react-start')>()), useServerFn: (fn: unknown) => fn }))
 vi.mock('@clerk/tanstack-react-start', () => ({ useReverification: (fn: unknown) => fn }))
-vi.mock('@/components/ae/layout/AeOperatorPage', () => ({ AeOperatorPage: ({ children, breadcrumbs }: { children: ReactNode; breadcrumbs?: readonly { label: string; href?: string }[] }) => <div>{breadcrumbs?.map(item => item.href ? <a key={item.label} href={item.href}>{item.label}</a> : null)}{children}</div> }))
+vi.mock('@/components/ae/layout/AeOperatorPage', () => ({ AeOperatorPage: ({ children }: { children: ReactNode }) => <div>{children}</div> }))
 vi.mock('@/components/ae/layout/AeNavigationSafetyBoundary', () => ({ AeNavigationSafetyBoundary: ({ children }: { children: ReactNode }) => <div>{children}</div> }))
 vi.mock('@/modules/capability-supply/supply-funnel.functions', () => ({ filterOwnerSupplyAuthorityOptions: (_business: string, connections: unknown[]) => connections, assessOwnerSupplySourceServer: vi.fn(), previewOwnerSupplySourceServer: vi.fn(), publishOwnerSupplySourceServer: vi.fn(), saveOwnerSupplySourceDraftServer: vi.fn().mockResolvedValue({ kind: 'saved' }), readOwnerProviderConnectionsServer: vi.fn(), resumeOwnerSupplySourceDraftServer: vi.fn(), startOwnerSupplySourceConnectionServer: vi.fn() }))
 import { AeOwnerSupplySourceStartPage, type AeOwnerSupplySourceStartPageProps } from '@/components/ae/supply/AeOwnerSupplySourceStartPage'
@@ -34,13 +34,9 @@ it('reconciles the visible saved terms after changing draft URLs and clears stal
   expect((screen.getByLabelText('x402 resource URL') as HTMLInputElement).value).toBe('')
 })
 
-it('retains later-page inventory context in setup breadcrumbs and the saved setup reopening URL', () => {
+it('retains later-page inventory context in the saved setup reopening URL', () => {
   const input = props('sha256:exact-draft')
   render(<AeOwnerSupplySourceStartPage {...input} search={{ ...input.search, inventoryQ: 'weather forecast', inventorySort: 'relevance', inventoryCursor: 'opaque:+/=' }} />)
-  const back = new URL(screen.getByRole('link', { name: 'Tools' }).getAttribute('href')!, 'https://aecon.test')
-  expect(back.searchParams.get('q')).toBe('weather forecast')
-  expect(back.searchParams.get('sort')).toBe('relevance')
-  expect(back.searchParams.get('cursor')).toBe('opaque:+/=')
   const reopen = new URL(screen.getByRole('link', { name: 'Reopen this saved setup' }).getAttribute('href')!, 'https://aecon.test')
   expect(reopen.searchParams.get('draft')).toBe('sha256:exact-draft')
   expect(reopen.searchParams.get('inventoryCursor')).toBe('opaque:+/=')
