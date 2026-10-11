@@ -62,7 +62,7 @@ export async function fetchCatalogPage(input: ToolSearchInput): Promise<Readonly
   try { response = await guardedFetch(url, { dispatcher, redirect: 'error', headers: { accept: 'application/json' }, signal: AbortSignal.timeout(TIMEOUT_MS) }) } catch (cause) { await dispatcher.close(); throw cause }
   void dispatcher.close()
   if (!response.ok) throw new Error('catalog_source_unavailable')
-  const body = await readBoundedRequestJson(response as unknown as Response, 2_097_152)
+  const body = await readBoundedRequestJson(response, 2_097_152)
   if (!body.ok || !isRecord(body.value) || !Array.isArray(body.value.items) || body.value.items.length > limit) throw new Error('catalog_source_invalid')
   const pagination = isRecord(body.value.pagination) ? body.value.pagination : undefined
   const total = pagination?.total

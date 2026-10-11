@@ -829,11 +829,11 @@ export async function handleMcpRequest(request: Request, options: McpRequestOpti
         ?? (options.authenticate === undefined
           ? resolveAgentAccessPrincipal(boundedRequest, bounded.bodyText, correlationId)
           : undefined)
+      const verifiedCandidate = options.verifiedCandidate
+      const authenticate = options.authenticate ?? (verifiedCandidate == null ? undefined : async () => verifiedCandidate)
       const admitted = await authenticateAgentAccess({
         request: boundedRequest,
-        ...(options.authenticate === undefined
-          ? options.verifiedCandidate == null ? {} : { authenticate: async () => options.verifiedCandidate! }
-          : { authenticate: options.authenticate }),
+        ...(authenticate === undefined ? {} : { authenticate }),
         ...(resolvePrincipal === undefined ? {} : { resolvePrincipal }),
         consequenceResource: genericAdmission
           ? 'surface:mcp:tools-list'
