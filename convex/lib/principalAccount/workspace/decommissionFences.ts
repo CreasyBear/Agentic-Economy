@@ -9,6 +9,7 @@ export type WorkspaceFenceReason =
   | 'unreleased_call_holds'
   | 'in_flight_funding'
   | 'open_reconciliation'
+  | 'positive_credit_balance'
 
 type FenceDb = GenericDatabaseReader<DataModel>
 

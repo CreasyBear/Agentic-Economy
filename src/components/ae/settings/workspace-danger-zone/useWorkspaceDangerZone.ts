@@ -9,6 +9,7 @@ import { useTypedReverification } from '@/lib/client/useTypedReverification'
 import { toast } from '@/lib/ui/toast'
 import {
   CLOSE_FAILURE_DIAGNOSTIC,
+  FENCE_MESSAGES,
   TRANSFER_FAILURE_DIAGNOSTIC,
   fenceMessagesFor,
   fenceDestinationsFor,
@@ -178,6 +179,14 @@ export function useWorkspaceDangerZone(options: Readonly<{
             if (!closeAttemptUnconfirmed) { closeCommand.current = undefined; pauseReads(false) }
             setCloseDiagnostic(closeAttemptUnconfirmed ? { ...CLOSE_MFA_DIAGNOSTIC, whatHappened: 'The original close attempt is still unconfirmed. It may already have completed.' } : CLOSE_MFA_DIAGNOSTIC)
             toast.error(closeAttemptUnconfirmed ? 'Workspace close could not be confirmed' : 'Workspace was not closed')
+            return
+          }
+          if (result.kind === 'refused') {
+            closeCommand.current = undefined; pauseReads(false)
+            setCloseDiagnostic(result.code === 'positive_credit_balance'
+              ? { whatHappened: 'Workspace close did not complete.', financialImpact: 'Your credit is unchanged.', nextStep: FENCE_MESSAGES.positive_credit_balance }
+              : CLOSE_FAILURE_DIAGNOSTIC)
+            toast.error('Workspace was not closed')
             return
           }
           const confirmed = { kind: 'closed' as const, accountRef: result.accountRef, displayName: command.confirmationName }

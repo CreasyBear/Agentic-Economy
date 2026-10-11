@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const boundary = vi.hoisted(() => ({ auth: vi.fn(), mutation: vi.fn(), receipt: vi.fn().mockResolvedValue(null) }))
+const boundary = vi.hoisted(() => ({ auth: vi.fn(), mutation: vi.fn(), action: vi.fn(), receipt: vi.fn().mockResolvedValue(null) }))
 vi.mock('@/lib/server/workspace-terminal-receipt', () => ({ readWorkspaceTerminalReceipt: boundary.receipt }))
 vi.mock('@clerk/tanstack-react-start/server', () => ({ auth: boundary.auth, clerkClient: vi.fn() }))
 vi.mock('@tanstack/react-start', async importOriginal => ({
@@ -18,6 +18,7 @@ vi.mock('@tanstack/react-start', async importOriginal => ({
 vi.mock('@/lib/server/convex-source', async importOriginal => ({
   ...(await importOriginal<typeof import('@/lib/server/convex-source')>()),
   callSourceMutation: boundary.mutation,
+  callSourceAction: boundary.action,
 }))
 
 import { closeWorkspaceServer, renameWorkspaceThroughClerk, transferWorkspaceOwnershipServer } from '@/lib/server/workspace-profile.functions'
@@ -72,6 +73,7 @@ describe('workspace consequence server producers', () => {
     vi.useFakeTimers()
     vi.setSystemTime(now)
     boundary.mutation.mockReset()
+    boundary.action.mockReset().mockResolvedValue({ kind: 'ok', balance: { currency: 'AUD', units: '0', exponent: 6 } })
     boundary.auth.mockReset().mockResolvedValue({ isAuthenticated: true, userId: 'user_owner',
       has: vi.fn().mockReturnValue(true), factorVerificationAge: [1, 2],
       sessionClaims: { reverification_id: proof.reverificationId, iat: (now - 30_000) / 1_000 } })
@@ -120,6 +122,15 @@ describe('workspace consequence server producers', () => {
       : { ...commandFields, successorPrincipalRef: 'principal:successor', proof }
     await expect((action === 'close' ? close : transfer)({ data, context })).rejects.toThrow()
     expect(boundary.auth).not.toHaveBeenCalled()
+    expect(boundary.mutation).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['positive credit', { kind: 'ok', balance: { units: '1' } }, 'positive_credit_balance'],
+    ['an unavailable balance read', { kind: 'refused', code: 'source_unavailable' }, 'source_unavailable'],
+  ])('refuses close before the mutation for %s', async (_name, balance, code) => {
+    boundary.action.mockResolvedValue(balance)
+    expect(await close({ data: { ...commandFields, confirmationName: 'Reviewed workspace' }, context })).toEqual({ kind: 'refused', code })
     expect(boundary.mutation).not.toHaveBeenCalled()
   })
 })
