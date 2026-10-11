@@ -18,7 +18,7 @@ buying again. Return output or exact refusal/uncertainty; continue the task.
 Paginate tools/list; refresh after connection. Use only listed tools. Installation
 grants no connection/spending authority. Use host settings; refresh in a fresh task
 if needed. Never use unlisted sign-in tools or pasted tokens. Setup:
-https://app.aecon.ai/for-agents.
+https://app.aecon.ai/for-agents?utm_source=aecon&utm_medium=agent&utm_campaign=install&utm_content=skill_md.
 
 Share exact verification link; **Follow live onboarding** observes access before
 issuance. `ae_agentAccess_whoami` supplies `principalRef` for
@@ -114,7 +114,7 @@ machine-readable stdout, progress on stderr.
 
 ## Lifecycle
 
-Start at https://app.aecon.ai/for-providers. Keep draft/connection-attempt refs;
+Start at https://app.aecon.ai/for-providers?utm_source=aecon&utm_medium=agent&utm_campaign=install&utm_content=skill_md. Keep draft/connection-attempt refs;
 read status on return. Callbacks prove neither connection nor publication. Reopen
 secure handoff or listed `ae_supply_connection_detail`; never duplicate a failed
 callback. Credentials: secure form only, never prompts/MCP/CLI arguments. Keep exact
@@ -140,7 +140,7 @@ rating/refund.
 
 - Guides: https://app.aecon.ai/llms.txt
 - Schemas: https://app.aecon.ai/openapi.json
-- Setup help: https://app.aecon.ai/support
+- Setup help: https://app.aecon.ai/support?utm_source=aecon&utm_medium=agent&utm_campaign=install&utm_content=skill_md
 - Support: support@aecon.ai
 
 Keep `x-ae-request-id` and safe Call/request refs for support. Never publish

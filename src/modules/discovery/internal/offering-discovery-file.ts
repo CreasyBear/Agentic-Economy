@@ -1,4 +1,5 @@
 import type { BuildDiscoveryFileOptions, DiscoveryFileBuildResult } from './discovery-contracts'
+import { withUtm } from '@/lib/attribution/with-utm'
 import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 import { CALL_ROUTE_CONTRACT } from '@/modules/capability-execution/call-entry'
@@ -87,6 +88,11 @@ export function buildOfferingLlmsUrlsFromSlugs(
 }
 
 /** Compact Tool-first assistant index. Business pages remain human-readable supporting facts. */
+/** Human-followed page links carry UTMs; endpoints that clients call stay bare. */
+function llmsPageLink(baseUrl: string, path: string): string {
+  return withUtm(`${baseUrl}${path}`, { source: 'aecon', medium: 'agent', campaign: 'install', content: 'llms_txt' })
+}
+
 export function buildOfferingLlmsTxt(
   businesses: readonly PublicBusinessCatalogApiV2Dto[],
   options: BuildDiscoveryFileOptions & { totalBusinesses?: number },
@@ -102,7 +108,7 @@ export function buildOfferingLlmsTxt(
     'Public instructions:',
     `- Skill: ${canonicalBaseUrl}/SKILL.md`,
     `- Deployment manifest: ${canonicalBaseUrl}/.well-known/ucp`,
-    `- Human guide: ${canonicalBaseUrl}/for-agents`,
+    `- Human guide: ${llmsPageLink(canonicalBaseUrl, '/for-agents')}`,
     `- Glossary: ${canonicalBaseUrl}/glossary.md`,
     `- OpenAPI: ${canonicalBaseUrl}/openapi.json`,
     `- Release: ${canonicalBaseUrl}/api/v1/release`,
@@ -111,7 +117,7 @@ export function buildOfferingLlmsTxt(
     `- MCP read-only: ${canonicalBaseUrl}/mcp?readonly=1 (discover and read, no buying)`,
     '',
     'Canonical catalogue:',
-    `- Human: ${canonicalBaseUrl}/market`,
+    `- Human: ${llmsPageLink(canonicalBaseUrl, '/market')}`,
     `- Machine search: POST ${canonicalBaseUrl}${TOOL_MARKET_SEARCH_PATH}`,
     `- Browse: POST ${canonicalBaseUrl}${TOOL_MARKET_LIST_PATH}`,
     `- Exact description: POST ${canonicalBaseUrl}${TOOL_MARKET_DESCRIBE_PATH}`,
