@@ -33,14 +33,14 @@ import { privacySections, privacyLastUpdated, privacyOaicLink } from '@/componen
 afterEach(cleanup)
 
 describe('privacy route', () => {
-  it('renders the alpha privacy draft, links its contents, and offers correction or removal', () => {
+  it('renders the privacy policy, links its contents, and offers correction or removal', () => {
     const Component = routeState.component
     if (Component === undefined) throw new Error('privacy_route_component_missing')
 
     render(<Component />)
 
     expect(screen.getByText('How Agentic Economy collects and uses data.')).toBeTruthy()
-    expect(screen.getByText(/Alpha draft for review/u)).toBeTruthy()
+    expect(screen.getByText(/Version 2026-10-11/u)).toBeTruthy()
     expect(screen.getByText(/alpha content and learning periods are set out below/u)).toBeTruthy()
     expect(screen.getByRole('heading', { level: 2, name: '1. Invitation-only alpha learning' })).toBeTruthy()
     expect(screen.getByText(/30 days after final purchase resolution/u)).toBeTruthy()
@@ -48,7 +48,7 @@ describe('privacy route', () => {
     expect(screen.getByRole('link', { name: 'Request a correction or removal' }).getAttribute('href'))
       .toBe('/privacy/remove-business')
 
-    expect(screen.getByText(`Legal · Last updated ${privacyLastUpdated} · Version Alpha draft for review`)).toBeTruthy()
+    expect(screen.getByText(`Legal · Last updated ${privacyLastUpdated} · Version 2026-10-11`)).toBeTruthy()
     for (const [index, section] of privacySections.entries()) {
       const region = screen.getByRole('region', { name: `${index + 1}. ${section.heading}` })
       expect(Array.from(region.querySelectorAll('p'), (p) => p.textContent)).toEqual(section.body)

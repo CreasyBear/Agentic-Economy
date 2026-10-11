@@ -20,17 +20,17 @@ import { utilityDocumentNavigation } from '@/components/ae/website/utility-docum
 afterEach(cleanup)
 
 describe('Terms page', () => {
-  it('marks the alpha terms as a draft and links every contents entry to its section', () => {
+  it('shows the terms version and links every contents entry to its section', () => {
     render(<AeTermsPage />)
 
     expect(screen.getByRole('heading', { level: 2, name: '1. Scope and agreement' })).toBeTruthy()
-    expect(screen.getByText(/Alpha draft for review/u)).toBeTruthy()
+    expect(screen.getByText(/Version 2026-10-11/u)).toBeTruthy()
     expect(screen.getByText(/draws it only after verified settlement and a successful HTTP response/u)).toBeTruthy()
     expect(screen.getByText(/does not revive expired promotional credits/u)).toBeTruthy()
     expect(screen.getByText(/Business customers may also have statutory protections/u)).toBeTruthy()
     expect(screen.getAllByRole('link', { name: 'Trust centre' }).some(link => link.getAttribute('href') === '/trust')).toBe(true)
     expect(screen.getByRole('heading', { level: 1, name: termsTitle })).toBeTruthy()
-    expect(screen.getByText(`Legal · Last updated ${termsLastUpdated} · Version Alpha draft for review`)).toBeTruthy()
+    expect(screen.getByText(`Legal · Last updated ${termsLastUpdated} · Version 2026-10-11`)).toBeTruthy()
     for (const [index, section] of termsSections.entries()) {
       const region = screen.getByRole('region', { name: `${index + 1}. ${section.heading}` })
       expect(Array.from(region.querySelectorAll('p'), (p) => p.textContent)).toEqual(section.body)

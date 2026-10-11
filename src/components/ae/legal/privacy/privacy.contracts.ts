@@ -1,10 +1,11 @@
+import { LEGAL_ENTITY_LINE } from '@/components/ae/legal/legal-version'
 import type { AeSiteUtilityDocumentSection } from '@/components/ae/website/utility-document.contracts'
 
-// Alpha draft: processor locations, remaining retention schedules and legal contact ownership need review.
+// Privacy policy for the invitation-only alpha.
 export const privacyLastUpdated = '6 October 2026'
 export const privacyTitle = 'Privacy policy.'
 export const privacyIntro = 'How Agentic Economy collects and uses data.'
-export const privacyOpening = 'This alpha notice describes information handled by the website, accounts, chat and Tool Calls. The alpha content and learning periods are set out below. Legal contact details, processor locations and schedules for other records remain under review.'
+export const privacyOpening = 'This alpha notice describes information handled by the website, accounts, chat and Tool Calls. The alpha content and learning periods are set out below. This policy is issued by '+LEGAL_ENTITY_LINE+'.'
 export const privacyTermsLead = 'Read alongside our'
 export const privacyTermsLink = 'terms of service'
 export const privacyOaicLead = 'Australian privacy information and complaints guidance are available from the'
@@ -18,7 +19,7 @@ export const privacySections = [
     body: [
       'During the alpha, AE retains Call inputs and results to investigate failures and learn which purchases help the Customer’s Agent continue. The founder, acting through an owner-admin account, may review the content of a selected Call for alpha quality or failure investigation. Each review requires current admin authority and verification, is recorded in Audit without copying content into the audit record, and has a ten-minute access window.',
       'Scheduled cleanup removes eligible Call content 30 days after final purchase resolution. Unresolved delivery, payment, reports, disputes or Provider obligations retain the evidence needed to resolve them. Unused Quote inputs are eligible for cleanup 24 hours after the Quote expires. Cleanup runs hourly and may need additional batches to finish.',
-      'Inactive chat turns and saved search continuation content are eligible after 30 days, provided linked purchases are resolved. Active generation and unresolved purchases delay deletion. Chat titles expire after 30 days from their last update. Message deletion removes embeddings and releases file references; the chat component then keeps unreferenced files for a further 24-hour grace period before storage cleanup.',
+      'Inactive chat turns and saved search continuation content are eligible after 30 days, provided linked purchases are resolved. Active generation and open purchases delay deletion. Chat titles expire after 30 days from their last update. Message deletion removes embeddings and releases file references; the chat component then keeps unreferenced files for a further 24-hour grace period before storage cleanup.',
       'Optional usefulness feedback records a bounded choice and reason, with no free-text comment, prompt or output. Feedback and content-free selection records are retained for 90 days. We use recent usefulness, no-match, failure, latency and cost signals to prioritise fixes and create redacted regression cases. Feedback does not request a refund; use the separate answer-report flow for that.',
       'Separately, optional product feedback submitted through the API, MCP or CLI sends your explicit message to the AE team through PostHog, with pseudonymous Account and Agent attribution and release/environment metadata. Do not include credentials, personal information, Customer business data or Tool inputs and outputs. Product feedback follows the PostHog project’s retention settings, not the 90-day usefulness-feedback period; that vendor retention period remains unverified. Acceptance confirms ingestion, not review or a promised fix. CLI users can prevent feedback submission with DO_NOT_TRACK=1 or AE_DISABLE_ANALYTICS=1; this does not change the remote server’s analytics policy for other requests.',
       'AE records account milestones (sign-up, first credit, first Agent connection, first Quote, first completed Call, activation and week-one return) to see where onboarding stalls. When product analytics is configured, each milestone is sent to PostHog with a one-way hash of the Account reference in place of the Account reference, and with no names, email addresses or content. An owner who opts in to stalled-step emails receives at most one email per stalled step, and each email has a one-click unsubscribe link.',
@@ -63,7 +64,7 @@ export const privacySections = [
       'Preparing a Quote can send the actual proposed inputs to the selected Tool Provider to check its price, before payment or final Call approval. Running the Call sends the relevant inputs and returns its response. Minimise personal information and have authority to disclose information about other people. An Agent’s access does not establish their consent.',
       'Chat sends relevant messages, conversation context and Tool results to the configured model service. Tool selection may also send the request and candidate summaries to a ranking service. OpenRouter and configured model or ranking hosts may process this information. The selected host may vary with the model and routing configuration.',
       'Tool details can show a Provider or endpoint and declared input categories, purposes and release stages. These declarations are not an independent audit of Provider behaviour. They do not always specify retention, training use or processing countries. Do not send sensitive or confidential material unless the available terms and controls meet your requirements; ask Support when they are unclear.',
-      'AE stores chat and Call content needed for the service, including request inputs and outputs, as well as separate transaction and recovery records. A payment receipt is not the only record of a request. The retention section below describes the limits of this draft.',
+      'AE stores chat and Call content needed for the service, including request inputs and outputs, as well as separate transaction and recovery records. A payment receipt is not the only record of a request. The retention section below describes the limits of this policy.',
     ],
   },
   {
@@ -88,7 +89,7 @@ export const privacySections = [
     id: 'transfers',
     heading: 'Overseas processing and public networks',
     body: [
-      'Providers and infrastructure may process information outside Australia. Processing is not restricted to Australia unless expressly agreed for a particular service. This draft does not yet provide a complete list of likely recipient countries; that list and the applicable overseas-disclosure arrangements must be reviewed before publication.',
+      'Providers and infrastructure may process information outside Australia. Processing is not restricted to Australia unless expressly agreed for a particular service. This policy does not list every likely recipient country; ask Support where a particular service processes information.',
       'If a request uses a public settlement network, transaction identifiers, addresses, amounts or timing may be visible to third parties and difficult or impossible to erase. AE will explain the settlement data flow for the service and keep prompts, files and direct personal identifiers off public ledgers. Account deletion cannot remove records from an independently operated public network.',
       'Ask Support before submitting information subject to a particular location or transfer requirement. An endpoint’s domain or a blockchain network does not establish where a Provider processes the request.',
     ],
@@ -118,8 +119,8 @@ export const privacySections = [
     heading: 'Retention and deletion',
     body: [
       'The alpha learning section sets the active-store periods for Call, Quote and chat content, usefulness feedback and selection records. Account data, financial records, diagnostics, support correspondence and backups have separate schedules that remain under review. Closing a chat does not immediately delete all copies.',
-      'A deletion request must be assessed separately for active content, financial and dispute records, backups and information already disclosed to independent Providers. Legal recordkeeping and unresolved transactions can limit deletion. Public blockchain records cannot be erased by closing an AE account.',
-      'Use Support to request access, correction or deletion and to ask what is retained and why. AE will explain applicable limits where lawful. This draft does not promise immediate deletion from every backup or independent recipient.',
+      'A deletion request must be assessed separately for active content, financial and dispute records, backups and information already disclosed to independent Providers. Legal recordkeeping and open transactions can limit deletion. Public blockchain records cannot be erased by closing an AE account.',
+      'Use Support to request access, correction or deletion and to ask what is retained and why. AE will explain applicable limits where lawful. This policy does not promise immediate deletion from every backup or independent recipient.',
     ],
   },
   {
@@ -159,15 +160,15 @@ export const privacySections = [
     id: 'complaints',
     heading: 'Contact and privacy complaints',
     body: [
-      'Raise a privacy request or complaint through Support. The final contracting entity and privacy contact details must be confirmed before this draft is published.',
-      'A complaint should identify the issue, relevant dates and the outcome sought, without unnecessary sensitive information. AE will acknowledge the complaint, investigate it and provide a reasoned response, with escalation where appropriate. Where Australian privacy law applies, a person may raise an unresolved complaint with the Office of the Australian Information Commissioner through oaic.gov.au. Other competent authorities may be available under applicable law.',
+      `Raise a privacy request or complaint through Support. This policy is issued by ${LEGAL_ENTITY_LINE}.`,
+      'A complaint should identify the issue, relevant dates and the outcome sought, without unnecessary sensitive information. AE will acknowledge the complaint, investigate it and provide a reasoned response, with escalation where appropriate. Where Australian privacy law applies, a person may raise an open complaint with the Office of the Australian Information Commissioner through oaic.gov.au. Other competent authorities may be available under applicable law.',
     ],
   },
   {
     id: 'updates',
     heading: 'Changes to this policy',
     body: [
-      'This draft was last updated on 4 October 2026. AE reviews the policy when its services, information practices or legal obligations change.',
+      'This policy was last updated on 6 October 2026. AE reviews the policy when its services, information practices or legal obligations change.',
       'Revisions display their update date. Material changes require appropriate notice before new handling begins, and fresh consent where required. Publishing a revised notice does not retrospectively authorise an unrelated use of information already collected.',
     ],
   },
