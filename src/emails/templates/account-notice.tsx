@@ -14,7 +14,7 @@ export type NoticeKind =
   | 'card_changed' | 'first_call_failed' | 'deletion_cancelled' | 'deletion_final_reminder'
 
 /** Money arrives already formatted by the loader (moneyNoticeAmount), so no amount is retyped here. */
-export type NoticeProps = { siteUrl: string; amount?: string; taskRef?: string; role?: string; when?: string; toolRef?: string; calls?: string; spent?: string; balance?: string }
+export type NoticeProps = { siteUrl: string; amount?: string; taskRef?: string; role?: string; when?: string; toolRef?: string; unsubscribeUrl?: string; calls?: string; spent?: string; balance?: string }
 
 type Notice = {
   subject: (props: NoticeProps) => string
@@ -186,7 +186,10 @@ export default function AccountNoticeEmail({ kind, ...props }: NoticeProps & { k
       preview={notice.preheader(props)}
       siteUrl={props.siteUrl}
       campaign={notice.campaign}
-      reason="You get this because of activity on your account. Required account mail cannot be turned off."
+      {...(props.unsubscribeUrl === undefined ? {} : { unsubscribeUrl: props.unsubscribeUrl })}
+      reason={props.unsubscribeUrl === undefined
+        ? 'You get this because of activity on your account. Required account mail cannot be turned off.'
+        : 'You get this because you created an aecon account. Turn these emails off with the link below.'}
     >
       {/* Structure from emailcn notification-default (vendored at ../vendor/emailcn/notification-default.tsx): heading, then one button. Its export is a full document and cannot nest in Layout, so the pieces are composed here. No actor row: aecon notices have no actor. */}
       <Text className="ae-text" style={{ ...bodyText, fontSize: 22, fontWeight: 500, lineHeight: '28px' }}>{notice.subject(props)}</Text>

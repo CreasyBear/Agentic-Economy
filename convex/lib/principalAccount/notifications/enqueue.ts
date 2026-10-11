@@ -95,6 +95,8 @@ export async function enqueueEmail(ctx: MutationCtx, input: {
   accountRef: string
   sourceEventRef: string
   consentBasis?: 'express' | 'inferred'
+  /** Hold the send until this time (ms epoch), for quiet hours. */
+  notBefore?: number
   evidence?: Pick<Doc<'notificationDeliveries'>, 'usageEvidenceJson' | 'preferenceRevision' | 'authorityRevisionAccount'>
 }): Promise<'enqueued' | 'exists' | 'suppressed'> {
   const existing = await ctx.db.query('notificationDeliveries')
@@ -138,6 +140,7 @@ export async function enqueueEmail(ctx: MutationCtx, input: {
     { deliveryId },
     {
       retry: true,
+      ...(input.notBefore === undefined ? {} : { runAt: input.notBefore }),
       onComplete: internal.notifications.completeDelivery,
       context: { deliveryId },
     },

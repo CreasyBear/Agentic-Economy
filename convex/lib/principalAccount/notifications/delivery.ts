@@ -11,7 +11,9 @@ import type { MutationCtx, QueryCtx } from '../../../_generated/server'
 import { readFundingTaxDocuments } from '../../money/documents/taxInvoices'
 import { resolveClerkUserIdForPrincipal } from '../workspace/directory'
 import { accountOwnerPrincipalRef, ACCOUNT_STATE_KINDS, activeOwnerPrincipalRef, PHASE3_KINDS } from './enqueue'
+import { hasJourneyEvent } from '../../journey/stalled'
 import { isStalledKind, readStalledDeliveryContext } from './stalled'
+import { unsubscribeUrlFor } from './unsubscribe'
 import { recordSuppression, suppressionCode } from './suppression'
 
 export const readSendSuppressionArgs = { deliveryId: v.id('notificationDeliveries'), addressHash: v.string() }
@@ -196,6 +198,14 @@ async function readAccountNoticeContext(ctx: QueryCtx, delivery: Doc<'notificati
   const siteUrl = process.env.AE_SITE_URL?.trim().replace(/\/+$/u, '')
   if (siteUrl === undefined || siteUrl.length === 0) return skip('site_url_missing')
   const props: Record<string, string> = delivery.eventKind === 'provider_live' ? { toolRef: delivery.sourceEventRef } : {}
+  if (delivery.eventKind === 'welcome') {
+    // Lifecycle mail, so exit and opt-out are re-read now (design doc section 5). Welcome is first in the sequence and never dropped by caps.
+    if (await hasJourneyEvent(ctx, delivery.accountRef, 'funded')) return skip('welcome_funded')
+    if (await hasJourneyEvent(ctx, delivery.accountRef, 'lifecycle_unsubscribed')) return skip('opted_out')
+    const unsubscribeUrl = await unsubscribeUrlFor({ principalRef: delivery.recipientPrincipalRef, accountRef: delivery.accountRef, stream: 'lifecycle' })
+    if (unsubscribeUrl === null) return skip('unsubscribe_url_missing')
+    props.unsubscribeUrl = unsubscribeUrl
+  }
   if (delivery.eventKind === 'role_changed') {
     const role = (await readActiveMembership(ctx, delivery))?.role
     if (role === undefined) return skip('role_unknown')
