@@ -240,6 +240,10 @@ npm run test:chat:conformance
 npm run test:cli-package
 ```
 
+`npm run gate` sets `AE_DEPLOYMENT_ENVIRONMENT=development` and
+`AE_FORMANCE_ENVIRONMENT=sandbox` itself. Its docs stage needs the docs site
+dependencies from `npm --prefix packages/docs ci`.
+
 ## Machine quickstart
 
 The following documents the accepted source CLI contract. It is not a hosted
