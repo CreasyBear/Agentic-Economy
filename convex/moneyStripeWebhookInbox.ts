@@ -2,7 +2,7 @@ import { vOnCompleteArgs } from '@convex-dev/workpool'
 import { makeFunctionReference } from 'convex/server'
 import { v, type Infer } from 'convex/values'
 
-import { internalMutation, internalQuery, mutation } from './_generated/server'
+import { internalMutation, internalQuery, mutation, type MutationCtx } from './_generated/server'
 import { stripeMoneyWebhookEventArg } from './moneyLedgerValues'
 import {
   stripeWebhookAdmissionResultValue,
@@ -15,7 +15,7 @@ import { stripeWebhookWorkpool } from './stripeWebhookWorkpool'
 
 const processStripeWebhookRef = makeFunctionReference<
   'action',
-  { stripeEventId: string },
+  { stripeEventId: string; attempt?: number },
   Infer<typeof stripeWebhookWorkResultValue>
 >('moneyStripeWebhookWorker:process')
 const completeStripeWebhookRef = makeFunctionReference<
@@ -30,6 +30,15 @@ const completeStripeWebhookRef = makeFunctionReference<
   },
   null
 >('moneyStripeWebhookInbox:complete')
+
+function enqueueProcess(ctx: MutationCtx, stripeEventId: string, attempt?: number) {
+  return stripeWebhookWorkpool.enqueueAction(
+    ctx,
+    processStripeWebhookRef,
+    attempt === undefined ? { stripeEventId } : { stripeEventId, attempt },
+    { retry: true, onComplete: completeStripeWebhookRef, context: { stripeEventId } },
+  )
+}
 
 const ingestArgs = v.object({
   destination: stripeWebhookDestinationValue,
@@ -69,16 +78,7 @@ export const ingest = mutation({
             completedAt: undefined,
             updatedAt: now,
           })
-          const workId = await stripeWebhookWorkpool.enqueueAction(
-            ctx,
-            processStripeWebhookRef,
-            { stripeEventId: existing.stripeEventId },
-            {
-              retry: true,
-              onComplete: completeStripeWebhookRef,
-              context: { stripeEventId: existing.stripeEventId },
-            },
-          )
+          const workId = await enqueueProcess(ctx, existing.stripeEventId)
           await ctx.db.patch(existing._id, { workId })
           return { kind: 'accepted', status: 'queued' }
         }
@@ -104,16 +104,7 @@ export const ingest = mutation({
       receivedAt: now,
       updatedAt: now,
     })
-    const workId = await stripeWebhookWorkpool.enqueueAction(
-      ctx,
-      processStripeWebhookRef,
-      { stripeEventId: args.event.stripeEventId },
-      {
-        retry: true,
-        onComplete: completeStripeWebhookRef,
-        context: { stripeEventId: args.event.stripeEventId },
-      },
-    )
+    const workId = await enqueueProcess(ctx, args.event.stripeEventId)
     await ctx.db.patch(rowId, { workId })
     return { kind: 'accepted', status: 'queued' }
   },
@@ -167,6 +158,20 @@ export const listStuckForOperator = internalQuery({
   },
 })
 
+/** Scheduled by the worker after a retryable refusal; re-enqueues the work under a fresh workId. */
+export const requeue = internalMutation({
+  args: { stripeEventId: v.string(), attempt: v.number() },
+  returns: v.null(),
+  handler: async (ctx, { stripeEventId, attempt }) => {
+    const row = await ctx.db.query('moneyStripeWebhookInbox')
+      .withIndex('by_stripeEventId', (index) => index.eq('stripeEventId', stripeEventId))
+      .unique()
+    if (row === null || row.state !== 'queued' || row.conflictPayloadDigest !== undefined) return null
+    await ctx.db.patch(row._id, { workId: await enqueueProcess(ctx, stripeEventId, attempt), updatedAt: Date.now() })
+    return null
+  },
+})
+
 export const complete = internalMutation({
   args: vOnCompleteArgs(v.object({ stripeEventId: v.string() }), stripeWebhookWorkResultValue),
   returns: v.null(),
@@ -185,6 +190,7 @@ export const complete = internalMutation({
       })
       return null
     }
+    if (result.returnValue.kind === 'retry_scheduled') return null
     if (result.returnValue.kind === 'reconciliation_required') {
       await ctx.db.patch(row._id, {
         state: 'reconciliation_required',

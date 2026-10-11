@@ -63,6 +63,7 @@ export const sendMessage = internalMutation({
       },
       threadId: args.threadId, prompt, clientTurnId: crypto.randomUUID(),
     })
+    if ('kind' in turn) throw new Error('thread_busy')
     return { threadId: turn.threadId, promptMessageId: turn.promptMessageId }
   },
 })

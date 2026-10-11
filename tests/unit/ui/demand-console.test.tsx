@@ -1305,6 +1305,7 @@ describe('assistant access components', () => {
     }
     const begin = vi.fn(async () => ({ kind: 'ok' as const, commandRef: 'funding:blocked', session }))
     const redirectToCheckout = vi.fn(() => { throw new Error('popup blocked') })
+    creditReads.capture.mockClear()
     render(<AeAccountFundingPanel port={{ begin, read: vi.fn() }} constraints={fundingConstraints} redirectToCheckout={redirectToCheckout} />)
 
     fireEvent.change(screen.getByLabelText(/other amount/i), { target: { value: '10.00' } })
@@ -1314,6 +1315,7 @@ describe('assistant access components', () => {
     expect(screen.getByRole('button', { name: 'Continue secure payment' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Refresh payment status' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Add more credit' })).toBeNull()
+    expect(creditReads.capture).not.toHaveBeenCalled()
   })
 
   it.each(['refused', 'transport failure'] as const)('resumes confirmed checkout, then requires status refresh after %s', async (failure) => {

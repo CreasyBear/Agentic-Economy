@@ -22,4 +22,5 @@ export const stripeWebhookWorkResultValue = v.union(
     kind: v.literal('reconciliation_required'),
     code: v.string(),
   }),
+  v.object({ kind: v.literal('retry_scheduled') }),
 )

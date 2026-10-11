@@ -8,15 +8,16 @@ import { chatModelCostHooks } from '../../../convex/lib/chat/generate/modelCost'
 import { openRouterModel } from '@/modules/model-gateway/public'
 import type { ChatModelCostBinding } from '@/modules/chat/model-cost'
 import { convexTestWithMarketComponents, publishedBusinessOwner } from '../../helpers/convex-fixtures'
+import { startedTurn } from '../../helpers/started-turn'
 
 async function trackedTurn() {
   const backend = convexTestWithMarketComponents()
   const { owner } = await publishedBusinessOwner(backend, 'model-cost-hooks-owner')
   vi.useFakeTimers()
   try {
-    const binding = await owner.mutation(api.chatTurns.startTurn, {
+    const binding = startedTurn(await owner.mutation(api.chatTurns.startTurn, {
       principal: { kind: 'clerk' }, clientTurnId: 'model-cost-hooks', prompt: 'A private test question',
-    })
+    }))
     await backend.run(async ctx => {
       const jobs = await ctx.db.system.query('_scheduled_functions').take(100)
       for (const job of jobs) {

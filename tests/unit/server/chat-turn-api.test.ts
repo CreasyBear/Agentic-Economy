@@ -226,7 +226,6 @@ describe('authenticated chat Turn HTTP adapter', () => {
 
   it.each([
     ['turn_conflict', 409, 'ALREADY_EXISTS'],
-    ['turn_fenced', 409, 'FAILED_PRECONDITION'],
     ['turn_invalid', 400, 'INVALID_ARGUMENT'],
     ['turn_not_found', 404, 'NOT_FOUND'],
   ] as const)('maps ConvexError.data.code %s to %i %s without inspecting redacted messages', async (code, status, kind) => {
@@ -234,6 +233,13 @@ describe('authenticated chat Turn HTTP adapter', () => {
     const response = await handleChatTurnPost(post(), options(store))
     expect(response.status).toBe(status)
     expect(await response.json()).toMatchObject({ code, kind })
+  })
+
+  it('maps a typed not_started turn_fenced result to 409 without throwing', async () => {
+    const store = source({ start: async () => ({ kind: 'not_started' as const, code: 'turn_fenced' as const }) })
+    const response = await handleChatTurnPost(post(), options(store))
+    expect(response.status).toBe(409)
+    expect(await response.json()).toMatchObject({ code: 'turn_fenced', kind: 'FAILED_PRECONDITION' })
   })
 
   it('projects stream-time key revocation as a nonretryable 401 with an owner authentication handoff', async () => {

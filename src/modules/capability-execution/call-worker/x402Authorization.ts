@@ -750,7 +750,7 @@ export function createX402PaymentCallbacks(
         settlementEvidence: _settlementEvidence,
         ...paymentEvent
       } = event
-      await ctx.runMutation(internal.moneyX402PaymentAttempts.markX402PaymentPossiblySubmitted, {
+      const marked = await ctx.runMutation(internal.moneyX402PaymentAttempts.markX402PaymentPossiblySubmitted, {
         dispatchRef: input.dispatch.callRef,
         effectGeneration: input.effectGeneration,
         ...paymentEvent,
@@ -758,6 +758,7 @@ export function createX402PaymentCallbacks(
         currency: input.useCustodySigner === true ? 'USDC' : amount.currency,
         exponent: amount.exponent,
       })
+      if (marked !== null) return false
       input.onPaymentPossiblySubmitted?.()
     },
     checkpointX402Response: async (response) => {

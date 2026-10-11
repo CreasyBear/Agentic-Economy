@@ -55,7 +55,11 @@ export const startTurnArgs = {
     prompt: v.string(), clientTurnId: v.string(),
     continuation: v.optional(searchContinuationValue), ...proofArgs,
   }
-export const startTurnResult = startValue
+export const startTurnResult = v.union(
+  startValue,
+  // Thread still answering: expected state, returned as data so it is never an exception.
+  v.object({ kind: v.literal('not_started'), code: v.literal('turn_fenced') }),
+)
 
 export const cancelTurnArgs = turnReadArgs
 export const cancelTurnResult = v.union(
