@@ -18,7 +18,7 @@ import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { readTrimmedEnv } from '@/lib/server/read-trimmed-env'
 import { package5RolloutDecision } from '@/lib/server/package5-rollout'
 import { sourceWriteAdmissionFromContext } from '@/lib/server/source-write-admission'
-import { isSafeAuthorizationUrl } from '../../provider-connection.contracts'
+import { validRedirectUri } from '@/lib/server/agent-access-oauth/protocol'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { sendGuardedHttpRequest } from '@/modules/network-guard/server'
 import { defaultDnsResolver, isPublicHttpTarget } from '@/modules/network-guard/public'
@@ -422,7 +422,7 @@ export async function startOwnerMcpProviderConnection(
     return degradeBackend(cause, startRefusal('source_unavailable'), { site: 'startOwnerMcpProviderConnection', reason: 'source_unavailable' })
   }
   const authorizationUrl = provider.authorizationUrl
-  if (authorizationUrl === undefined || !isSafeAuthorizationUrl(authorizationUrl) || !provider.readyForRedirect()) {
+  if (authorizationUrl === undefined || !validRedirectUri(authorizationUrl) || !provider.readyForRedirect()) {
     return startRefusal('connection_conflict')
   }
   const material = new TextEncoder().encode(provider.serialize())

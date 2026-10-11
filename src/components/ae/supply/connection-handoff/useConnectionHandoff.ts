@@ -6,7 +6,6 @@ import { isReverificationCancelledError } from '@clerk/tanstack-react-start/erro
 
 import { captureClientExceptionOnClient } from '@/lib/observability/capture-client-exception'
 import { degrade } from '@/lib/observability/degrade'
-import { isSafeAuthorizationUrl } from '@/modules/capability-supply/provider-connection.contracts'
 import {
   cancelOwnerProviderConnectionAttemptServer,
   completeOwnerHttpProviderConnectionServer,
@@ -162,7 +161,7 @@ export function useConnectionHandoff({ loaded }: AeConnectionHandoffProps) {
         idempotencyKey: mcpIdempotencyKeyRef.current,
       } })
       if (result.kind === 'redirect') {
-        if (!isSafeAuthorizationUrl(result.authorizationUrl)) {
+        if (!/^https:\/\//i.test(result.authorizationUrl) && !/^http:\/\/(localhost|127\.0\.0\.1|\[::1\])[:/]/i.test(result.authorizationUrl)) {
           setMcpError('Agentic Economy could not start sign in. The provider returned an unsafe sign-in address.')
           return
         }
