@@ -73,7 +73,10 @@ export function createConvexSecretLifecyclePersistence(
       if (row === null
         || row.state !== expectedState
         || row.updatedAt > canonical.updatedAt
-        || !recordsShareIdentity(recordFromRow(row), canonical)) {
+        || !recordsShareIdentity(recordFromRow(row), canonical)
+        || row.authority.accountRef !== authority.accountRef
+        || (authority.operation !== 'reconcile'
+          && !authoritiesEqual(canonicalAuthority(row.authority), authority))) {
         throw new SecretLifecycleError('secret_lifecycle_conflict')
       }
       await requireSnapshot(ctx, authority, canonical.secretRef)
@@ -97,6 +100,7 @@ export function createConvexSecretLifecyclePersistence(
       if (row.owningAccountRef !== authority.accountRef) {
         throw new SecretLifecycleError('secret_lifecycle_conflict')
       }
+      await requireSnapshot(ctx, authority, canonicalRef)
       return Object.freeze({
         secretRef: canonicalRef,
         activeGeneration: secretGeneration(row.activeGeneration),
