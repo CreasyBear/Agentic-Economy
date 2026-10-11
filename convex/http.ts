@@ -2,6 +2,7 @@ import { httpRouter } from 'convex/server'
 
 import { internal } from './_generated/api'
 import { httpAction } from './_generated/server'
+import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 
 import { anonymousChat } from './chatAnonymous'
 import {
@@ -40,12 +41,16 @@ const STREAM_LABEL = { alert: 'account alert emails', lifecycle: 'stalled-step e
 const invalidPage = () => page(`<p>This unsubscribe link is not valid. Manage emails in ${settingsLink('notification settings')}.</p>`, 404)
 
 // Resend posts here with a Svix signature. The raw body goes to a node action that verifies it before any state changes.
+const MAX_RESEND_WEBHOOK_BYTES = 64 * 1024
 http.route({ path: '/resend/webhook', method: 'POST', handler: httpAction(async (ctx, request) => {
+  const svixId = request.headers.get('svix-id') ?? ''
+  const svixTimestamp = request.headers.get('svix-timestamp') ?? ''
+  const svixSignature = request.headers.get('svix-signature') ?? ''
+  if (!svixId || !svixTimestamp || !svixSignature) return new Response(null, { status: 400 })
+  const bounded = await readBoundedRequestText(request, MAX_RESEND_WEBHOOK_BYTES)
+  if (!bounded.ok) return new Response(null, { status: 413 })
   const result = await ctx.runAction(internal.emailWebhook.receiveResendWebhook, {
-    rawBody: await request.text(),
-    svixId: request.headers.get('svix-id') ?? '',
-    svixTimestamp: request.headers.get('svix-timestamp') ?? '',
-    svixSignature: request.headers.get('svix-signature') ?? '',
+    rawBody: bounded.text, svixId, svixTimestamp, svixSignature,
   })
   return new Response(null, { status: result === 'invalid' ? 400 : 200 })
 }) })
