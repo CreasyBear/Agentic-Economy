@@ -237,6 +237,7 @@ export async function callHandler(
           expiresAt: new Date(authorityExpiresAt).toISOString(),
         }
         const fixedPriceAmount = pricingConfigDecisionAmount(operation.pricingConfig)
+        const maximumSpend = args.decisionPrice ?? fixedPriceAmount
         const freeRead = principal.applicationRef !== 'ae-owner-chat'
           && descriptor.consequenceClass === 'read_only'
           && descriptor.authorityRequirement === 'none'
@@ -254,7 +255,7 @@ export async function callHandler(
             toolRef,
             consequence: descriptor.consequenceClass,
             retryClass: descriptor.retryClass,
-            ...(fixedPriceAmount === undefined ? {} : { maximumSpend: fixedPriceAmount }),
+            ...(maximumSpend === undefined ? {} : { maximumSpend }),
             dataFields: descriptor.materialInputPointers,
           },
         }

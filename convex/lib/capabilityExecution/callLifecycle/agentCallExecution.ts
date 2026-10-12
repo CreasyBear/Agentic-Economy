@@ -49,7 +49,7 @@ export async function canonicalAgentCallCore(
   ctx: ActionCtx,
   args: CanonicalCallArgs,
   trustedChat?: TrustedChatAuthority,
-  /** Chat Calls without user-intent evidence stop at the existing owner approval. */
+  /** An explicit server-side requirement may narrow the current grant to per-Call approval. */
   requireApproval = false,
 ): Promise<Infer<typeof callResultValue>> {
   const material = await ctx.runQuery(internal.capabilityQuotes.readForCall, {

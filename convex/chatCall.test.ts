@@ -8,14 +8,15 @@ import { call } from './chatCall'
 const principal = { principalId: 'prn_1' }
 const authority = { applicationRef: 'ae-owner-chat', turnRef: 't', credentialLocator: 'c', scopes: [] }
 
-describe('chatCall.call approval gate', () => {
-  it('requires owner approval even when the user text names the toolRef', async () => {
+describe('chatCall.call authority policy', () => {
+  it.each([undefined, false, true])('preserves an explicit approval requirement of %s', async (requireApproval) => {
+    core.mockClear()
     const ctx = { runMutation: vi.fn(async () => principal), runQuery: vi.fn() }
-    // A model-visible mention of the Tool must not clear approval (on main, includes() did).
     await (call as unknown as { _handler: (c: unknown, a: unknown) => Promise<unknown> })._handler(ctx, {
       authority, quoteRef: 'q', idempotencyKey: 'k', operationKey: 'o', correlationId: 'c',
-      userRequestText: 'tell me about tool.example.run',
+      ...(requireApproval === undefined ? {} : { requireApproval }),
     })
-    expect(core).toHaveBeenCalledWith(ctx, expect.anything(), authority, true)
+    expect(core).toHaveBeenCalledTimes(1)
+    expect(core).toHaveBeenCalledWith(ctx, expect.objectContaining({ principal }), authority, requireApproval === true)
   })
 })
