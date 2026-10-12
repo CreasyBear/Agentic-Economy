@@ -26,7 +26,7 @@ import { parseToolInputJson, supportsToolInputForm, toolInputSchema, toolInputVa
 import { toolInputFixedValues, toolInputUiSchema } from './public-tool-detail/tool-input-ui'
 import styles from './public-tool-detail/ToolPage.module.css'
 
-/** How a run leaves this page: the existing chat quote, approve, call and receipt path, or somewhere else. */
+/** How a run leaves this page: the existing Quote, authorized Call and receipt path, or somewhere else. */
 export type ToolRun =
   | Readonly<{ kind: 'callable'; toolRef: string }>
   | Readonly<{ kind: 'elsewhere'; label: string; href: string; reason: string }>
@@ -138,7 +138,7 @@ export function DirectoryToolPlayground({ run, input, sampleOutputJson, inputNot
 
     {callable
       ? <Alert tone="info" title="Your agent can do this on its own">
-        Add the MCP URL in Claude Code, Cursor or Codex. Nothing runs until you approve the price. <a href="#connect" className={styles.inlineLink}>Connect your agent</a>
+        Add the MCP URL in Claude Code, Cursor or Codex. Your agent can run Tools within its spending limits, or ask for approval each time. <a href="#connect" className={styles.inlineLink}>Connect your agent</a>
       </Alert>
       : null}
   </div>

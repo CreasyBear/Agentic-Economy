@@ -151,7 +151,7 @@ function ToolPageBody({ model, search, onSearchChange }: ToolPageProps) {
               {baseUrl === undefined
                 ? <p className={styles.muted}>Agent setup is unavailable right now. You can still run this tool here.</p>
                 : <>
-                  <p className={styles.muted}>Add one MCP URL and your agent can find and run this tool. It asks you before it pays.</p>
+                  <p className={styles.muted}>Add one MCP URL and your agent can find and run this tool within its spending limits. Choose “Ask each time” if you want to approve every Call.</p>
                   <ToolConnect baseUrl={baseUrl} toolRef={run.toolRef} sampleInput={input.errors.length === 0 ? input.value : parseToolInputJson(model.sampleInputJson)} />
                 </>}
             </section>

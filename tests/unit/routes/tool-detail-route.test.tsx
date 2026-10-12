@@ -571,7 +571,7 @@ describe('/tools/$toolRef', () => {
     if (!(disclosure instanceof HTMLElement)) throw new Error('disclosure_missing')
     expect(within(disclosure).getByText('/documentUrl')).toBeTruthy()
     expect(within(disclosure).getByText('/includeTax')).toBeTruthy()
-    expect(disclosure.textContent).toContain('Nothing runs until you approve the price.')
+    expect(disclosure.textContent).toContain('Calls use your Agent’s existing authority and spending limits.')
     const run = screen.getAllByRole('link', { name: 'Run this call' })[0]
     if (run === undefined) throw new Error('run_missing')
     const prompt = new URL(run.getAttribute('href') ?? '', 'https://aecon.test').searchParams.get('q')

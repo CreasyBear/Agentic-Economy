@@ -112,8 +112,8 @@ function readinessBadge(recipientUnverified: boolean, posture: string | undefine
 
 function InputRecipient({ tool }: Readonly<{ tool: PublicToolDescriptor }>) {
   const fields = [...new Set(tool.dataUse.map(effect => effect.inputPointer))]
-  if (fields.length === 0) return <Alert tone="info" title={`${tool.business.name} hasn’t declared which input fields it receives`}>Check the input schema before you run it. Nothing runs until you approve the price.</Alert>
+  if (fields.length === 0) return <Alert tone="info" title={`${tool.business.name} hasn’t declared which input fields it receives`}>Check the input schema before you run it. Calls use your Agent’s existing authority and spending limits.</Alert>
   return <Alert tone="info" title={`Your input goes to ${tool.business.name}`}>
-    Fields sent: {fields.map((field, index) => <span key={field}>{index === 0 ? '' : ', '}<code>{field}</code></span>)}. Nothing runs until you approve the price.
+    Fields sent: {fields.map((field, index) => <span key={field}>{index === 0 ? '' : ', '}<code>{field}</code></span>)}. Calls use your Agent’s existing authority and spending limits.
   </Alert>
 }

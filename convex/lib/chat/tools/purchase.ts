@@ -186,7 +186,7 @@ export function createPurchaseTools(authority: TrustedChatAuthority & { kind: 'a
   }
 }
 
-/** Card Quote then Call. Call stops at the existing owner approval; it does not settle. */
+/** Card Quote then Call using current authority; approval-required grants wait for the owner. */
 export async function quoteThenCallFromCard(
   ctx: ActionCtx,
   authority: TrustedChatAuthority & { kind: 'agent_key' },

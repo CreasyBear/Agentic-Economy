@@ -169,7 +169,12 @@ export const readOwnerChatCards = query({
 })
 
 
-/** Internal-only Call: the public source-write wrapper remains unchanged. */
+/**
+ * Requires: a current key, grant, turn and matching Quote, rechecked by the Call core.
+ * Ensures: spending-policy Calls use that authority without an extra owner gate.
+ * Invariant: Tool scope, financial limits and idempotency remain canonical.
+ * On violation: refuse; explicit approval requirements still return needs_authority.
+ */
 export const call = internalAction({
   args: {
     authority: trustedChatAuthorityValue,
@@ -185,12 +190,10 @@ export const call = internalAction({
       authority: args.authority, quoteRef: args.quoteRef,
     })
     if (principal === null) return { kind: 'refused' as const, code: 'grant_not_found', retryable: false }
-    // Owner chat always waits for the owner's decision on the pending approval; model-visible text never clears it.
-    const requireApproval = args.requireApproval === true || args.authority.applicationRef === 'ae-owner-chat'
     const result = await canonicalAgentCallCore(ctx, {
       principal, quoteRef: args.quoteRef, idempotencyKey: args.idempotencyKey,
       operationKey: args.operationKey, correlationId: args.correlationId,
-    }, args.authority, requireApproval)
+    }, args.authority, args.requireApproval === true)
     if (args.authority.applicationRef === 'ae-owner-chat' && result.kind !== 'refused') {
       const recorded = await ctx.runMutation(internal.chatTurns.recordOwnerChatCall, {
         authority: args.authority, quoteRef: args.quoteRef, callRef: result.callRef,

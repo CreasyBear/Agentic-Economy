@@ -48,6 +48,8 @@ import {
 import { AUTHORITY_REQUEST_TTL_MS } from '../../../convex/lib/capabilityExecution/callLifecycle/admissionApprovals'
 import { canonicalOwnerApprovalDecisionHandler } from '../../../convex/lib/capabilityExecution/callLifecycle/ownerCallAuthority'
 import { buildDevelopmentPublishedToolEvidence } from '../capability-supply/fixtures/development-published-tool-evidence'
+import { buildDevelopmentAlternatePublishedToolEvidence } from '../capability-supply/fixtures/development-alternate-published-tool-evidence'
+import { call as chatCall } from '../../../convex/chatCall'
 import {
   createPublicToolRef,
   materializeRuntimePublishedTool,
@@ -182,6 +184,7 @@ async function approvalCommand(args: Record<string, unknown>) {
 }
 const listHandler = (listPendingCallApprovals as unknown as { _handler: Handler })._handler
 const callHandler = (call as unknown as { _handler: Handler })._handler
+const chatCallHandler = (chatCall as unknown as { _handler: Handler })._handler
 const expireOneHandler = (expireStaleApproval as unknown as { _handler: Handler })._handler
 const reserveHandler = (reserve as unknown as { _handler: Handler })._handler
 
@@ -1060,11 +1063,30 @@ describe('approval request expiry', () => {
   })
 })
 describe('bounded mandate invocation dispatch', () => {
-  it('dispatches with the active grant standing mandate and grant expiry', async () => {
-    const boundedPrincipal = { ...principal, authorityMode: 'spending_policy' as const }
-    const grantRow = grant()
+  it.each([
+    { name: 'agent spending policy', ownerChat: false, mode: 'spending_policy', expected: 'pending' },
+    { name: 'owner chat spending policy', ownerChat: true, mode: 'spending_policy', expected: 'pending' },
+    { name: 'owner chat ask each time with accepted AUD consideration', ownerChat: true, mode: 'approval_required', expected: 'needs_authority' },
+    { name: 'owner chat ask each time with a managed Quote', ownerChat: true, mode: 'approval_required', managed: true, expected: 'needs_authority' },
+    { name: 'explicit server approval requirement with a managed Quote', ownerChat: true, mode: 'spending_policy', managed: true, requireApproval: true, expected: 'needs_authority' },
+    { name: 'owner chat without current authority', ownerChat: true, mode: 'spending_policy', unauthorized: true, expected: 'refused' },
+    { name: 'owner chat with exhausted allowance', ownerChat: true, mode: 'spending_policy', overBudget: true, expected: 'refused' },
+  ] as const)('$name uses current authority and preserves financial admission', async (scenario) => {
+    const boundedPrincipal = { ...principal, authorityMode: scenario.mode,
+      applicationRef: scenario.ownerChat ? 'ae-owner-chat' : principal.applicationRef }
+    const currentOperation = 'managed' in scenario ? buildDevelopmentAlternatePublishedToolEvidence().tool : operation
+    const currentToolRef = createPublicToolRef({
+      operationId: currentOperation.operationId,
+      publicationRef: currentOperation.identity.publicationRef,
+      publicationRevision: currentOperation.identity.publicationRevision,
+      contractRef: currentOperation.contract.ref,
+    })
+    const decisionPrice = { currency: 'AUD', exponent: 6, units: '1432' } as const
+    const grantRow = grant({ applicationRef: boundedPrincipal.applicationRef,
+      authorityMode: scenario.mode === 'spending_policy' ? 'bounded_mandate' : 'approve_each' })
     const activeGrant = normalizeStoredAgentAccessGrant(grantRow)
     let dispatchedAuthority: Record<string, unknown> | undefined
+    let replayResult: unknown
     const reservation = {
       quoteRef,
       principalId: boundedPrincipal.principalId,
@@ -1075,10 +1097,10 @@ describe('bounded mandate invocation dispatch', () => {
       policyDigest: activeGrant.spendingPolicyDigest,
       grantExpiresAt: activeGrant.expiresAt,
       environment: boundedPrincipal.environment,
-      toolRef,
+      toolRef: currentToolRef,
       idempotencyKey: 'idempotency:bounded',
       inputDigest: canonicalDigest(input),
-      requestDigest: canonicalDigest({ toolRef, input }),
+      requestDigest: canonicalDigest({ toolRef: currentToolRef, input }),
       callRef: 'operation-invocation:v1:bounded',
     }
     const ctx = {
@@ -1088,8 +1110,13 @@ describe('bounded mandate invocation dispatch', () => {
             return true
           case 'capabilityCalls:resolveCallAgentAuthority':
             return args.principal
+          case 'chatCall:authorize':
+            return 'unauthorized' in scenario ? null : boundedPrincipal
+          case 'chatTurns:recordOwnerChatCall':
+            return true
           case 'capabilityCalls:reserve':
-            return { kind: 'reserved', reservation }
+            return 'overBudget' in scenario ? { kind: 'refused', code: 'budget_exceeded', retryable: false }
+              : { kind: 'reserved', reservation }
           case 'capabilityCalls:dispatch':
             dispatchedAuthority = args.authority as Record<string, unknown>
             return { kind: 'enqueued', workId: 'workpool:bounded' }
@@ -1102,15 +1129,18 @@ describe('bounded mandate invocation dispatch', () => {
       runQuery: vi.fn(async (reference: unknown) => {
         switch (functionPath(reference)) {
           case 'capabilityQuotes:readForCall':
+            if (replayResult !== undefined) return { toolRef: currentToolRef, consumedCallRef: reservation.callRef }
             return {
-              toolRef,
+              toolRef: currentToolRef,
               input,
-              decisionPrice: { currency: 'AUD', exponent: 6, units: '1000000' },
+              decisionPrice,
               quoteRef,
               evidenceDigest: `sha256:${'a'.repeat(64)}`,
             }
+          case 'capabilityCalls:readReplay':
+            return { toolRef: currentToolRef, state: 'pending', result: replayResult }
           case 'capabilitySupplyTools:readCurrentPublishedToolSnapshot':
-            return { toolJson: JSON.stringify(operation) }
+            return { toolJson: JSON.stringify(currentOperation) }
           case 'agentAccessPolicy:readActiveGrant':
             return activeGrant
           case 'moneyManagedCall:readBooking':
@@ -1122,15 +1152,35 @@ describe('bounded mandate invocation dispatch', () => {
         }
       }),
     }
-    const result = await callHandler(ctx, {
+    const command = {
       operationKey: 'operation-invoke:bounded',
       correlationId: 'correlation:bounded',
-      principal: boundedPrincipal,
       quoteRef,
       idempotencyKey: 'idempotency:bounded',
-    })
+    }
+    const chatCommand = {
+      ...command,
+      authority: { kind: 'agent_key', turnRef: 'turn:bounded', credentialLocator: boundedPrincipal.credentialId,
+        applicationRef: boundedPrincipal.applicationRef, environment: boundedPrincipal.environment,
+        scopes: boundedPrincipal.scopes, grantRef: activeGrant.grantRef },
+      ...('requireApproval' in scenario ? { requireApproval: scenario.requireApproval } : {}),
+    }
+    const result = scenario.ownerChat ? await chatCallHandler(ctx, chatCommand)
+      : await callHandler(ctx, { ...command, principal: boundedPrincipal })
 
-    expect(result).toMatchObject({ kind: 'pending', callRef: reservation.callRef, toolRef })
+    expect(result).toMatchObject({ kind: scenario.expected })
+    if (scenario.expected === 'refused') {
+      expect(result).toMatchObject({ code: 'unauthorized' in scenario ? 'grant_not_found' : 'budget_exceeded' })
+    } else {
+      expect(result).toMatchObject({ callRef: reservation.callRef, toolRef: currentToolRef })
+    }
+    if (scenario.expected === 'needs_authority') {
+      expect(result).toMatchObject({ authorityRequest: { maximumSpend: decisionPrice } })
+    }
+    if (scenario.expected !== 'pending') {
+      expect(dispatchedAuthority).toBeUndefined()
+      return
+    }
     expect(dispatchedAuthority).toMatchObject({
       acceptedBasis: {
         kind: 'spending_policy_use',
@@ -1140,6 +1190,13 @@ describe('bounded mandate invocation dispatch', () => {
       },
       expiresAt: new Date(activeGrant.expiresAt).toISOString(),
     })
+    if (scenario.ownerChat) {
+      replayResult = result
+      expect(await chatCallHandler(ctx, chatCommand)).toEqual(result)
+      for (const name of ['capabilityCalls:reserve', 'capabilityCalls:dispatch']) {
+        expect(ctx.runMutation.mock.calls.filter(([reference]) => functionPath(reference) === name)).toHaveLength(1)
+      }
+    }
   })
 })
 
