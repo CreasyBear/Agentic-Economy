@@ -97,6 +97,39 @@ describe('complete external directory index', () => {
   beforeEach(() => { vi.useFakeTimers(); vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production') })
   afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs() })
 
+  it.each(['complete', 'failed'] as const)('preserves last successful coverage while a refresh is pending or %s', async (outcome) => {
+    const { backend, workload } = await setup()
+    const generation = `coinbase-completion-${outcome}`
+    await seedRefresh(backend, generation)
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, {
+      generation, offset: 0, reportedTotal: 1, observedAt: 2, runStartedAt: 1, workload, items: [source(1)],
+    })
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, {
+      generation, offset: 100, reportedTotal: 1, observedAt: 3, runStartedAt: 1, workload, items: [],
+    })
+
+    expect(await backend.mutation(internal.x402DirectoryIndexStore.begin, { startedAt: 4, workload }))
+      .toEqual({ kind: 'started', generation })
+    expect(await backend.mutation(internal.x402DirectoryIndexStore.begin, { startedAt: 5, workload }))
+      .toEqual({ kind: 'refreshing', generation })
+    expect(await backend.query(api.x402DirectoryIndex.status, {}))
+      .toMatchObject({ kind: 'ready', refreshState: 'refreshing', coverage: { completedAt: 3 } })
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, {
+      generation, offset: 0, reportedTotal: 1, observedAt: 6, runStartedAt: 4, workload, items: [source(1)],
+    })
+    expect(await backend.query(api.x402DirectoryIndex.browse, { paginationOpts: { cursor: null, numItems: 10 } }))
+      .toMatchObject({ kind: 'ok', coverage: { completedAt: 3 }, page: [{ entry: { resource: source(1).resource } }] })
+    if (outcome === 'failed') {
+      await backend.mutation(internal.x402DirectoryIndexStore.fail, { generation, reason: 'provider_unavailable', workload })
+    } else {
+      await backend.mutation(internal.x402DirectoryIndexStore.applyPage, {
+        generation, offset: 100, reportedTotal: 1, observedAt: 7, runStartedAt: 4, workload, items: [],
+      })
+    }
+    expect(await backend.query(api.x402DirectoryIndex.status, {}))
+      .toMatchObject({ kind: 'ready', refreshState: outcome, coverage: { completedAt: outcome === 'complete' ? 7 : 3 } })
+  })
+
   it('indexes beyond 1,000 resources, publishes only after terminal page, paginates all results and resolves an exact late resource', async () => {
     const { backend, workload } = await setup()
     const generation = 'coinbase-complete'
