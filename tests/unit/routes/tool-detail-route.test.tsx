@@ -6,6 +6,7 @@ import { nextActionCode, toToolInspectorModel } from '@/components/ae/market/too
 import { alternativeToolSearchHref, projectToolObject } from '@/components/ae/shared/listing-family.view-model'
 import { projectAdmittedListing, projectDirectoryListing } from '@/modules/registry/public'
 import { REFERENCE_RATE_MAX_AGE_MS } from '@/modules/money/public'
+import { parseRunRequest } from '@/modules/chat/run-request'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { RouterContextProvider, createMemoryHistory, createRootRoute, createRoute, createRouter, isRedirect } from '@tanstack/react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -573,6 +574,8 @@ describe('/tools/$toolRef', () => {
     expect(disclosure.textContent).toContain('Nothing runs until you approve the price.')
     const run = screen.getAllByRole('link', { name: 'Run this call' })[0]
     if (run === undefined) throw new Error('run_missing')
+    const prompt = new URL(run.getAttribute('href') ?? '', 'https://aecon.test').searchParams.get('q')
+    expect(parseRunRequest(prompt ?? '')).toEqual({ toolRef: callableTool.toolRef, input: callableTool.contract.inputExamples?.[0]?.input })
     expect(disclosure.compareDocumentPosition(run) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(screen.queryByText(/named recipient/i)).toBeNull()
   })
@@ -672,7 +675,7 @@ describe('/tools/$toolRef', () => {
     renderWithRouter({ kind: 'found', schemaVersion: PublicToolRegistrySchemaVersion, tool: callableTool }, false, 'https://aecon.test', { tab: 'try', input: longInput })
     expect(screen.queryByRole('link', { name: 'Run this call' })).toBeNull()
     expect(screen.getAllByRole('link', { name: 'Run it from your agent' })[0]?.getAttribute('href')).toBe('#connect')
-    expect(screen.getByText(/over the 2,000 character limit/u)).toBeTruthy()
+    expect(screen.getByText(/up to 1,500 bytes of JSON/u)).toBeTruthy()
   })
 
   it('gives a tool that is not found a top-level heading', () => {
@@ -722,9 +725,8 @@ describe('/tools/$providerHost/$slug', () => {
     const href = screen.getAllByRole('link', { name: 'Run this call' })[0]?.getAttribute('href')
     if (href == null) throw new Error('run_link_missing')
     const prompt = new URL(href, 'https://aecon.test').searchParams.get('q')
-    expect(prompt).toContain(JSON.stringify(values))
+    expect(parseRunRequest(prompt ?? '')).toEqual({ toolRef: `registry:${'c'.repeat(64)}`, input: values })
     expect(prompt).not.toContain('bodyType')
-    expect(prompt).toContain('show me the price and ask before paying')
   })
 
   it('retains both published directory examples while exposing its input schema once under Schema', () => {

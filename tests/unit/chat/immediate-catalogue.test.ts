@@ -3,8 +3,8 @@ import { formatRunRequest, parseRunRequest } from '@/modules/chat/run-request'
 import type { JsonValue } from '@/modules/common/bounded-json'
 
 describe('chat exact Run request', () => {
-  it('accepts only canonical, bounded Run sentences and preserves their JSON bytes', () => {
-    const toolRef = `operation:v1:${'c'.repeat(64)}`
+  it.each(['operation:v1:', 'registry:'])('accepts only canonical, bounded %s Run sentences and preserves their JSON bytes', prefix => {
+    const toolRef = `${prefix}${'c'.repeat(64)}`
     const input = { city: 'Sydney', negativeZero: -0, large: 1e100, unicode: '\u2028\u2029😀' }
     const request = formatRunRequest(toolRef, input)
     const parsed = parseRunRequest(request)
@@ -12,7 +12,7 @@ describe('chat exact Run request', () => {
     expect(parsed === null ? undefined : Object.is(parsed.input.negativeZero, -0)).toBe(true)
     expect(parsed === null ? null : formatRunRequest(parsed.toolRef, parsed.input as Readonly<Record<string, JsonValue>>)).toBe(request)
     expect(parseRunRequest(`${request}\n  `)).toEqual(parsed)
-    expect(parseRunRequest(`Run Tool operation:v1:${'C'.repeat(64)} with this exact JSON input: {"city":"Sydney"}.`)).toBeNull()
+    expect(parseRunRequest(`Run Tool ${prefix}${'C'.repeat(64)} with this exact JSON input: {"city":"Sydney"}.`)).toBeNull()
     expect(parseRunRequest(`Run Tool ${toolRef} with this exact JSON input: ["Sydney"].`)).toBeNull()
     expect(parseRunRequest(`${request} Extra text.`)).toBeNull()
     expect(parseRunRequest(`Header\n${request}`)).toBeNull()
