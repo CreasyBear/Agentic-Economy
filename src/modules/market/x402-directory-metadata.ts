@@ -1,6 +1,30 @@
 import { isRecord } from '@/modules/common/is-record'
 import { degradeBackend } from '@/lib/observability/degrade-backend'
 import type { X402DirectoryEntry } from './x402-directory'
+import { admitBazaarDiscoveryInfo } from '@/modules/capability-supply/public'
+
+/**
+ * Requires a supported Bazaar HTTP declaration. Ensures the editor uses the
+ * same body/query/path mapping as admission, preserving source metadata.
+ * Invariant: no Provider request or authority change. Invalid declarations
+ * return undefined so the page retains its source-only presentation.
+ */
+export function directoryCallableInput(entry: X402DirectoryEntry) {
+  let source: unknown
+  try { source = JSON.parse(entry.metadataJson) } catch (cause) {
+    return degradeBackend(cause, undefined, { site: 'directoryCallableInput', reason: 'invalid_response' })
+  }
+  const extensions = isRecord(source) ? source.extensions : undefined
+  const bazaar = isRecord(extensions) ? extensions.bazaar : undefined
+  const info = isRecord(bazaar) ? bazaar.info : undefined
+  if (!isRecord(bazaar) || !isRecord(info) || !isRecord(info.input)) return undefined
+  const admitted = admitBazaarDiscoveryInfo(bazaar, { input: info.input, output: info.output })
+  if (admitted.kind !== 'admitted') return undefined
+  return {
+    inputSchemaJson: JSON.stringify(admitted.inputSchema),
+    ...(admitted.inputExample === undefined ? {} : { sampleInputJson: JSON.stringify(admitted.inputExample) }),
+  }
+}
 
 /** Published structure, not a judgment of correctness, usefulness or runtime support. */
 export function directoryMetadataFlags(entry: X402DirectoryEntry) {

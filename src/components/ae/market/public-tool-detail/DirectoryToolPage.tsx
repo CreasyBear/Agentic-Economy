@@ -12,6 +12,7 @@ import { REASON_COPY, REASON_COPY_FALLBACK } from '@/content/reason-copy'
 import { directoryActivityLabel, directoryLede, toDirectoryToolCardModel } from '@/modules/market/directory-card.view-model'
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
 import type { X402DirectoryCatalogueResource } from '@/modules/market/x402-directory-catalogue'
+import { directoryCallableInput } from '@/modules/market/x402-directory-metadata'
 import { projectDirectoryListing } from '@/modules/registry/public'
 import type { ReferenceRate } from '@/modules/money/public'
 
@@ -39,6 +40,7 @@ export function DirectoryToolPage({ metadata, providerHost, slug, baseUrl, refer
   const view = projectToolObject(listing, `/tools/${encodeURIComponent(providerHost)}/${encodeURIComponent(slug)}`, readAt, referenceRate)
   const choice = metadata.kind === 'found' ? metadata.item.choice : undefined
   const callableRef = choice?.access === 'ae_callable' ? choice.toolRef : undefined
+  const callableInput = callableRef === undefined ? undefined : directoryCallableInput(entry)
   const indexedSourceRouteRef = metadata.kind === 'found' ? choice?.sourceRouteRef ?? metadata.item.sourceRouteRef : undefined
   const capability = entry.description || entry.category || entry.tags?.join(' ') || ''
   const alternativeHref = capability.trim().length === 0 ? '/market' : alternativeToolSearchHref(listing, capability, indexedSourceRouteRef)
@@ -65,9 +67,9 @@ export function DirectoryToolPage({ metadata, providerHost, slug, baseUrl, refer
       reason: `${BRAND_NAME} can’t run this listing. ${REASON_COPY[choice?.reason ?? 'fallback'] ?? REASON_COPY_FALLBACK}`,
     },
     baseUrl,
-    ...(entry.input?.schemaJson === undefined ? {} : { inputSchemaJson: entry.input.schemaJson }),
+    ...(callableInput ?? (entry.input?.schemaJson === undefined ? {} : { inputSchemaJson: entry.input.schemaJson })),
     ...(entry.output?.schemaJson === undefined ? {} : { outputSchemaJson: entry.output.schemaJson }),
-    ...(entry.input?.exampleJson === undefined ? {} : { sampleInputJson: entry.input.exampleJson }),
+    ...(callableInput !== undefined || entry.input?.exampleJson === undefined ? {} : { sampleInputJson: entry.input.exampleJson }),
     ...(entry.output?.exampleJson === undefined ? {} : { sampleOutputJson: entry.output.exampleJson }),
     trackRecord: <DirectoryActivity activity={entry.activity} />,
   }} />
