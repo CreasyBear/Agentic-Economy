@@ -79,6 +79,19 @@ const baseSepoliaSyntheticPost = {
 afterEach(() => vi.unstubAllEnvs());
 
 describe("facilitator discovery ingest", () => {
+  it.each(["GET", "POST"] as const)("admits %s object properties without an explicit type and preserves constraints", (method) => {
+    const request = { properties: { url: { type: "string", format: "uri" }, max_chars: { type: "integer", maximum: 60000 } }, required: ["url"] };
+    const example = { url: "https://example.com", max_chars: 8000 };
+    const channel = method === "GET" ? "queryParams" : "body";
+    const input = { type: "http", method, [channel]: example, ...(method === "POST" ? { bodyType: "json" } : {}) };
+    const extension = { schema: { properties: { input: { properties: { [channel]: request } } } } };
+    expect(admitBazaarDiscoveryInfo(extension, { input, output: { type: "json" } })).toMatchObject({
+      kind: "admitted", method, inputSchema: { ...request, type: "object", additionalProperties: false }, inputExample: example,
+    });
+    expect(admitBazaarDiscoveryInfo({ schema: { properties: { input: { properties: { [channel]: { ...request, type: "string" } } } } } },
+      { input, output: { type: "json" } })).toEqual({ kind: "refused", reason: "schema_missing" });
+  });
+
   it("rejects unsupported Bazaar HTTP channels and non-JSON output", () => {
     const extension = isRecord(timezonePaymentRequired?.extensions)
       && isRecord(timezonePaymentRequired.extensions.bazaar)

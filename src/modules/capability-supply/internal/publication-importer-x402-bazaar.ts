@@ -218,7 +218,7 @@ function objectJsonSchema(
 ): Readonly<Record<string, JsonValue>> | undefined {
   if (
     !isRecord(value) ||
-    value.type !== "object" ||
+    (value.type !== undefined && value.type !== "object") ||
     !isRecord(value.properties) ||
     Object.keys(value.properties).length > MAX_SCHEMA_PROPERTIES ||
     !isBoundedJsonValue(value)

@@ -46,6 +46,7 @@ import type { PublicToolDetailProps } from '@/components/ae/market/public-tool-d
 import { DirectoryToolPage } from '@/components/ae/market/public-tool-detail/DirectoryToolPage'
 import { Route as DirectoryRoute } from '@/routes/tools.$providerHost.$slug'
 import type { X402DirectoryEntry } from '@/modules/market/x402-directory'
+import { projectX402DirectoryEntry } from '@/modules/market/x402-directory-projection'
 import { REASON_COPY_FALLBACK } from '@/content/reason-copy'
 
 const sourceRecord = {
@@ -700,6 +701,31 @@ describe('/tools/$providerHost/$slug', () => {
     prices: [{ network: 'eip155:8453', scheme: 'exact', amount: '0.000001 USDC', decimalAmount: '0.000001', symbol: 'USDC' }],
     metadataJson: '{}',
   }
+
+  it('hands chat the admitted request body instead of the Provider HTTP envelope', () => {
+    authState.isSignedIn = true
+    const values = { url: 'https://example.com', max_chars: 8000 }
+    const source = { resource: entry.resource, extensions: { bazaar: {
+      info: { input: { type: 'http', method: 'POST', bodyType: 'json', body: values }, output: { type: 'json' } },
+      schema: { properties: { input: { properties: { body: { properties: { url: { type: 'string' }, max_chars: { type: 'integer' } }, required: ['url'] } } } } },
+    } } }
+    const root = createRootRoute()
+    const router = createRouter({ routeTree: root.addChildren([createRoute({ getParentRoute: () => root, path: '/' })]), history: createMemoryHistory({ initialEntries: ['/'] }) })
+    render(<RouterContextProvider router={router}><DirectoryToolPage baseUrl="https://aecon.test" metadata={{
+      kind: 'found', coverage: {
+        source: 'coinbase', generation: 'active', indexedTotal: 1, reportedTotal: 1, reportedTotalAtStart: 1,
+        sourceChangedDuringScan: false, duplicateObservations: 0, pagesFetched: 1, startedAt: 1_000,
+        completedAt: 2_000, completeness: 'completed_observed_scan',
+      }, item: { entry: projectX402DirectoryEntry(source), category: 'documents', categorySource: 'provider_declared', observedAt: 2_000, sourceDigest: 'digest',
+        choice: { access: 'ae_callable', toolRef: `registry:${'c'.repeat(64)}` } },
+    }} providerHost="example.test" slug="invoices" /></RouterContextProvider>)
+    const href = screen.getAllByRole('link', { name: 'Run this call' })[0]?.getAttribute('href')
+    if (href == null) throw new Error('run_link_missing')
+    const prompt = new URL(href, 'https://aecon.test').searchParams.get('q')
+    expect(prompt).toContain(JSON.stringify(values))
+    expect(prompt).not.toContain('bodyType')
+    expect(prompt).toContain('show me the price and ask before paying')
+  })
 
   it('retains both published directory examples while exposing its input schema once under Schema', () => {
     const input = '{"documentUrl":"https://docs.example/invoice.pdf"}'

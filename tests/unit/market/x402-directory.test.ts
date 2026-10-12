@@ -6,6 +6,7 @@ vi.mock('@coinbase/cdp-sdk', () => ({ listX402DiscoveryResources: sdk.list, sear
 import { readX402Directory } from '@/modules/market/x402-directory.server'
 import { projectX402DirectoryEntry } from '@/modules/market/x402-directory-projection'
 import { minimumDirectoryUsdPrice } from '@/modules/market/x402-directory-index'
+import { directoryCallableInput } from '@/modules/market/x402-directory-metadata'
 
 const resources = Array.from({ length: 20 }, (_, index) => ({
   resource: `https://provider.test/resource/${index}`,
@@ -222,6 +223,21 @@ describe('rich provider-declared contracts', () => {
     expect(result.output?.fields[0]).toMatchObject({ name: 'temperature', source: 'example' })
     expect(result.output?.fields[0]).not.toHaveProperty('required')
   })
+  it.each(['GET', 'POST'] as const)('uses admitted %s request values for the editor while retaining the raw HTTP envelope', (method) => {
+    const channel = method === 'GET' ? 'queryParams' : 'body'
+    const request = { properties: { url: { type: 'string', format: 'uri' }, max_chars: { type: 'integer', maximum: 60000 } }, required: ['url'] }
+    const values = { url: 'https://example.com', max_chars: 8000 }
+    const example = { type: 'http', method, [channel]: values, ...(method === 'POST' ? { bodyType: 'json' } : {}) }
+    const source = { ...resources[0], extensions: { bazaar: { info: { input: example, output: { type: 'json' } }, schema: { properties: { input: { properties: { [channel]: request } } } } } } }
+    const entry = projectX402DirectoryEntry(source)
+    const editor = directoryCallableInput(entry)
+    expect(editor).toBeDefined()
+    expect(JSON.parse(editor!.sampleInputJson!)).toEqual(values)
+    expect(JSON.parse(editor!.inputSchemaJson)).toMatchObject({ ...request, type: 'object', additionalProperties: false })
+    expect(JSON.parse(entry.input!.exampleJson!)).toEqual(example)
+    expect(JSON.parse(entry.metadataJson)).toEqual(source)
+  })
+
   it('omits oversized JSON explicitly, bounds field projection and preserves complete raw source', async () => {
     const example = { payload: 'x'.repeat(17000) }
     const schema = { properties: Object.fromEntries(Array.from({ length: 80 }, (_, i) => [`field${i}`, { type: 'string', description: 'x'.repeat(500) }])) }

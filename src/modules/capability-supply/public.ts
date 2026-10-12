@@ -17,6 +17,7 @@ export type { CapabilityCancellation, CapabilityContinuation, CapabilityTranspor
 declare const mappingRefBrand: unique symbol
 
 export { isPublicToolRef }
+export { admitBazaarDiscoveryInfo } from './internal/publication-importer-x402-bazaar'
 export type { PublicToolRef }
 export type RegisteredToolMappingRef = string & Readonly<{ [mappingRefBrand]: true }>
 export type RegisteredToolMappingContractBinding = Readonly<{
