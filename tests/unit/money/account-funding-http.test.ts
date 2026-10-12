@@ -164,13 +164,14 @@ describe('Account AUD funding HTTP boundary', () => {
   )
 
   it.each(['development', 'production'] as const)(
-    'refuses public and owner constraints without Stripe configuration in %s', async (declaration) => {
+    'refuses open public and owner constraints without Stripe configuration in %s', async (declaration) => {
       const runtime = { env: { AE_DEPLOYMENT_ENVIRONMENT: declaration } }
+      sourceMocks.callPublicSourceQuery.mockResolvedValueOnce({ kind: 'available' })
       await expect(readPlatformFundingConstraintsThroughSource(runtime))
         .resolves.toMatchObject({ kind: 'refused', code: 'stripe_setup_required' })
       await expect(readAccountFundingConstraintsThroughSource(runtime))
         .resolves.toMatchObject({ kind: 'refused', code: 'stripe_setup_required' })
-      expect(sourceMocks.callPublicSourceQuery).not.toHaveBeenCalled()
+      expect(sourceMocks.callPublicSourceQuery).toHaveBeenCalledOnce()
       expect(sourceMocks.callSourceQuery).not.toHaveBeenCalled()
       expect(stripeMocks.createStripeMoneyProvider).not.toHaveBeenCalled()
     },
@@ -191,11 +192,12 @@ describe('Account AUD funding HTTP boundary', () => {
     ['development', 'rk_live_wrong'],
     ['production', 'rk_test_wrong'],
     ['production', 'sk_live_unrestricted'],
-  ] as const)('refuses public constraints for %s with %s before source access', async (declaration, key) => {
+  ] as const)('refuses open public constraints for %s with %s before provider access', async (declaration, key) => {
+    sourceMocks.callPublicSourceQuery.mockResolvedValueOnce({ kind: 'available' })
     await expect(readPlatformFundingConstraintsThroughSource({ env: {
       AE_DEPLOYMENT_ENVIRONMENT: declaration, STRIPE_SECRET_KEY: key, STRIPE_WEBHOOK_SECRET: 'whsec_configured',
     } })).resolves.toMatchObject({ kind: 'refused', code: 'stripe_setup_required' })
-    expect(sourceMocks.callPublicSourceQuery).not.toHaveBeenCalled()
+    expect(sourceMocks.callPublicSourceQuery).toHaveBeenCalledOnce()
     expect(stripeMocks.createStripeMoneyProvider).not.toHaveBeenCalled()
   })
 

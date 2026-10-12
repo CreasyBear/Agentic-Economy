@@ -53,16 +53,45 @@ describe('public funding preflight', () => {
     restorePublicSource = undefined
   })
 
-  it('refuses with typed payments_not_open (409, no-store) when payments are off', async () => {
+  it.each(['payments_paused', 'payments_admins_only', 'payments_not_open'])(
+    'returns payments_not_open (409, no-store) for %s without Stripe setup', async (code) => {
+      vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
+      vi.stubEnv('STRIPE_SECRET_KEY', '')
+      vi.stubEnv('STRIPE_WEBHOOK_SECRET', '')
+      restorePublicSource?.()
+      restorePublicSource = setPublicSourceTransportForTests({
+        query: vi.fn(async (_reference, args) => {
+          expect(args.environment).toBe('production')
+          return { kind: 'refused', code, retryable: false }
+        }),
+        mutation: vi.fn(), action: vi.fn(),
+      } as never)
+      const response = await handleFundingConstraintsRequest(new Request('https://ae.example/api/v1/funding/constraints'))
+      expect(response.status).toBe(409)
+      expect(response.headers.get('cache-control')).toBe('no-store')
+      await expect(response.json()).resolves.toMatchObject({ code: 'payments_not_open', retryable: false })
+    },
+  )
+
+  it('keeps open funding unavailable without Stripe setup', async () => {
+    vi.stubEnv('STRIPE_SECRET_KEY', '')
+    const response = await handleFundingConstraintsRequest(new Request('https://ae.example/api/v1/funding/constraints'))
+    expect(response.status).toBe(503)
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'funding_constraints_unavailable', reason: 'stripe_setup_required',
+    })
+  })
+
+  it('rejects an unknown deployment environment before reading policy', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', '')
     restorePublicSource?.()
+    const query = vi.fn(async () => ({ kind: 'refused', code: 'payments_not_open', retryable: false }))
     restorePublicSource = setPublicSourceTransportForTests({
-      query: vi.fn(async () => ({ kind: 'refused', code: 'payments_admins_only', retryable: false })),
-      mutation: vi.fn(), action: vi.fn(),
+      query, mutation: vi.fn(), action: vi.fn(),
     } as never)
     const response = await handleFundingConstraintsRequest(new Request('https://ae.example/api/v1/funding/constraints'))
-    expect(response.status).toBe(409)
-    expect(response.headers.get('cache-control')).toBe('no-store')
-    await expect(response.json()).resolves.toMatchObject({ code: 'payments_not_open', retryable: false })
+    expect(response.status).toBe(503)
+    expect(query).not.toHaveBeenCalled()
   })
 
   it('keeps 503 when the source throws', async () => {

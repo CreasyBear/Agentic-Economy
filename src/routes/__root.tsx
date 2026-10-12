@@ -6,7 +6,7 @@ import { Toaster, toast as sonnerToast } from 'sonner'
 import { useWorkspacePresentationVisible } from '@/lib/client/workspace-presentation'
 
 import { AeAppShell } from '@/components/ae/layout/AeAppShell'
-import { AeConvexProvider, ChatAuthorityBoundary, ChatConfigurationUnavailable, requiresChatProviders } from '@/components/ae/layout/AeConvexProviders'
+import { AeConvexProvider, ChatAuthorityBoundary, ChatConfigurationUnavailable, requiresAccountAuthority, requiresChatProviders } from '@/components/ae/layout/AeConvexProviders'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { ThemeProvider } from '@/components/ae/theme/ThemeProvider'
 import { RouteProgressBar } from '@/components/ae/layout/AeRouteProgressBar'
@@ -59,7 +59,7 @@ function RootComponent() {
       <ThemeProvider>
         <AeAppShell>
           <WorkspaceToaster />
-          {chatUnavailable ? <ChatConfigurationUnavailable /> : <ChatAuthorityBoundary required={requiresChatProviders(pathname)}><Outlet /></ChatAuthorityBoundary>}
+          {chatUnavailable ? <ChatConfigurationUnavailable /> : <ChatAuthorityBoundary required={requiresAccountAuthority(pathname)} surface={requiresChatProviders(pathname) ? 'chat' : 'account'}><Outlet /></ChatAuthorityBoundary>}
         </AeAppShell>
       </ThemeProvider>
     </RootDocument>
@@ -92,10 +92,10 @@ function WorkspaceToaster() {
 
 function RootDocument({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname })
-  const chatProvidersRequired = requiresChatProviders(pathname) && Boolean(import.meta.env.VITE_CONVEX_URL?.trim())
+  const authorityRequired = requiresAccountAuthority(pathname) && Boolean(import.meta.env.VITE_CONVEX_URL?.trim())
   const content = (
     <ClerkProvider appearance={clerkAppearance}>
-      <AeConvexProvider chatRequired={chatProvidersRequired}>{children}</AeConvexProvider>
+      <AeConvexProvider authorityRequired={authorityRequired}>{children}</AeConvexProvider>
     </ClerkProvider>
   )
 
