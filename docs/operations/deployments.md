@@ -1,6 +1,6 @@
 # Deployment map
 
-**Last verified:** 9 October 2026, after the Sydney health follow-through in PR #378. This is a dated inventory;
+**Last verified:** 12 October 2026, for the production payment audience change below. This is a dated inventory;
 resolve current provider identities and source revisions before mutations.
 [TODOS.md](../../TODOS.md) owns work; [readiness](../production-readiness-plan.md)
 owns acceptance and its limits.
@@ -11,7 +11,7 @@ owns acceptance and its limits.
 | Purpose | Address | Provider identity | Authority |
 | --- | --- | --- | --- |
 | Marketing | <https://aecon.ai> | Vercel `agentic-economy-website`; separate repository | Public website |
-| Production app | <https://app.aecon.ai> | Vercel `agentic-economy`, project `prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9`; Convex `upbeat-cricket-954` (`aws-ap-southeast-2`) | Explicit production declaration; Admin-only payments |
+| Production app | <https://app.aecon.ai> | Vercel `agentic-economy`, project `prj_dK5mDpjBYuAXMwvLr0pWO0h8DoH9`; Convex `upbeat-cricket-954` (`aws-ap-southeast-2`) | Explicit production declaration; payments open to everyone, revision 3 |
 | Isolated staging | <https://staging.aecon.ai> | Same Vercel project, `staging` environment; Convex `courteous-finch-213` | Development declaration, sandbox payments; staging inventory last verified 2 October |
 | Production ledger | <https://formance-alpha.aecon.ai> | Formance Ledger 2.4.14, ledger `agentic-economy-production`, existing AWS `ae-alpha` footprint | Production financial authority |
 | Production identity | <https://clerk.aecon.ai> | Existing Clerk production instance | Signed identity, owner MFA and revocation checks |
@@ -22,6 +22,81 @@ is one private host and Multi-AZ RDS with independent backups; no second permane
 stack is approved. Resolve provider identities afresh before mutations.
 
 ## Current production release
+
+### MCP admission and native-client recovery, 12 October
+
+Codex desktop logs at 15:29 and 15:37 UTC record native startup HTTP 429
+(`rate_limited`), then a closed initialized-notification channel. A fresh
+installed Codex `0.162.0-alpha.17.2` app-server subsequently discovered all 29
+authenticated tools against production in 7.46 seconds, with no tool error.
+This establishes native handshake and paginated discovery, not native purchase
+execution. The active chat's older tool catalogue still had no Aecon connection.
+
+The MCP route now separates anonymous discovery (30/minute per trusted IP) from
+credential verification (120/minute per trusted IP, before Clerk). Only verified
+credentials also enter `public-read`; invalid credentials remain anonymous.
+Rotating unverified headers cannot create a new quota. Spending policy, principal
+resolution, Call idempotency and financial admission remain separate boundaries.
+The verification bound permits more credential checks than the old anonymous
+guard while preserving a finite per-IP ceiling. No credential cache is introduced.
+
+Admission failures return correlated 429 or retryable 503 responses with
+`Retry-After`; an uncertain admission debit is never retried automatically.
+Real-component regression coverage exhausts anonymous capacity, connects two
+official clients concurrently through initialization and every metadata page,
+exhausts verification with rotating junk credentials, then checks recovery after
+refill and continued authentication refusal. Existing official-client Call
+recovery tests now exercise route admission, including the stable original Call.
+
+Local Codex startup timeout for this server was raised from the default 10 to
+30 seconds; other connection fields and credentials were preserved. If native
+startup fails, honour `Retry-After` and restart the MCP connection in the host.
+Verify native discovery and recover the original Call before another purchase.
+A custom HTTP/JSON-RPC client is not evidence that the requested native harness
+integration works. Do not silently substitute one for a failed native connection.
+
+### Production payment audience and delivered Call, 12 October
+
+At 15:57 UTC on 12 October, Joel authorized opening production payments to all
+customers and completed owner MFA in `/admin/treasury`. The existing audited
+audience command changed `paymentsOpenTo` and `resumePaymentsOpenTo` from `admins`
+to `everyone`, revision 2 to 3; native readback records `updatedAt=1791820646972`.
+The UI shows **Paid calls on**. `/api/ready` returned 200 with payment checks
+`ready` and `paidCalls: open`. Its aggregate `sellable` field remained false;
+this control change alone does not establish every commercial journey.
+
+The production alias resolves to Vercel `dpl_DBTAyJfRj4dymrv84uGk2rftKuWJ`,
+`syd1`, Node 22, source `0c1d64a10d365827ece8ed0348ebb17757e6b539`.
+The Sydney backend's release binding reports the same revision. No application
+deployment, credential rotation, custody-cap change or financial-data restore
+was performed. The existing admitted readiness refresh passed current RPC,
+CDP, Formance, reference-rate, treasury and commercial-policy checks; sanctions
+remain deliberately deferred under `alpha_not_screened_v1`.
+
+Rollback for the audience change is the existing **Turn off paid calls** control,
+restoring `admins` with a new audited revision. Payment admission still requires
+current readiness, funding and Account/Agent authority. Retain accepted Calls
+and recover their exact references; an audience rollback does not reverse money.
+
+The authorized Colosseum website audit completed through Aecon's MCP endpoint at
+16:00:02 UTC. Call `operation-invocation:v1:8c9c84228d53ccaf4479cea8aa7e4b7d895ee047c3a474db0b0a89b3b7954e96`
+delivered output and a settled receipt: A$0.114872 from promotional credit,
+USDC 0.08 Provider settlement, transaction
+`0x19aa8dad3cb155b5fd4bad89192e22df8aa1725a4212af33527bb64e142f57d9`.
+The Provider fetched the signup page, not authenticated hackathon content.
+The transport was a Python JSON-RPC MCP client using the configured credential;
+Codex's native MCP tool integration was not exercised and remains unverified.
+
+The overlapping 15:59 treasury audit refused `treasury_sources_changed_during_audit`.
+The next normal 16:04 cycle matched cash, funding, reservations and settlements
+with zero differences, zero committed funds and zero signing liability. Its
+USDC 0.08 timing adjustment accounts for the finalized-chain observation lag.
+After current source checks passed, the existing admitted readiness refresh
+restored backend `ready` and public `/api/ready` 200 at 16:05 UTC. This is bounded
+post-payment recovery evidence; the five-minute schedules can briefly gate
+new purchases when an audit overlaps a payment. No evidence or gate was bypassed.
+
+### 9 October Sydney release snapshot
 
 At 03:38 UTC on 9 October, production moved to Sydney through
 [PR #376](https://github.com/CreasyBear/Agentic-Economy/pull/376). The subsequent
@@ -109,7 +184,8 @@ check `/api/v1/release` and the release PR for current provenance.
 
 ## Commercial and operating limits
 
-Production payments remain `admins`, observed launch-control revision 2.
+Production payments are open to `everyone`, observed launch-control revision 3
+on 12 October after Joel's explicit authorization and owner MFA.
 `alpha_not_screened_v1` deliberately means payees are not screened. Recorded
 custody ceilings are USDC 0.5 per Call, USDC 10 platform daily, USDC 2 per payee
 daily and USDC 0.5 on first payee use; read active policy before any effect.

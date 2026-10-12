@@ -735,12 +735,7 @@ type McpRequestOptions = Readonly<{
  * JSON-RPC (like authentication and media-type failures), but make it a
  * truthful, retryable HTTP problem with the same request correlation reference.
  */
-/**
- * Anonymous MCP callers (no bearer token, no API key) get their own,
- * tighter bucket so an unauthenticated flood cannot exhaust the
- * `public-read` capacity shared with authenticated agents. Header presence
- * only routes the request; the admission bucket is chosen by verification.
- */
+/** Header presence selects only a bounded verification attempt, never authenticated authority. */
 function isAnonymousMcpRequest(request: Request): boolean {
   return !request.headers.has('x-api-key') && !request.headers.has('authorization')
 }
@@ -753,12 +748,14 @@ export async function handleMcpRouteRequest(
     let admission
     let verifiedCandidate: Awaited<ReturnType<typeof verifyApiKeyCandidate>> | undefined
     try {
-      // Per-IP anonymous admission always runs first, so junk credentials never
-      // reach Clerk unthrottled. A verified key is then also charged to public-read.
-      admission = await assertHttpAdmission(request, 'mcp-anonymous')
+      // Requires: trusted per-IP admission before verification. Ensures: only verified
+      // credentials reach public-read; anonymous exhaustion cannot block native setup.
+      // Invariant: no header grants authority and no failed admission dispatches a Call.
+      // On violation: return 429 with Retry-After, or a correlated retryable 503; never retry a debit.
+      admission = await assertHttpAdmission(request, isAnonymousMcpRequest(request) ? 'mcp-anonymous' : 'mcp-authentication')
       if (admission.ok && !isAnonymousMcpRequest(request)) {
         verifiedCandidate = await verifyApiKeyCandidate(request, options.authenticate)
-        if (verifiedCandidate !== null) admission = await assertHttpAdmission(request, 'public-read')
+        admission = await assertHttpAdmission(request, verifiedCandidate === null ? 'mcp-anonymous' : 'public-read')
       }
     } catch (cause) {
       recordGatewayTelemetry(options.timing,{correlationId,transport:'mcp',operation:'admission',stage:'pre_admission',durationMs:0,outcome:'failed',refusalCode:'mcp_admission_unavailable',retryable:true})
@@ -771,7 +768,7 @@ export async function handleMcpRouteRequest(
           retryable: true,
           detail: 'The MCP endpoint is temporarily unavailable. Retry later.',
           extras: { correlationId },
-        }), correlationId),
+        }, { 'Retry-After': '5' }), correlationId),
         { site: 'handleMcpRouteRequest', reason: 'source_unavailable' },
       )
     }
@@ -831,7 +828,7 @@ export async function handleMcpRequest(request: Request, options: McpRequestOpti
           ? resolveAgentAccessPrincipal(boundedRequest, bounded.bodyText, correlationId)
           : undefined)
       const verifiedCandidate = options.verifiedCandidate
-      const authenticate = options.authenticate ?? (verifiedCandidate === undefined ? undefined : async () => verifiedCandidate ?? ({ isAuthenticated: false } as AgentAccessApiKeyAuth))
+      const authenticate = verifiedCandidate === undefined ? options.authenticate : async () => verifiedCandidate ?? ({ isAuthenticated: false } as AgentAccessApiKeyAuth)
       const admitted = await authenticateAgentAccess({
         request: boundedRequest,
         ...(authenticate === undefined ? {} : { authenticate }),

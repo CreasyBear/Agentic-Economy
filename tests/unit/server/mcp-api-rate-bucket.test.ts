@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { ClerkAPIResponseError } from '@clerk/shared/error'
 
 import { setHttpRateLimitAdmissionForTests } from '@/lib/server/rate-limit'
 import { authenticateWithScopes, handleMcpRouteRequest } from './mcp-api-harness'
 
-const verify = vi.fn(async () => { throw new Error('invalid api key') })
+const verify = vi.fn(async () => { throw new ClerkAPIResponseError('invalid api key', { status: 401, data: [] }) })
 vi.mock('@clerk/tanstack-react-start/server', () => ({ clerkClient: () => ({ apiKeys: { verify } }) }))
 
 function ping(headers: HeadersInit) {
@@ -14,7 +15,7 @@ function ping(headers: HeadersInit) {
   })
 }
 
-async function bucketsFor(request: Request, options = {}, refuseAt = 'mcp-anonymous') {
+async function bucketsFor(request: Request, options = {}, refuseAt = 'mcp-authentication') {
   const names: string[] = []
   setHttpRateLimitAdmissionForTests(async (input) => {
     names.push(input.name)
@@ -26,21 +27,21 @@ async function bucketsFor(request: Request, options = {}, refuseAt = 'mcp-anonym
 
 afterEach(() => { setHttpRateLimitAdmissionForTests(undefined); verify.mockClear() })
 
-describe('MCP admission runs per-IP first, then verifies', () => {
-  it('admits every credentialed request anonymously before calling Clerk', async () => {
-    expect(await bucketsFor(ping({ authorization: 'Bearer junk' }))).toEqual(['mcp-anonymous'])
+describe('MCP admission bounds verification independently of anonymous discovery', () => {
+  it('refuses an exhausted verification quota before calling Clerk', async () => {
+    expect(await bucketsFor(ping({ authorization: 'Bearer junk' }))).toEqual(['mcp-authentication'])
     expect(verify).not.toHaveBeenCalled()
   })
 
-  it('charges junk credentials to the anonymous bucket only', async () => {
-    expect(await bucketsFor(ping({ 'x-api-key': 'junk' }), {}, 'none')).toContain('mcp-anonymous')
-    expect(await bucketsFor(ping({ 'x-api-key': 'junk' }), {}, 'none')).not.toContain('public-read')
+  it.each(['authorization', 'x-api-key'])('keeps junk %s credentials outside public-read', async (header) => {
+    expect(await bucketsFor(ping({ [header]: 'junk' }), {}, 'none'))
+      .toEqual(['mcp-authentication', 'mcp-anonymous'])
   })
 
   it('also charges a verified key to public-read', async () => {
     const authenticate = authenticateWithScopes([])
     expect(await bucketsFor(ping({ authorization: 'Bearer valid' }), { authenticate }, 'public-read'))
-      .toEqual(['mcp-anonymous', 'public-read'])
+      .toEqual(['mcp-authentication', 'public-read'])
   })
 
   it('verifies an invalid key with Clerk exactly once', async () => {
@@ -51,5 +52,26 @@ describe('MCP admission runs per-IP first, then verifies', () => {
     })
     await bucketsFor(request, {}, 'none')
     expect(verify).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps credential rotation in the same per-IP verification quota', async () => {
+    const keys: string[] = []
+    setHttpRateLimitAdmissionForTests(async ({ name, key }) => {
+      expect(name).toBe('mcp-authentication')
+      keys.push(key)
+      return { ok: false, retryAfter: 1_250 }
+    })
+    for (const token of ['junk-first', 'junk-second']) {
+      const response = await handleMcpRouteRequest(ping({ authorization: `Bearer ${token}` }))
+      expect(response.status).toBe(429)
+      expect(response.headers.get('retry-after')).toBe('2')
+    }
+    expect(keys[0]).toBe(keys[1])
+    expect(verify).not.toHaveBeenCalled()
+  })
+
+  it('never verifies an anonymous request', async () => {
+    expect(await bucketsFor(ping({}), {}, 'mcp-anonymous')).toEqual(['mcp-anonymous'])
+    expect(verify).not.toHaveBeenCalled()
   })
 })

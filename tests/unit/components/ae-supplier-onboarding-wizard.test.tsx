@@ -17,7 +17,7 @@ describe('Provider identity setup', () => {
     fireEvent.click(screen.getByRole('button', { name: /Continue to add Tool/i }))
     await screen.findByRole('link', { name: 'Add Tool' })
     expect(save).toHaveBeenCalledWith({ name: 'Acme', website: 'https://acme.example' })
-    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Provider setup' }))
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Provider setup' })))
   })
   it('keeps validation focus on the invalid field and never saves an invalid profile', async () => {
     const save = vi.fn()

@@ -17,6 +17,7 @@ export type RateLimitName =
   | 'chat-anonymous'
   | 'chat-anonymous-edge'
   | 'mcp-anonymous'
+  | 'mcp-authentication'
   | 'funding-checkout'
   | 'funding-checkout-ip'
 

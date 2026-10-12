@@ -153,6 +153,7 @@ describe('MCP host adapter protocol', () => {
     const response = await handleMcpRouteRequest(request)
 
     expect(response.status).toBe(503)
+    expect(response.headers.get('retry-after')).toBe('5')
     expect(response.headers.get('content-type')).toContain('application/problem+json')
     expect(response.headers.get('x-ae-request-id')).toBe('corr_mcp_admission_42')
     const body = await response.json()

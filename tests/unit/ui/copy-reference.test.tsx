@@ -24,8 +24,8 @@ describe('AeCopyReference', () => {
     fireEvent.click(copy)
 
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(reference))
-    expect(screen.getByText('Copied')).toBeTruthy()
-    expect(screen.getByRole('status').textContent).toBe('Copied')
+    expect(await screen.findByText('Copied')).toBeTruthy()
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Copied'))
     expect(screen.getByRole('button', { name: 'Operation reference copied' })).toBeTruthy()
     expect(toast.success).toHaveBeenCalledWith('Copied Operation reference to clipboard')
     expect(toast.error).not.toHaveBeenCalled()
@@ -43,7 +43,7 @@ describe('AeCopyReference', () => {
     expect(link.textContent).toBe(`${reference.slice(0, 21)}…${reference.slice(-8)}`)
     fireEvent.click(screen.getByRole('button', { name: 'Copy Tool' }))
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(reference))
-    expect(screen.getByRole('status').textContent).toBe('Copied')
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Copied'))
   })
 
   it('keeps the reference selectable and gives visible failure recovery', async () => {
