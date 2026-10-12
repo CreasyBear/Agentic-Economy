@@ -35,6 +35,11 @@ type Env = {
   readonly AE_CHAT_SHARE_SECRET: string | undefined;
   readonly AE_CONVEX_SERVER_FUNCTION_TOKEN: string | undefined;
   readonly AE_DEPLOYMENT_ENVIRONMENT: "production" | "development";
+  readonly AE_EMAIL_ALERT_ENABLED: "true" | "false" | undefined;
+  readonly AE_EMAIL_LIFECYCLE_ENABLED: "true" | "false" | undefined;
+  readonly AE_EMAIL_PHASE2_ENABLED: "true" | "false" | undefined;
+  readonly AE_EMAIL_PHASE3_ENABLED: "true" | "false" | undefined;
+  readonly AE_EMAIL_TRANSACTIONAL_ENABLED: "true" | "false" | undefined;
   readonly AE_FORMANCE_ACCESS_CLIENT_ID: string | undefined;
   readonly AE_FORMANCE_ACCESS_CLIENT_SECRET: string | undefined;
   readonly AE_FORMANCE_ENVIRONMENT: string | undefined;
@@ -55,6 +60,7 @@ type Env = {
   readonly AE_ROUTE_CALL_SIGNING_SECRET: string | undefined;
   readonly AE_SECRET_LIFECYCLE_RPC_TOKEN: string | undefined;
   readonly AE_SITE_URL: string | undefined;
+  readonly AE_STALLED_EMAILS_ENABLED: string | undefined;
   readonly AE_SUPPLY_HTTP_CREDENTIALS_ENABLED: string | undefined;
   readonly AE_SUPPLY_MCP_OAUTH_ENABLED: string | undefined;
   readonly AE_X402_CDP_ACCOUNT_NAME: string | undefined;
@@ -78,9 +84,15 @@ type Env = {
   readonly CDP_WALLET_SECRET: string | undefined;
   readonly CLERK_JWT_ISSUER_DOMAIN: string | undefined;
   readonly CLERK_SECRET_KEY: string | undefined;
+  readonly EMAIL_SUPPRESSION_HASH_SECRET: string | undefined;
+  readonly EMAIL_UNSUBSCRIBE_SECRET: string | undefined;
   readonly NOTIFICATION_FROM_EMAIL: string | undefined;
   readonly OPENROUTER_API_KEY: string | undefined;
+  readonly OPERATOR_EMAIL: string | undefined;
+  readonly POSTHOG_HOST: string | undefined;
+  readonly POSTHOG_KEY: string | undefined;
   readonly RESEND_API_KEY: string | undefined;
+  readonly RESEND_WEBHOOK_SECRET: string | undefined;
   readonly SITE_URL: string | undefined;
   readonly STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID: string | undefined;
   readonly STRIPE_CHECKOUT_HOST: string | undefined;

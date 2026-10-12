@@ -21,18 +21,23 @@ function workspaceLanding(path: string): string | undefined {
   return undefined
 }
 
-export function WorkspaceTransitionBoundary({ children, renderHeader }: { children: ReactNode; renderHeader?: (ready: boolean) => ReactNode }) {
-  const auth = useAuth()
-  const router = useRouter()
+/** Mounted only with the root Convex provider; attribution must not block an unconfigured public shell. */
+function ConfiguredAccountAttribution() {
   const { isAuthenticated } = useConvexAuth()
   const distinctId = useQuery(api.journeyEvents.viewerDistinctId, isAuthenticated ? {} : 'skip')
-  const wasSignedIn = useRef(false)
   const recordAttribution = useMutation(api.attribution.recordAttribution)
   useEffect(() => {
     if (!distinctId) return
     identifyPostHogAccount(distinctId)
     void readPostHogAttribution().then((touches) => touches && recordAttribution(touches)).catch(() => {})
   }, [distinctId, recordAttribution])
+  return null
+}
+
+export function WorkspaceTransitionBoundary({ children, renderHeader }: { children: ReactNode; renderHeader?: (ready: boolean) => ReactNode }) {
+  const auth = useAuth()
+  const router = useRouter()
+  const wasSignedIn = useRef(false)
   useEffect(() => {
     if (auth.isSignedIn) wasSignedIn.current = true
     else if (auth.isSignedIn === false && wasSignedIn.current) { wasSignedIn.current = false; resetPostHogAccount() }
@@ -82,7 +87,7 @@ export function WorkspaceTransitionBoundary({ children, renderHeader }: { childr
     return () => { active = false }
   }, [attempt, auth.isSignedIn, context.generation, context.scope, context.identityChanged, router, scope, switching])
 
-  return <>{renderHeader?.(!switching)}<div className="arc-market arc-workspace-transition" aria-busy={switching}>
+  return <>{import.meta.env.VITE_CONVEX_URL?.trim() ? <ConfiguredAccountAttribution /> : null}{renderHeader?.(!switching)}<div className="arc-market arc-workspace-transition" aria-busy={switching}>
     <div key={context.mountedGeneration} inert={switching} aria-hidden={switching || undefined} className={switching ? 'hidden' : 'flex min-h-0 flex-1 flex-col'}><WorkspacePresentationVisibility value={!switching}>{children}</WorkspacePresentationVisibility></div>
     {switching ? <div data-slot="workspace-transition-scrim" data-testid="workspace-transition-scrim" className="arc-workspace-transition-scrim min-h-64" role="status" aria-live="polite">
       {failed ? <><p>We couldn’t load this Account. Your previous Account’s records are hidden.</p><Button onClick={() => setAttempt(value => value + 1)}>Retry Account load</Button></> : <><Spinner className="size-6 text-muted-foreground" /><p>Switching workspace…</p></>}

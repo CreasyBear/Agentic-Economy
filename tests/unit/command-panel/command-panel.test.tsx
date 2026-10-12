@@ -101,6 +101,7 @@ describe('operator command panel', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Command console' })
     expect(dialog.getAttribute('data-slot')).toBe('dialog-content')
     expect(dialog.className).toContain('arc-command-panel')
+    await act(async () => { await vi.dynamicImportSettled() })
     await waitFor(() => expect(dialog.querySelector('[data-slot="command"]')).toBeTruthy())
     expect(document.querySelector('[data-slot="dialog-backdrop"], [data-slot="dialog-overlay"]')).toBeTruthy()
     expect(document.querySelector('[data-slot="sheet-content"]')).toBeNull()

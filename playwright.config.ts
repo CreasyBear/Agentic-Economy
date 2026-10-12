@@ -28,6 +28,7 @@ export default defineConfig({
     { name: 'wide-chromium', use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 1100 } } },
   ],
   ...(externalBaseUrl === undefined ? {
+    workers: 1,
     webServer: {
       command: `npm run dev -- --port ${sourcePort} --strictPort --host 127.0.0.1`,
       // This source proof has no backend. Use PLAYWRIGHT_BASE_URL for the real local/hosted stack.

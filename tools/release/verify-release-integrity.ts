@@ -6,7 +6,7 @@ import { promisify } from 'node:util'
 
 import {
   assertGeneratedSnapshotUnchanged,
-  assertPinnedNitroNightly,
+  assertPinnedNitro,
   protectedGeneratedPaths,
 } from './release-integrity'
 
@@ -50,7 +50,7 @@ const [packageManifestText, packageLockText] = await Promise.all([
   readFile(resolve(root, 'package-lock.json'), 'utf8'),
 ])
 
-const nitroVersion = assertPinnedNitroNightly(
+const nitroVersion = assertPinnedNitro(
   JSON.parse(packageManifestText) as unknown,
   JSON.parse(packageLockText) as unknown,
 )
