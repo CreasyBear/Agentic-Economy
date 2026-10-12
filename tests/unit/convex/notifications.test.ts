@@ -984,8 +984,10 @@ describe('stalled step notification deliveries', () => {
     const backend = await createNotificationBackend()
     await seedStalledOwner(backend, true)
     const token = await signedToken('lifecycle')
+    const signatureStart = token.indexOf('.') + 1
+    const tampered = `${token.slice(0, signatureStart)}${token[signatureStart] === 'A' ? 'B' : 'A'}${token.slice(signatureStart + 1)}`
 
-    await expect(backend.fetch(unsubscribePath(`${token.slice(0, -2)}xx`), { method: 'POST' })).resolves.toMatchObject({ status: 404 })
+    await expect(backend.fetch(unsubscribePath(tampered), { method: 'POST' })).resolves.toMatchObject({ status: 404 })
     await expect(readPreferences(backend)).resolves.toMatchObject({ stalledStepEmails: true })
   })
 
