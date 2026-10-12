@@ -23,7 +23,7 @@ async function forwardResendWebhook(request: Request): Promise<Response> {
   const site = process.env.CONVEX_SITE_URL?.trim()
   const cloud = process.env.CONVEX_URL?.trim() ?? process.env.VITE_CONVEX_URL?.trim()
   const origin = site ?? cloud?.replace(/\.convex\.cloud$/u, '.convex.site')
-  if (origin === undefined || !/^https:\/\/[a-z0-9-]+\.convex\.site$/u.test(origin)) return new Response(null, { status: 503 })
+  if (origin === undefined || !/^https:\/\/[a-z0-9-]+(?:\.[a-z0-9-]+)?\.convex\.site$/u.test(origin)) return new Response(null, { status: 503 })
   const declared = Number(request.headers.get('content-length'))
   if (Number.isFinite(declared) && declared > MAX_BODY_CHARS) return new Response(null, { status: 413 })
   const body = await request.text()
