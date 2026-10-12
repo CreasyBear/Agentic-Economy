@@ -147,12 +147,14 @@ describe.each([
     expect(result.output).not.toContain('PASS')
   })
 
-  it('requires exactly one target and a usable source identity', async () => {
-    for (const [targets, sources] of [[[], [source]], [[target, target], [source]], [[target], []]]) {
-      const result = await execute({ ...binding, targetRows: targets!, sourceRows: sources! })
-      expect(result.status, result.stderr).toBe(1)
-      expect(result.calls).not.toContain('secretsmanager')
-    }
+  it.each([
+    { reason: 'missing target', targets: [], sources: [source] },
+    { reason: 'ambiguous target', targets: [target, target], sources: [source] },
+    { reason: 'missing source identity', targets: [target], sources: [] },
+  ])('refuses $reason before reading any secret', async ({ targets, sources }) => {
+    const result = await execute({ ...binding, targetRows: targets, sourceRows: sources })
+    expect(result.status, result.stderr).toBe(1)
+    expect(result.calls).not.toContain('secretsmanager')
   })
 
   it('reaches only the named target secret after all identity checks pass', async () => {
