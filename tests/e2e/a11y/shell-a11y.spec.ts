@@ -21,7 +21,7 @@ test.describe('app shell accessibility (S-19)', () => {
     const compact = viewport !== null && viewport.width < 768
     const focusTarget = compact
       ? page.getByRole('button', { name: 'Open public menu' })
-      : page.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name: 'Market' })
+      : page.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name: 'Tools', exact: true })
 
     await focusTarget.focus()
     await expect(focusTarget).toBeFocused()
@@ -29,7 +29,7 @@ test.describe('app shell accessibility (S-19)', () => {
       await focusTarget.press('Enter')
       const publicNav = page.getByRole('dialog', { name: 'Public navigation' }).getByRole('navigation', { name: 'Primary' })
       await expect(publicNav).toBeVisible()
-      const marketLink = publicNav.getByRole('link', { name: 'Market' })
+      const marketLink = publicNav.getByRole('link', { name: 'Tools', exact: true })
       await marketLink.focus()
       await expect(marketLink).toBeFocused()
       await page.keyboard.press('Escape')
@@ -48,7 +48,7 @@ test.describe('app shell accessibility (S-19)', () => {
   test('dismissing command console restores focus after Escape', async ({ page }) => {
     await gotoSettledShell(page, '/market')
 
-    const searchTrigger = page.getByRole('button', { name: 'Find Tools' })
+    const searchTrigger = page.getByRole('button', { name: 'Find tools' })
     await searchTrigger.focus()
     await expect(searchTrigger).toBeFocused()
 
@@ -79,16 +79,19 @@ test.describe('app shell accessibility (S-19)', () => {
     await expect(page.locator('#main-content')).toBeVisible()
     await expect(page.getByRole('contentinfo')).toBeVisible()
   })
-  test('market help and legal links remain keyboard reachable without the site footer', async ({ page }) => {
+  test('market support and legal links remain keyboard reachable in the public footer', async ({ page }) => {
     await gotoSettledShell(page, '/market')
-    await expect(page.getByRole('contentinfo')).toHaveCount(0)
-    const utility = page.getByRole('navigation', { name: 'Market help and legal' })
+    const utility = page.getByRole('contentinfo')
+    await expect(utility).toHaveCount(1)
     await expect(utility).toBeVisible()
-    const help = utility.getByRole('link', { name: 'Help', exact: true })
+    const help = utility.getByRole('link', { name: 'Support', exact: true })
     await expect(help).toHaveAttribute('href', '/support')
     await help.focus()
     await expect(help).toBeFocused()
-    await page.keyboard.press('Tab')
+    for (const name of ['llms.txt', 'SKILL.md', '.well-known/ucp', 'glossary.md', 'Privacy']) {
+      await page.keyboard.press('Tab')
+      await expect(utility.getByRole('link', { name, exact: true })).toBeFocused()
+    }
     const privacy = utility.getByRole('link', { name: 'Privacy', exact: true })
     await expect(privacy).toBeFocused()
     await expect(privacy).toHaveAttribute('href', '/privacy')

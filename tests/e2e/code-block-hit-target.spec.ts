@@ -28,6 +28,7 @@ test('native setup choice and copy work by pointer and keyboard', async ({ conte
 
   await expect(page.getByRole('button', { name: 'Copy setup commands' })).toHaveCount(0)
   const codexChoice = page.getByRole('button', { name: 'Codex', exact: true })
+  await expect(codexChoice).toBeEnabled({ timeout: 15_000 })
   await codexChoice.scrollIntoViewIfNeeded()
   await expectInitialHitTarget(page, codexChoice)
   await codexChoice.click()

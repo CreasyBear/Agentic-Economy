@@ -32,7 +32,6 @@ const authState = vi.hoisted(() => ({
 }))
 
 
-vi.mock('convex/react', () => ({ useConvexAuth: () => ({ isAuthenticated: false }), useQuery: () => undefined, useMutation: () => async () => null }))
 vi.mock('@clerk/tanstack-react-start', () => ({
   useAuth: () => ({
     isLoaded: authState.isLoaded,
@@ -46,6 +45,7 @@ vi.mock('@clerk/tanstack-react-start', () => ({
 
 afterEach(() => {
   vi.useRealTimers()
+  vi.unstubAllEnvs()
   cleanup()
   authState.orgId = 'org_alpha'
   authState.orgRole = 'org:admin'
@@ -57,6 +57,13 @@ afterEach(() => {
 
 
 describe('WorkspaceTransitionBoundary (S-12)', () => {
+  it('renders without a configured Convex backend', async () => {
+    vi.stubEnv('VITE_CONVEX_URL', '')
+    const router = await createBoundaryRouter('/market')
+    render(<BoundaryFixture router={router}><main>Public catalogue</main></BoundaryFixture>)
+    expect(screen.getByRole('main').textContent).toBe('Public catalogue')
+  })
+
   it.each(['drawer', 'confirmation'] as const)('withholds an open private %s during a role refresh', async kind => {
     const router = await createBoundaryRouter('/owner/operations')
     const fresh = Promise.withResolvers<void>()
