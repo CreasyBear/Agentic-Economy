@@ -18,6 +18,9 @@ import { PRODUCTION_COMMERCIAL_POLICY_CONTROLS } from '../../helpers/commercial-
 import { seedCommercialPolicies } from '../../helpers/quote-fixtures'
 import { ownerAdmin, reviewerAdmin, supportAdmin, testMfaConsequenceProof } from '../../helpers/convex-fixtures'
 import { withSourceWrite } from '../../helpers/source-write-admission'
+import { setPublicSourceTransportForTests } from '@/lib/server/convex-source'
+import { setHttpRateLimitAdmissionForTests } from '@/lib/server/rate-limit'
+import { handleFundingConstraintsRequest } from '@/routes/api.v1.funding.constraints'
 
 const convexModules = Object.fromEntries(
   Object.entries(import.meta.glob('../../../convex/**/*.{ts,js}'))
@@ -120,6 +123,43 @@ describe('commercial policy persistence', () => {
     expect(projected).not.toHaveProperty('legalCustomerMaximumAccessibleUnits')
   })
 
+  it.each([
+    [undefined, 'payments_admins_only'],
+    ['admins', 'payments_admins_only'],
+    ['none', 'payments_paused'],
+  ] as const)('refuses public funding for the %s production audience before requiring policy or Stripe setup', async (audience, code) => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
+    const backend = convexTest(schema, convexModules)
+    if (audience !== undefined) await backend.run(async (ctx) => {
+      await ctx.db.insert('platformLaunch', {
+        environment: 'production', paymentsOpenTo: audience, resumePaymentsOpenTo: 'admins', revision: 1, updatedAt: 1,
+      })
+    })
+    await expect(backend.query(readPlatformFundingConstraints, {
+      environment: 'production', now: Date.now(),
+    })).resolves.toEqual({ kind: 'refused', code, retryable: false })
+  })
+
+  it('returns HTTP 409 through the actual Convex query when public funding is closed and Stripe is absent', async () => {
+    vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'production')
+    vi.stubEnv('STRIPE_SECRET_KEY', '')
+    vi.stubEnv('STRIPE_WEBHOOK_SECRET', '')
+    const backend = convexTest(schema, convexModules)
+    const restoreSource = setPublicSourceTransportForTests({
+      query: (reference: Parameters<typeof backend.query>[0], args: Record<string, unknown>) => backend.query(reference, args),
+    } as never)
+    setHttpRateLimitAdmissionForTests(async () => ({ ok: true }))
+    try {
+      const response = await handleFundingConstraintsRequest(new Request('https://ae.example/api/v1/funding/constraints'))
+      expect(response.status).toBe(409)
+      expect(response.headers.get('cache-control')).toBe('no-store')
+      await expect(response.json()).resolves.toMatchObject({ code: 'payments_not_open', retryable: false })
+    } finally {
+      restoreSource()
+      setHttpRateLimitAdmissionForTests(undefined)
+    }
+  })
+
   it('refuses the owner funding projection without an authenticated owner', async () => {
     vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development')
     const backend = convexTest(schema, convexModules)
@@ -142,6 +182,9 @@ describe('commercial policy persistence', () => {
     const wallNow = Date.now()
     const twoDays = 2 * 86_400_000
     await backend.run(async (ctx) => {
+      await ctx.db.insert('platformLaunch', {
+        environment: 'production', paymentsOpenTo: 'everyone', resumePaymentsOpenTo: 'everyone', revision: 1, updatedAt: wallNow,
+      })
       for (const [index, family] of COMMERCIAL_POLICY_FAMILIES.entries()) {
         await ctx.db.insert('moneyCommercialPolicies', {
           policyRef: `commercial-policy:${family}:1`,
