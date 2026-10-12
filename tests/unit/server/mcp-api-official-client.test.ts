@@ -8,8 +8,9 @@ import { listMcpActions, mcpToolName } from '@/modules/actions'
 import type { CallService } from '@/modules/capability-execution/call-authority'
 import {
   currentToolRef,
-  handleMcpRequest,
+  handleMcpRouteRequest,
 } from './mcp-api-harness'
+import { setHttpRateLimitAdmissionForTests } from '@/lib/server/rate-limit'
 
 const callRef = `operation-invocation:v1:${'b'.repeat(64)}`
 
@@ -25,7 +26,7 @@ async function connectOfficialClient(
     ...(scopes === null ? {} : { requestInit: { headers: { authorization: 'Bearer official-client-test' } } }),
     fetch: async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
       const request = new Request(input, init)
-      return await handleMcpRequest(request, {
+      return await handleMcpRouteRequest(request, {
         authenticate: async () => ({
           isAuthenticated: true,
           tokenType: 'api_key',
@@ -60,6 +61,31 @@ async function connectOfficialClient(
 beforeEach(() => vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', 'development'))
 
 describe('MCP host adapter with the official client', () => {
+  it.each(clientModes)('discovers all pages through two concurrent %s connections despite exhausted anonymous capacity', async (mode) => {
+    setHttpRateLimitAdmissionForTests(async ({ name }) => name === 'mcp-anonymous'
+      ? { ok: false, retryAfter: 2_000 } : { ok: true })
+    const service: CallService = {
+      callTool: vi.fn(), readCallStatus: vi.fn(), cancelCall: vi.fn(), reconcileCall: vi.fn(),
+    }
+    const clients = await Promise.all([connectOfficialClient(service, undefined, mode), connectOfficialClient(service, undefined, mode)])
+    try {
+      await Promise.all(clients.map(async client => {
+        const names: string[] = []
+        let page = await client.listTools()
+        names.push(...page.tools.map(tool => tool.name))
+        while (page.nextCursor !== undefined) {
+          page = await client.listTools({ cursor: page.nextCursor })
+          names.push(...page.tools.map(tool => tool.name))
+        }
+        expect(names).toContain('ae_tool_call')
+        expect(names).toContain('ae_call_status')
+        expect(new Set(names).size).toBe(names.length)
+      }))
+      expect(service.callTool).not.toHaveBeenCalled()
+    } finally {
+      await Promise.all(clients.map(client => client.close()))
+    }
+  })
   it.each(clientModes)('compiles every admitted tool contract in %s mode with exact output constraints and bounded metadata pages', async (mode) => {
     const service: CallService = {
       callTool: vi.fn(),
