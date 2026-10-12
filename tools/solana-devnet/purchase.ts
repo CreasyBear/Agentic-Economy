@@ -7,7 +7,7 @@ import type { PaymentPayload, PaymentRequired, PaymentRequirements } from '@x402
 
 import { formatExactAmount, type ExactAmount } from '@/modules/money/public'
 
-import { DEVNET_USDC_MINT, SOLANA_DEVNET, explorerTransactionUrl, type AgentId } from './devnet'
+import { explorerTransactionUrl, type AgentId, type SolanaCluster } from './devnet'
 import { checkAgentSpendCap, devnetUsdcFromAtomic, type AgentSpendCap, type CapCheck } from './spend-cap'
 
 export type DevnetPayer = Readonly<{
@@ -23,6 +23,7 @@ export type PurchaseDependencies = Readonly<{
 }>
 
 export type PurchaseRequest = Readonly<{
+  cluster: SolanaCluster
   agentId: AgentId
   toolUrl: string
   cap: AgentSpendCap
@@ -38,8 +39,8 @@ type ReceiptCapCheck = Readonly<{
 }>
 
 type ReceiptBase = Readonly<{
-  network: 'solana-devnet'
-  caip2: typeof SOLANA_DEVNET
+  network: SolanaCluster['name']
+  caip2: SolanaCluster['caip2']
   agentId: AgentId
   toolUrl: string
   priceUsdc: string
@@ -60,6 +61,8 @@ export type DevnetReceipt =
     explorerUrl: string
     settledAt: string
     toolResponse: unknown
+    /** Settlement facts that disagree with the request; recorded, never thrown, because the money already moved. */
+    discrepancies: readonly string[]
   }>)
 
 function usdcText(amount: ExactAmount): string {
@@ -76,18 +79,18 @@ function receiptCapCheck(check: CapCheck): ReceiptCapCheck {
   }
 }
 
-function devnetUsdcRequirement(required: PaymentRequired): PaymentRequirements {
+function usdcRequirement(required: PaymentRequired, cluster: SolanaCluster): PaymentRequirements {
   const requirement = required.accepts.find((accept) =>
-    accept.scheme === 'exact' && accept.network === SOLANA_DEVNET && accept.asset === DEVNET_USDC_MINT)
+    accept.scheme === 'exact' && accept.network === cluster.caip2 && accept.asset === cluster.usdcMint)
   if (requirement === undefined) {
     const offered = required.accepts.map((accept) => `${accept.scheme}/${accept.network}/${accept.asset}`).join(', ')
-    throw new Error(`devnet: the Tool offers no exact devnet USDC payment (offered: ${offered || 'nothing'})`)
+    throw new Error(`${cluster.name}: the Tool offers no exact ${cluster.caip2} USDC payment (offered: ${offered || 'nothing'})`)
   }
   return requirement
 }
 
 /**
- * One agent-scoped devnet Call: read the 402 challenge, check the price against the agent's caps,
+ * One agent-scoped Solana Call: read the 402 challenge, check the price against the agent's caps,
  * and only then sign, pay and confirm settlement from PAYMENT-RESPONSE.
  */
 export async function purchaseOnDevnet(
@@ -101,12 +104,12 @@ export async function purchaseOnDevnet(
     throw new Error(`devnet: expected HTTP 402 with PAYMENT-REQUIRED from ${request.toolUrl}, got ${challenge.status}`)
   }
   const required = decodePaymentRequiredHeader(challengeHeader)
-  const requirement = devnetUsdcRequirement(required)
+  const requirement = usdcRequirement(required, request.cluster)
   const price = devnetUsdcFromAtomic(requirement.amount)
   const check = checkAgentSpendCap(price, request.spentToday, request.cap)
   const base: ReceiptBase = {
-    network: 'solana-devnet',
-    caip2: SOLANA_DEVNET,
+    network: request.cluster.name,
+    caip2: request.cluster.caip2,
     agentId: request.agentId,
     toolUrl: request.toolUrl,
     priceUsdc: usdcText(price),
@@ -119,29 +122,42 @@ export async function purchaseOnDevnet(
   }
   if (check.outcome === 'refused') return { ...base, outcome: 'refused' }
 
+  // Resolve the wallet before signing: after settlement nothing may throw before the receipt exists.
+  const payer = await dependencies.payer.address()
   const payload = await dependencies.payer.createPaymentPayload({ ...required, accepts: [requirement] })
   const paid = await dependencies.fetch(request.toolUrl, {
     headers: { 'PAYMENT-SIGNATURE': encodePaymentSignatureHeader(payload) },
   })
   const settlementHeader = paid.headers.get('PAYMENT-RESPONSE')
   if (paid.status !== 200 || settlementHeader === null) {
-    throw new Error(`devnet: paid request returned ${paid.status} without a settled PAYMENT-RESPONSE: ${await paid.text()}`)
+    throw new Error(`${request.cluster.name}: paid request returned ${paid.status} without a settled PAYMENT-RESPONSE: ${await paid.text()}`)
   }
   const settlement = decodePaymentResponseHeader(settlementHeader)
-  const payer = await dependencies.payer.address()
-  if (!settlement.success || settlement.transaction === '' || settlement.network !== SOLANA_DEVNET) {
-    throw new Error(`devnet: settlement did not succeed on devnet: ${JSON.stringify(settlement)}`)
+  if (!settlement.success || settlement.transaction === '') {
+    throw new Error(`${request.cluster.name}: settlement did not succeed: ${JSON.stringify(settlement)}`)
+  }
+  const discrepancies: string[] = []
+  if (settlement.network !== request.cluster.caip2) {
+    discrepancies.push(`settlement network ${settlement.network} is not ${request.cluster.caip2}`)
   }
   if (settlement.payer !== payer) {
-    throw new Error(`devnet: settlement payer ${settlement.payer ?? 'missing'} is not the agent wallet ${payer}`)
+    discrepancies.push(`settlement payer ${settlement.payer ?? 'missing'} is not the agent wallet ${payer}`)
+  }
+  const body = await paid.text().catch((error: unknown) => `unreadable body: ${String(error)}`)
+  let toolResponse: unknown = body
+  try {
+    toolResponse = JSON.parse(body)
+  } catch {
+    // Keep the raw text: a non-JSON body is still the Tool's answer.
   }
   return {
     ...base,
     outcome: 'settled',
     signature: settlement.transaction,
     payer,
-    explorerUrl: explorerTransactionUrl(settlement.transaction),
+    explorerUrl: explorerTransactionUrl(settlement.transaction, request.cluster),
     settledAt: dependencies.now().toISOString(),
-    toolResponse: await paid.json(),
+    toolResponse,
+    discrepancies,
   }
 }

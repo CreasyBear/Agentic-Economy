@@ -5,8 +5,42 @@ export const DEVNET_USDC_MINT = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU'
 export const DEVNET_USDC_EXPONENT = 6
 export const X402_ORG_FACILITATOR_URL = 'https://x402.org/facilitator'
 export const SELLER_ACCOUNT_NAME = 'ae-devnet-seller'
-export const RECEIPT_DIR = 'output/solana-devnet/receipts'
 export const CIRCLE_DEVNET_FAUCET_URL = 'https://faucet.circle.com/'
+
+export const SOLANA_MAINNET = 'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp'
+export const MAINNET_USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
+
+export type SolanaCluster = Readonly<{
+  /** CDP SDK network name. */
+  name: 'solana-devnet' | 'solana'
+  caip2: typeof SOLANA_DEVNET | typeof SOLANA_MAINNET
+  usdcMint: string
+  /** Explorer `cluster` query parameter; mainnet is the explorer default. */
+  explorerCluster: 'devnet' | undefined
+  receiptDir: string
+}>
+
+export const DEVNET: SolanaCluster = {
+  name: 'solana-devnet',
+  caip2: SOLANA_DEVNET,
+  usdcMint: DEVNET_USDC_MINT,
+  explorerCluster: 'devnet',
+  receiptDir: 'output/solana-devnet/receipts',
+}
+
+export const MAINNET: SolanaCluster = {
+  name: 'solana',
+  caip2: SOLANA_MAINNET,
+  usdcMint: MAINNET_USDC_MINT,
+  explorerCluster: undefined,
+  receiptDir: 'output/solana-mainnet/receipts',
+}
+
+export function parseCluster(value: string): SolanaCluster {
+  if (value === 'devnet') return DEVNET
+  if (value === 'mainnet') return MAINNET
+  throw new Error(`--network must be devnet or mainnet, got ${value}`)
+}
 
 export type AgentId = string & { readonly __brand: 'DevnetAgentId' }
 
@@ -24,8 +58,9 @@ export function agentAccountName(agentId: AgentId): string {
   return `ae-devnet-agent-${agentId}`
 }
 
-export function explorerTransactionUrl(signature: string): string {
-  return `https://explorer.solana.com/tx/${signature}?cluster=devnet`
+export function explorerTransactionUrl(signature: string, cluster: SolanaCluster): string {
+  const query = cluster.explorerCluster === undefined ? '' : `?cluster=${cluster.explorerCluster}`
+  return `https://explorer.solana.com/tx/${signature}${query}`
 }
 
 export function explorerAddressUrl(address: string): string {

@@ -29,3 +29,14 @@ Other flags are `--agent <id>` and `--url <tool url>` on the buyer, and `--price
 If the CDP faucet refuses, `setup` prints the address to fund. Request devnet USDC for it at https://faucet.circle.com/ and choose Solana Devnet.
 
 The test is `tests/unit/solana-devnet/purchase.test.ts`. It needs no network.
+
+## Mainnet
+
+`--network mainnet` (default `devnet`) switches the buyer to `solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp`, mainnet USDC `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`, the CDP network `solana` and receipts in `output/solana-mainnet/receipts/<agent>/`. The same CDP account name signs on both networks. This spends real USDC; there is no local seller, so pass `--url` to an independent Tool:
+
+```sh
+npm run devnet:buy -- --network mainnet --url '<tool url>' --per-call 0.005   # free: refused before signing
+npm run devnet:buy -- --network mainnet --url '<tool url>' --per-call 0.01 --daily 0.02
+```
+
+Once a settlement succeeds, the buyer never throws before the receipt is written. A payer or network that disagrees with the request goes into the receipt's `discrepancies`.
