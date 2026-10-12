@@ -13,6 +13,7 @@ import {
   readCommercialPolicySummary,
 } from './lib/adminConsole/actions/commercialPolicy'
 import { defineAdminQuery } from './lib/adminConsole/reads/registrars'
+import { readPaymentsAudience } from './lib/money/treasury/paymentAdmission'
 import { commercialPolicyControlValue } from '../src/modules/money/schema'
 import { AUD_EXPONENT, audFundingPolicyFromCommercialControls, type CommercialPolicyEnvironment } from '../src/modules/money/public'
 export { readCommercialPolicyGate } from './lib/adminConsole/actions/commercialPolicy'
@@ -171,6 +172,14 @@ async function projectPublicFundingConstraints(
   db: GenericDatabaseReader<DataModel>,
   args: Readonly<{ environment: CommercialPolicyEnvironment; now: number }>,
 ): Promise<Infer<typeof platformFundingConstraintsValue>> {
+  const audience = await readPaymentsAudience({ db }, args.environment)
+  if (audience !== 'everyone') {
+    return {
+      kind: 'refused',
+      code: audience === 'none' ? 'payments_paused' : 'payments_admins_only',
+      retryable: false,
+    }
+  }
   const projected = await projectFundingConstraints(db, args)
   if (projected.kind !== 'available') return projected
   return {
