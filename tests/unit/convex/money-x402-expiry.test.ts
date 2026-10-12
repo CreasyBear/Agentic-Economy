@@ -61,11 +61,14 @@ const call = {
 const proof = { callRef, attemptRef, effectGeneration: 1, paymentIdentityDigest: identity,
   paymentNonce: nonce, evidenceDigest, evidenceRef: 'chain:safe:block' }
 
-async function fixture(settlementStatus: 'unknown' | 'not_settled' = 'unknown') {
+type RecordedPaymentResponse = { paymentResponseDigest: string; responseStatus?: number; evidenceRefs?: string[] }
+const rejectedResponse: RecordedPaymentResponse = { paymentResponseDigest: identity, responseStatus: 402 }
+
+async function fixture(settlementStatus: 'unknown' | 'not_settled' = 'unknown', response?: RecordedPaymentResponse) {
   const backend = convexTest(schema, modules)
   await backend.run(async ctx => {
     await ctx.db.insert('capabilityCalls', call)
-    await ctx.db.insert('moneyX402PaymentAttempts', { ...payment, settlementStatus })
+    await ctx.db.insert('moneyX402PaymentAttempts', { ...payment, ...response, settlementStatus })
     await ctx.db.insert('moneyX402SpendReservations', {
       reservationRef: payment.spendReservationRef, platformBudgetRef: 'platform:sandbox',
       custodyBudgetRef: 'wallet:sandbox', custodyRef: payment.custodyRef, custodyGeneration: 1,
@@ -95,8 +98,12 @@ beforeEach(() => {
 afterEach(() => { vi.restoreAllMocks() })
 
 describe('expired unused authorization claims', () => {
-  it.each(['unknown', 'not_settled'] as const)('pins one financial evidence identity across concurrent %s recovery and blocks settlement while claimed', async settlementStatus => {
-    const backend = await fixture(settlementStatus)
+  it.each([
+    { label: 'unknown', settlementStatus: 'unknown' as const },
+    { label: 'not_settled', settlementStatus: 'not_settled' as const },
+    { label: 'recorded HTTP 402 without a settlement locator', settlementStatus: 'unknown' as const, response: rejectedResponse },
+  ])('pins one financial evidence identity across concurrent $label recovery and blocks settlement while claimed', async ({ settlementStatus, response }) => {
+    const backend = await fixture(settlementStatus, response)
     const claims = await Promise.all([
       backend.mutation(internal.moneyX402Expiry.claim, proof),
       backend.mutation(internal.moneyX402Expiry.claim, { ...proof, evidenceDigest: `sha256:${'e'.repeat(64)}` }),
@@ -112,7 +119,7 @@ describe('expired unused authorization claims', () => {
     expect(row?.reconciliationEvidenceDigest).toBe(claims[0]?.evidenceDigest)
   })
 
-  it.each(['settled', 'response recorded', 'unexpired', 'other identity', 'other reservation'])(
+  it.each(['settled', 'response recorded', 'HTTP 200', 'HTTP 401', 'HTTP 402 with transaction', 'unexpired', 'other identity', 'other reservation'])(
     'does not claim %s payment', async reason => {
       const backend = await fixture()
       await backend.run(async ctx => {
@@ -120,6 +127,9 @@ describe('expired unused authorization claims', () => {
         if (!row) throw new Error('fixture_missing')
         await ctx.db.patch(row._id, reason === 'settled' ? { settlementStatus: 'settled' }
           : reason === 'response recorded' ? { paymentResponseDigest: identity }
+            : reason === 'HTTP 200' ? { paymentResponseDigest: identity, responseStatus: 200 }
+              : reason === 'HTTP 401' ? { paymentResponseDigest: identity, responseStatus: 401 }
+                : reason === 'HTTP 402 with transaction' ? { ...rejectedResponse, evidenceRefs: [`chain:${payment.network}:0x${'1'.repeat(64)}`] }
             : reason === 'unexpired' ? { paymentAuthorizationExpiresAt: now + 1 }
               : reason === 'other identity' ? { paymentIdentityDigest: `sha256:${'f'.repeat(64)}` }
                 : { reservationRef: 'reserve:other' })
@@ -174,11 +184,11 @@ describe('expired unused authorization claims', () => {
 })
 
 const handler = (recover as unknown as { _handler: (ctx: ActionCtx, args: { callRef: string; attempt?: number }) => Promise<unknown> })._handler
-function actionContext() {
+function actionContext(response?: RecordedPaymentResponse) {
   const runQuery = vi.fn(async (ref: unknown): Promise<unknown> => {
     switch (getFunctionName(ref as never)) {
       case 'capabilityCalls:readOwnerRecovery': return call
-      case 'moneyX402PaymentAttempts:readX402PaymentAttempt': return payment
+      case 'moneyX402PaymentAttempts:readX402PaymentAttempt': return { ...payment, ...response }
       case 'moneyManagedCall:readBooking': return { kind: 'available', expectedEnvironment: 'sandbox', booking: { providerAmountUnits: '1000', buyerAmountUnits: '1408' } }
       default: throw new Error(getFunctionName(ref as never))
     }
@@ -196,8 +206,8 @@ function actionContext() {
 }
 
 describe('expired unused authorization recovery action', () => {
-  it('checks both RPCs and uses the pinned proof to release without a new payment', async () => {
-    const ctx = actionContext()
+  it.each([undefined, rejectedResponse])('checks both RPCs and uses the pinned proof to release without a new payment, with response %j', async response => {
+    const ctx = actionContext(response)
     expect(await handler(ctx as unknown as ActionCtx, { callRef })).toEqual({ kind: 'completed' })
     expect(rpc.read).toHaveBeenCalledTimes(2)
     expect(rpc.read.mock.calls[0]?.[0]).toMatchObject({ payer: payment.paymentPayer, nonce, expiresAt: payment.paymentAuthorizationExpiresAt })
@@ -210,9 +220,9 @@ describe('expired unused authorization recovery action', () => {
     expect(ctx.runMutation.mock.invocationCallOrder[0]).toBeLessThan(ctx.runAction.mock.invocationCallOrder[0]!)
   })
 
-  it('keeps the reservation and schedules another proof check when either RPC cannot prove unused expiry', async () => {
+  it.each([undefined, rejectedResponse])('keeps the reservation when either RPC cannot prove unused expiry, with response %j', async response => {
     rpc.read.mockResolvedValueOnce(undefined)
-    const ctx = actionContext()
+    const ctx = actionContext(response)
     expect(await handler(ctx as unknown as ActionCtx, { callRef })).toEqual({ kind: 'pending' })
     expect(ctx.runAction).not.toHaveBeenCalled()
     expect(ctx.runMutation.mock.calls.map(([ref]) => getFunctionName(ref as never))).toEqual(['moneyX402Expiry:schedule'])

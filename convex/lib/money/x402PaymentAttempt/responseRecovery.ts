@@ -9,6 +9,20 @@ const RESPONSE_RECOVERY_BACKOFF_BASE_MS = 60_000
 /** A retry lease outlives its scheduled successor so the next attempt can take it over. */
 const RESPONSE_RECOVERY_LEASE_GRACE_MS = 60_000
 
+/**
+ * Requires the caller's exact-payment, expiry and settlement guards. Ensures
+ * only an absent response or an unknown HTTP 402 without a chain locator may
+ * reach independent unused-nonce proof. Eligibility never releases money:
+ * both RPCs and the immutable booking must still verify; otherwise retain the hold.
+ * Keep this policy shared by the RPC action and its transactional claim.
+ */
+export function responsePermitsExpiredUnusedProof(payment: Pick<Doc<'moneyX402PaymentAttempts'>,
+  'paymentResponseDigest' | 'responseStatus' | 'settlementStatus' | 'evidenceRefs'>): boolean {
+  return payment.paymentResponseDigest === undefined || (payment.responseStatus === 402
+    && payment.settlementStatus === 'unknown'
+    && !payment.evidenceRefs.some(ref => ref.startsWith('chain:')))
+}
+
 /** The permanent refund fence belongs to this retained payment, never a new effect. */
 async function isExactHttpErrorRemedy(ctx: Pick<QueryCtx, 'db'>, row: Doc<'capabilityCalls'>): Promise<boolean> {
   const owner = row.reconciliation?.leaseOwner

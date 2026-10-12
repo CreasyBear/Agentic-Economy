@@ -8,6 +8,7 @@ import { materializePurchaseResolutionRecord } from './lib/capabilityExecution/c
 import { upsertCallProjection } from './lib/capabilityExecution/callLifecycle/dispatchProjection'
 import { resolveX402SpendReservation } from './lib/money/x402PaymentAttempt/spendResolution'
 import { activeOwnerPrincipalRef, enqueueEmail } from './lib/principalAccount/notifications/enqueue'
+import { responsePermitsExpiredUnusedProof } from './lib/money/x402PaymentAttempt/responseRecovery'
 
 const owner = (nonce: string) => `expired-unused:${nonce}`
 const proof = {
@@ -45,7 +46,7 @@ export const claim = internalMutation({
       || attempt.toolRef !== call.toolRef || attempt.inputDigest !== call.inputDigest
       || attempt.paymentIdentityDigest !== args.paymentIdentityDigest || attempt.paymentNonce !== args.paymentNonce
       || attempt.paymentAuthorizationExpiresAt === undefined || attempt.paymentAuthorizationExpiresAt > Date.now()
-      || attempt.settlementStatus === 'settled' || attempt.paymentResponseDigest !== undefined
+      || attempt.settlementStatus === 'settled' || !responsePermitsExpiredUnusedProof(attempt)
       || attempt.reservationRef === undefined || !call.formanceReservationRefs?.includes(attempt.reservationRef)) return null
     const lease = call.reconciliation
     const leaseOwner = owner(args.paymentNonce)
