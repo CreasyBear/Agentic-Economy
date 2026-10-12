@@ -1,11 +1,11 @@
 // Run requests trust only validated refs and exact JSON; copied from the card quote parser contract.
 import { isRecord } from '../common/is-record'
 import type { JsonValue } from '../common/bounded-json'
-import { isPublicToolRef, parseCallableRef } from '../common/tool-ref'
+import { parseCallableRef } from '../common/tool-ref'
 
 export type RunIntent = Readonly<{ toolRef: string; title: string; input: Readonly<Record<string, JsonValue>> }>
 
-const MAX_RUN_INPUT_BYTES = 1_500
+export const MAX_RUN_INPUT_BYTES = 1_500
 const MAX_RUN_REQUEST_LENGTH = 2_000
 const RUN_PREFIX = 'Run Tool '
 const INPUT_INTRO = ' with this exact JSON input: '
@@ -113,7 +113,7 @@ function serializeInput(value: unknown): string | undefined {
 }
 
 export function formatRunRequest(toolRef: string, input: Readonly<Record<string, JsonValue>>): string {
-  if (!isPublicToolRef(toolRef)) throw new RangeError('run_request_tool_ref_invalid')
+  if (!isDetailToolRef(toolRef)) throw new RangeError('run_request_tool_ref_invalid')
   const serialized = serializeInput(input)
   if (serialized === undefined) throw new RangeError('run_request_input_invalid')
   return `${RUN_PREFIX}${toolRef}${INPUT_INTRO}${serialized}.`
@@ -121,11 +121,11 @@ export function formatRunRequest(toolRef: string, input: Readonly<Record<string,
 
 export function parseRunRequest(text: string): { toolRef: string; input: Record<string, unknown> } | null {
   if (typeof text !== 'string' || text.length > MAX_RUN_REQUEST_LENGTH) return null
-  const match = /^Run Tool (operation:v1:[0-9a-f]{64}) with this exact JSON input: (\{[\s\S]*\})\.$/u.exec(text.trim())
+  const match = /^Run Tool ((?:operation:v1:|registry:)[0-9a-f]{64}) with this exact JSON input: (\{[\s\S]*\})\.$/u.exec(text.trim())
   if (match === null) return null
   const toolRef = match[1]
   const serializedInput = match[2]
-  if (toolRef === undefined || serializedInput === undefined || !isPublicToolRef(toolRef)
+  if (toolRef === undefined || serializedInput === undefined || !isDetailToolRef(toolRef)
     || new TextEncoder().encode(serializedInput).byteLength > MAX_RUN_INPUT_BYTES) return null
   try {
     const input: unknown = JSON.parse(serializedInput)
