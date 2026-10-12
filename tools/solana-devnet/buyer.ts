@@ -5,7 +5,7 @@ import { CdpX402Client } from '@coinbase/cdp-sdk/x402'
 
 import { addExactAmounts, formatCurrencyAmount, type ExactAmount } from '@/modules/money/public'
 
-import { agentAccountName, parseAgentId, parseCluster, readFlag, requireCdpCredentials, type AgentId } from './devnet'
+import { DEVNET, agentAccountName, parseAgentId, parseCluster, readFlag, requireCdpCredentials, type AgentId } from './devnet'
 import { purchaseOnDevnet, type DevnetPayer, type DevnetReceipt } from './purchase'
 import { devnetUsdc, devnetUsdcFromAtomic } from './spend-cap'
 
@@ -31,7 +31,7 @@ async function spentTodayFromReceipts(agent: AgentId, now: Date): Promise<ExactA
     const receipt = JSON.parse(await readFile(path.join(receiptDir, name), 'utf8')) as DevnetReceipt
     if (receipt.agentId === agent && receipt.outcome === 'settled' && receipt.requestedAt.startsWith(day)) {
       const next = addExactAmounts(total, devnetUsdcFromAtomic(receipt.priceAtomic))
-      if (next === undefined) throw new Error(`devnet: receipt ${name} has an unreadable price`)
+      if (next === undefined) throw new Error(`${cluster.label}: receipt ${name} has an unreadable price`)
       total = next
     }
   }
@@ -58,7 +58,7 @@ const receipt = await purchaseOnDevnet(
   { cluster, agentId, toolUrl, cap, spentToday: await spentTodayFromReceipts(agentId, new Date()) },
   {
     fetch: (url, init) => fetch(url, init).catch((error: unknown) => {
-      throw new Error(`devnet: cannot reach ${url}. Is \`npm run devnet:seller\` running?`, { cause: error })
+      throw new Error(`${cluster.label}: cannot reach ${url}.${cluster === DEVNET ? ' Is \`npm run devnet:seller\` running?' : ''}`, { cause: error })
     }),
     payer,
     now: () => new Date(),
@@ -70,15 +70,15 @@ const receiptPath = path.join(receiptDir, `${receipt.requestedAt.replaceAll(':',
 await writeFile(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`)
 
 const capLine = `cap ${formatCurrencyAmount(cap.perCall)}/Call, ${formatCurrencyAmount(cap.daily)}/day, spent today ${receipt.capCheck.spentTodayUsdc} USDC`
-console.log(`${cluster.name}: agent ${agentId} asked ${toolUrl}`)
-console.log(`${cluster.name}: price ${receipt.priceUsdc} USDC to ${receipt.payTo}; ${capLine}`)
+console.log(`${cluster.label}: agent ${agentId} asked ${toolUrl}`)
+console.log(`${cluster.label}: price ${receipt.priceUsdc} USDC to ${receipt.payTo}; ${capLine}`)
 if (receipt.outcome === 'refused') {
-  console.log(`${cluster.name}: REFUSED before signing (${receipt.capCheck.reason}). No payment was signed or sent.`)
+  console.log(`${cluster.label}: REFUSED before signing (${receipt.capCheck.reason}). No payment was signed or sent.`)
 } else {
-  console.log(`${cluster.name}: PAID ${receipt.priceUsdc} USDC from ${receipt.payer}`)
-  console.log(`${cluster.name}: signature ${receipt.signature}`)
-  console.log(`${cluster.name}: explorer ${receipt.explorerUrl}`)
-  console.log(`${cluster.name}: Tool response ${JSON.stringify(receipt.toolResponse)}`)
-  for (const discrepancy of receipt.discrepancies) console.log(`${cluster.name}: DISCREPANCY ${discrepancy}`)
+  console.log(`${cluster.label}: PAID ${receipt.priceUsdc} USDC from ${receipt.payer}`)
+  console.log(`${cluster.label}: signature ${receipt.signature}`)
+  console.log(`${cluster.label}: explorer ${receipt.explorerUrl}`)
+  console.log(`${cluster.label}: Tool response ${JSON.stringify(receipt.toolResponse)}`)
+  for (const discrepancy of receipt.discrepancies) console.log(`${cluster.label}: DISCREPANCY ${discrepancy}`)
 }
-console.log(`${cluster.name}: receipt ${receiptPath}`)
+console.log(`${cluster.label}: receipt ${receiptPath}`)

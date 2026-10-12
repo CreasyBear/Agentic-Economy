@@ -84,7 +84,7 @@ function usdcRequirement(required: PaymentRequired, cluster: SolanaCluster): Pay
     accept.scheme === 'exact' && accept.network === cluster.caip2 && accept.asset === cluster.usdcMint)
   if (requirement === undefined) {
     const offered = required.accepts.map((accept) => `${accept.scheme}/${accept.network}/${accept.asset}`).join(', ')
-    throw new Error(`${cluster.name}: the Tool offers no exact ${cluster.caip2} USDC payment (offered: ${offered || 'nothing'})`)
+    throw new Error(`${cluster.label}: the Tool offers no exact ${cluster.caip2} USDC payment (offered: ${offered || 'nothing'})`)
   }
   return requirement
 }
@@ -101,7 +101,7 @@ export async function purchaseOnDevnet(
   const challenge = await dependencies.fetch(request.toolUrl)
   const challengeHeader = challenge.headers.get('PAYMENT-REQUIRED')
   if (challenge.status !== 402 || challengeHeader === null) {
-    throw new Error(`devnet: expected HTTP 402 with PAYMENT-REQUIRED from ${request.toolUrl}, got ${challenge.status}`)
+    throw new Error(`${request.cluster.label}: expected HTTP 402 with PAYMENT-REQUIRED from ${request.toolUrl}, got ${challenge.status}`)
   }
   const required = decodePaymentRequiredHeader(challengeHeader)
   const requirement = usdcRequirement(required, request.cluster)
@@ -130,11 +130,11 @@ export async function purchaseOnDevnet(
   })
   const settlementHeader = paid.headers.get('PAYMENT-RESPONSE')
   if (paid.status !== 200 || settlementHeader === null) {
-    throw new Error(`${request.cluster.name}: paid request returned ${paid.status} without a settled PAYMENT-RESPONSE: ${await paid.text()}`)
+    throw new Error(`${request.cluster.label}: paid request returned ${paid.status} without a settled PAYMENT-RESPONSE: ${await paid.text()}`)
   }
   const settlement = decodePaymentResponseHeader(settlementHeader)
   if (!settlement.success || settlement.transaction === '') {
-    throw new Error(`${request.cluster.name}: settlement did not succeed: ${JSON.stringify(settlement)}`)
+    throw new Error(`${request.cluster.label}: settlement did not succeed: ${JSON.stringify(settlement)}`)
   }
   const discrepancies: string[] = []
   if (settlement.network !== request.cluster.caip2) {

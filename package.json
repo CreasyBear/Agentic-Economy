@@ -13,6 +13,7 @@
     "devnet:setup": "tsx --env-file-if-exists=.env.local tools/solana-devnet/setup.ts",
     "devnet:seller": "tsx --env-file-if-exists=.env.local tools/solana-devnet/seller.ts",
     "devnet:buy": "tsx --env-file-if-exists=.env.local tools/solana-devnet/buyer.ts",
+    "solana:buy": "tsx --env-file-if-exists=.env.local tools/solana-devnet/buyer.ts",
     "build:cli": "npm run build --workspace @agentic-economy/cli",
     "pack:cli:public": "npm run build:cli && mkdir -p ./public/downloads && npm pack ./packages/cli --ignore-scripts --pack-destination ./public/downloads",
     "test:cli-package": "npm test --workspace @agentic-economy/cli",

@@ -92,7 +92,7 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
     sendJson(response, 402, { error: 'payment required (Solana devnet USDC)' }, {
       'PAYMENT-REQUIRED': encodePaymentRequiredHeader(required),
     })
-    console.log(`devnet seller: 402 challenge for ${url.pathname}${url.search}`)
+    console.log(`solana devnet seller: 402 challenge for ${url.pathname}${url.search}`)
     return
   }
 
@@ -105,26 +105,26 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
   const verification = await resourceServer.verifyPayment(payload, accepted)
   if (!verification.isValid) {
     sendJson(response, 402, { error: 'payment verification failed', reason: verification.invalidReason ?? 'unknown' })
-    console.log(`devnet seller: verify refused (${verification.invalidReason ?? 'unknown'})`)
+    console.log(`solana devnet seller: verify refused (${verification.invalidReason ?? 'unknown'})`)
     return
   }
   const settlement = await resourceServer.settlePayment(payload, accepted)
   if (!settlement.success) {
     sendJson(response, 402, { error: 'settlement failed', reason: settlement.errorReason ?? 'unknown' })
-    console.log(`devnet seller: settle failed (${settlement.errorReason ?? 'unknown'})`)
+    console.log(`solana devnet seller: settle failed (${settlement.errorReason ?? 'unknown'})`)
     return
   }
   sendJson(response, 200, result, { 'PAYMENT-RESPONSE': encodePaymentResponseHeader(settlement) })
-  console.log(`devnet seller: settled ${settlement.transaction} from ${settlement.payer ?? 'unknown payer'}`)
+  console.log(`solana devnet seller: settled ${settlement.transaction} from ${settlement.payer ?? 'unknown payer'}`)
 }
 
 createServer((request, response) => {
   handle(request, response).catch((error: unknown) => {
     const message = error instanceof Error ? error.message : String(error)
-    console.error(`devnet seller: ${message}`)
+    console.error(`solana devnet seller: ${message}`)
     if (!response.headersSent) sendJson(response, 502, { error: message })
   })
 }).listen(port, () => {
-  console.log(`devnet seller: GET http://localhost:${port}/gst?amount=110.00 costs ${formatCurrencyAmount(price)} on Solana devnet`)
-  console.log(`devnet seller: payTo ${payTo}, facilitator ${facilitatorUrl}`)
+  console.log(`solana devnet seller: GET http://localhost:${port}/gst?amount=110.00 costs ${formatCurrencyAmount(price)} on Solana devnet`)
+  console.log(`solana devnet seller: payTo ${payTo}, facilitator ${facilitatorUrl}`)
 })

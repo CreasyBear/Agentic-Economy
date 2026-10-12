@@ -26,11 +26,11 @@ async function devnetUsdcAtomic(cdp: CdpClient, address: string): Promise<bigint
 async function dripUsdc(cdp: CdpClient, role: string, address: string): Promise<void> {
   try {
     const { signature } = await cdp.solana.requestFaucet({ address, token: 'usdc' })
-    console.log(`devnet: ${role} USDC faucet tx ${signature}`)
+    console.log(`solana devnet: ${role} USDC faucet tx ${signature}`)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    console.log(`devnet: ${role} CDP USDC faucet refused (${message}).`)
-    console.log(`devnet: fund ${address} with devnet USDC at ${CIRCLE_DEVNET_FAUCET_URL} (network Solana Devnet).`)
+    console.log(`solana devnet: ${role} CDP USDC faucet refused (${message}).`)
+    console.log(`solana devnet: fund ${address} with devnet USDC at ${CIRCLE_DEVNET_FAUCET_URL} (network Solana Devnet).`)
   }
 }
 
@@ -46,9 +46,9 @@ async function main(): Promise<void> {
 
   for (const [role, account] of [['buyer', buyer], ['seller', seller]] as const) {
     const holding = formatCurrencyAmount(devnetUsdcFromAtomic((await devnetUsdcAtomic(cdp, account.address)).toString()))
-    console.log(`devnet: ${role} ${account.name} ${account.address} holds ${holding} ${explorerAddressUrl(account.address)}`)
+    console.log(`solana devnet: ${role} ${account.name} ${account.address} holds ${holding} ${explorerAddressUrl(account.address)}`)
   }
-  console.log('devnet: balances can lag a faucet drip by a few seconds; rerun setup to refresh them.')
+  console.log('solana devnet: balances can lag a faucet drip by a few seconds; rerun setup to refresh them.')
 }
 
 await main()

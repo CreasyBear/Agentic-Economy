@@ -152,7 +152,7 @@ describe('Solana x402 purchase', () => {
     await expect(purchaseOnDevnet(
       { cluster: MAINNET, agentId: parseAgentId('demo'), toolUrl: TOOL_URL, cap: { perCall: devnetUsdc('0.01'), daily: devnetUsdc('0.02') }, spentToday: devnetUsdc('0') },
       devnetSeller(signed),
-    )).rejects.toThrow(/offers no exact solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp USDC payment/)
+    )).rejects.toThrow(/^solana mainnet: the Tool offers no exact solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp USDC payment/)
     expect(signed).toEqual([])
   })
 
@@ -169,6 +169,17 @@ describe('Solana x402 purchase', () => {
       payer: BUYER,
       discrepancies: [`settlement payer ${SELLER} is not the agent wallet ${BUYER}`],
     })
+  })
+
+  it('names the network in every log prefix', () => {
+    expect([DEVNET.label, MAINNET.label]).toEqual(['solana devnet', 'solana mainnet'])
+  })
+
+  it('prefixes a devnet failure with the devnet label', async () => {
+    await expect(purchaseOnDevnet(
+      { cluster: DEVNET, agentId: parseAgentId('demo'), toolUrl: TOOL_URL, cap: { perCall: devnetUsdc('0.01'), daily: devnetUsdc('0.02') }, spentToday: devnetUsdc('0') },
+      devnetSeller([], { cluster: MAINNET }),
+    )).rejects.toThrow(/^solana devnet: the Tool offers no exact/)
   })
 
   it('rejects an unknown --network value', () => {

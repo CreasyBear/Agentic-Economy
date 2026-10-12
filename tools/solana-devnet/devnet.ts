@@ -13,6 +13,8 @@ export const MAINNET_USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
 export type SolanaCluster = Readonly<{
   /** CDP SDK network name. */
   name: 'solana-devnet' | 'solana'
+  /** Prefix for every console line and error, so the output names the network. */
+  label: 'solana devnet' | 'solana mainnet'
   caip2: typeof SOLANA_DEVNET | typeof SOLANA_MAINNET
   usdcMint: string
   /** Explorer `cluster` query parameter; mainnet is the explorer default. */
@@ -22,6 +24,7 @@ export type SolanaCluster = Readonly<{
 
 export const DEVNET: SolanaCluster = {
   name: 'solana-devnet',
+  label: 'solana devnet',
   caip2: SOLANA_DEVNET,
   usdcMint: DEVNET_USDC_MINT,
   explorerCluster: 'devnet',
@@ -30,6 +33,7 @@ export const DEVNET: SolanaCluster = {
 
 export const MAINNET: SolanaCluster = {
   name: 'solana',
+  label: 'solana mainnet',
   caip2: SOLANA_MAINNET,
   usdcMint: MAINNET_USDC_MINT,
   explorerCluster: undefined,
@@ -72,7 +76,7 @@ const CDP_ENV_NAMES = ['CDP_API_KEY_ID', 'CDP_API_KEY_SECRET', 'CDP_WALLET_SECRE
 export function requireCdpCredentials(): void {
   const missing = CDP_ENV_NAMES.filter((name) => !process.env[name]?.trim())
   if (missing.length > 0) {
-    throw new Error(`devnet: missing ${missing.join(', ')}. Run from a checkout whose .env.local holds the CDP keys.`)
+    throw new Error(`solana: missing ${missing.join(', ')}. Run from a checkout whose .env.local holds the CDP keys.`)
   }
 }
 
