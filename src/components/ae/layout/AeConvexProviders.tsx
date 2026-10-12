@@ -92,7 +92,7 @@ function ConfiguredConvexProvider({ convexUrl, authorityRequired, children }: { 
   // maintained Convex integration installs it for reactive reads, including
   // every refresh. While rotating authority, descendants cannot read the old
   // generation. Refusal remains retryable; obsolete completions grant nothing.
-  // Owner/admin routes share this lifecycle so reading terms cannot outlast the
+  // All operator routes share this lifecycle so reading terms cannot outlast the
   // credential window. Initialization never records terms acceptance.
   const useInitializedAuth = useMemo(() => function useInitializedAuth() {
     const clerk = useAuth()
@@ -240,4 +240,7 @@ export function requiresAccountAuthority(pathname: string): boolean {
   return requiresChatProviders(pathname)
     || pathname === '/owner' || pathname.startsWith('/owner/')
     || pathname === '/admin' || pathname.startsWith('/admin/')
+    || pathname === '/agent-access' || pathname.startsWith('/agent-access/')
+    || pathname === '/activity' || pathname.startsWith('/activity/')
+    || pathname.startsWith('/calls/') || pathname.startsWith('/plans/')
 }

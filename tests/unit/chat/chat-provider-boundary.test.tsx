@@ -273,7 +273,7 @@ describe('Tool chat provider boundary', () => {
     expect(runtime.materialize).toHaveBeenCalledTimes(1)
   })
 
-  it.each(['/owner/settings/team', '/owner/settings/agent-keys', '/admin'])(
+  it.each(['/owner/settings/team', '/owner/settings/agent-keys', '/admin', '/agent-access', '/agent-access/authorize', '/activity', '/calls/call-1', '/plans/plan-1'])(
     'initializes and renews authority on %s before exposing protected content', async (pathname) => {
       runtime.pathname = pathname
       let finish!: (ready: boolean) => void
@@ -354,7 +354,7 @@ describe('Tool chat provider boundary', () => {
     expect(screen.getByText('Chat ready')).toBeTruthy()
   })
 
-  it.each(['/t/new', '/owner/settings/team'])('renews active account authority on %s without losing the draft and blocks on refusal', async (pathname) => {
+  it.each(['/t/new', '/owner/settings/team', '/agent-access/authorize'])('renews active account authority on %s without losing the draft and blocks on refusal', async (pathname) => {
     runtime.pathname = pathname
     vi.useFakeTimers()
     const Root = (Route as unknown as { options: { component: ComponentType } }).options.component
