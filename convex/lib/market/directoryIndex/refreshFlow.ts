@@ -46,11 +46,13 @@ export const beginHandler = async (ctx: MutationCtx, args: Infer<typeof beginArg
       // completed" flag read by activeDirectoryGeneration) are NOT reset, so
       // reads stay served from the last-good state for the run's whole
       // duration - there is no spare "previous complete generation" anymore.
+      // Preserve completedAt too: only a terminal page may advance evidence
+      // of a completed scan; retries and failed refreshes keep its true age.
       await ctx.db.patch(existingRow._id, {
         status: 'refreshing', startedAt: args.startedAt, nextOffset: 0, pageItemCursor: 0,
         pagesFetched: 0, observations: 0, duplicateObservations: 0,
         sourceReportedInitial: undefined, sourceReportedLatest: undefined, sourceReportedMinimum: undefined, sourceReportedMaximum: undefined,
-        completedAt: undefined, failedAt: undefined, failureReason: undefined,
+        failedAt: undefined, failureReason: undefined,
       })
     }
     const next = {
