@@ -22,7 +22,7 @@ function convexSiteOrigin(): string | null {
   const site = process.env.CONVEX_SITE_URL?.trim()
   const cloud = process.env.CONVEX_URL?.trim() ?? process.env.VITE_CONVEX_URL?.trim()
   const origin = site ?? cloud?.replace(/\.convex\.cloud$/u, '.convex.site')
-  return origin !== undefined && /^https:\/\/[a-z0-9-]+\.convex\.site$/u.test(origin) ? origin : null
+  return origin !== undefined && /^https:\/\/[a-z0-9-]+(?:\.[a-z0-9-]+)?\.convex\.site$/u.test(origin) ? origin : null
 }
 
 async function forwardUnsubscribe(request: Request, method: 'GET' | 'POST'): Promise<Response> {
