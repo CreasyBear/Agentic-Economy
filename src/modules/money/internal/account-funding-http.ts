@@ -325,12 +325,15 @@ export async function readAccountFundingConstraintsThroughSource(
 export async function readPlatformFundingConstraintsThroughSource(
   runtime: AccountFundingServerRuntime = {},
 ): Promise<PlatformFundingConstraints> {
-  const providerContext = createAccountFundingProvider(runtime)
-  if (isMoneyRefusal(providerContext)) return providerContext
-  return await callPublicSourceQuery(readPlatformFundingConstraintsQuery, {
-    environment: providerContext.environment,
+  const environment = fundingEnvironmentFromRuntime(runtime)
+  if (isMoneyRefusal(environment)) return environment
+  const constraints = await callPublicSourceQuery(readPlatformFundingConstraintsQuery, {
+    environment,
     now: Date.now(),
   })
+  if (isMoneyRefusal(constraints)) return constraints
+  const providerContext = createAccountFundingProvider(runtime)
+  return isMoneyRefusal(providerContext) ? providerContext : constraints
 }
 
 export async function readPublicAvailabilityThroughSource(): Promise<{ paidCalls: PaidCallsAvailability }> {

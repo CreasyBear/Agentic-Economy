@@ -27,10 +27,10 @@ type ChatAuthorityState = {
 const ChatAuthorityContext = createContext<ChatAuthorityState | null>(null)
 
 /** One root client and maintained Clerk adapter across public, workspace and chat routes. */
-export function AeConvexProvider({ children, chatRequired = false }: { children: ReactNode; chatRequired?: boolean }) {
+export function AeConvexProvider({ children, authorityRequired = false }: { children: ReactNode; authorityRequired?: boolean }) {
   const convexUrl = import.meta.env.VITE_CONVEX_URL?.trim()
   if (!convexUrl) return children
-  return <ConfiguredConvexProvider convexUrl={convexUrl} chatRequired={chatRequired}>{children}</ConfiguredConvexProvider>
+  return <ConfiguredConvexProvider convexUrl={convexUrl} authorityRequired={authorityRequired}>{children}</ConfiguredConvexProvider>
 }
 
 export function SignedInConvexProvider({ children }: { children: ReactNode }) {
@@ -55,10 +55,10 @@ export function ChatConfigurationUnavailable() {
 export function ChatConvexProvider({ children }: { children: ReactNode }) {
   const convexUrl = import.meta.env.VITE_CONVEX_URL?.trim()
   if (!convexUrl) return <ChatConfigurationUnavailable />
-  return <AeConvexProvider chatRequired><ChatAuthorityBoundary>{children}</ChatAuthorityBoundary></AeConvexProvider>
+  return <AeConvexProvider authorityRequired><ChatAuthorityBoundary>{children}</ChatAuthorityBoundary></AeConvexProvider>
 }
 
-function ConfiguredConvexProvider({ convexUrl, chatRequired, children }: { convexUrl: string; chatRequired: boolean; children: ReactNode }) {
+function ConfiguredConvexProvider({ convexUrl, authorityRequired, children }: { convexUrl: string; authorityRequired: boolean; children: ReactNode }) {
   const client = useMemo(() => new ConvexReactClient(convexUrl), [convexUrl])
   const pendingClose = useRef<{ client: ConvexReactClient; cancelled: boolean } | null>(null)
   useEffect(() => {
@@ -79,10 +79,10 @@ function ConfiguredConvexProvider({ convexUrl, chatRequired, children }: { conve
   // account's hidden draft until fresh materialization confirms it is usable.
   const authorityScope = JSON.stringify([identity, auth.orgRole])
   const [attempt, setAttempt] = useState(0)
-  const [activation, setActivation] = useState({ chatRequired, epoch: 0 })
-  // A return to chat requires fresh authority even if this identity was ready on
-  // an earlier visit. Reconcile before descendants can render that old readiness.
-  if (activation.chatRequired !== chatRequired) setActivation({ chatRequired, epoch: activation.epoch + 1 })
+  const [activation, setActivation] = useState({ authorityRequired, epoch: 0 })
+  // Returning to protected routes requires fresh authority even if this identity
+  // was ready earlier. Reconcile before descendants can render that readiness.
+  if (activation.authorityRequired !== authorityRequired) setActivation({ authorityRequired, epoch: activation.epoch + 1 })
   const epoch = activation.epoch
   const [initialization, setInitialization] = useState<{ authorityScope: string; epoch: number; attempt: number; ready: boolean } | null>(null)
   const generation = useRef(0)
@@ -92,12 +92,14 @@ function ConfiguredConvexProvider({ convexUrl, chatRequired, children }: { conve
   // maintained Convex integration installs it for reactive reads, including
   // every refresh. While rotating authority, descendants cannot read the old
   // generation. Refusal remains retryable; obsolete completions grant nothing.
+  // Owner/admin routes share this lifecycle so reading terms cannot outlast the
+  // credential window. Initialization never records terms acceptance.
   const useInitializedAuth = useMemo(() => function useInitializedAuth() {
     const clerk = useAuth()
     const clerkGetToken = clerk.getToken
     const getToken = useCallback(async (options: Parameters<typeof clerkGetToken>[0]) => {
       const requestGeneration = ++generation.current
-      if (!chatRequired) return clerkGetToken(options)
+      if (!authorityRequired) return clerkGetToken(options)
       setInitialization(previous => previous?.authorityScope === authorityScope && previous.epoch === epoch && previous.ready ? previous : null)
       try {
         const token = await clerkGetToken(options)
@@ -128,7 +130,7 @@ function ConfiguredConvexProvider({ convexUrl, chatRequired, children }: { conve
     // refresh its token callback with that factory, even though these values
     // are outside the nested hook's own render scope.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
-    }, [clerkGetToken, convexUrl, authorityScope, epoch, chatRequired, attempt])
+    }, [clerkGetToken, convexUrl, authorityScope, epoch, authorityRequired, attempt])
     return {
       ...clerk,
       getToken,
@@ -138,17 +140,17 @@ function ConfiguredConvexProvider({ convexUrl, chatRequired, children }: { conve
       // The actual Clerk session and exact fetched token remain unchanged.
       sessionId: clerk.sessionId ? `${clerk.sessionId}:ae:${identity}:${epoch}:${attempt}` : clerk.sessionId,
     }
-  }, [convexUrl, identity, authorityScope, epoch, chatRequired, attempt])
+  }, [convexUrl, identity, authorityScope, epoch, authorityRequired, attempt])
   useEffect(() => {
-    if (!chatRequired || !auth.isLoaded || !auth.isSignedIn) return
+    if (!authorityRequired || !auth.isLoaded || !auth.isSignedIn) return
     const reconnect = () => {
       if (committedIdentity.current === identity) setAttempt((value) => value + 1)
     }
     window.addEventListener('online', reconnect)
     return () => window.removeEventListener('online', reconnect)
-  }, [chatRequired, auth.isLoaded, auth.isSignedIn, identity])
+  }, [authorityRequired, auth.isLoaded, auth.isSignedIn, identity])
   useEffect(() => {
-    if (!chatRequired || !auth.isSignedIn) return
+    if (!authorityRequired || !auth.isSignedIn) return
     // Convex does not always expose JWT exp in UserIdentity. Maintain its short
     // server-anchored window with the already-installed token; the backend
     // verifies that token again and refuses revoked authority. Successful
@@ -168,7 +170,7 @@ function ConfiguredConvexProvider({ convexUrl, chatRequired, children }: { conve
       )
     }, 20_000)
     return () => window.clearInterval(interval)
-  }, [chatRequired, auth.isSignedIn, authorityScope, epoch, attempt])
+  }, [authorityRequired, auth.isSignedIn, authorityScope, epoch, attempt])
   const current = initialization?.authorityScope === authorityScope && initialization.epoch === epoch
     && (initialization.attempt === attempt || initialization.ready)
     ? initialization
@@ -200,8 +202,8 @@ function ConfiguredConvexProvider({ convexUrl, chatRequired, children }: { conve
   )
 }
 
-/** Gate only the routed chat projection; the app shell keeps its own lifecycle. */
-export function ChatAuthorityBoundary({ children, required = true }: { children: ReactNode; required?: boolean }) {
+/** Gate protected route content; the app shell keeps its own lifecycle. */
+export function ChatAuthorityBoundary({ children, required = true, surface = 'chat' }: { children: ReactNode; required?: boolean; surface?: 'chat' | 'account' }) {
   const visible = useWorkspacePresentationVisible()
   const authority = useContext(ChatAuthorityContext)
   if (!required || authority === null) return children
@@ -213,10 +215,10 @@ export function ChatAuthorityBoundary({ children, required = true }: { children:
       </div>
     )}
     {!showChat && (opening ? (
-      <AePageState title="Opening chat" description="Connecting to your account…" />
+      <AePageState title={`Opening ${surface}`} description="Connecting to your account…" />
     ) : (
       <AePageState
-        title="Couldn’t open chat"
+        title={`Couldn’t open ${surface}`}
         description="Your account connection could not be completed. Try again or browse Tools."
         tone="warning"
         action={(
@@ -232,4 +234,10 @@ export function ChatAuthorityBoundary({ children, required = true }: { children:
 
 export function requiresChatProviders(pathname: string): boolean {
   return pathname === '/t/new' || pathname.startsWith('/t/') || pathname.startsWith('/s/')
+}
+
+export function requiresAccountAuthority(pathname: string): boolean {
+  return requiresChatProviders(pathname)
+    || pathname === '/owner' || pathname.startsWith('/owner/')
+    || pathname === '/admin' || pathname.startsWith('/admin/')
 }

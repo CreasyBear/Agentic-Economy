@@ -273,6 +273,32 @@ describe('Tool chat provider boundary', () => {
     expect(runtime.materialize).toHaveBeenCalledTimes(1)
   })
 
+  it.each(['/owner/settings/team', '/owner/settings/agent-keys', '/admin'])(
+    'initializes and renews authority on %s before exposing protected content', async (pathname) => {
+      runtime.pathname = pathname
+      let finish!: (ready: boolean) => void
+      runtime.materialize.mockImplementationOnce(() => new Promise<boolean>((resolve) => { finish = resolve }))
+      const Root = (Route as unknown as { options: { component: ComponentType } }).options.component
+      render(<Root />, { container: document })
+      expect(screen.queryByText('Chat ready')).toBeNull()
+      await waitFor(() => expect(runtime.materialize).toHaveBeenCalledOnce())
+      expect(runtime.setHttpAuth).toHaveBeenLastCalledWith('verified-token')
+      await act(async () => { finish(true) })
+      expect(screen.getByText('Chat ready')).toBeTruthy()
+
+      runtime.getToken.mockResolvedValueOnce('renewed-owner-token')
+      await act(async () => { await expect(runtime.refresh!()).resolves.toBe('renewed-owner-token') })
+      expect(runtime.setHttpAuth).toHaveBeenLastCalledWith('renewed-owner-token')
+      expect(runtime.materialize).toHaveBeenCalledTimes(2)
+      runtime.materialize.mockResolvedValueOnce(false)
+      await act(async () => { await expect(runtime.refresh!()).resolves.toBeNull() })
+      expect(screen.queryByText('Chat ready')).toBeNull()
+      expect(screen.getByRole('heading', { name: 'Couldn’t open account' })).toBeTruthy()
+      fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+      await screen.findByText('Chat ready')
+    },
+  )
+
   it('waits for authority initialization before mounting authenticated chat', async () => {
     let finish!: (ready: boolean) => void
     runtime.materialize.mockImplementationOnce(() => new Promise<boolean>((resolve) => { finish = resolve }))
@@ -328,13 +354,14 @@ describe('Tool chat provider boundary', () => {
     expect(screen.getByText('Chat ready')).toBeTruthy()
   })
 
-  it('renews active account authority without losing the draft and blocks on refusal', async () => {
+  it.each(['/t/new', '/owner/settings/team'])('renews active account authority on %s without losing the draft and blocks on refusal', async (pathname) => {
+    runtime.pathname = pathname
     vi.useFakeTimers()
     const Root = (Route as unknown as { options: { component: ComponentType } }).options.component
     await act(async () => { render(<Root />, { container: document }) })
     fireEvent.change(screen.getByRole('textbox', { name: 'Draft' }), { target: { value: 'Keep my OCR request' } })
-    await act(async () => { await vi.advanceTimersByTimeAsync(40_000) })
-    expect(runtime.materialize).toHaveBeenCalledTimes(3)
+    await act(async () => { await vi.advanceTimersByTimeAsync(80_000) })
+    expect(runtime.materialize).toHaveBeenCalledTimes(5)
     expect(screen.getByDisplayValue('Keep my OCR request')).toBeTruthy()
     runtime.materialize.mockResolvedValueOnce(false)
     await act(async () => { await vi.advanceTimersByTimeAsync(20_000) })
@@ -412,7 +439,7 @@ describe('Tool chat provider boundary', () => {
     }
     const tree = (suspend: boolean) => (
       <Suspense fallback={<div>Suspended identity</div>}>
-        <AeConvexProvider chatRequired>
+        <AeConvexProvider authorityRequired>
           <ChatAuthorityBoundary><Draft suspend={suspend} /></ChatAuthorityBoundary>
         </AeConvexProvider>
       </Suspense>
