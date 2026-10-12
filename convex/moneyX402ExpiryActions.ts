@@ -10,6 +10,7 @@ import { readGuardedX402UnusedAuthorization } from '@/modules/capability-supply/
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { createGuardedLookup, defaultDnsResolver } from '@/modules/network-guard/public'
 import type { FormanceMoneyResult as MoneyFormanceResult } from '@/modules/money/public'
+import { responsePermitsExpiredUnusedProof } from './lib/money/x402PaymentAttempt/responseRecovery'
 
 /** Exact expired-unused nonce recovery. No signing, Provider call, or replacement purchase. */
 export const recover = internalAction({
@@ -43,7 +44,7 @@ export const recover = internalAction({
       if (payment === null || payment.paymentIdentityDigest === undefined || payer === undefined || nonce === undefined
         || expiresAt === undefined || payment.toolRef !== call.toolRef
         || payment.inputDigest !== call.inputDigest || payment.settlementStatus === 'settled'
-        || payment.paymentResponseDigest !== undefined) return { kind: 'not_eligible' }
+        || !responsePermitsExpiredUnusedProof(payment)) return { kind: 'not_eligible' }
       const targets = configuredX402RpcUrls(payment.network, call.environment)
       if (targets.length === 0) return retry()
       const dispatcher = new Agent({ connect: { lookup: createGuardedLookup(defaultDnsResolver) } })
