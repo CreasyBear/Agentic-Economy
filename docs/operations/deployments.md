@@ -1,6 +1,7 @@
 # Deployment map
 
-**Last verified:** 12 October 2026, for the production payment audience change below. This is a dated inventory;
+**Last verified:** 13 October 2026, for the bounded Convex directory release below.
+The payment audience change was verified on 12 October. This is a dated inventory;
 resolve current provider identities and source revisions before mutations.
 [TODOS.md](../../TODOS.md) owns work; [readiness](../production-readiness-plan.md)
 owns acceptance and its limits.
@@ -22,6 +23,52 @@ is one private host and Multi-AZ RDS with independent backups; no second permane
 stack is approved. Resolve provider identities afresh before mutations.
 
 ## Current production release
+
+### Directory indexes and aggregate reconciliation, 13 October
+
+Joel approved both operations from
+`d0a26e63f98fae756a82fcbfbeb1f46b7106c63f`. Native Convex 1.45.0 deployed that
+source to Sydney production `upbeat-cricket-954` at 22:39 AWST. It reported exactly
+the eight reviewed index deletions: five directory search indexes, two external
+entry indexes and the unused external-entry full-text index. A subsequent native
+dry run found no remaining index differences or component mount changes.
+The aggregate update preserves missing-member and recency repair while skipping
+healthy unchanged memberships. The [reviewed change](../designs/directory-io-reduction-2026-10-13.md)
+records the contract, exact indexes and shared chat-contract carryover.
+
+After deployment, the nonsecret `AE_RELEASE_SOURCE_REVISION` binding was updated
+and read back as that exact source; the `production` declaration was preserved.
+The web release remains `6fce9ae10b9e93297531fa1d0d03d1268c1d4cbb`. This was a
+backend release, with no web deployment or source merge.
+
+Ten native directory queries returned the same ordered samples and generation
+before and after deployment: adoption, popular and price order globally, by
+category and by Provider, plus keyword search. Public health and registry reads
+returned 200. Native Aecon MCP search and directory-reference Describe returned
+current metadata; no Quote, paid Call or live chat-model test was performed.
+
+The first post-deploy readiness sample returned 503. A later read at 22:47 AWST
+returned 200 with payments ready and paid Calls open, without a recovery mutation.
+The cause of the transient failure was not established. At 22:47 commercial quoting
+reported unavailable and `sellable: false`; the successful checks do not establish
+complete commercial availability or sustained readiness. The pre-deploy HTTP
+baseline did not retain commercial fields, so quoting's prior state and cause
+remain unverified. The paid-Calls policy switch and quoting availability are
+separate signals; their combination does not itself violate an admission rule.
+The final read at 23:03 AWST returned health and readiness 200, with quoting
+ready again and paid Calls open. `sellable` remained false. The backend revision
+still matched the approved source. No broader commercial acceptance is claimed.
+
+The candidate passed `npm run check` and the full `npm run gate`, including
+10,081 unit tests, 3,313 integration tests, 20 browser journeys, 20 accessibility
+cases, CLI and docs checks. Existing skips and runtime limits remain recorded in
+the reviewed change. Billed I/O/storage savings await native observation after a
+normal refresh; no refresh, backfill or cleanup was forced.
+
+Rollback/fix-forward source is
+`6fce9ae10b9e93297531fa1d0d03d1268c1d4cbb`; restoring the deleted indexes requires
+a rebuild and consumes I/O. Code rollback does not authorize a database or ledger
+restore. Treasury and retained-proofs work remain deferred.
 
 ### MCP admission and native-client recovery, 12 October
 

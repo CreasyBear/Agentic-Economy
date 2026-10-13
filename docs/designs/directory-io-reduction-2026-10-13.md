@@ -113,8 +113,8 @@ results are recorded below before this proposal is presented for approval.
   resolution.
 - `npm run docs:build` passed after installing the docs package's existing locked
   dependencies. It verified 231 published pages and 86 owner examples, including
-  emitted HTML/resources. No dependency version or lockfile changed. The existing
-  CI source-proof job now installs that lockfile and explicitly declares
+  emitted HTML/resources. No dependency version or lockfile changed. The
+  CI source-proof job in the reviewed branch installs that lockfile and declares
   development/sandbox for the gate; README documents the same prerequisite.
   Claude's scoped review found no blocker. Local execution and YAML validation
   passed; the GitHub runner itself has not been exercised.
@@ -163,27 +163,40 @@ exact revision and gated code fingerprints. Compare the native live function
 surface and index preview before execution. After deployment, read back the
 recorded revision and exercise directory and chat description paths.
 
-Production proposal, pending Joel's approval: deploy the reviewed backend source
-to `joel-chan/agentic-economy/upbeat-cricket-954`, removing these eight indexes and
-updating analytics reconciliation, including the shared-contract carryover above.
-Then update the nonsecret `AE_RELEASE_SOURCE_REVISION` binding to that exact
-approved commit and read it back. These are the two production operations offered
-for approval. A web deployment is not needed. Documents, generation, backfill,
+Joel approved both production operations from
+`d0a26e63f98fae756a82fcbfbeb1f46b7106c63f`. Native Convex deployed that reviewed
+backend source to `joel-chan/agentic-economy/upbeat-cricket-954` at 22:39 AWST on
+13 October, removing exactly these eight indexes and updating analytics
+reconciliation, including the shared-contract carryover above. The nonsecret
+`AE_RELEASE_SOURCE_REVISION` binding was then set to that exact commit and read
+back; the production declaration was preserved. Both approved operations are
+complete. The web release remains at the recorded base. Documents, generation, backfill,
 cadence, payment authority, treasury and other environment bindings are outside
 this change. Native Convex 1.45.0 dry run verified the exact production target and
 listed these eight removals with no component installation/removal. Convex's large-index
 deletion guard also applies to previews, so the successful preview explicitly
-acknowledged it while retaining `--dry-run`. The actual deployment needs
-`--allow-deleting-large-indexes` and Joel's explicit approval. No deployment has
-been applied. Repeat the target/source check immediately before any deployment.
+acknowledged it while retaining `--dry-run`. The approved actual deployment used
+`--allow-deleting-large-indexes` after a fresh target/source check. A post-deploy
+native dry run found no remaining index differences or component mount changes.
 The final preview reported 108,365 documents in each affected search-table index
 and 39,476 documents in each affected external-entry index. Those are live index
 document counts, not a measurement of reclaimed storage.
 
-Acceptance: read back the exact index removals; exercise current directory
-keyword, price, popular, adoption and Provider paths; inspect the next normal
-refresh's outcome logs and component I/O. Source tests establish mutation bounds
-and repair behavior; only native metering can establish billed savings. Do not
+Acceptance: ten native keyword, price, popular, adoption, category and Provider
+queries returned identical ordered samples and generations before and after
+deployment. Public health and registry reads returned 200. Native Aecon MCP
+search and directory-reference Describe passed without a Quote or Call. Readiness
+first returned 503, then 200 at 22:47 AWST without a recovery mutation; its cause
+is unconfirmed. At 22:47 quoting reported unavailable and sellable false; at the
+final 23:03 read, health/readiness were 200 and quoting was ready again, while
+sellable remained false. The pre-deployment commercial state was not retained,
+so causality is unverified. No live
+chat-model or paid-purchase acceptance is claimed. The [deployment record](../operations/deployments.md)
+retains the deployed source and observed limits.
+
+Inspect the next normal refresh's outcome logs and component I/O. Source tests
+establish mutation bounds and repair behavior; only native metering can establish
+billed savings. Do not
 force a full refresh just to obtain a performance number without a separately
 bounded approval.
 
