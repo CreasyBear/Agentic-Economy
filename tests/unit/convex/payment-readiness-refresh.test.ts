@@ -78,7 +78,7 @@ describe('payment readiness read-only refresh', () => {
   it('publishes an explicit deferred check only for the approved alpha setting', async () => {
     vi.stubEnv('AE_X402_PAYEE_SCREENING_POLICY', 'alpha_not_screened_v1')
     const f = actionFixture()
-    expect(await refreshPaymentReadiness(f.ctx)).toEqual({ kind: 'published', replayed: false })
+    expect(await refreshPaymentReadiness(f.ctx, 'fixture:claim')).toEqual({ kind: 'published', replayed: false })
     expect(f.snapshot().checks.sanctions).toEqual({ kind: 'deferred', policyRef: 'alpha_not_screened_v1', validUntil: NOW + 600_000 })
     expect(validPaymentReadinessSnapshot(f.snapshot(), NOW)).toBe(true)
     vi.stubEnv('AE_X402_PAYEE_SCREENING_POLICY', 'unknown')
@@ -86,7 +86,7 @@ describe('payment readiness read-only refresh', () => {
   })
   it('publishes exactly eight sealed checks retaining each source expiry and real unsupported sanctions', async () => {
     const f = actionFixture()
-    expect(await refreshPaymentReadiness(f.ctx)).toEqual({ kind: 'published', replayed: false })
+    expect(await refreshPaymentReadiness(f.ctx, 'fixture:claim')).toEqual({ kind: 'published', replayed: false })
     const snapshot = f.snapshot()
     expect(Object.keys(snapshot.checks).sort()).toEqual([
       'base_rpc', 'cdp_custody', 'commercial_policy', 'formance', 'reference_rate', 'sanctions', 'treasury', 'web_configuration',
@@ -105,11 +105,11 @@ describe('payment readiness read-only refresh', () => {
     expect(getFunctionName(f.runQuery.mock.calls[0]![0])).toBe('moneyReadiness:readSourceChecks')
     expect(f.runQuery.mock.calls[0]?.[1]).toEqual({ environment: 'sandbox' })
     expect(f.runMutation).toHaveBeenCalledTimes(1)
-    expect(getFunctionName(f.runMutation.mock.calls[0]![0])).toBe('moneyReadiness:publish')
+    expect(getFunctionName(f.runMutation.mock.calls[0]![0])).toBe('moneyReadinessWork:complete')
     expect(JSON.stringify(snapshot)).not.toContain('private-')
     expect(io.createLedger.mock.calls[0]?.[0]).toMatchObject({ environment: 'sandbox', requestTimeoutMs: 5_000 })
     expect(io.createLedger.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal)
-    expect(io.chain).toHaveBeenCalledWith({ environment: 'sandbox', address: ADDRESS, now: NOW })
+    expect(io.chain).toHaveBeenCalledWith({ environment: 'sandbox', address: ADDRESS, now: NOW, signal: expect.any(AbortSignal) })
   })
 
   it('records expiry during I/O as failure without extending surviving evidence', async () => {
@@ -118,7 +118,7 @@ describe('payment readiness read-only refresh', () => {
       vi.mocked(Date.now).mockReturnValue(NOW + 25_000)
       return Response.json(webBody())
     })
-    await refreshPaymentReadiness(f.ctx)
+    await refreshPaymentReadiness(f.ctx, 'fixture:claim')
     expect(f.snapshot()).toMatchObject({ startedAt: NOW, completedAt: NOW + 25_000, expiresAt: NOW + 30_000,
       checks: { reference_rate: { kind: 'failed', code: 'readiness_source_expired' },
         commercial_policy: { kind: 'passed', validUntil: NOW + 30_000 }, treasury: f.sources.treasury } })
@@ -175,7 +175,7 @@ describe('payment readiness read-only refresh', () => {
     io.cdp.mockResolvedValue({ kind: 'unavailable', code: 'cdp_custody_read_unavailable' })
     io.chain.mockResolvedValue({ kind: 'unavailable', code: 'treasury_rpc_unavailable' })
     for (const key of ['reference_rate', 'commercial_policy', 'treasury'] as const) f.sources[key] = { kind: 'failed', code: 'source_unavailable' }
-    await refreshPaymentReadiness(f.ctx)
+    await refreshPaymentReadiness(f.ctx, 'fixture:claim')
     expect(Object.values(f.snapshot().checks).every(check => check.kind === 'failed')).toBe(true)
     expect(validPaymentReadinessSnapshot(f.snapshot(), NOW)).toBe(true)
     expect(f.runMutation).toHaveBeenCalledTimes(1)
@@ -184,7 +184,7 @@ describe('payment readiness read-only refresh', () => {
   it.each([undefined, 'preview', ' production '])('requires explicit supported deployment %j and performs no I/O or write otherwise', async deployment => {
     vi.stubEnv('AE_DEPLOYMENT_ENVIRONMENT', deployment)
     const f = actionFixture()
-    expect(await refreshPaymentReadiness(f.ctx)).toEqual({ kind: 'refused', code: 'readiness_environment_mismatch' })
+    expect(await refreshPaymentReadiness(f.ctx, 'fixture:claim')).toEqual({ kind: 'refused', code: 'readiness_environment_mismatch' })
     expect(f.runQuery).not.toHaveBeenCalled()
     expect(f.runMutation).not.toHaveBeenCalled()
     expect(io.web).not.toHaveBeenCalled()
@@ -196,7 +196,7 @@ describe('payment readiness read-only refresh', () => {
   it.each([32 * 60_000, 60 * 60_000 - 1_000, 60 * 60_000])('keeps source and finalized-block expiry independent at block age %i', async age => {
     io.chain.mockResolvedValue({ kind: 'observed', blockTimestamp: NOW - age })
     const f = actionFixture()
-    await refreshPaymentReadiness(f.ctx)
+    await refreshPaymentReadiness(f.ctx, 'fixture:claim')
     expect(f.snapshot().checks.base_rpc).toEqual(age < 60 * 60_000
       ? { kind: 'passed', validUntil: Math.min(NOW + 10 * 60_000, NOW - age + 60 * 60_000) }
       : { kind: 'failed', code: 'readiness_source_expired' })
@@ -206,8 +206,8 @@ describe('payment readiness read-only refresh', () => {
     vi.stubEnv('AE_X402_CUSTODY_ENABLED', 'false')
     io.cdp.mockResolvedValue({ kind: 'refused', code: 'cdp_custody_configuration_invalid' })
     const f = actionFixture()
-    await refreshPaymentReadiness(f.ctx)
-    expect(io.chain).toHaveBeenCalledWith({ environment: 'sandbox', address: ADDRESS, now: NOW })
+    await refreshPaymentReadiness(f.ctx, 'fixture:claim')
+    expect(io.chain).toHaveBeenCalledWith({ environment: 'sandbox', address: ADDRESS, now: NOW, signal: expect.any(AbortSignal) })
     expect(f.snapshot().checks.base_rpc.kind).toBe('passed')
     expect(f.snapshot().checks.cdp_custody).toEqual({ kind: 'failed', code: 'cdp_custody_configuration_invalid' })
   })
@@ -216,7 +216,7 @@ describe('payment readiness read-only refresh', () => {
     vi.stubEnv('CDP_API_KEY_SECRET', undefined)
     io.cdp.mockResolvedValue({ kind: 'refused', code: 'cdp_custody_configuration_invalid' })
     const f = actionFixture()
-    await refreshPaymentReadiness(f.ctx)
+    await refreshPaymentReadiness(f.ctx, 'fixture:claim')
     expect(io.chain).not.toHaveBeenCalled()
     expect(f.snapshot().checks.base_rpc).toEqual({ kind: 'failed', code: 'treasury_chain_configuration_invalid' })
     expect(f.snapshot().checks.cdp_custody).toEqual({ kind: 'failed', code: 'cdp_custody_configuration_invalid' })
@@ -229,7 +229,7 @@ describe('payment readiness read-only refresh', () => {
     if (boundary === 'cdp') io.cdp.mockRejectedValue(cause)
     if (boundary === 'chain') io.chain.mockRejectedValue(cause)
     if (boundary === 'source query') f.runQuery.mockRejectedValue(cause)
-    expect(await refreshPaymentReadiness(f.ctx)).toEqual({ kind: 'published', replayed: false })
+    expect(await refreshPaymentReadiness(f.ctx, 'fixture:claim')).toEqual({ kind: 'published', replayed: false })
     const checks = f.snapshot().checks
     if (boundary === 'formance') expect(checks.formance).toEqual({ kind: 'failed', code: 'formance_readiness_unavailable' })
     if (boundary === 'cdp') expect(checks.cdp_custody).toEqual({ kind: 'failed', code: 'cdp_custody_read_unavailable' })
@@ -244,14 +244,14 @@ describe('payment readiness read-only refresh', () => {
   it('returns transaction refusal unchanged and never retries an alternative publication', async () => {
     const f = actionFixture()
     f.runMutation.mockResolvedValue({ kind: 'refused', code: 'readiness_configuration_changed' })
-    expect(await refreshPaymentReadiness(f.ctx)).toEqual({ kind: 'refused', code: 'readiness_configuration_changed' })
+    expect(await refreshPaymentReadiness(f.ctx, 'fixture:claim')).toEqual({ kind: 'refused', code: 'readiness_configuration_changed' })
     expect(f.runMutation).toHaveBeenCalledTimes(1)
   })
 
   it('propagates publication failure without fabricating successful readiness', async () => {
     const f = actionFixture()
     f.runMutation.mockRejectedValue(new Error('publication unavailable'))
-    await expect(refreshPaymentReadiness(f.ctx)).rejects.toThrow('publication unavailable')
+    await expect(refreshPaymentReadiness(f.ctx, 'fixture:claim')).rejects.toThrow('publication unavailable')
     expect(f.runMutation).toHaveBeenCalledTimes(1)
   })
 })
@@ -266,7 +266,7 @@ describe('web static subset from aggregate readiness diagnostics', () => {
   it('publishes static web pass from a genuine aggregate503 while preserving unsupported sanctions failure', async () => {
     io.web.mockResolvedValue(Response.json(diagnostic(), { status: 503, headers: { 'content-type': 'application/problem+json' } }))
     const f = actionFixture()
-    await refreshPaymentReadiness(f.ctx)
+    await refreshPaymentReadiness(f.ctx, 'fixture:claim')
     expect(f.snapshot().checks.web_configuration).toEqual({ kind: 'passed', validUntil: NOW + 600_000 })
     expect(f.snapshot().checks.sanctions).toEqual({ kind: 'failed', code: 'trm_tenant_contract_unavailable' })
   })
@@ -286,4 +286,27 @@ describe('web static subset from aggregate readiness diagnostics', () => {
       expect(await readWebConfiguration(process.env, 'sandbox', NOW + 60_000)).toMatchObject({ kind: 'failed' })
     },
   )
+})
+
+
+it('publishes a named source deadline failure and ignores the late source completion', async () => {
+  vi.useFakeTimers()
+  vi.spyOn(Date, 'now').mockReturnValue(NOW)
+  try {
+    const f = actionFixture()
+    let release: (() => void) | undefined
+    io.cdp.mockImplementation(() => new Promise(resolve => { release = () => resolve({ kind: 'ready' }) }))
+    const pending = refreshPaymentReadiness(f.ctx, 'fixture:claim')
+    for (let tick = 0; tick < 10; tick += 1) await Promise.resolve()
+    expect(io.cdp).toHaveBeenCalledOnce()
+    vi.mocked(Date.now).mockReturnValue(NOW + 45_000)
+    await vi.advanceTimersByTimeAsync(45_001)
+    expect(await pending).toMatchObject({ kind: 'published' })
+    expect(f.snapshot()).toMatchObject({ startedAt: NOW, completedAt: NOW + 45_000,
+      checks: { cdp_custody: { kind: 'failed', code: 'cdp_custody_read_deadline_exceeded' } } })
+    expect(io.cdp.mock.calls[0]?.[2]?.aborted).toBe(true)
+    release?.()
+    for (let tick = 0; tick < 10; tick += 1) await Promise.resolve()
+    expect(f.runMutation).toHaveBeenCalledOnce()
+  } finally { vi.useRealTimers() }
 })

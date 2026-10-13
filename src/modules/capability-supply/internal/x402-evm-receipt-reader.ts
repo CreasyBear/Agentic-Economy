@@ -17,144 +17,178 @@ import {
   type X402AeEnvironment,
 } from './x402-payment-profile'
 import type { X402EvmReceipt } from './x402-settlement-verifier'
+import {
+  createX402ReadBudget, receiptFailureFromCause, receiptReadFailure, retryableReceiptFailure, X402RpcReadError,
+  type X402ReadBudget, type X402ReceiptFailure, type X402ReceiptReadResult, type X402RpcMethod,
+} from './x402-rpc-read'
 
-/**
- * A JSON-RPC result is opaque by protocol, so the envelope — not the payload —
- * carries the contract: `unavailable` covers transport, bound, and parse
- * failures alike and never masquerades as a legitimate null result.
- */
-type GuardedRpcResult =
-  | Readonly<{ kind: 'result'; value: unknown }>
-  | Readonly<{ kind: 'unavailable' }>
+type GuardedRpcResult = Readonly<{ kind: 'result'; value: unknown }> | X402ReceiptFailure
+
+type RpcOptions = Readonly<{ budget: X402ReadBudget; provider: 'rpc_1' | 'rpc_2' }>
+
+function retryAfterMs(value: string | null): number | undefined {
+  if (value === null) return undefined
+  const seconds = /^\d+(?:\.\d+)?$/u.test(value.trim()) ? Number(value) * 1_000 : Date.parse(value) - Date.now()
+  return Number.isFinite(seconds) && seconds >= 0 ? Math.min(120_000, Math.ceil(seconds)) : undefined
+}
 
 async function readGuardedRpcResult(
-  target: URL,
-  dispatcher: Agent,
-  method: string,
-  params: readonly unknown[],
+  target: URL, dispatcher: Agent, method: X402RpcMethod, params: readonly unknown[], options?: RpcOptions,
 ): Promise<GuardedRpcResult> {
-  const response = await guardedFetch(target, {
-    method: 'POST',
-    dispatcher,
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
-    signal: AbortSignal.timeout(5_000),
-  })
-  if (!response.ok) return { kind: 'unavailable' }
-  const bounded = await readBoundedRequestText(response, 256 * 1024)
-  if (!bounded.ok) return { kind: 'unavailable' }
-  const payload: unknown = JSON.parse(bounded.text)
-  if (!isRecord(payload) || !('result' in payload)) return { kind: 'unavailable' }
-  return { kind: 'result', value: payload.result }
+  const startedAt = Date.now()
+  const budget = options?.budget ?? createX402ReadBudget(startedAt + 5_000)
+  const provider = options?.provider ?? 'rpc_1'
+  const signal = AbortSignal.any([budget.signal, AbortSignal.timeout(5_000)])
+  const fail = (code: X402ReceiptFailure['code'], details: Partial<Pick<X402ReceiptFailure, 'httpStatus' | 'retryAfterMs'>> = {}) =>
+    receiptReadFailure(code, method, { provider, elapsedMs: Math.max(0, Date.now() - startedAt), ...details })
+  try {
+    const response = await budget.run(() => guardedFetch(target, {
+      method: 'POST', dispatcher, headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }), signal,
+    }), method, provider, signal)
+    if (!response.ok) {
+      void response.body?.cancel().catch(() => undefined)
+      const delay = retryAfterMs(response.headers.get('retry-after'))
+      const code = response.status === 401 || response.status === 403 ? 'rpc_authentication_failed'
+        : response.status === 429 ? 'rpc_rate_limited'
+          : response.status >= 500 ? 'rpc_transport_unavailable' : 'rpc_configuration_invalid'
+      return fail(code, { httpStatus: response.status, ...(delay === undefined ? {} : { retryAfterMs: delay }) })
+    }
+    const bounded = await budget.run(() => readBoundedRequestText(response, 256 * 1024, signal), method, provider, signal)
+    if (!bounded.ok) return fail('rpc_invalid_response')
+    let payload: unknown
+    try { payload = JSON.parse(bounded.text) }
+    catch { return fail('rpc_invalid_response') }
+    if (!isRecord(payload) || payload.jsonrpc !== '2.0' || payload.id !== 1) return fail('rpc_invalid_response')
+    if ('error' in payload) {
+      if ('result' in payload || !isRecord(payload.error)) return fail('rpc_invalid_response')
+      const message = typeof payload.error.message === 'string' ? payload.error.message.slice(0, 512) : ''
+      return fail(payload.error.code === 429 || payload.error.code === -32005 || /rate.?limit|too many requests|quota|capacity|credits exhausted/iu.test(message)
+        ? 'rpc_rate_limited' : /unauthori[sz]ed|invalid api.?key|authentication/iu.test(message)
+          ? 'rpc_authentication_failed' : 'rpc_invalid_response')
+    }
+    if (!('result' in payload)) return fail('rpc_invalid_response')
+    return { kind: 'result', value: payload.result }
+  } catch (cause) {
+    return receiptFailureFromCause(cause) ?? fail(signal.aborted ? 'rpc_timeout' : 'rpc_transport_unavailable')
+  } finally { if (options === undefined) budget.dispose() }
+}
+
+type ReceiptReadInput = Readonly<{
+  target: URL; aeEnvironment: X402AeEnvironment; network: string; asset: string
+  transactionHash: string; payer: string; nonce: string; dispatcher: Agent
+  minimumConfirmations?: number; confirmationTimeoutMs?: number; transportRetryCount?: 0
+  deadlineAt?: number; provider?: 'rpc_1' | 'rpc_2'; signal?: AbortSignal
+}>
+
+/** Compatibility view for existing Call/cancellation consumers; detailed failures stay internal. */
+export async function readGuardedX402EvmReceipt(input: ReceiptReadInput): Promise<X402EvmReceipt | undefined> {
+  const result = await readGuardedX402EvmReceiptDetailed(input)
+  return result.kind === 'receipt' ? result.receipt : undefined
 }
 
 /**
- * Requires an exact supported payment identity and bounded confirmation wait.
- * Ensures transaction and head evidence are read after receipt confirmation.
- * Identity, block and authorization checks remain mandatory; unavailable or
- * inconsistent evidence returns undefined without financial side effects.
+ * Requires exact payment identity and one absolute read deadline.
+ * Ensures typed sanitized failures survive transport/Viem wrapping; no raw URL,
+ * response body or credential becomes diagnostics. Reads have no money effects.
+ * Invariant: receipt/head/transaction/nonce checks and caller confirmation policy.
+ * On violation: named failure; a contradiction is never a transient missing read.
  */
-export async function readGuardedX402EvmReceipt(input: Readonly<{
-  target: URL
-  aeEnvironment: X402AeEnvironment
-  network: string
-  asset: string
-  transactionHash: string
-  payer: string
-  nonce: string
-  dispatcher: Agent
-  minimumConfirmations?: number
-  confirmationTimeoutMs?: number
-  /** A caller with its own retry budget can disable the transport's retries. */
-  transportRetryCount?: 0
-}>): Promise<X402EvmReceipt | undefined> {
+export async function readGuardedX402EvmReceiptDetailed(input: ReceiptReadInput): Promise<X402ReceiptReadResult> {
   const { defaultDnsResolver, isPublicHttpTarget } = await import('@/modules/network-guard/public')
   const profile = x402PaymentProfileForEnvironment(input.aeEnvironment)
-  if (
-    profile === undefined
-    || input.target.protocol !== 'https:'
-    || input.network !== profile.network
-    || input.asset.toLowerCase() !== profile.asset.toLowerCase()
-    || !/^0x[0-9a-fA-F]{64}$/.test(input.transactionHash)
-    || !isAddress(input.payer)
-    || !/^0x[0-9a-fA-F]{64}$/.test(input.nonce)
-    || !validConfirmationWait(input.minimumConfirmations, input.confirmationTimeoutMs)
-    || !await isPublicHttpTarget(input.target, defaultDnsResolver)
-  ) {
-    return undefined
+  const provider = input.provider ?? 'rpc_1'
+  const fail = (code: X402ReceiptFailure['code'], method: X402RpcMethod) => receiptReadFailure(code, method, { provider })
+  if (profile === undefined || input.target.protocol !== 'https:' || input.target.username !== '' || input.target.password !== ''
+    || input.network !== profile.network || input.asset.toLowerCase() !== profile.asset.toLowerCase()
+    || !/^0x[0-9a-fA-F]{64}$/u.test(input.transactionHash) || !isAddress(input.payer)
+    || !/^0x[0-9a-fA-F]{64}$/u.test(input.nonce)
+    || !validConfirmationWait(input.minimumConfirmations, input.confirmationTimeoutMs)) {
+    return fail('rpc_configuration_invalid', 'confirmation')
   }
+  const deadlineAt = input.deadlineAt ?? Date.now() + Math.min(120_000, (input.confirmationTimeoutMs ?? 0) + 30_000)
+  if (!Number.isSafeInteger(deadlineAt) || deadlineAt > Date.now() + 120_000) return fail('rpc_configuration_invalid', 'confirmation')
+  const budget = createX402ReadBudget(deadlineAt, input.signal)
   try {
-    const client = createPublicClient({
-      transport: custom({
-        request: async ({ method, params = [] }) => {
-          const result = await readGuardedRpcResult(
-            input.target,
-            input.dispatcher,
-            method,
-            params,
-          )
-          if (result.kind === 'unavailable') {
-            throw new Error('x402_rpc_result_missing')
-          }
-          return result.value
-        },
-      }, input.transportRetryCount === undefined ? {} : { retryCount: input.transportRetryCount }),
-    })
+    let dnsFailure: X402ReceiptFailure | undefined
+    const resolver = { lookup: async (hostname: string) => {
+      try { return await budget.run(() => defaultDnsResolver.lookup(hostname), 'dns', provider) }
+      catch (cause) {
+        dnsFailure = receiptFailureFromCause(cause) ?? fail('rpc_transport_unavailable', 'dns')
+        throw new X402RpcReadError(dnsFailure)
+      }
+    } }
+    const publicTarget = await budget.run(() => isPublicHttpTarget(input.target, resolver), 'dns', provider)
+    if (!publicTarget) return dnsFailure ?? fail('rpc_target_refused', 'dns')
     const minimumConfirmations = input.minimumConfirmations ?? 1
-    const receiptPromise = minimumConfirmations === 1
-      ? client.getTransactionReceipt({ hash: input.transactionHash as Hex })
-      : client.waitForTransactionReceipt({
-          hash: input.transactionHash as Hex,
-          confirmations: minimumConfirmations,
-          timeout: input.confirmationTimeoutMs,
-        })
-    const receipt = await receiptPromise
-    // A transaction captured while pending stays pending in memory even after
-    // its receipt is confirmed. Read both snapshots after the wait completes.
-    const [transaction, latestBlock] = await Promise.all([
-      client.getTransaction({
-        hash: input.transactionHash as Hex,
-      }),
-      client.getBlock(),
-    ])
-    if (
-      latestBlock.number === null
-      || latestBlock.number < receipt.blockNumber
-      || transaction.hash.toLowerCase() !== receipt.transactionHash.toLowerCase()
-      || receipt.transactionHash.toLowerCase() !== input.transactionHash.toLowerCase()
-      || typeof receipt.blockHash !== 'string'
-      || typeof transaction.blockHash !== 'string'
-      || receipt.blockHash.toLowerCase() !== transaction.blockHash.toLowerCase()
-      || transaction.blockNumber === null
-      || transaction.blockNumber !== receipt.blockNumber
-    ) return undefined
-    const authorizationState = await client.readContract({
-      address: profile.asset as Address,
-      abi: eip3009ABI,
-      functionName: 'authorizationState',
-      args: [input.payer as Address, input.nonce as Hex],
-      blockNumber: latestBlock.number,
+    const client = createPublicClient({
+      transport: custom({ request: async ({ method, params = [] }) => {
+        if (!isReceiptRpcMethod(method)) throw new X402RpcReadError(fail('rpc_configuration_invalid', 'confirmation'))
+        const maximum = input.transportRetryCount === 0 ? 1 : 4
+        for (let attempt = 0; attempt < maximum; attempt += 1) {
+          const result = await readGuardedRpcResult(input.target, input.dispatcher, method, params, { budget, provider })
+          if (result.kind === 'result') {
+            if (result.value === null && (method === 'eth_getTransactionByHash' || method === 'eth_getTransactionReceipt')) {
+              throw new X402RpcReadError(fail('receipt_missing', method))
+            }
+            return result.value
+          }
+          const delay = result.retryAfterMs ?? 150 * 2 ** attempt
+          if (attempt + 1 >= maximum || !retryableReceiptFailure(result) || Date.now() + delay >= budget.deadlineAt) {
+            throw new X402RpcReadError(result)
+          }
+          await budget.wait(delay)
+        }
+        throw new X402RpcReadError(fail('rpc_deadline_exceeded', method))
+      } }, { retryCount: 0 }),
     })
-    if (typeof authorizationState !== 'boolean') return undefined
-    return {
-      transactionHash: receipt.transactionHash,
-      status: receipt.status,
-      confirmations: latestBlock.number - receipt.blockNumber + 1n,
-      blockHash: receipt.blockHash,
-      blockNumber: receipt.blockNumber,
-      observedBlockTimestamp: latestBlock.timestamp,
-      authorizationState,
-      transactionTo: transaction.to,
-      transactionInput: transaction.input,
-      logs: receipt.logs.map((log) => ({
-        address: log.address,
-        data: log.data,
-        topics: log.topics,
-      })),
+    const confirmationDeadline = Math.min(budget.deadlineAt, Date.now() + (input.confirmationTimeoutMs ?? 0))
+    // Own the polling policy: viem's waiter retries errors outside the transport.
+    // Here only a missing receipt or an immature valid receipt can wait for a block.
+    for (;;) {
+      let receipt: Awaited<ReturnType<typeof client.getTransactionReceipt>>
+      try {
+        receipt = await budget.run(() => client.getTransactionReceipt({ hash: input.transactionHash as Hex }), 'eth_getTransactionReceipt', provider)
+      } catch (cause) {
+        if (minimumConfirmations > 1 && receiptFailureFromCause(cause)?.code === 'receipt_missing'
+          && Date.now() + 1_000 < confirmationDeadline) { await budget.wait(1_000); continue }
+        throw cause
+      }
+      const [transaction, latestBlock] = await budget.run(() => Promise.all([
+        client.getTransaction({ hash: input.transactionHash as Hex }), client.getBlock(),
+      ]), 'eth_getTransactionByHash', provider)
+      if (latestBlock.number === null || latestBlock.number < receipt.blockNumber
+        || transaction.hash.toLowerCase() !== receipt.transactionHash.toLowerCase()
+        || receipt.transactionHash.toLowerCase() !== input.transactionHash.toLowerCase()
+        || typeof receipt.blockHash !== 'string' || typeof transaction.blockHash !== 'string'
+        || receipt.blockHash.toLowerCase() !== transaction.blockHash.toLowerCase()
+        || transaction.blockNumber === null || transaction.blockNumber !== receipt.blockNumber) {
+        return fail('receipt_conflict', 'eth_getTransactionByHash')
+      }
+      if (latestBlock.number - receipt.blockNumber + 1n < BigInt(minimumConfirmations)) {
+        if (minimumConfirmations > 1 && Date.now() + 1_000 < confirmationDeadline) { await budget.wait(1_000); continue }
+        return fail('receipt_immature', 'confirmation')
+      }
+      const authorizationState = await budget.run(() => client.readContract({
+        address: profile.asset as Address, abi: eip3009ABI, functionName: 'authorizationState',
+        args: [input.payer as Address, input.nonce as Hex], blockNumber: latestBlock.number,
+      }), 'eth_call', provider)
+      if (typeof authorizationState !== 'boolean') return fail('rpc_invalid_response', 'eth_call')
+      return { kind: 'receipt', receipt: {
+        transactionHash: receipt.transactionHash, status: receipt.status,
+        confirmations: latestBlock.number - receipt.blockNumber + 1n, blockHash: receipt.blockHash,
+        blockNumber: receipt.blockNumber, observedBlockTimestamp: latestBlock.timestamp,
+        authorizationState, transactionTo: transaction.to, transactionInput: transaction.input,
+        logs: receipt.logs.map(log => ({ address: log.address, data: log.data, topics: log.topics })),
+      } }
     }
   } catch (cause) {
-    return degradeBackend(cause, undefined, { site: 'readGuardedX402EvmReceipt', reason: 'source_unavailable' })
-  }
+    return receiptFailureFromCause(cause) ?? fail('rpc_invalid_response', 'confirmation')
+  } finally { budget.dispose() }
+}
+
+function isReceiptRpcMethod(method: string): method is X402RpcMethod {
+  return ['eth_blockNumber', 'eth_getTransactionReceipt', 'eth_getTransactionByHash', 'eth_getBlockByNumber', 'eth_call'].includes(method)
 }
 
 /**

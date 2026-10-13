@@ -7,6 +7,7 @@ import { paymentsAudienceValue, treasuryEnvironmentValue, treasuryThresholdsValu
   treasuryChainCheckpointValue, treasuryChainObservationValue, treasuryCursorStateValue } from '../treasury'
 import { treasuryAlertCodeValue, treasurySnapshotValue } from '../treasury-report'
 import { paymentReadinessSnapshotValue } from '../payment-readiness'
+import { paymentReadinessWorkValue } from '../payment-readiness'
 
 const currency = v.string()
 const exponent = v.number()
@@ -656,6 +657,8 @@ export const moneyTables = {
     .index('by_snapshotRef', ['snapshotRef'])
     .index('by_environment_and_snapshotAt', ['environment', 'snapshotAt']),
   moneyPaymentReadiness: defineTable(paymentReadinessSnapshotValue)
+    .index('by_environment', ['environment']),
+  moneyPaymentReadinessWork: defineTable(paymentReadinessWorkValue)
     .index('by_environment', ['environment']),
   moneyTreasuryAlerts: defineTable({
     alertRef: identifier, environment: treasuryEnvironmentValue,

@@ -16,6 +16,7 @@ export {
   configuredX402RpcUrl,
   configuredX402RpcUrls,
   readX402EvmReceipt,
+  readX402EvmReceiptDetailed,
   recordX402TransportObservation,
 } from './x402Settlement'
 export {

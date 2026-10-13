@@ -5,7 +5,7 @@ import { boundaryCauseKind, degradeBackend } from '@/lib/observability/degrade-b
 import { isRecord } from '@/modules/common/is-record'
 import { TREASURY_FINALIZED_BLOCK_MAX_AGE_MS } from '@/modules/money/treasury'
 import { sendGuardedHttpRequest } from '@/modules/network-guard/server'
-import { cdpX402TreasuryConfigurationFromEnvironment, readCdpX402CustodyReadiness } from '@/modules/capability-supply/server'
+import { cdpX402TreasuryConfigurationFromEnvironment, readCdpX402CustodyReadiness, createX402ReadBudget, receiptFailureFromCause } from '@/modules/capability-supply/server'
 import { createFormanceContext, readFormanceConfiguration, readFormanceHealth } from '../formance/gateway'
 import { backendPaymentReadinessDigest, paymentReadinessExpiresAt, sealPaymentReadinessSnapshot,
   type PaymentReadinessCheck, type PaymentReadinessChecks } from '@/modules/money/payment-readiness'
@@ -27,28 +27,33 @@ type RefreshResult = { kind: 'published'; replayed: boolean } | { kind: 'refused
  * On violation: named failed checks are published; invalid/late publication is
  * refused by the transaction. No retry loop or last-good readiness fallback.
  */
-export async function refreshPaymentReadiness(ctx: ActionCtx): Promise<RefreshResult> {
+export async function refreshPaymentReadiness(ctx: ActionCtx, workToken: string): Promise<RefreshResult> {
   const startedAt = Date.now()
   const environment = deploymentPaymentEnvironment(process.env)
   if (environment === undefined) return { kind: 'refused', code: 'readiness_environment_mismatch' }
   const configurationDigest = backendPaymentReadinessDigest(process.env)
   const expiresAt = startedAt + VALID_FOR_MS
   const custody = cdpX402TreasuryConfigurationFromEnvironment(process.env)
+  // Bound all source reads together, leaving 15s for the sealed publication.
+  // Each race settles once; late SDK results cannot re-enter publication.
+  const budget = createX402ReadBudget(startedAt + 45_000)
   const [web, formance, cdp, chain, sources] = await Promise.all([
-    readWebConfiguration(process.env, environment, expiresAt),
-    readLedgerHealth(expiresAt).catch(cause => sourceFailure(cause, 'formance_readiness_unavailable')),
-    readCdpX402CustodyReadiness(process.env, environment).catch(cause => ({
-      kind: 'unavailable' as const, code: sourceFailure(cause, 'cdp_custody_read_unavailable').code,
-    })),
+    budget.run(() => readWebConfiguration(process.env, environment, expiresAt, budget.signal), 'agreement')
+      .catch(cause => sourceFailure(cause, 'web_readiness_unavailable')),
+    budget.run(() => readLedgerHealth(expiresAt, budget.signal), 'agreement')
+      .catch(cause => sourceFailure(cause, 'formance_readiness_unavailable')),
+    budget.run(() => readCdpX402CustodyReadiness(process.env, environment, budget.signal), 'agreement')
+      .catch(cause => ({ kind: 'unavailable' as const, code: sourceFailure(cause, 'cdp_custody_read_unavailable').code })),
     custody === undefined ? undefined
-      : readTreasuryChainObservation({ environment, address: custody.expectedEvmAddress, now: startedAt })
+      : budget.run(() => readTreasuryChainObservation({ environment, address: custody.expectedEvmAddress, now: startedAt,
+        signal: budget.signal }), 'agreement')
         .catch(cause => ({ kind: 'unavailable' as const, code: sourceFailure(cause, 'treasury_rpc_unavailable').code })),
-    ctx.runQuery(internal.moneyReadiness.readSourceChecks, { environment })
+    budget.run(() => ctx.runQuery(internal.moneyReadiness.readSourceChecks, { environment }), 'agreement')
       .catch((cause: unknown): PaymentReadinessSourceChecks => {
         const check = sourceFailure(cause, 'readiness_source_unavailable')
         return { reference_rate: check, commercial_policy: check, treasury: check }
       }),
-  ])
+  ]).finally(() => budget.dispose())
   const screening = readX402PayeeScreeningReadiness()
   const checks: PaymentReadinessChecks = {
     web_configuration: web,
@@ -70,14 +75,14 @@ export async function refreshPaymentReadiness(ctx: ActionCtx): Promise<RefreshRe
   }
   const snapshot = sealPaymentReadinessSnapshot({ environment, configurationDigest, startedAt, completedAt,
     expiresAt: paymentReadinessExpiresAt(startedAt, checks), checks })
-  return await ctx.runMutation(internal.moneyReadiness.publish, { snapshot })
+  return await ctx.runMutation(internal.moneyReadinessWork.complete, { snapshot, token: workToken })
 }
 
-async function readLedgerHealth(validUntil: number): Promise<PaymentReadinessCheck> {
+async function readLedgerHealth(validUntil: number, signal: AbortSignal): Promise<PaymentReadinessCheck> {
   const configured = readFormanceConfiguration()
   if (configured.kind !== 'configured') return failed(configured.code)
   const context = createFormanceContext({ ...configured.configuration, requestTimeoutMs: 5_000 },
-    { signal: AbortSignal.timeout(10_000) })
+    { signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]) })
   const result = await readFormanceHealth(context)
   // This verifies observed Ledger version/schema and gateway reachability.
   // The gatewayVersion field is a requirement constant, not live version proof.
@@ -88,6 +93,7 @@ export async function readWebConfiguration(
   environment: Readonly<Record<string, string | undefined>>,
   paymentEnvironment: PaymentEnvironment,
   validUntil: number,
+  signal?: AbortSignal,
 ): Promise<PaymentReadinessCheck> {
   const site = environment.AE_SITE_URL?.trim() ?? environment.SITE_URL?.trim()
   const convex = environment.CONVEX_CLOUD_URL
@@ -101,7 +107,7 @@ export async function readWebConfiguration(
       || source.pathname !== '/' || source.search !== '' || source.hash !== '') return failed('web_readiness_configuration_invalid')
     target.pathname = '/api/ready'
     const response = await sendGuardedHttpRequest(new Request(target, {
-      method: 'GET', headers: { accept: 'application/json' }, signal: AbortSignal.timeout(5_000),
+      method: 'GET', headers: { accept: 'application/json' }, signal: signal === undefined ? AbortSignal.timeout(5_000) : AbortSignal.any([signal, AbortSignal.timeout(5_000)]),
     }), 32 * 1024)
     if (response.status !== 200 && response.status !== 503) return failed('web_readiness_unavailable')
     const body: unknown = await response.json()
@@ -123,6 +129,8 @@ export async function readWebConfiguration(
 function failed(code: string): PaymentReadinessCheck { return { kind: 'failed', code } }
 
 function sourceFailure(cause: unknown, code: string): Extract<PaymentReadinessCheck, { kind: 'failed' }> {
-  return degradeBackend(boundaryCauseKind(cause), { kind: 'failed', code },
+  const failureCode = receiptFailureFromCause(cause)?.code === 'rpc_deadline_exceeded'
+    ? `${code.replace(/_unavailable$/, '')}_deadline_exceeded` : code
+  return degradeBackend(boundaryCauseKind(cause), { kind: 'failed', code: failureCode },
     { site: 'refreshPaymentReadiness', reason: 'source_unavailable' })
 }

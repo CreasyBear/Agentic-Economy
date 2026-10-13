@@ -138,7 +138,17 @@ async function reconcileSnapshotAttempt(ctx: Context, dependencies: SnapshotDepe
   }
   material.alerts = treasuryAlerts(material, base)
   if (!await dependencies.admit()) return unavailable('treasury_workload_authority_unavailable')
-  return await ctx.runMutation(internal.moneyTreasuryReconciliation.publishSnapshot, { snapshot: sealTreasurySnapshot(material) })
+  const snapshot = sealTreasurySnapshot(material)
+  const published: TreasurySnapshotResult = await ctx.runMutation(internal.moneyTreasuryReconciliation.publishSnapshot, { snapshot })
+  if (published.kind === 'published' && Object.values(snapshot.checks).every(check => check.kind === 'matched')) {
+    try { await ctx.runMutation(internal.moneyReadinessWork.requestRecovery, { snapshotRef: snapshot.snapshotRef }) }
+    catch (cause) {
+      // Recovery scheduling cannot undo a completed treasury audit; the watchdog closes this gap.
+      degradeBackend(cause instanceof Error ? cause.name : typeof cause, undefined,
+        { site: 'treasuryReadinessRecovery', reason: 'source_unavailable' })
+    }
+  }
+  return published
 }
 
 function advancedReadback(context: Extract<TreasurySnapshotContext, { kind: 'available' }>, proof: TreasuryChainObservation | Unavailable): boolean {
@@ -214,6 +224,9 @@ export function treasuryAlerts(snapshot: Omit<TreasurySnapshot, 'snapshotRef' | 
     const check = snapshot.checks[name]
     if (check.kind === 'mismatch') add(code, 'critical', check.evidenceRefs)
     else if (check.kind === 'attention') add(code, 'warning', check.evidenceRefs)
+    else if (name === 'settlements' && check.kind === 'unavailable' && check.code === 'treasury_payment_receipt_conflict') {
+      add('settlement_difference', 'critical')
+    }
   }
   if (snapshot.inFlight.kind === 'available' && snapshot.inFlight.overdueCount > 0) add('reservation_overdue', 'warning', snapshot.inFlight.calls.map(row => row.callRef))
   if (Object.values(snapshot.checks).some(check => check.kind === 'unavailable')) add('reconciliation_unavailable', 'warning')

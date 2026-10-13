@@ -18,7 +18,7 @@ vi.mock('@/modules/network-guard/public', () => ({
   isPublicHttpTarget: mocks.isPublicHttpTarget,
 }))
 
-import { readGuardedX402EvmReceipt, readGuardedX402UnusedAuthorization } from '@/modules/capability-supply/server'
+import { readGuardedX402EvmReceipt, readGuardedX402EvmReceiptDetailed, readGuardedX402UnusedAuthorization } from '@/modules/capability-supply/server'
 import { decodeFunctionData } from 'viem'
 import { eip3009ABI } from '@x402/evm'
 
@@ -215,7 +215,7 @@ describe('guarded x402 EVM receipt reader', () => {
     expect(call?.params[1]).toBe('0x70')
   })
 
-  it('uses viem confirmation waiting when the caller requires final settlement evidence', async () => {
+  it('waits for the caller confirmation threshold through the bounded reader', async () => {
     installSuccessfulRpc(BASE_SEPOLIA_USDC_ADDRESS)
 
     await expect(readGuardedX402EvmReceipt({
@@ -352,5 +352,151 @@ describe('expired unused x402 authorization proof', () => {
     mocks.isPublicHttpTarget.mockResolvedValueOnce(false)
     await expect(readGuardedX402UnusedAuthorization(input)).resolves.toBeUndefined()
     expect(mocks.fetch).not.toHaveBeenCalled()
+  })
+})
+
+
+describe('classified bounded receipt reads', () => {
+  beforeEach(() => { vi.resetAllMocks(); mocks.isPublicHttpTarget.mockResolvedValue(true) })
+  const input = () => ({ target: new URL('https://rpc.example.test/private-api-key'), aeEnvironment: 'sandbox' as const,
+    network: BASE_SEPOLIA_NETWORK, asset: BASE_SEPOLIA_USDC_ADDRESS, transactionHash, payer, nonce,
+    dispatcher: {} as never, transportRetryCount: 0 as const })
+
+  it('polls missing then immature evidence until twelve confirmations under the original deadline', async () => {
+    vi.useFakeTimers()
+    try {
+      installSuccessfulRpc(BASE_SEPOLIA_USDC_ADDRESS)
+      const successful = mocks.fetch.getMockImplementation()!
+      let receipts = 0
+      mocks.fetch.mockImplementation(async (target: URL, init: RequestInit) => {
+        const { method } = JSON.parse(String(init.body))
+        if (method === 'eth_getTransactionReceipt' && ++receipts === 1) return rpcResult(null)
+        if (method === 'eth_getBlockByNumber') {
+          const response = await successful(target, init)
+          const payload = await response.json()
+          return rpcResult({ ...payload.result, number: receipts === 2 ? '0x64' : '0x6f' })
+        }
+        return await successful(target, init)
+      })
+      const pending = readGuardedX402EvmReceiptDetailed({ ...input(), minimumConfirmations: 12,
+        confirmationTimeoutMs: 5_000, deadlineAt: Date.now() + 5_000 })
+      await vi.advanceTimersByTimeAsync(1)
+      expect(receipts).toBe(1)
+      await vi.advanceTimersByTimeAsync(1_000)
+      expect(receipts).toBe(2)
+      await vi.advanceTimersByTimeAsync(1_000)
+      expect(await pending).toMatchObject({ kind: 'receipt', receipt: { confirmations: 12n } })
+      const calls = mocks.fetch.mock.calls.length
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(mocks.fetch).toHaveBeenCalledTimes(calls)
+    } finally { vi.useRealTimers() }
+  })
+
+  it.each(['missing', 'immature'] as const)('stops permanently %s evidence before the original deadline with no late HTTP', async fault => {
+    vi.useFakeTimers()
+    try {
+      installSuccessfulRpc(BASE_SEPOLIA_USDC_ADDRESS)
+      const successful = mocks.fetch.getMockImplementation()!
+      mocks.fetch.mockImplementation(async (target: URL, init: RequestInit) => {
+        const { method } = JSON.parse(String(init.body))
+        if (method === 'eth_getTransactionReceipt' && fault === 'missing') return rpcResult(null)
+        if (method === 'eth_getBlockByNumber') {
+          const payload = await (await successful(target, init)).json()
+          return rpcResult({ ...payload.result, number: '0x64' })
+        }
+        return await successful(target, init)
+      })
+      const pending = readGuardedX402EvmReceiptDetailed({ ...input(), minimumConfirmations: 12,
+        confirmationTimeoutMs: 60_000, deadlineAt: Date.now() + 1_500 })
+      await vi.advanceTimersByTimeAsync(1_001)
+      expect(await pending).toMatchObject({ kind: 'failed', code: fault === 'missing' ? 'receipt_missing' : 'receipt_immature' })
+      const calls = mocks.fetch.mock.calls.length
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(mocks.fetch).toHaveBeenCalledTimes(calls)
+      expect(mocks.fetch.mock.calls.some(([, init]) => JSON.parse(String(init.body)).method === 'eth_call')).toBe(false)
+    } finally { vi.useRealTimers() }
+  })
+
+  it.each(['authentication', 'malformed'] as const)('does not retry %s when twelve confirmations are requested', async fault => {
+    mocks.fetch.mockResolvedValue(fault === 'authentication' ? new Response('private', { status: 401 }) : new Response('{invalid'))
+    const { transportRetryCount, ...defaultRetryInput } = input()
+    void transportRetryCount
+    const result = await readGuardedX402EvmReceiptDetailed({ ...defaultRetryInput,
+      minimumConfirmations: 12, confirmationTimeoutMs: 60_000 })
+    expect(result).toMatchObject({ kind: 'failed', code: fault === 'authentication' ? 'rpc_authentication_failed' : 'rpc_invalid_response' })
+    expect(mocks.fetch).toHaveBeenCalledOnce()
+  })
+
+  it.each([[401, 'rpc_authentication_failed'], [403, 'rpc_authentication_failed'],
+    [429, 'rpc_rate_limited'], [503, 'rpc_transport_unavailable']] as const)(
+    'classifies HTTP %s without leaking target or response content', async (status, code) => {
+      mocks.fetch.mockResolvedValue(new Response('private-provider-detail', { status, headers: { 'retry-after': '2' } }))
+      const result = await readGuardedX402EvmReceiptDetailed(input())
+      expect(result).toMatchObject({ kind: 'failed', code, httpStatus: status, retryAfterMs: 2_000,
+        provider: 'rpc_1', method: 'eth_getTransactionReceipt' })
+      expect(JSON.stringify(result)).not.toMatch(/private-api-key|private-provider-detail/)
+      expect(mocks.fetch).toHaveBeenCalledOnce()
+    },
+  )
+
+  it('never hides authentication failure behind nested transport retry', async () => {
+    mocks.fetch.mockResolvedValue(new Response('denied', { status: 401 }))
+    const { transportRetryCount: _retry, ...defaultInput } = input()
+    expect(await readGuardedX402EvmReceiptDetailed(defaultInput)).toMatchObject({ code: 'rpc_authentication_failed' })
+    expect(mocks.fetch).toHaveBeenCalledOnce()
+  })
+
+  it.each(['invalid-json', 'wrong-id', 'contradictory-envelope', 'missing-receipt'])(
+    'preserves protocol failure identity: %s', async mode => {
+      mocks.fetch.mockResolvedValue(new Response(mode === 'invalid-json' ? '{' : JSON.stringify(
+        mode === 'wrong-id' ? { jsonrpc: '2.0', id: 8, result: null }
+          : mode === 'contradictory-envelope' ? { jsonrpc: '2.0', id: 1, result: null, error: { code: 429 } }
+            : { jsonrpc: '2.0', id: 1, result: null }), { status: 200 }))
+      expect(await readGuardedX402EvmReceiptDetailed(input())).toMatchObject({ kind: 'failed',
+        code: mode === 'missing-receipt' ? 'receipt_missing' : 'rpc_invalid_response' })
+      expect(mocks.fetch).toHaveBeenCalledOnce()
+    },
+  )
+
+  it('preserves a receipt/transaction contradiction without calling nonce state or retrying', async () => {
+    installSuccessfulRpc(BASE_SEPOLIA_USDC_ADDRESS)
+    const respond = mocks.fetch.getMockImplementation()!
+    mocks.fetch.mockImplementation(async (target: URL, init: RequestInit) => {
+      const response = await respond(target, init) as Response
+      if (JSON.parse(String(init.body)).method !== 'eth_getTransactionByHash') return response
+      const body = await response.json()
+      return rpcResult({ ...body.result, blockHash: `0x${'8'.repeat(64)}` })
+    })
+    expect(await readGuardedX402EvmReceiptDetailed(input())).toMatchObject({ code: 'receipt_conflict' })
+    expect(mocks.fetch.mock.calls.map(([, init]) => JSON.parse(String(init.body)).method)).not.toContain('eth_call')
+  })
+
+  it('bounds DNS and starts no late HTTP request after the shared deadline', async () => {
+    vi.useFakeTimers()
+    try {
+      let release!: (value: boolean) => void
+      mocks.isPublicHttpTarget.mockImplementationOnce(() => new Promise<boolean>(resolve => { release = resolve }))
+      const pending = readGuardedX402EvmReceiptDetailed({ ...input(), deadlineAt: Date.now() + 20 })
+      await vi.advanceTimersByTimeAsync(21)
+      expect(await pending).toMatchObject({ code: 'rpc_deadline_exceeded', method: 'dns' })
+      release(true)
+      await Promise.resolve()
+      expect(mocks.fetch).not.toHaveBeenCalled()
+    } finally { vi.useRealTimers() }
+  })
+
+  it.each(['fetch', 'body'])('aborts a stalled %s at the caller deadline', async mode => {
+    vi.useFakeTimers()
+    try {
+      const cancel = vi.fn()
+      if (mode === 'fetch') mocks.fetch.mockImplementation(() => new Promise(() => undefined))
+      else mocks.fetch.mockResolvedValue(new Response(new ReadableStream({ cancel }), { status: 200 }))
+      const pending = readGuardedX402EvmReceiptDetailed({ ...input(), deadlineAt: Date.now() + 20 })
+      await vi.advanceTimersByTimeAsync(21)
+      expect(await pending).toMatchObject({ code: 'rpc_deadline_exceeded' })
+      const init = mocks.fetch.mock.calls[0]?.[1] as RequestInit | undefined
+      expect(init?.signal?.aborted).toBe(true)
+      if (mode === 'body') expect(cancel).toHaveBeenCalledOnce()
+    } finally { vi.useRealTimers() }
   })
 })

@@ -1066,9 +1066,9 @@ describe('production aggregate payment readiness', () => {
     const passed = { kind: 'passed' as const, validUntil: now + 60_000 }
     const action = {
       runQuery: vi.fn(async () => ({ reference_rate: passed, commercial_policy: passed, treasury: passed })),
-      runMutation: async (_reference: unknown, args: { snapshot: PaymentReadinessSnapshot }) => await backend.mutation(publish, args),
+      runMutation: async (_reference: unknown, args: { snapshot: PaymentReadinessSnapshot }) => await backend.mutation(publish, { snapshot: args.snapshot }),
     } as unknown as ActionCtx
-    expect(await refreshPaymentReadiness(action)).toEqual({ kind: 'published', replayed: false })
+    expect(await refreshPaymentReadiness(action, 'fixture:claim')).toEqual({ kind: 'published', replayed: false })
     const rows = await backend.run(ctx => ctx.db.query('moneyPaymentReadiness').collect())
     expect(rows).toHaveLength(1)
     expect(rows[0]?.checks.web_configuration.kind).toBe('passed')
@@ -1117,7 +1117,7 @@ describe('production aggregate payment readiness', () => {
     expect(outward).not.toContain('treasury_reconciliation_required')
     expect(outward).not.toContain(treasury.snapshotRef)
   })
-  it.each(['network', 'partial_body', 'redirect'] as const)('bounds actual Convex SDK %s failure without exposing transport details', async failure => {
+  it.each(['network', 'partial_body', 'redirect', 'authentication', 'rate_limit', 'malformed'] as const)('bounds actual Convex SDK %s failure without exposing transport details', async failure => {
     setPublicSourceTransportForTests(undefined)
     vi.stubEnv('CONVEX_URL', undefined)
     vi.stubEnv('VITE_CONVEX_URL', undefined)
@@ -1127,6 +1127,9 @@ describe('production aggregate payment readiness', () => {
       if (init?.method !== 'POST') return new Response(null, { status: 200 })
       expect(init.redirect).toBe('error')
       expect(String(init.body)).not.toContain(env.AE_CONVEX_SERVER_FUNCTION_TOKEN)
+      if (failure === 'authentication') return new Response('private-provider-detail', { status: 403 })
+      if (failure === 'rate_limit') return new Response('private-provider-detail', { status: 429 })
+      if (failure === 'malformed') return new Response('{invalid-private-body')
       if (failure === 'redirect') {
         const response = Response.json({ status: 'success', value: readyPaymentView() })
         Object.defineProperty(response, 'redirected', { value: true })
@@ -1147,6 +1150,12 @@ describe('production aggregate payment readiness', () => {
     const response = await handleReadyRequest(request(), { env, fetch: fetchImpl, timeoutMs: 25, nodeMajor: 22 })
     expect(response.status).toBe(503)
     expect((await response.json()).checks.payments).toEqual({ status: 'failed', code: 'payments_unavailable' })
-    if (failure !== 'redirect') expect(aborted).toBe(true)
+    if (failure === 'network' || failure === 'partial_body') expect(aborted).toBe(true)
+    const code = failure === 'redirect' ? 'payment_readiness_backend_identity_invalid'
+      : failure === 'authentication' ? 'payment_readiness_backend_authentication_failed'
+        : failure === 'rate_limit' ? 'payment_readiness_backend_rate_limited'
+          : failure === 'malformed' ? 'payment_readiness_backend_response_invalid' : 'payment_readiness_backend_timeout'
+    await vi.waitFor(() => expect(mocks.captureServerException.mock.calls.some(([cause]) => cause === code)).toBe(true))
+    expect(JSON.stringify(mocks.captureServerException.mock.calls)).not.toMatch(/private-provider-detail|invalid-private-body|private-network-details|private-body-details/)
   })
 })

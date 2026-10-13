@@ -12,9 +12,9 @@ import type { FormanceTreasuryAuditTransaction } from '@/modules/money/formance-
 import type { TreasuryBatch, TreasuryIdentity, TreasuryTransfer } from '@/modules/money/treasury'
 import type { X402EvmReceipt } from '@/modules/capability-supply/server'
 import { auditTreasuryCash } from '../../../convex/lib/money/treasury/cashAudit'
-import { readX402EvmReceipt } from '@/modules/capability-execution/call-runtime'
+import { readX402EvmReceiptDetailed as readX402EvmReceipt } from '@/modules/capability-execution/call-runtime'
 
-vi.mock('@/modules/capability-execution/call-runtime', () => ({ readX402EvmReceipt: vi.fn() }))
+vi.mock('@/modules/capability-execution/call-runtime', () => ({ readX402EvmReceiptDetailed: vi.fn() }))
 
 type Input = Parameters<typeof auditTreasuryCash>[0]
 type CallSource = Input['calls'][number]
@@ -213,7 +213,7 @@ describe('independent treasury cash reconciliation behavior', () => {
     expect(result).toMatchObject({ cash: { kind: 'matched', expectedUnits: '95000000', observedUnits: '95000000' },
       settlements: { kind: 'matched', checkedCount: 1, expectedUnits: PAYMENT }, reservations: { kind: 'matched', expectedUnits: '0' },
       rawCashDifferenceUnits: '0', cashTimingAdjustmentUnits: '0', inFlight: { kind: 'available', count: 0 } })
-    expect(f.reader).toHaveBeenCalledWith(f.attempt.material, hash(1))
+    expect(f.reader).toHaveBeenCalledWith(f.attempt.material, hash(1), expect.any(Number))
     expect(result.deposits).toEqual([{ transactionRef: f.opening.state.kind === 'booked' ? f.opening.state.transactionRefs[0] : '',
       amountUnits: '100000000', bookedAt: NOW - 1_500, chainTransactionHash: null }])
   })
@@ -271,7 +271,7 @@ describe('independent treasury cash reconciliation behavior', () => {
     const reader = vi.fn(async () => { now += 120_000; return undefined })
     const result = await auditTreasuryCash(f.input, reader).finally(() => clock.mockRestore())
     expect(reader).toHaveBeenCalledOnce()
-    expect(result.settlements).toMatchObject({ kind: 'unavailable', code: 'treasury_payment_readback_incomplete' })
+    expect(result.settlements).toMatchObject({ kind: 'unavailable', code: 'treasury_payment_rpc_deadline_exceeded' })
   })
 
   it('rechecks the deadline after a delayed retry timer resumes', async () => {
@@ -363,11 +363,12 @@ describe('independent treasury cash reconciliation behavior', () => {
   it.each([11n, 12n])('uses current receipt evidence with %s confirmations without waiting for a later block', async confirmations => {
     const f = fixture()
     vi.mocked(readX402EvmReceipt).mockImplementation(async (...args) => args[7] === undefined
-      ? { ...receipt(f.attempt.material, hash(1)), confirmations } : undefined)
+      ? { kind: 'receipt', receipt: { ...receipt(f.attempt.material, hash(1)), confirmations } }
+      : { kind: 'failed', code: 'receipt_missing', method: 'eth_getTransactionReceipt' })
     const result = await auditTreasuryCash(f.input)
     expect(result.settlements).toMatchObject(confirmations === 12n
       ? { kind: 'matched', checkedCount: 1, expectedUnits: PAYMENT }
-      : { kind: 'unavailable', code: 'treasury_payment_receipt_unavailable' })
+      : { kind: 'unavailable', code: 'treasury_payment_receipt_immature' })
     expect(result.cash.kind).toBe(confirmations === 12n ? 'matched' : 'unavailable')
     expect(vi.mocked(readX402EvmReceipt).mock.calls.every(args => args[8]?.retryCount === 0)).toBe(true)
   })
@@ -381,7 +382,7 @@ describe('independent treasury cash reconciliation behavior', () => {
     const result = await auditTreasuryCash(f.input, async () => { throw new Error('external_rpc_unavailable') })
     expect(result.settlements).toMatchObject(hasOrphan
       ? { kind: 'mismatch', code: 'treasury_settlement_evidence_conflict', evidenceRefs: [`chain:${NETWORK}:${hash(9)}`] }
-      : { kind: 'unavailable', code: 'treasury_payment_receipt_unavailable' })
+      : { kind: 'unavailable', code: 'treasury_payment_rpc_transport_unavailable' })
     expect(result.cash.kind).not.toBe('matched')
   })
 
@@ -488,4 +489,92 @@ describe('independent treasury cash reconciliation behavior', () => {
     expect(result.settlements).toMatchObject({ kind: 'mismatch', code: 'treasury_settlement_evidence_conflict' })
     expect(result.cash.kind).not.toBe('matched')
   })
+})
+
+
+describe('classified treasury receipt failures', () => {
+  it.each(['receipt_conflict', 'rpc_authentication_failed', 'rpc_invalid_response', 'receipt_immature'] as const)(
+    'does not retry %s or turn it into missing evidence', async code => {
+      const f = fixture()
+      const reader = vi.fn(async () => ({ kind: 'failed' as const, code, method: 'agreement' as const }))
+      const result = await auditTreasuryCash(f.input, reader)
+      expect(reader).toHaveBeenCalledOnce()
+      expect(result.settlements).toMatchObject({ kind: 'unavailable', code: `treasury_payment_${code}` })
+      expect(result.cash.kind).not.toBe('matched')
+    },
+  )
+
+  it('honors a bounded provider retry delay within the original read budget', async () => {
+    vi.useFakeTimers()
+    try {
+      const f = fixture()
+      const reader = vi.fn<NonNullable<Parameters<typeof auditTreasuryCash>[1]>>()
+        .mockResolvedValueOnce({ kind: 'failed', code: 'rpc_rate_limited', method: 'eth_getTransactionReceipt', retryAfterMs: 1_000 })
+        .mockResolvedValueOnce({ kind: 'receipt', receipt: receipt(f.attempt.material, hash(1)) })
+      const pending = auditTreasuryCash(f.input, reader)
+      await vi.advanceTimersByTimeAsync(999)
+      expect(reader).toHaveBeenCalledOnce()
+      await vi.advanceTimersByTimeAsync(1)
+      expect((await pending).settlements.kind).toBe('matched')
+      expect(reader).toHaveBeenCalledTimes(2)
+      expect(reader.mock.calls[0]?.[2]).toBe(reader.mock.calls[1]?.[2])
+    } finally { vi.useRealTimers() }
+  })
+
+  it('returns at the absolute deadline even if an injected receipt read ignores cancellation', async () => {
+    vi.useFakeTimers()
+    try {
+      const f = fixture()
+      const reader = vi.fn(async () => new Promise<undefined>(() => undefined))
+      const pending = auditTreasuryCash(f.input, reader)
+      await vi.advanceTimersByTimeAsync(120_001)
+      expect((await pending).settlements).toMatchObject({ kind: 'unavailable', code: 'treasury_payment_rpc_deadline_exceeded' })
+      expect(reader).toHaveBeenCalledOnce()
+    } finally { vi.useRealTimers() }
+  })
+})
+
+
+it('preserves real provider disagreement through the cash audit without retrying it into a pass', async () => {
+  const supply = await import('@/modules/capability-supply/server')
+  const actual = await vi.importActual<typeof import('@/modules/capability-execution/call-runtime')>('@/modules/capability-execution/call-runtime')
+  const f = fixture()
+  vi.stubEnv('AE_X402_RPC_URLS_JSON', JSON.stringify({ [NETWORK]: ['https://rpc.one.example', 'https://rpc.two.example'] }))
+  const first = receipt(f.attempt.material, hash(1))
+  const peer = vi.spyOn(supply, 'readGuardedX402EvmReceiptDetailed')
+    .mockResolvedValueOnce({ kind: 'receipt', receipt: first })
+    .mockResolvedValueOnce({ kind: 'receipt', receipt: { ...first, blockHash: hash(999) } })
+    .mockResolvedValue({ kind: 'receipt', receipt: first })
+  try {
+    const result = await auditTreasuryCash(f.input, async (attempt, transactionHash, deadlineAt) =>
+      await actual.readX402EvmReceiptDetailed(attempt.network, attempt.asset, transactionHash, {} as never,
+        'sandbox', attempt.paymentPayer!, attempt.paymentNonce!, undefined, { retryCount: 0, ...(deadlineAt === undefined ? {} : { deadlineAt }) }))
+    expect(result.settlements).toEqual({ kind: 'unavailable', code: 'treasury_payment_receipt_conflict' })
+    expect(result.cash.kind).not.toBe('matched')
+    expect(peer).toHaveBeenCalledTimes(2)
+  } finally { peer.mockRestore(); vi.unstubAllEnvs() }
+})
+
+
+it('delivers a terminal conflict through the real wrapper and audit before a stalled peer can consume the deadline', async () => {
+  vi.useFakeTimers()
+  const supply = await import('@/modules/capability-supply/server')
+  const actual = await vi.importActual<typeof import('@/modules/capability-execution/call-runtime')>('@/modules/capability-execution/call-runtime')
+  const f = fixture()
+  vi.stubEnv('AE_X402_RPC_URLS_JSON', JSON.stringify({ [NETWORK]: ['https://rpc.one.example', 'https://rpc.two.example'] }))
+  const peer = vi.spyOn(supply, 'readGuardedX402EvmReceiptDetailed')
+    .mockResolvedValueOnce({ kind: 'failed', code: 'receipt_conflict', method: 'eth_getTransactionByHash' })
+    .mockImplementationOnce(() => new Promise(() => undefined))
+  try {
+    const pending = auditTreasuryCash(f.input, async (attempt, transactionHash, deadlineAt) =>
+      await actual.readX402EvmReceiptDetailed(attempt.network, attempt.asset, transactionHash, {} as never,
+        'sandbox', attempt.paymentPayer!, attempt.paymentNonce!, undefined,
+        { retryCount: 0, ...(deadlineAt === undefined ? {} : { deadlineAt }) }))
+    await vi.advanceTimersByTimeAsync(1)
+    expect((await pending).settlements).toEqual({ kind: 'unavailable', code: 'treasury_payment_receipt_conflict' })
+    expect(peer).toHaveBeenCalledTimes(2)
+    expect(peer.mock.calls[1]?.[0].signal?.aborted).toBe(true)
+    await vi.advanceTimersByTimeAsync(120_000)
+    expect(peer).toHaveBeenCalledTimes(2)
+  } finally { peer.mockRestore(); vi.unstubAllEnvs(); vi.useRealTimers() }
 })

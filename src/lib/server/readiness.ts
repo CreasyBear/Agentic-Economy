@@ -16,7 +16,7 @@ import { readPlatformFundingConstraintsThroughSource, readPublicAvailabilityThro
 import { isRecord } from '@/modules/common/is-record'
 import { PAYMENT_READINESS_CHECK_KEYS, PAYMENT_READINESS_GATING_KEYS, PAYMENT_READINESS_MAX_VALIDITY_MS, referenceRateFresh, type PaymentReadinessServerView } from '@/modules/money/payment-readiness'
 import { ALPHA_X402_PAYEE_SCREENING_POLICY } from '@/modules/money/x402-spend-admission'
-import { callPublicSourceQuery, createConvexServerFunctionAssertion, sourceQuery, type ConvexServerFunctionAssertion } from './convex-source'
+import { callPublicSourceQuery, ConvexSourceError, createConvexServerFunctionAssertion, sourceQuery, type ConvexServerFunctionAssertion } from './convex-source'
 
 const DEFAULT_PROBE_TIMEOUT_MS = 2_000
 const MAX_PROBE_TIMEOUT_MS = 5_000
@@ -204,11 +204,17 @@ export async function readServerReadiness(
   }
 
   const production = deployment.paymentEnvironment === 'production'
-  const [convex, commercial, paymentView] = await Promise.all([
+  const [convex, commercial, paymentProbe] = await Promise.all([
     probeConvex(config.convexUrl, options.fetch ?? globalThis.fetch, options.timeoutMs),
     commercialPromise,
     production ? readBackendPaymentReadiness(env, config.convexUrl, options.fetch ?? globalThis.fetch, options.timeoutMs) : undefined,
   ])
+  const paymentView = paymentProbe?.kind === 'read' ? paymentProbe.view : undefined
+  if (paymentProbe?.kind === 'failed') {
+    degrade(paymentProbe.code, undefined, { site: 'readBackendPaymentReadiness', reason: 'source_unavailable' })
+  } else if (paymentView?.kind === 'not_ready') {
+    degrade('payment_readiness_backend_refused', undefined, { site: 'readBackendPaymentReadiness', reason: 'source_unavailable' })
+  }
   // Commercial reads can finish after the query. Authority is still evaluated
   // at response completion, on one clock; a previously green response cannot extend expiry.
   const now = Date.now()
@@ -260,35 +266,60 @@ function gateSellable(
   return payments === 'failed' || payments === 'disabled' ? { ...commercial, sellable: false } : commercial
 }
 
+type BackendPaymentProbe = { kind: 'read'; view: PaymentReadinessServerView }
+  | { kind: 'failed'; code: 'payment_readiness_backend_timeout' | 'payment_readiness_backend_authentication_failed'
+    | 'payment_readiness_backend_rate_limited' | 'payment_readiness_backend_transport_unavailable'
+    | 'payment_readiness_backend_identity_invalid' | 'payment_readiness_backend_response_invalid' }
+
 /**
- * Requires a statically admitted production origin and exact signed environment.
- * Ensures bounded read-only transport, including response body cancellation.
- * Invariant: no Clerk session, provider effect, raw error or detailed public code.
- * On violation: undefined; the aggregate gate returns only payments_unavailable.
+ * Requires a statically admitted origin and exact signed environment.
+ * Ensures one bounded read and sanitized internal diagnosis; no effects/retries.
+ * Invariant: public payment refusal stays payments_unavailable; no raw error/URL/body in telemetry.
+ * On violation: typed failure distinguishes failed transport from a backend refusal.
  */
-async function readBackendPaymentReadiness(env: StringEnvironment, convexUrl: string, fetchImpl: typeof fetch, timeoutMs?: number): Promise<PaymentReadinessServerView | undefined> {
+async function readBackendPaymentReadiness(env: StringEnvironment, convexUrl: string, fetchImpl: typeof fetch, timeoutMs?: number): Promise<BackendPaymentProbe> {
   const controller = new AbortController()
+  let failureCode: Extract<BackendPaymentProbe, { kind: 'failed' }>['code'] = 'payment_readiness_backend_transport_unavailable'
+  let abort: () => void = () => undefined
+  const aborted = new Promise<never>((_resolve, reject) => {
+    abort = () => reject(new DOMException('Readiness probe expired.', 'AbortError'))
+    controller.signal.addEventListener('abort', abort, { once: true })
+  })
   const timer = setTimeout(() => controller.abort(), boundedProbeTimeout(timeoutMs))
   try {
-    const command = { environment: 'production' as const }
-    const serviceAuth = await createConvexServerFunctionAssertion({
-      operation: PAYMENT_READINESS_OPERATION, scope: PAYMENT_READINESS_SCOPE, command, env,
-    })
-    if (controller.signal.aborted) return undefined
-    const view = await callPublicSourceQuery(paymentReadinessQuery, { ...command, serviceAuth }, {
-      env, fetch: async (input, init) => {
-        const response = await fetchImpl(input, { ...init, redirect: 'error', signal: controller.signal })
-        if (response.redirected || (response.url !== '' && new URL(response.url).origin !== new URL(convexUrl).origin)) {
-          throw new Error('readiness_backend_identity_invalid')
-        }
-        return response
-      },
-    })
-    return controller.signal.aborted ? undefined : view
-  } catch {
-    return undefined
+    const view = await Promise.race([aborted, (async () => {
+      const command = { environment: 'production' as const }
+      const serviceAuth = await createConvexServerFunctionAssertion({
+        operation: PAYMENT_READINESS_OPERATION, scope: PAYMENT_READINESS_SCOPE, command, env,
+      })
+      controller.signal.throwIfAborted()
+      return await callPublicSourceQuery(paymentReadinessQuery, { ...command, serviceAuth }, {
+        env, signal: controller.signal, fetch: async (input, init) => {
+          controller.signal.throwIfAborted()
+          const response = await fetchImpl(input, { ...init, redirect: 'error', signal: controller.signal })
+          if (response.redirected || (response.url !== '' && new URL(response.url).origin !== new URL(convexUrl).origin)) {
+            failureCode = 'payment_readiness_backend_identity_invalid'
+            void response.body?.cancel().catch(() => undefined)
+            throw new Error(failureCode)
+          }
+          failureCode = response.status === 401 || response.status === 403 ? 'payment_readiness_backend_authentication_failed'
+            : response.status === 429 ? 'payment_readiness_backend_rate_limited'
+              : response.status >= 500 ? 'payment_readiness_backend_transport_unavailable' : 'payment_readiness_backend_response_invalid'
+          return response
+        },
+      })
+    })()])
+    if (!isRecord(view) || (view.kind !== 'ready' && view.kind !== 'not_ready')) {
+      return { kind: 'failed', code: 'payment_readiness_backend_response_invalid' }
+    }
+    return { kind: 'read', view }
+  } catch (cause) {
+    return { kind: 'failed', code: controller.signal.aborted ? 'payment_readiness_backend_timeout'
+      : cause instanceof ConvexSourceError && cause.code === 'missing_auth' ? 'payment_readiness_backend_authentication_failed' : failureCode }
   } finally {
     clearTimeout(timer)
+    controller.signal.removeEventListener('abort', abort)
+    controller.abort()
   }
 }
 
