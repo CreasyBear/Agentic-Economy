@@ -292,7 +292,6 @@ export const externalToolDescriptionSchema = z.strictObject({
   }),
 })
 export const toolChoiceDescribeOutputSchema = z.union([
-  externalToolDescriptionSchema,
   z.strictObject({
     kind: z.literal('found'),
     schemaVersion: z.literal(PublicToolRegistrySchemaVersion),
@@ -309,6 +308,7 @@ export const toolChoiceDescribeOutputSchema = z.union([
     toolRef: z.string(),
     reason: z.string(),
   }),
+  externalToolDescriptionSchema,
 ])
 export const toolChoiceCompareOutputSchema = z.union([
   z.strictObject({

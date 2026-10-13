@@ -81,6 +81,8 @@ async function fixture(workflow = false, approvalRequired = false) {
 }
 
 describe('Plan lifecycle through persisted authority and ordinary Calls', () => {
+  // Cold Node action imports need a bounded startup allowance; the workflow
+  // still has the same 30 simulated-time steps and completion assertions.
   it('runs the actual workflow, Call worker and trigger bridge once per dependent node', async () => {
     vi.stubEnv('AE_ROUTE_CALL_SIGNING_SECRET', 'plan-workflow-fixture-signing-secret-32-bytes')
     vi.stubEnv('AE_ROUTE_CALL_SIGNING_KEY_ID', 'route-calls:plan-proof')
@@ -114,7 +116,7 @@ describe('Plan lifecycle through persisted authority and ordinary Calls', () => 
     expect(await f.run()).toMatchObject({ kind: 'replayed' })
     expect((await f.row())?.workflowId).toBe(workflowId)
     expect(providerFetch).toHaveBeenCalledTimes(3)
-  })
+  }, 15_000)
 
   it('binds chat execution to its live turn and sealed quote, refusing stopped turns before any Hold', async () => {
     const f = await fixture(false, true)
