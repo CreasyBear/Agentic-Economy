@@ -3662,8 +3662,32 @@
   {
     "visibility": "internal",
     "module": "moneyReadinessRefresh",
+    "method": "recover",
+    "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyReadinessRefresh",
     "method": "refresh",
     "kind": "action"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyReadinessWork",
+    "method": "claim",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyReadinessWork",
+    "method": "complete",
+    "kind": "mutation"
+  },
+  {
+    "visibility": "internal",
+    "module": "moneyReadinessWork",
+    "method": "requestRecovery",
+    "kind": "mutation"
   },
   {
     "visibility": "public",

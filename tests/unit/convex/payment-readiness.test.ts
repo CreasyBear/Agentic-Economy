@@ -10,6 +10,8 @@ import { backendPaymentReadinessDigest, failedPaymentReadinessChecks, paymentRea
   type PaymentReadinessView } from '@/modules/money/payment-readiness'
 import type { PublishPaymentReadinessResult } from '../../../convex/lib/money/readiness/store'
 import schema from '../../../convex/schema'
+import { completePaymentReadinessWork } from '../../../convex/lib/money/readiness/work'
+import { canonicalDb } from './workload-cron.harness'
 import { internal } from '../../../convex/_generated/api'
 import { seedTreasuryReadinessFacts } from '../../helpers/payment-readiness-fixture'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -464,5 +466,237 @@ describe('registered server-authorized payment readiness read', () => {
     vi.stubEnv('CDP_WALLET_SECRET', 'rotated-wallet-secret')
     expect(await backend.query(serviceRead, { environment: 'production', serviceAuth: proof }))
       .toMatchObject({ kind: 'not_ready', code: 'readiness_configuration_changed' })
+  })
+})
+
+describe('leased payment readiness recovery', () => {
+  beforeEach(() => { vi.useFakeTimers(); vi.spyOn(Date, 'now').mockReturnValue(NOW) })
+  afterEach(() => { vi.clearAllTimers(); vi.useRealTimers() })
+  const work = (backend: ReturnType<typeof convexTest>) => backend.run(async ctx =>
+    await ctx.db.query('moneyPaymentReadinessWork').unique())
+  const queued = (backend: ReturnType<typeof convexTest>) => backend.run(async ctx =>
+    await ctx.db.system.query('_scheduled_functions').collect())
+  async function prepare() {
+    const backend = convexTest(schema, modules)
+    await backend.mutation(publish, { snapshot: snapshot({ checks: {
+      ...passedChecks(), treasury: { kind: 'failed', code: 'treasury_reconciliation_required' },
+    } }) })
+    const facts = await seedTreasuryReadinessFacts(backend, { observation: 'create' })
+    return { backend, facts }
+  }
+  async function claim(backend: ReturnType<typeof convexTest>, token?: string) {
+    const result = await backend.mutation(internal.moneyReadinessWork.claim, {
+      environment: 'production', ...(token === undefined ? {} : { token }),
+    })
+    if (result.kind !== 'claimed') throw new Error(`fixture_claim_refused:${result.code}`)
+    return result
+  }
+  async function request(backend: ReturnType<typeof convexTest>, snapshotRef: string) {
+    return await backend.mutation(internal.moneyReadinessWork.requestRecovery, { snapshotRef })
+  }
+  function evidence(checks = passedChecks()) {
+    return snapshot({ startedAt: Date.now(), completedAt: Date.now(), checks })
+  }
+
+  it('coalesces concurrent duplicate requests into one scheduled action without changing sealed evidence', async () => {
+    const { backend, facts } = await prepare()
+    const before = await storedRows(backend)
+    expect(await Promise.all([request(backend, facts.snapshotRef), request(backend, facts.snapshotRef)]))
+      .toEqual([{ kind: 'requested' }, { kind: 'requested' }])
+    const current = await work(backend)
+    expect(current).toMatchObject({ requestedVersion: NOW, completedVersion: 0, attemptsInWindow: 1, job: { kind: 'queued' } })
+    expect(await queued(backend)).toHaveLength(1)
+    expect(await storedRows(backend)).toEqual(before)
+    expect(JSON.stringify(await view(backend))).not.toContain('claimedVersion')
+    expect(await request(backend, facts.snapshotRef)).toEqual({ kind: 'requested' })
+    expect(await work(backend)).toEqual(current)
+  })
+
+  it('a queued claim covers coalesced demand and duplicate deliveries cannot start another probe', async () => {
+    const { backend, facts } = await prepare()
+    await request(backend, facts.snapshotRef)
+    const first = (await work(backend))!
+    if (first.job.kind !== 'queued') throw new Error('fixture_queue_missing')
+    vi.mocked(Date.now).mockReturnValue(NOW + 1)
+    const newer = await seedTreasuryReadinessFacts(backend, { observation: 'create' })
+    await request(backend, newer.snapshotRef)
+    expect((await work(backend))?.job).toEqual(first.job)
+    const active = await claim(backend, first.job.token)
+    expect(active.claimedVersion).toBe(NOW + 1)
+    expect(await backend.mutation(internal.moneyReadinessWork.claim, { environment: 'production', token: active.token }))
+      .toEqual({ kind: 'refused', code: 'readiness_work_superseded' })
+    expect(await backend.mutation(internal.moneyReadinessWork.claim, { environment: 'production' }))
+      .toEqual({ kind: 'refused', code: 'readiness_work_active' })
+    expect(await queued(backend)).toHaveLength(1)
+  })
+
+  it('keeps newer demand separate from a running claim and schedules one bounded follow-up after a red result', async () => {
+    const { backend, facts } = await prepare()
+    await request(backend, facts.snapshotRef)
+    const row = (await work(backend))!
+    if (row.job.kind !== 'queued') throw new Error('fixture_queue_missing')
+    const active = await claim(backend, row.job.token)
+    vi.mocked(Date.now).mockReturnValue(NOW + 1)
+    const newer = await seedTreasuryReadinessFacts(backend, { observation: 'create' })
+    await request(backend, newer.snapshotRef)
+    expect(await work(backend)).toMatchObject({ requestedVersion: NOW + 1, attemptsInWindow: 1,
+      job: { kind: 'running', claimedVersion: NOW, leaseUntil: active.leaseUntil } })
+    const red = evidence({ ...passedChecks(), formance: { kind: 'failed', code: 'formance_access_unavailable' } })
+    expect(await backend.mutation(internal.moneyReadinessWork.complete, { snapshot: red, token: active.token })).toMatchObject({ kind: 'published' })
+    const followup = (await work(backend))!
+    expect(followup).toMatchObject({ completedVersion: NOW, requestedVersion: NOW + 1, attemptsInWindow: 2, job: { kind: 'queued' } })
+    expect(await queued(backend)).toHaveLength(2)
+    expect(await backend.mutation(internal.moneyReadinessWork.complete, { snapshot: red, token: active.token }))
+      .toEqual({ kind: 'refused', code: 'readiness_work_superseded' })
+    expect(await work(backend)).toEqual(followup)
+  })
+
+  it.each(['queued', 'running'] as const)('watchdog takes over abandoned %s work and rejects its late worker', async kind => {
+    const { backend, facts } = await prepare()
+    await request(backend, facts.snapshotRef)
+    const row = (await work(backend))!
+    if (row.job.kind !== 'queued') throw new Error('fixture_queue_missing')
+    const oldToken = row.job.token
+    if (kind === 'running') await claim(backend, oldToken)
+    vi.mocked(Date.now).mockReturnValue(NOW + 90_001)
+    const replacement = await claim(backend)
+    expect(replacement.token).not.toBe(oldToken)
+    expect(await backend.mutation(internal.moneyReadinessWork.complete, { snapshot: evidence(), token: oldToken }))
+      .toEqual({ kind: 'refused', code: 'readiness_work_superseded' })
+    expect(await backend.mutation(internal.moneyReadinessWork.claim, { environment: 'production', token: oldToken }))
+      .toEqual({ kind: 'refused', code: 'readiness_work_superseded' })
+    expect((await work(backend))?.job).toMatchObject({ kind: 'running', token: replacement.token })
+  })
+
+  it('preserves pending demand when attempts are exhausted; only the periodic watchdog renews the window', async () => {
+    const { backend, facts } = await prepare()
+    await request(backend, facts.snapshotRef)
+    vi.mocked(Date.now).mockReturnValue(NOW + 90_001)
+    await claim(backend)
+    vi.mocked(Date.now).mockReturnValue(NOW + 180_002)
+    const newer = await seedTreasuryReadinessFacts(backend, { observation: 'create' })
+    await request(backend, newer.snapshotRef)
+    expect(await backend.mutation(internal.moneyReadinessWork.claim, { environment: 'production' }))
+      .toEqual({ kind: 'refused', code: 'readiness_work_budget_exhausted' })
+    expect(await work(backend)).toMatchObject({ requestedVersion: NOW + 180_002, completedVersion: 0, attemptsInWindow: 2 })
+    vi.mocked(Date.now).mockReturnValue(NOW + 300_001)
+    const latest = await seedTreasuryReadinessFacts(backend, { observation: 'create' })
+    await request(backend, latest.snapshotRef)
+    expect((await work(backend))?.attemptsInWindow).toBe(2)
+    expect((await claim(backend)).claimedVersion).toBe(NOW + 300_001)
+    expect((await work(backend))?.attemptsInWindow).toBe(1)
+  })
+
+  it('current treasury red prevents a green probe from publishing and clearing demand', async () => {
+    const { backend, facts } = await prepare()
+    await request(backend, facts.snapshotRef)
+    const row = (await work(backend))!
+    if (row.job.kind !== 'queued') throw new Error('fixture_queue_missing')
+    const active = await claim(backend, row.job.token)
+    const before = await storedRows(backend)
+    vi.mocked(Date.now).mockReturnValue(NOW + 1)
+    await seedTreasuryReadinessFacts(backend, { observation: 'preserve', cashCheck: { kind: 'unavailable', code: 'treasury_payment_receipt_conflict' } })
+    expect(await backend.mutation(internal.moneyReadinessWork.complete, { snapshot: evidence(), token: active.token }))
+      .toEqual({ kind: 'refused', code: 'readiness_treasury_changed' })
+    expect(await storedRows(backend)).toEqual(before)
+    expect(await work(backend)).toMatchObject({ completedVersion: 0, requestedVersion: NOW, job: { kind: 'idle' } })
+    expect(await queued(backend)).toHaveLength(1)
+    expect(await request(backend, facts.snapshotRef)).toEqual({ kind: 'refused', code: 'readiness_treasury_changed' })
+  })
+
+  it.each(['config', 'custody', 'invalid_seal', 'newer_red'] as const)('refuses %s publication without consuming or clearing the claim', async fault => {
+    const { backend } = await prepare()
+    const active = await claim(backend)
+    let result = evidence()
+    if (fault === 'config') vi.stubEnv('CDP_API_KEY_SECRET', 'rotated-fixture')
+    if (fault === 'custody') vi.stubEnv('AE_X402_CDP_EXPECTED_EVM_ADDRESS', `0x${'2'.repeat(40)}`)
+    if (fault === 'invalid_seal') result = { ...result, evidenceDigest: canonicalDigest('invalid') }
+    if (fault === 'newer_red') {
+      vi.mocked(Date.now).mockReturnValue(NOW + 1)
+      await backend.mutation(publish, { snapshot: evidence({ ...passedChecks(), base_rpc: { kind: 'failed', code: 'treasury_rpc_unavailable' } }) })
+    }
+    const before = await storedRows(backend)
+    const pending = await work(backend)
+    expect(await backend.mutation(internal.moneyReadinessWork.complete, { snapshot: result, token: active.token }))
+      .toEqual({ kind: 'refused', code: fault === 'invalid_seal' ? 'readiness_snapshot_invalid'
+        : fault === 'newer_red' ? 'readiness_snapshot_superseded' : 'readiness_configuration_changed' })
+    expect(await work(backend)).toEqual(pending)
+    expect(await storedRows(backend)).toEqual(before)
+  })
+
+  it('concurrent periodic bootstrap admits one worker', async () => {
+    const { backend } = await prepare()
+    const results = await Promise.all([
+      backend.mutation(internal.moneyReadinessWork.claim, { environment: 'production' }),
+      backend.mutation(internal.moneyReadinessWork.claim, { environment: 'production' }),
+    ])
+    expect(results.filter(result => result.kind === 'claimed')).toHaveLength(1)
+    expect(results).toContainEqual({ kind: 'refused', code: 'readiness_work_active' })
+    expect(await work(backend)).toMatchObject({ generation: 1, attemptsInWindow: 1, job: { kind: 'running' } })
+  })
+
+  it('scheduler failure rolls back evidence publication and the completion transition together', async () => {
+    const { backend, facts } = await prepare()
+    await request(backend, facts.snapshotRef)
+    const row = (await work(backend))!
+    if (row.job.kind !== 'queued') throw new Error('fixture_queue_missing')
+    const active = await claim(backend, row.job.token)
+    vi.mocked(Date.now).mockReturnValue(NOW + 1)
+    const newer = await seedTreasuryReadinessFacts(backend, { observation: 'create' })
+    await request(backend, newer.snapshotRef)
+    const before = { evidence: await storedRows(backend), work: await work(backend) }
+    const red = evidence({ ...passedChecks(), formance: { kind: 'failed', code: 'formance_access_unavailable' } })
+    await expect(backend.run(async ctx => await completePaymentReadinessWork({ ...ctx,
+      scheduler: { runAfter: async () => { throw new Error('fixture_scheduler_unavailable') } },
+    } as unknown as Parameters<typeof completePaymentReadinessWork>[0], { snapshot: red, token: active.token })))
+      .rejects.toThrow('fixture_scheduler_unavailable')
+    expect({ evidence: await storedRows(backend), work: await work(backend) }).toEqual(before)
+  })
+
+  it('revoked workload authority after claim blocks completion through the admitted consequence transaction', async () => {
+    const { backend } = await prepare()
+    const authority = canonicalDb()
+    await backend.run(async ctx => {
+      for (const table of ['principals', 'accounts', 'accountOwnerships', 'memberships'] as const) {
+        for (const row of await authority.query(table).collect()) {
+          const { _id, _creationTime, ...material } = row
+          void _id; void _creationTime
+          await ctx.db.insert(table, material as never)
+        }
+      }
+    })
+    const workload = await backend.query(internal.workloadCron.admit, { name: 'refresh payment readiness' })
+    const dispatch = (operation: 'moneyReadinessWork:claim' | 'moneyReadinessWork:complete', payload: Record<string, unknown>) =>
+      backend.mutation(internal.workloadCron.dispatchConsequence, { name: 'refresh payment readiness', snapshot: workload,
+        operation, payload: payload as never })
+    const active = await dispatch('moneyReadinessWork:claim', { environment: 'production' }) as { kind: string; token: string }
+    expect(active.kind).toBe('claimed')
+    const before = { evidence: await storedRows(backend), work: await work(backend) }
+    await backend.run(async ctx => {
+      const principal = await ctx.db.query('principals').unique()
+      if (principal === null) throw new Error('fixture_principal_missing')
+      await ctx.db.patch(principal._id, { lifecycle: 'suspended', revision: principal.revision + 1 })
+    })
+    await expect(dispatch('moneyReadinessWork:complete', { token: active.token, snapshot: evidence() }))
+      .rejects.toMatchObject({ code: 'workload_principal_inactive' })
+    expect({ evidence: await storedRows(backend), work: await work(backend) }).toEqual(before)
+  })
+
+  it('publishes fresh sealed recovery atomically and never renews it on duplicate completion', async () => {
+    const { backend, facts } = await prepare()
+    await request(backend, facts.snapshotRef)
+    const row = (await work(backend))!
+    if (row.job.kind !== 'queued') throw new Error('fixture_queue_missing')
+    const active = await claim(backend, row.job.token)
+    const result = evidence()
+    expect(await backend.mutation(internal.moneyReadinessWork.complete, { snapshot: result, token: active.token }))
+      .toEqual({ kind: 'published', replayed: false })
+    expect(await view(backend)).toMatchObject({ kind: 'ready', checkedAt: NOW })
+    expect(await work(backend)).toMatchObject({ completedVersion: NOW, requestedVersion: NOW, job: { kind: 'idle' } })
+    const before = await storedRows(backend)
+    expect(await backend.mutation(internal.moneyReadinessWork.complete, { snapshot: result, token: active.token }))
+      .toEqual({ kind: 'refused', code: 'readiness_work_superseded' })
+    expect(await storedRows(backend)).toEqual(before)
+    expect(await request(backend, facts.snapshotRef)).toEqual({ kind: 'refused', code: 'readiness_already_ready' })
   })
 })

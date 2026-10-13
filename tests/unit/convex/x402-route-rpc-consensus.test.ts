@@ -7,13 +7,17 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/modules/capability-supply/server', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/capability-supply/server')>()),
-  readGuardedX402EvmReceipt: mocks.readGuardedX402EvmReceipt,
+  readGuardedX402EvmReceiptDetailed: async (input: unknown) => {
+    const receipt = await mocks.readGuardedX402EvmReceipt(input)
+    return receipt?.kind === 'failed' ? receipt : receipt === undefined ? { kind: 'failed', code: 'receipt_missing', method: 'eth_getTransactionReceipt' }
+      : { kind: 'receipt', receipt }
+  },
 }))
 
 import {
   configuredX402RpcUrl,
   configuredX402RpcUrls,
-  readX402EvmReceipt,
+  readX402EvmReceipt, readX402EvmReceiptDetailed,
 } from '@/modules/capability-execution/call-runtime'
 
 const NETWORK = 'eip155:8453'
@@ -254,3 +258,25 @@ function callTargets(): string[] {
     .map(([input]) => (input as { target: URL }).target.href)
     .sort()
 }
+
+
+describe('classified required-provider failures', () => {
+  beforeEach(() => { vi.resetAllMocks(); setRpcConfig(['https://rpc.one.example', 'https://rpc.two.example']) })
+  afterEach(() => { vi.unstubAllEnvs(); vi.useRealTimers() })
+  it('honors the longest required provider Retry-After', async () => {
+    mocks.readGuardedX402EvmReceipt.mockResolvedValueOnce({ kind: 'failed', code: 'rpc_timeout', method: 'eth_getTransactionReceipt' })
+      .mockResolvedValueOnce({ kind: 'failed', code: 'rpc_rate_limited', method: 'eth_getTransactionReceipt', retryAfterMs: 30_000 })
+    expect(await readX402EvmReceiptDetailed(NETWORK, ASSET, TRANSACTION_HASH, DISPATCHER, 'production', PAYER, NONCE,
+      undefined, { retryCount: 0 })).toMatchObject({ kind: 'failed', retryAfterMs: 30_000 })
+  })
+  it('preserves a known conflict when its peer never responds', async () => {
+    vi.useFakeTimers()
+    mocks.readGuardedX402EvmReceipt.mockResolvedValueOnce({ kind: 'failed', code: 'receipt_conflict', method: 'eth_getTransactionByHash' })
+      .mockImplementationOnce(() => new Promise(() => undefined))
+    const pending = readX402EvmReceiptDetailed(NETWORK, ASSET, TRANSACTION_HASH, DISPATCHER, 'production', PAYER, NONCE,
+      undefined, { retryCount: 0, deadlineAt: Date.now() + 1_000 })
+    await vi.advanceTimersByTimeAsync(1_001)
+    expect(await pending).toMatchObject({ kind: 'failed', code: 'receipt_conflict' })
+    expect(mocks.readGuardedX402EvmReceipt).toHaveBeenCalledTimes(2)
+  })
+})

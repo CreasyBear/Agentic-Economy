@@ -40,6 +40,7 @@ export async function readTreasuryChainObservation(
     address: string
     checkpoint?: TreasuryChainCheckpoint
     now?: number
+    signal?: AbortSignal
   }>,
   dependencies: Readonly<{ rpc?: TreasuryRpc; targets?: readonly URL[] }> = {},
 ): Promise<TreasuryChainObservation | Unavailable> {
@@ -62,7 +63,7 @@ export async function readTreasuryChainObservation(
     if (dispatcher === undefined) throw new Error('treasury_rpc_target_invalid')
     // The same deadline covers DNS preflight, connection and body. Keep the
     // preflight: native sockets can bypass the guarded lookup for IP literals.
-    const signal = AbortSignal.timeout(5_000)
+    const signal = input.signal === undefined ? AbortSignal.timeout(5_000) : AbortSignal.any([input.signal, AbortSignal.timeout(5_000)])
     signal.throwIfAborted()
     let onAbort = () => {}
     const aborted = new Promise<never>((_resolve, reject) => {
@@ -85,7 +86,7 @@ export async function readTreasuryChainObservation(
       signal,
     })
     if (!response.ok) throw new Error('treasury_rpc_unavailable')
-    const bounded = await readBoundedRequestText(response, 256 * 1024)
+    const bounded = await readBoundedRequestText(response, 256 * 1024, signal)
     if (!bounded.ok) throw new Error('treasury_rpc_response_too_large')
     const value: unknown = JSON.parse(bounded.text)
     if (!isRecord(value) || value.jsonrpc !== '2.0' || value.id !== 1

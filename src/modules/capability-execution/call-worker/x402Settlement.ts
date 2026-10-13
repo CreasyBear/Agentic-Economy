@@ -1,4 +1,4 @@
-import { degradeBackend } from '@/lib/observability/degrade-backend'
+import { boundaryCauseKind, degradeBackend } from '@/lib/observability/degrade-backend'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { isRecord } from '@/modules/common/is-record'
 import { callReceiptPaymentProfile } from '@/modules/capability-execution/call-contracts'
@@ -6,6 +6,8 @@ import { Agent } from 'undici'
 import {
   paymentObservationDigest,
   readGuardedX402EvmReceipt,
+  readGuardedX402EvmReceiptDetailed, createX402ReadBudget, receiptReadFailure, retryableReceiptFailure, reportX402ReceiptFailure, receiptFailureFromCause,
+  type X402ReceiptReadResult, type X402ReceiptFailure,
   transportObservationDigest,
   x402SettlementStatusForObservation,
 } from '@/modules/capability-supply/server'
@@ -31,7 +33,7 @@ function parseX402RpcUrl(value: unknown): URL | undefined {
     const url = new URL(value)
     return url.protocol === 'https:' ? url : undefined
   } catch (cause) {
-    return degradeBackend(cause, undefined, { site: 'parseX402RpcUrl', reason: 'invalid_response' })
+    return degradeBackend(boundaryCauseKind(cause), undefined, { site: 'parseX402RpcUrl', reason: 'invalid_response' })
   }
 }
 
@@ -68,7 +70,7 @@ export function configuredX402RpcUrls(
     const distinct = new Set(parsedUrls.map((url) => url.href))
     return distinct.size === parsedUrls.length ? parsedUrls : []
   } catch (cause) {
-    return degradeBackend(cause, [], { site: 'configuredX402RpcUrls', reason: 'invalid_response' })
+    return degradeBackend(boundaryCauseKind(cause), [], { site: 'configuredX402RpcUrls', reason: 'invalid_response' })
   }
 }
 
@@ -85,58 +87,90 @@ export function configuredX402RpcUrl(
  * advanced observation. Missing or conflicting evidence remains unavailable.
  */
 export async function readX402EvmReceipt(
-  network: string,
-  asset: string,
-  transactionHash: string,
-  dispatcher: Agent,
-  environment: 'sandbox' | 'production',
-  payer: string,
-  nonce: string,
+  network: string, asset: string, transactionHash: string, dispatcher: Agent,
+  environment: 'sandbox' | 'production', payer: string, nonce: string,
   confirmation?: Readonly<{ minimumConfirmations: number; timeoutMs: number }>,
-  rpcRetry?: Readonly<{ retryCount: 0 }>,
+  rpcRetry?: Readonly<{ retryCount: 0; deadlineAt?: number }>,
 ): Promise<X402EvmReceipt | undefined> {
-  if (callReceiptPaymentProfile(environment, network, asset) === undefined) return undefined
+  const result = await readX402EvmReceiptDetailed(network, asset, transactionHash, dispatcher, environment, payer, nonce, confirmation, rpcRetry)
+  return result.kind === 'receipt' ? result.receipt : undefined
+}
+
+/** Detailed corroboration preserves conflicts and the caller's absolute deadline. */
+export async function readX402EvmReceiptDetailed(
+  network: string, asset: string, transactionHash: string, dispatcher: Agent,
+  environment: 'sandbox' | 'production', payer: string, nonce: string,
+  confirmation?: Readonly<{ minimumConfirmations: number; timeoutMs: number }>,
+  rpcRetry?: Readonly<{ retryCount: 0; deadlineAt?: number }>,
+): Promise<X402ReceiptReadResult> {
+  if (callReceiptPaymentProfile(environment, network, asset) === undefined) return receiptReadFailure('rpc_configuration_invalid', 'agreement')
   const targets = configuredX402RpcUrls(network, environment)
-  if (targets.length === 0) return undefined
-
-  const receipts = await Promise.all(targets.map(async (target) => {
-    try {
-      return await readGuardedX402EvmReceipt({
-        target,
-        aeEnvironment: environment,
-        network,
-        asset,
-        transactionHash,
-        payer,
-        nonce,
-        dispatcher,
-        ...(rpcRetry === undefined ? {} : { transportRetryCount: rpcRetry.retryCount }),
-        ...(confirmation === undefined
-          ? {}
-          : {
-              minimumConfirmations: confirmation.minimumConfirmations,
-              confirmationTimeoutMs: confirmation.timeoutMs,
-            }),
-      })
-    } catch (cause) {
-      return degradeBackend(cause, undefined, { site: 'readX402EvmReceipt', reason: 'source_unavailable' })
-    }
-  }))
-  if (receipts.some((receipt) => receipt === undefined)) return undefined
-
-  const first = receipts[0]
-  if (first === undefined || !x402EvmReceiptsAgree(first, first)) return undefined
-  let confirmations = first.confirmations
-  let observedBlockTimestamp = first.observedBlockTimestamp
-  for (const receipt of receipts.slice(1)) {
-    if (receipt === undefined || !x402EvmReceiptsAgree(first, receipt)) return undefined
-    if (receipt.confirmations < confirmations) confirmations = receipt.confirmations
-    if (receipt.observedBlockTimestamp < observedBlockTimestamp) {
-      observedBlockTimestamp = receipt.observedBlockTimestamp
-    }
+  if (targets.length === 0) return receiptReadFailure('rpc_configuration_invalid', 'agreement')
+  const deadlineAt = rpcRetry?.deadlineAt ?? Date.now() + Math.min(120_000, (confirmation?.timeoutMs ?? 0) + 30_000)
+  if (!Number.isSafeInteger(deadlineAt) || deadlineAt > Date.now() + 120_000) return receiptReadFailure('rpc_configuration_invalid', 'agreement')
+  const budget = createX402ReadBudget(deadlineAt)
+  const completedFailures: X402ReceiptFailure[] = []
+  let terminal: (failure: X402ReceiptFailure) => void = () => undefined
+  const terminalFailure = new Promise<X402ReceiptFailure>(resolve => { terminal = resolve })
+  const observeFailure = (failure: X402ReceiptFailure) => {
+    completedFailures.push(failure)
+    if (!retryableReceiptFailure(failure)) terminal(failure)
   }
-  if (confirmations < BigInt(confirmation?.minimumConfirmations ?? 1)) return undefined
-  return { ...first, confirmations, observedBlockTimestamp }
+  try {
+    const result = await budget.run(() => Promise.race([terminalFailure, Promise.all(targets.map(async (target, index): Promise<X402ReceiptReadResult> => {
+      const provider = index === 0 ? 'rpc_1' as const : 'rpc_2' as const
+      try {
+        const result = await readGuardedX402EvmReceiptDetailed({
+          target, aeEnvironment: environment, network, asset, transactionHash, payer, nonce, dispatcher,
+          deadlineAt, provider, signal: budget.signal,
+          ...(rpcRetry === undefined ? {} : { transportRetryCount: rpcRetry.retryCount }),
+          ...(confirmation === undefined ? {} : {
+            minimumConfirmations: confirmation.minimumConfirmations, confirmationTimeoutMs: confirmation.timeoutMs,
+          }),
+        })
+        if (result.kind === 'failed') observeFailure(result)
+        return result
+      } catch (cause) {
+        const failure = receiptFailureFromCause(cause) ?? receiptReadFailure('rpc_transport_unavailable', 'agreement', { provider })
+        observeFailure(failure)
+        return failure
+      }
+    }))]), 'agreement')
+    const results = Array.isArray(result) ? result : [result]
+    const failures = results.filter(result => result.kind === 'failed')
+    for (const failure of failures) reportX402ReceiptFailure(failure)
+    if (failures.length > 0) return aggregateReceiptFailure(completedFailures)
+    const receipts = results.flatMap(result => result.kind === 'receipt' ? [result.receipt] : [])
+    const first = receipts[0]
+    if (first === undefined || !x402EvmReceiptsAgree(first, first)) return receiptReadFailure('receipt_conflict', 'agreement')
+    let confirmations = first.confirmations
+    let observedBlockTimestamp = first.observedBlockTimestamp
+    for (const receipt of receipts.slice(1)) {
+      if (!x402EvmReceiptsAgree(first, receipt)) {
+        const failure = receiptReadFailure('receipt_conflict', 'agreement')
+        reportX402ReceiptFailure(failure)
+        return failure
+      }
+      if (receipt.confirmations < confirmations) confirmations = receipt.confirmations
+      if (receipt.observedBlockTimestamp < observedBlockTimestamp) observedBlockTimestamp = receipt.observedBlockTimestamp
+    }
+    if (confirmations < BigInt(confirmation?.minimumConfirmations ?? 1)) return receiptReadFailure('receipt_immature', 'confirmation')
+    return { kind: 'receipt', receipt: { ...first, confirmations, observedBlockTimestamp } }
+  } catch (cause) {
+    const failure = aggregateReceiptFailure([...completedFailures,
+      receiptFailureFromCause(cause) ?? receiptReadFailure('rpc_invalid_response', 'agreement')])
+    reportX402ReceiptFailure(failure)
+    return failure
+  } finally { budget.dispose() }
+}
+
+/** Required peers share the longest retry delay; known contradictions survive peer timeouts. */
+function aggregateReceiptFailure(failures: readonly X402ReceiptFailure[]): X402ReceiptFailure {
+  const selected = failures.find(failure => failure.code === 'receipt_conflict')
+    ?? failures.find(failure => !retryableReceiptFailure(failure)) ?? failures[0]
+  if (selected === undefined) throw new Error('receipt_failures_required')
+  const retryAfterMs = Math.max(0, ...failures.map(failure => failure.retryAfterMs ?? 0))
+  return retryAfterMs === 0 ? selected : { ...selected, retryAfterMs }
 }
 
 function x402EvmReceiptsAgree(left: X402EvmReceipt, right: X402EvmReceipt): boolean {

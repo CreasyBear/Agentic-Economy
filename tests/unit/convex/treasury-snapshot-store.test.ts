@@ -273,6 +273,31 @@ describe('registered treasury snapshot publication and control behavior', () => 
       .resolves.toMatchObject({ kind: 'published', replayed: false })
   })
 
+  it('keeps a receipt contradiction critical through a transport outage until matched evidence resolves it', async () => {
+    const backend = convexTestWithMarketComponents()
+    await seedObservation(backend)
+    const context = await backend.query(internal.moneyTreasuryReconciliation.readSnapshotContext, { cutoffAt: NOW })
+    if (context.kind !== 'available') throw new Error('fixture_context_missing')
+    const base = report(NOW - 3)
+    const conflict = reseal(base, { checks: { ...base.checks,
+      settlements: { kind: 'unavailable', code: 'treasury_payment_receipt_conflict' } } })
+    const alerts = treasuryAlerts(conflict, context)
+    expect(alerts).toContainEqual({ code: 'settlement_difference', severity: 'critical', evidenceRefs: [] })
+    await backend.mutation(internal.moneyTreasuryReconciliation.publishSnapshot, { snapshot: reseal(conflict, { alerts }) })
+    const initial = (await stored(backend)).alerts.find(alert => alert.code === 'settlement_difference')!
+    expect(initial).toMatchObject({ state: 'open', severity: 'critical' })
+    const outage = report(NOW - 2)
+    const unavailable = reseal(outage, { checks: { ...outage.checks,
+      settlements: { kind: 'unavailable', code: 'treasury_payment_rpc_transport_unavailable' } } })
+    await backend.mutation(internal.moneyTreasuryReconciliation.publishSnapshot, {
+      snapshot: reseal(unavailable, { alerts: treasuryAlerts(unavailable, context) }),
+    })
+    expect((await stored(backend)).alerts.find(alert => alert.alertRef === initial.alertRef)).toEqual(initial)
+    await backend.mutation(internal.moneyTreasuryReconciliation.publishSnapshot, { snapshot: report(NOW - 1) })
+    expect((await stored(backend)).alerts.find(alert => alert.alertRef === initial.alertRef))
+      .toMatchObject({ state: 'resolved', resolvedAt: NOW - 1 })
+  })
+
   it('keeps a critical mismatch open through unavailable evidence, resolves on matched proof and creates a new recurrence episode', async () => {
     const backend = convexTestWithMarketComponents()
     const admin = await ownerAdmin(backend, 'user_snapshot-episode')

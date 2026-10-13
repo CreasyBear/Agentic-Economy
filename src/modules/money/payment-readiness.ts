@@ -133,3 +133,20 @@ export function failedPaymentReadinessChecks(code: string): PaymentReadinessChec
   return { web_configuration: failed, formance: failed, cdp_custody: failed, base_rpc: failed,
     reference_rate: failed, sanctions: failed, commercial_policy: failed, treasury: failed }
 }
+
+const ticket = { token: v.string(), leaseUntil: v.number() }
+export const paymentReadinessWorkValue = v.object({
+  environment: paymentReadinessEnvironmentValue,
+  generation: v.number(), requestedVersion: v.number(), completedVersion: v.number(),
+  windowStartedAt: v.number(), attemptsInWindow: v.number(),
+  job: v.union(v.object({ kind: v.literal('idle') }),
+    v.object({ kind: v.literal('queued'), ...ticket }),
+    v.object({ kind: v.literal('running'), ...ticket,
+      claimedVersion: v.number(), claimedAt: v.number(), configurationDigest: v.string(), custodyDigest: v.string(),
+    })),
+})
+export type PaymentReadinessWork = Infer<typeof paymentReadinessWorkValue>
+export const paymentReadinessClaimValue = v.object({ kind: v.literal('claimed'),
+  environment: paymentReadinessEnvironmentValue, token: v.string(), claimedVersion: v.number(), leaseUntil: v.number(),
+})
+export type PaymentReadinessClaim = Infer<typeof paymentReadinessClaimValue>

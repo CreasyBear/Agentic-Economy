@@ -20,6 +20,7 @@ import {
   createManagedX402PaymentCallbacks,
   readX402Authorization,
   readX402EvmReceipt,
+  readX402EvmReceiptDetailed,
   replayManagedX402SigningForRecovery,
   X402_MANAGED_CUSTODY_REF,
 } from './call-worker/x402Route'
@@ -65,6 +66,7 @@ export {
   readRecoveryStatus,
   readX402Authorization,
   readX402EvmReceipt,
+  readX402EvmReceiptDetailed,
   reconcileRecovery,
   recoverCapabilityCall,
   recoveryArgs,

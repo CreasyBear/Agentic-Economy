@@ -33,6 +33,7 @@ const MAX_RESPONSE_BYTES = 64 * 1024
 export async function readCdpX402CustodyReadiness(
   environment: StringEnvironment,
   paymentEnvironment: X402AeEnvironment,
+  callerSignal?: AbortSignal,
 ): Promise<CdpX402CustodyReadinessResult> {
   if (x402PaymentProfileForEnvironment(paymentEnvironment) === undefined) {
     return { kind: 'refused', code: 'cdp_custody_environment_unsupported' }
@@ -48,7 +49,7 @@ export async function readCdpX402CustodyReadiness(
     import('undici'), import('@/modules/network-guard/public'),
   ])
   const completed = new AbortController()
-  const signal = AbortSignal.any([AbortSignal.timeout(READ_TIMEOUT_MS), completed.signal])
+  const signal = AbortSignal.any([AbortSignal.timeout(READ_TIMEOUT_MS), completed.signal, ...(callerSignal === undefined ? [] : [callerSignal])])
   const dispatcher = new Agent({ connect: { lookup: createGuardedLookup(defaultDnsResolver) } })
   const read = async (path: string): Promise<JsonValue> => {
     signal.throwIfAborted()
@@ -70,7 +71,7 @@ export async function readCdpX402CustodyReadiness(
       throw Object.assign(new Error('CDP custody read failed'), { kind: 'cdp_custody_read_failure',
         code: response.status === 404 ? 'cdp_custody_not_found' : 'cdp_custody_read_unavailable' })
     }
-    const body = await readBoundedRequestText(response, MAX_RESPONSE_BYTES)
+    const body = await readBoundedRequestText(response, MAX_RESPONSE_BYTES, signal)
     signal.throwIfAborted()
     if (!body.ok) throw Object.assign(new Error('CDP custody response invalid'),
       { kind: 'cdp_custody_read_failure', code: 'cdp_custody_response_invalid' })
