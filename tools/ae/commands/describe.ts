@@ -39,11 +39,24 @@ export async function runDescribeCommand(args: readonly string[], options: CliOp
   if (parsed.data.kind === 'unavailable') {
     throwToolReadFailure({ reason: 'source_unavailable', toolRef })
   }
-  const tool = parsed.data.tool
   if (options.json) {
     printJson(parsed.data)
     return
   }
+  if (parsed.data.kind === 'external') {
+    const tool = parsed.data.tool
+    heading(`Directory Tool ${toolRef} (${outcome.durationMs}ms)`)
+    line(`  ${tool.provider} — ${tool.title}`)
+    line(`  ${tool.description}`)
+    line(`  readiness: ${tool.readiness} · Provider-declared metadata`)
+    line(`  access: ${tool.access}${tool.reason === undefined ? '' : ` (${tool.reason})`}`)
+    line('  price: confirmed by Quote')
+    if (tool.input !== undefined) line(`  inputs: ${JSON.stringify(tool.input)}`)
+    line(`  Tool reference: ${tool.toolRef}`)
+    line(`  From an MCP client: ${QUOTE_MCP_TOOL_NAME} with this directory reference and input.`)
+    return
+  }
+  const tool = parsed.data.tool
   heading(`Market Tool ${toolRef} (${outcome.durationMs}ms)`)
   line(`  ${tool.provider.name} — ${tool.title}`)
   line(`  ${tool.description}`)

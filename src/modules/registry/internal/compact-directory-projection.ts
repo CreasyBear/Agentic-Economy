@@ -1,5 +1,5 @@
 import { x402NetworkLabel } from '@/modules/capability-supply/public'
-import { isPublicToolRef, parseCallableRef } from '@/modules/common/tool-ref'
+import { parseCallableRef } from '@/modules/common/tool-ref'
 import { CATALOGUE_STALE_AFTER_MS, sourceFreshnessState } from '@/modules/common/freshness'
 import { REFERENCE_RATE_MAX_AGE_MS, formatDisplayPrice, parseDecimalExactAmount, type ReferenceRate } from '@/modules/money/public'
 import type { SearchResult } from '../tool-choice-contracts'
@@ -85,7 +85,7 @@ export function compactDirectoryRows(page: Extract<CompactDirectoryPage, { kind:
       readiness: access === 'ae_callable' && refKind === 'operation' ? 'ready' as const : access === 'unavailable' ? 'unavailable' as const : 'unverified' as const,
       price: displayPrice === undefined ? { kind: 'unavailable' as const } : { kind: 'indicative' as const, label: displayPrice },
       detailRef: refKind === 'operation' && toolRef !== undefined ? toolRef : `/api/v1/registry/detail?id=${encodeURIComponent(item.id)}`,
-      next: refKind === 'operation' && isPublicToolRef(toolRef)
+      next: toolRef !== undefined
         ? [{ action: 'registry.tools.describe' as const, args: { toolRef }, authority: 'public' as const }]
         : [],
       ...(item.payers30d === undefined ? {} : { signals: { calls: 0, payers30d: item.payers30d } }),

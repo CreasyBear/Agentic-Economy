@@ -212,7 +212,8 @@ describe('registry.tools.search mixed assessment', () => {
     directoryRows = [{ ...directoryRow('unverified-listing'), choice: { access: 'ae_callable', toolRef: listingRef } }]
     mockDirectoryAssessment()
     expect(await runSearch('timezone conversion', { source: 'coinbase', filters: { healthStatus: ['unverified'] } }))
-      .toMatchObject({ kind: 'match', results: [{ id: 'unverified-listing', access: 'ae_callable', toolRef: listingRef, readiness: 'unverified', next: [] }] })
+      .toMatchObject({ kind: 'match', results: [{ id: 'unverified-listing', access: 'ae_callable', toolRef: listingRef, readiness: 'unverified',
+        next: [{ action: 'registry.tools.describe', args: { toolRef: listingRef }, authority: 'public' }] }] })
   })
 
   it('ranks relevant rows by AE evidence and shows success, p50 latency, last verified and payers', async () => {

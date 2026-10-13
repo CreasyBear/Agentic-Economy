@@ -7,6 +7,8 @@ import { setPublicSourceTransportForTests, type ConvexSourceTransport } from '@/
 import { setHttpRateLimitAdmissionForTests } from '@/lib/server/rate-limit'
 import { handleApiRegistryRequest } from '@/routes/api.v1.registry'
 import { handleApiRegistryDetailRequest } from '@/routes/api.v1.registry.detail'
+import { handleMcpRequest } from '@/lib/server/mcp-api'
+import { readMcpBody } from '../helpers/mcp-response'
 
 // Drive compact list and exact detail against the real indexed generation.
 // The durable business/offering registry is a separate API.
@@ -112,6 +114,23 @@ describe('GET /api/v1/registry backed by the compact x402 directory index', () =
       expect(row).not.toHaveProperty('entry')
     }
     expect(browseBody.pagination).toEqual({ limit: 8, hasMore: false })
+    const toolRef = browseBody.page[0].toolRef as string
+    const nativeResponse = await handleMcpRequest(new Request('https://ae.test/mcp', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: {
+        name: 'ae_registry_tools_describe', arguments: { toolRef },
+      } }),
+    }))
+    const nativeDetail = await readMcpBody(nativeResponse)
+    expect(nativeDetail.result?.isError).not.toBe(true)
+    expect(nativeDetail.result?.structuredContent).toMatchObject({ result: {
+      kind: 'external', schemaVersion: 'registry-tools:v3', tool: {
+        id: toolRef, toolRef, source: 'coinbase', access: 'ae_callable',
+        readiness: 'unverified', provider: 'provider.test',
+        output: { fields: [], schemaJson: '{}' },
+      },
+    } })
     // Freshness reports the x402 directory source (review issue 4A / C16); the
     // fixture's tiny `observedAt` reads as ancient next to real wall-clock time,
     // so the derived state is 'stale' rather than 'fresh' - the source and the

@@ -1,4 +1,3 @@
-import { brandedStringSchema } from '@/modules/common/branded-string-schema'
 import { z } from 'zod'
 
 import { jsonValueSchema } from '@/modules/capability-contract/public'
@@ -7,7 +6,6 @@ import type {
   ToolDetailResult,
   ToolSearchResult,
   PublicToolDescriptor,
-  PublicToolRef,
 } from '@/modules/capability-supply/public'
 import {
   PublicToolRegistrySchemaVersion,
@@ -40,12 +38,15 @@ export const toolListInputSchema = z.strictObject({
   cursor: z.string().max(8192).optional(),
   filters: toolCatalogFiltersSchema.optional(),
 })
+const publishedToolRefSchema = z.string().regex(/^operation:v1:[0-9a-f]{64}$/u)
+const directoryToolRefSchema = z.string().regex(/^registry:[0-9a-f]{64}$/u)
+export const toolInspectionRefSchema = z.string().regex(/^(?:operation:v1|registry):[0-9a-f]{64}$/u)
 export const toolDescribeInputSchema = z.strictObject({
-  toolRef: z.string().regex(/^operation:v1:[0-9a-f]{64}$/),
+  toolRef: toolInspectionRefSchema,
   includeLatency: z.boolean().optional().describe('Include observed time to result, sample count and 30-day query window. Omitted by default for legacy clients.'),
 })
 export const toolCatalogCompareInputSchema = z.strictObject({
-  toolRefs: z.array(toolDescribeInputSchema.shape.toolRef).min(1).max(4),
+  toolRefs: z.array(publishedToolRefSchema).min(1).max(4),
   includeLatency: toolDescribeInputSchema.shape.includeLatency,
 })
 export const toolCatalogPaginationSchema = z.strictObject({
@@ -72,7 +73,7 @@ const registrySearchArgsSchema = toolCatalogSearchInputSchema.omit({ cursor: tru
   limit: toolCatalogSearchInputSchema.shape.limit.removeDefault().optional(),
 })
 export const registryNextActionSchema = z.discriminatedUnion('action', [
-  z.strictObject({ action: z.literal('registry.tools.describe'), args: z.strictObject({ toolRef: brandedStringSchema(z.string().regex(/^operation:v1:[0-9a-f]{64}$/), (ref) => ref as PublicToolRef) }), authority: z.literal('public') }),
+  z.strictObject({ action: z.literal('registry.tools.describe'), args: z.strictObject({ toolRef: toolInspectionRefSchema }), authority: z.literal('public') }),
   z.strictObject({ action: z.literal('registry.tools.search'), args: registrySearchArgsSchema.extend({ cursor: toolCatalogSearchInputSchema.shape.cursor }), authority: z.literal('public') }),
 ])
 export const listingTierSchema = z.enum(['reviewed', 'listed'])
@@ -267,6 +268,29 @@ const toolDescriptionSchema = z.strictObject({
   listingTier: listingTierSchema,
   canonicalUrl: z.string().optional(),
 })
+/** Directory metadata is Provider-declared, not a published contract or a live Quote. */
+export const externalToolDescriptionSchema = z.strictObject({
+  kind: z.literal('external'),
+  schemaVersion: z.literal(PublicToolRegistrySchemaVersion),
+  tool: z.strictObject({
+    id: directoryToolRefSchema,
+    toolRef: directoryToolRefSchema,
+    source: z.literal('coinbase'),
+    access: z.enum(['ae_callable', 'setup_required', 'unavailable']),
+    reason: z.string().optional(),
+    readiness: z.literal('unverified'),
+    verification: z.literal('not_verified'),
+    claimSource: z.literal('provider'),
+    title: z.string(), description: z.string(), provider: z.string(), resource: z.string(),
+    method: z.string().optional(),
+    input: z.record(z.string(), jsonValueSchema).optional(),
+    output: z.record(z.string(), jsonValueSchema).optional(),
+    prices: z.array(z.object({
+      network: z.string(), scheme: z.string(), amount: z.string(),
+      asset: z.string().optional(), symbol: z.string().optional(), decimalAmount: z.string().optional(),
+    })),
+  }),
+})
 export const toolChoiceDescribeOutputSchema = z.union([
   z.strictObject({
     kind: z.literal('found'),
@@ -284,6 +308,7 @@ export const toolChoiceDescribeOutputSchema = z.union([
     toolRef: z.string(),
     reason: z.string(),
   }),
+  externalToolDescriptionSchema,
 ])
 export const toolChoiceCompareOutputSchema = z.union([
   z.strictObject({
