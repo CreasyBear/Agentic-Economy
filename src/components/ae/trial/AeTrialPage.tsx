@@ -7,6 +7,7 @@ import { AePublicPage } from '@/components/ae/layout/AePublicPage'
 import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeAlert } from '@/components/ae/shared/alert/AeAlert'
 import { Button } from '@/components/arc/button/button'
+import { Input } from '@/components/arc/input/input'
 import { trialClaimResultValue } from '@/modules/money/public'
 import { formatTimestamp } from '@/lib/ui/format-time'
 import { trialNextAction } from './trial-next-action'
@@ -23,6 +24,8 @@ const REFUSAL_COPY: Record<Extract<TrialResult, { kind: 'refused' }>['code'], st
   trial_already_claimed: 'This invitation or Account already has a trial. Open your credit page to check its status.',
   trial_authority_invalid: 'The trial approval could not be verified. Contact an Admin before trying again.',
   trial_verification_unavailable: 'Trial verification is temporarily unavailable. Try again shortly.',
+  trial_code_invalid: 'That trial code is not recognized. Check the code and try again.',
+  trial_code_exhausted: 'This trial code has reached its redemption limit. Contact support for access.',
 }
 
 export function AeTrialPage() {
@@ -34,7 +37,7 @@ export function AeTrialPage() {
         <AeSection title="A$10 to try Tools" description="Approved trials include A$10 promotional credit and 30 days of purchase access. No payment is required to activate.">
           {auth.isSignedIn !== true ? (
             <div className="grid gap-related">
-              <p>Sign in with the verified email address that received the invitation. Public signup does not include automatic credit; an Admin must approve your trial.</p>
+              <p>Create an Account or sign in with your verified email to redeem a trial code or activate an approved invitation. Public signup alone does not include automatic credit.</p>
               <a className="underline underline-offset-4" href="/sign-in?redirect=%2Ftrial">Sign in to activate</a>
               <a className="underline underline-offset-4" href="/sign-up?redirect=%2Ftrial">Create an Account</a>
             </div>
@@ -54,18 +57,19 @@ function TrialActivation() {
   const [result, setResult] = useState<{ outcome: TrialResult; currentAtResult: TrialResult | undefined } | null>(null)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState(false)
+  const [code, setCode] = useState('')
   // Keep an action result while the query is still its snapshot at action completion.
   // Later authority changes supersede it; generic no-offer reads cannot replace
   // a claim refusal that includes Clerk verification or availability evidence.
   const useCurrent = current !== undefined && current !== result?.currentAtResult
     && !(current.kind === 'refused' && current.code === 'trial_not_approved' && result?.outcome.kind === 'refused')
   const outcome = useCurrent ? current : result?.outcome ?? current
-  async function activate() {
+  async function activate(trialCode?: string) {
     if (pending) return
     setPending(true)
     setError(false)
     try {
-      const outcome = await claimTrialServer({ data: {} })
+      const outcome = await claimTrialServer({ data: trialCode === undefined ? {} : { code: trialCode } })
       setResult({ outcome, currentAtResult: currentSnapshot.current })
     } catch { setError(true) }
     finally { setPending(false) }
@@ -73,6 +77,17 @@ function TrialActivation() {
   const remedy = outcome?.kind === 'refused' ? trialNextAction(outcome.code) : undefined
   return (
     <div className="grid gap-related">
+      {outcome?.kind === 'granted' ? null : <form className="grid gap-related" onSubmit={event => {
+        event.preventDefault()
+        if (code.trim() !== '') void activate(code.trim())
+      }}>
+        <Input label="Trial code" value={code} maxLength={32} autoComplete="off" disabled={pending}
+          onChange={event => setCode(event.target.value)} />
+        <Button type="submit" disabled={pending || code.trim() === ''} className="justify-self-start">
+          {pending ? 'Checking trial…' : 'Redeem code'}
+        </Button>
+        <p className="text-sm text-muted-foreground">A valid code grants A$10 promotional credit and 30 days of purchase access. One trial per Account.</p>
+      </form>}
       {outcome?.kind === 'granted' ? <AeAlert title={outcome.booking === 'booked' ? 'Trial credit granted' : 'Confirming your trial credit'} tone={outcome.booking === 'booked' ? 'success' : 'info'}>
         <p>{outcome.booking === 'booked' ? 'Your approved A$10 grant has been recorded. Your credit page shows the amount remaining.' : 'Activation is recorded. Credit will appear after confirmation.'} Trial credit and purchase access expire {formatTimestamp(outcome.expiresAt, 'Australia/Perth')}.</p>
       </AeAlert> : outcome?.kind === 'refused' ? <AeAlert title="Trial status" tone="warning">{REFUSAL_COPY[outcome.code]}</AeAlert>

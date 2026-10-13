@@ -86,8 +86,13 @@ function approvalSheet(command: AdminCommandRequest, proposalRef: string, onOpen
       return <AdminActionSheet {...common} action={command.action} input={command.input} initialReasonCode={command.reasonCode} targetRefs={[{ label: ADMIN_AUDIT_ACTION_COPY.targetLabels.policyRef, value: command.input.policyRef }]} />
     case 'issue_trial':
       return <AdminActionSheet {...common} action={command.action} input={command.input} initialReasonCode={command.reasonCode} targetRefs={[
-        { label: command.input.recipient.kind === 'email' ? 'Email' : 'Account', value: command.input.recipient.kind === 'email' ? command.input.recipient.email : command.input.recipient.accountRef },
+        { label: command.input.recipient.kind === 'email' ? 'Email' : command.input.recipient.kind === 'code' ? 'Code' : 'Account',
+          value: command.input.recipient.kind === 'email' ? command.input.recipient.email : command.input.recipient.kind === 'account' ? command.input.recipient.accountRef : command.input.recipient.code },
         { label: 'Trial', value: 'A$10 credit and purchase access for 30 days from activation' },
+        ...(command.input.recipient.kind === 'code' ? [
+          { label: 'Campaign cap', value: '10 Accounts, A$100 total' },
+          { label: 'Redeem by', value: formatTimestamp(command.input.recipient.claimBy, 'Australia/Perth') },
+        ] : []),
         { label: 'Environment', value: command.input.environment },
       ]} />
     case 'grant_promotional_credit':

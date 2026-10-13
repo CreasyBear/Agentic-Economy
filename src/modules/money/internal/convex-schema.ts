@@ -251,6 +251,10 @@ export const moneyTables = {
     recipient: trialRecipientValue,
     activation: trialActivationValue,
     delivery: trialDeliveryValue,
+    codeCampaign: v.optional(v.union(
+      v.object({ kind: v.literal('approval'), claimedCount: v.number() }),
+      v.object({ kind: v.literal('claim'), approvalRef: v.string(), position: v.number() }),
+    )),
     createdAt: v.number(), updatedAt: v.number(),
     actorRef: v.string(), operationKey: v.string(), correlationId: v.string(),
     commandDigest: v.string(), auditEventRef: v.string(),
@@ -258,6 +262,7 @@ export const moneyTables = {
     expectedStateDigest: v.optional(v.string()),
   })
     .index('by_offerRef', ['offerRef'])
+    .index('by_codeCampaign_approvalRef_and_codeCampaign_position', ['codeCampaign.approvalRef', 'codeCampaign.position'])
     .index('by_environment_and_activation_accountRef', ['environment', 'activation.accountRef'])
     .index('by_environment_and_createdAt', ['environment', 'createdAt']),
   moneyPromotionalGrants: defineTable({

@@ -2,7 +2,7 @@ import type { Doc } from '../../../_generated/dataModel'
 import type { QueryCtx } from '../../../_generated/server'
 import { canonicalDigest, isCanonicalDigest } from '@/modules/common/canonical-digest'
 import { isRecord } from '@/modules/common/is-record'
-import { TRIAL_AMOUNT_UNITS, TRIAL_DURATION_MS } from '@/modules/money/public'
+import { TRIAL_AMOUNT_UNITS, TRIAL_DURATION_MS, COLOSSEUM_TRIAL_CLAIM_BY } from '@/modules/money/public'
 import { ADMIN_ACTION_PERMISSION, type AdminActionInput } from '@/lib/operator/admin-console/contracts'
 import { parseAdminOperationReceipt } from '../../adminConsole/commands/idempotency'
 import { financialEnvironmentMatches } from '../formance/contracts'
@@ -15,6 +15,31 @@ export function trialOfferRef(input: AdminActionInput['issue_trial']): string {
  * audit authorize exactly its recipient and fixed terms. Invariant: recipient
  * claims cannot manufacture an Admin grant. Missing/conflicting facts refuse. */
 export async function trialOfferHasAuthority(ctx: Pick<QueryCtx, 'db'>, offer: Doc<'moneyTrialOffers'>): Promise<boolean> {
+  const campaign = offer.codeCampaign
+  if (campaign?.kind === 'claim') {
+    const approval = await ctx.db.query('moneyTrialOffers').withIndex('by_offerRef', q => q.eq('offerRef', campaign.approvalRef)).unique()
+    if (approval?.recipient.kind !== 'code' || approval.codeCampaign?.kind !== 'approval'
+      || offer.recipient.kind !== 'account' || offer.activation.kind !== 'granted'
+      || offer.activation.accountRef !== offer.recipient.accountRef
+      || !Number.isSafeInteger(campaign.position) || campaign.position < 1 || campaign.position > approval.codeCampaign.claimedCount
+      || offer.environment !== approval.environment || offer.actorRef !== approval.actorRef
+      || offer.operationKey !== approval.operationKey || offer.correlationId !== approval.correlationId
+      || offer.commandDigest !== approval.commandDigest || offer.auditEventRef !== approval.auditEventRef
+      || offer.reasonCode !== approval.reasonCode || canonicalDigest(offer.evidenceRefs) !== canonicalDigest(approval.evidenceRefs)
+      || offer.expectedStateDigest !== approval.expectedStateDigest
+      || offer.createdAt < approval.createdAt || offer.createdAt >= approval.recipient.claimBy
+      || offer.activation.activatedAt !== offer.createdAt
+      || offer.offerRef !== trialOfferRef({ environment: offer.environment, recipient: offer.recipient })) return false
+    const slot = await ctx.db.query('moneyTrialOffers').withIndex('by_codeCampaign_approvalRef_and_codeCampaign_position', q => q
+      .eq('codeCampaign.approvalRef', approval.offerRef).eq('codeCampaign.position', campaign.position)).unique()
+    return slot?._id === offer._id && await trialOfferHasAuthority(ctx, approval)
+  }
+  if (offer.recipient.kind === 'code') {
+    if (campaign?.kind !== 'approval' || !Number.isSafeInteger(campaign.claimedCount)
+      || campaign.claimedCount < 0 || campaign.claimedCount > offer.recipient.maxClaims
+      || offer.recipient.claimBy !== COLOSSEUM_TRIAL_CLAIM_BY
+      || offer.activation.kind !== 'unclaimed' || offer.activation.claimBy !== offer.recipient.claimBy) return false
+  } else if (campaign !== undefined) return false
   const input = { environment: offer.environment, recipient: offer.recipient }
   if (!financialEnvironmentMatches(offer.environment) || offer.offerRef !== trialOfferRef(input)
     || offer.commandDigest !== canonicalDigest({ scope: 'admin_operator', action: 'issue_trial', input,

@@ -7,8 +7,8 @@ import type { TrialClaimResult } from './activation'
 import type { Infer } from 'convex/values'
 import type { deliveryOutcomeValue } from './delivery'
 
-export async function claimTrialHandler(ctx: ActionCtx): Promise<TrialClaimResult> {
-  const prepared = await ctx.runMutation(internal.trialAccess.prepareClaim, {})
+export async function claimTrialHandler(ctx: ActionCtx, args: { code?: string }): Promise<TrialClaimResult> {
+  const prepared = await ctx.runMutation(internal.trialAccess.prepareClaim, args)
   if (prepared.kind !== 'verify_email') return prepared
   const secretKey = env.CLERK_SECRET_KEY?.trim()
   if (!secretKey) return { kind: 'refused', code: 'trial_verification_unavailable' }
@@ -26,6 +26,7 @@ export async function claimTrialHandler(ctx: ActionCtx): Promise<TrialClaimResul
   return await ctx.runMutation(internal.trialAccess.finishClaim, {
     tokenIdentifier: prepared.tokenIdentifier, accountRef: prepared.accountRef,
     ownerPrincipalRef: prepared.ownerPrincipalRef, verifiedEmail,
+    ...(prepared.code === undefined ? {} : { code: prepared.code }),
   })
 }
 

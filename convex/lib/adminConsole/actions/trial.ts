@@ -3,7 +3,7 @@ import { env, type MutationCtx } from '../../../_generated/server'
 import { internal } from '../../../_generated/api'
 import { deploymentPaymentEnvironment } from '@/lib/deployment/environment'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { TRIAL_DURATION_MS } from '@/modules/money/public'
+import { TRIAL_DURATION_MS, COLOSSEUM_TRIAL_CLAIM_BY } from '@/modules/money/public'
 import type { AdminCommandSpec } from '../commands/commandEnvelope'
 import type { AdminCommandWireArgs } from '../commands/contracts'
 import { activateTrialOffer, readAccountTrial, readTrialAccount } from '../../money/trials/activation'
@@ -22,6 +22,8 @@ export function trialSpec(ctx: MutationCtx, args: AdminCommandWireArgs<'issue_tr
     apply: async authority => {
       if (deploymentPaymentEnvironment(env) !== input.environment || !financialEnvironmentMatches(input.environment)) return { kind: 'refused', code: 'environment_mismatch' }
       const recipient = input.recipient
+      if (recipient.kind === 'code' && (recipient.claimBy !== COLOSSEUM_TRIAL_CLAIM_BY
+        || recipient.claimBy <= Date.now())) return { kind: 'refused', code: 'trial_recipient_invalid' }
       if (recipient.kind === 'email' && (recipient.email !== recipient.email.trim().toLowerCase()
         || recipient.email.length > 254 || !z.email().safeParse(recipient.email).success)) return { kind: 'refused', code: 'trial_recipient_invalid' }
       if (await ctx.db.query('moneyTrialOffers').withIndex('by_offerRef', q => q.eq('offerRef', offerRef)).unique() !== null) {
@@ -42,8 +44,9 @@ export function trialSpec(ctx: MutationCtx, args: AdminCommandWireArgs<'issue_tr
       const auditEventRef = `audit:money.trial_approved:${canonicalDigest({ actorRef, operationName: 'admin:issue_trial', key: args.operationKey, requestHash })}`
       const id = await ctx.db.insert('moneyTrialOffers', {
         offerRef, environment: input.environment, recipient,
-        activation: { kind: 'unclaimed', claimBy: now + TRIAL_DURATION_MS },
+        activation: { kind: 'unclaimed', claimBy: recipient.kind === 'code' ? recipient.claimBy : now + TRIAL_DURATION_MS },
         delivery: recipient.kind === 'email' ? { kind: 'queued' } : { kind: 'not_required' },
+        ...(recipient.kind === 'code' ? { codeCampaign: { kind: 'approval' as const, claimedCount: 0 } } : {}),
         createdAt: now, updatedAt: now, actorRef, operationKey: args.operationKey, correlationId: args.correlationId,
         commandDigest, auditEventRef, reasonCode: args.reasonCode, evidenceRefs: [...args.evidenceRefs],
         ...(args.expectedStateDigest === undefined ? {} : { expectedStateDigest: args.expectedStateDigest }),
@@ -53,7 +56,7 @@ export function trialSpec(ctx: MutationCtx, args: AdminCommandWireArgs<'issue_tr
         if (offer === null) throw new Error('trial_offer_insert_missing')
         const activated = await activateTrialOffer(ctx, offer, recipient.accountRef, account.ownerPrincipalRef, now)
         if (activated.kind !== 'granted') throw new Error('trial_activation_conflict')
-      } else {
+      } else if (recipient.kind === 'email') {
         await ctx.scheduler.runAfter(0, internal.trialAccessActions.deliverInvitation, { offerRef })
       }
       return { kind: 'applied', code: 'trial_approved', effectRefs: [offerRef], beforeState: 'absent', afterState: 'approved' }

@@ -31,6 +31,16 @@ function approveReview() {
 }
 
 describe('Admin trial actions', () => {
+  it('reviews the fixed code, campaign cap and expiry through the original guarded approval', async () => {
+    render(<AdminTrialAccess />)
+    fireEvent.click(screen.getByRole('button', { name: 'Review COLOSSEUM code' }))
+    expect(screen.getByText(/COLOSSEUM: up to 10 Accounts/)).toBeTruthy()
+    expect(mocks.execute).not.toHaveBeenCalled()
+    approveReview()
+    await waitFor(() => expect(mocks.execute).toHaveBeenCalledTimes(1))
+    expect(mocks.execute.mock.calls[0]?.[0]).toMatchObject({ action: 'issue_trial', input: { environment: 'production',
+      recipient: { kind: 'code', code: 'COLOSSEUM', maxClaims: 10, claimBy: Date.UTC(2026, 10, 30, 16) } } })
+  })
   it('reviews normalized email and fixed terms before submitting through the existing guarded command', async () => {
     render(<AdminTrialAccess />)
     fireEvent.change(screen.getByLabelText('Recipient email'), { target: { value: 'Buyer@Example.com' } })

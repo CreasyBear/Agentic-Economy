@@ -1,6 +1,6 @@
 import { v } from 'convex/values'
 import { internalMutation, mutation, query } from './_generated/server'
-import { trialRecipientValue, trialClaimResultValue } from '@/modules/money/public'
+import { trialRecipientValue, trialClaimResultValue, trialClaimArgs } from '@/modules/money/public'
 import { adminCommandArgsValue, adminCommandReceiptValue } from './lib/adminConsole/commands/contracts'
 import { runAdminCommand } from './lib/adminConsole/commands/commandEnvelope'
 import { trialSpec } from './lib/adminConsole/actions/trial'
@@ -19,7 +19,7 @@ export const issue = mutation({
 })
 export const readAdmin = query({ args: adminTrialArgs, returns: adminTrialResultValue, handler: readAdminTrialsHandler })
 export const readCurrent = query({ args: {}, returns: trialClaimResultValue, handler: readCurrentTrialHandler })
-export const prepareClaim = internalMutation({ args: {}, returns: preparedClaimValue, handler: prepareClaimHandler })
+export const prepareClaim = internalMutation({ args: trialClaimArgs, returns: preparedClaimValue, handler: prepareClaimHandler })
 export const finishClaim = internalMutation({ args: verifiedClaimArgs.fields, returns: trialClaimResultValue, handler: finishClaimHandler })
 export const claimDelivery = internalMutation({ args: offerRefArgs, returns: deliveryWorkValue, handler: claimDeliveryHandler })
 export const finishDelivery = internalMutation({ args: finishDeliveryArgs, returns: v.boolean(), handler: finishDeliveryHandler })

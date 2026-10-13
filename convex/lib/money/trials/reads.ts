@@ -9,6 +9,7 @@ export const adminTrialArgs = { accountRef: v.optional(v.string()) }
 export const adminTrialViewValue = v.object({
   offerRef: v.string(), recipient: trialRecipientValue, activation: trialActivationValue, delivery: trialDeliveryValue,
   createdAt: v.number(), booking: v.union(v.literal('not_started'), v.literal('pending'), v.literal('booked'), v.literal('unavailable')),
+  redeemedCount: v.optional(v.number()),
 })
 export const adminTrialResultValue = v.union(
   v.object({ kind: v.literal('refused') }),
@@ -29,6 +30,7 @@ export async function readAdminTrialsHandler(ctx: QueryCtx, args: { accountRef?:
       ? await ctx.db.query('moneyPromotionalGrants').withIndex('by_grantRef', q => q.eq('grantRef', activation.grantRef)).unique()
       : null
     return { offerRef: offer.offerRef, recipient: offer.recipient, activation, delivery: offer.delivery,
+      ...(offer.codeCampaign?.kind === 'approval' ? { redeemedCount: offer.codeCampaign.claimedCount } : {}),
       createdAt: offer.createdAt, booking: activation.kind === 'unclaimed' ? 'not_started' as const : grant?.bookingState ?? 'unavailable' as const }
   })) }
 }

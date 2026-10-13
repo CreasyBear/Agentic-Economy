@@ -39,6 +39,7 @@ export async function grantedTrialResult(ctx: Pick<QueryCtx, 'db'>, offer: Doc<'
  * concurrent different offer loses without a second financial effect. */
 export async function activateTrialOffer(ctx: MutationCtx, offer: Doc<'moneyTrialOffers'>,
   accountRef: string, ownerPrincipalRef: string, now: number): Promise<TrialClaimResult> {
+  if (offer.recipient.kind === 'code') return { kind: 'refused', code: 'trial_authority_invalid' }
   if (offer.activation.kind === 'granted') {
     return offer.activation.accountRef === accountRef && offer.activation.ownerPrincipalRef === ownerPrincipalRef
       ? await grantedTrialResult(ctx, offer) : { kind: 'refused', code: 'trial_already_claimed' }

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { api, internal } from '../../../convex/_generated/api'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { TRIAL_AMOUNT_UNITS, TRIAL_DURATION_MS, promotionalCreditReference } from '@/modules/money/public'
+import { TRIAL_AMOUNT_UNITS, TRIAL_DURATION_MS, COLOSSEUM_TRIAL_CLAIM_BY, promotionalCreditReference } from '@/modules/money/public'
 import type { AdminActionInput, AdminCommandArgs } from '@/lib/operator/admin-console/contracts'
 import { convexTestWithMarketComponents, ownerAdmin, nonAdmin, supportAdmin, testMfaConsequenceProof } from '../../helpers/convex-fixtures'
 import { withSourceWrite } from '../../helpers/source-write-admission'
@@ -60,6 +60,100 @@ beforeEach(() => {
   clerk.getInvitationList.mockReset().mockResolvedValue({ data: [], totalCount: 0 })
 })
 afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); vi.restoreAllMocks() })
+
+const codeRecipient = { kind: 'code' as const, code: 'COLOSSEUM' as const, maxClaims: 10 as const, claimBy: COLOSSEUM_TRIAL_CLAIM_BY }
+
+describe('capped Colosseum trial code', () => {
+  it('requires original Admin approval and refuses unknown codes without creating credit', async () => {
+    const f = await setup()
+    expect(await f.buyer.action(api.trialAccessActions.claim, { code: 'COLOSSEUM' })).toEqual({ kind: 'refused', code: 'trial_not_approved' })
+    expect(await f.buyer.action(api.trialAccessActions.claim, { code: 'OTHER' })).toEqual({ kind: 'refused', code: 'trial_code_invalid' })
+    expect(await rows(f.backend)).toEqual({ offers: [], grants: [] })
+  })
+
+  it('concurrent retries create one grant, recover ledger confirmation and never consume a second slot', async () => {
+    const f = await setup()
+    expect((await f.approve(codeRecipient)).receipt).toMatchObject({ kind: 'completed' })
+    const results = await Promise.all([f.buyer.action(api.trialAccessActions.claim, { code: ' colosseum ' }),
+      f.buyer.action(api.trialAccessActions.claim, { code: 'COLOSSEUM' })])
+    expect(results[0]).toMatchObject({ kind: 'granted', booking: 'pending' })
+    expect(results[1]).toEqual(results[0])
+    const grant = (await rows(f.backend)).grants[0]
+    if (grant === undefined) throw new Error('grant_missing')
+    expect(grant).toMatchObject({ amountUnits: TRIAL_AMOUNT_UNITS, availableUnits: '0' })
+    expect(grant.expiresAt - grant.createdAt).toBe(TRIAL_DURATION_MS)
+    const work = await book(f.backend, grant.grantRef)
+    expect(await Promise.all([f.backend.mutation(internal.moneyPromotionalCredit.finishWork, work),
+      f.backend.mutation(internal.moneyPromotionalCredit.finishWork, work)])).toEqual([true, true])
+    expect(await f.buyer.action(api.trialAccessActions.claim, { code: 'COLOSSEUM' })).toMatchObject({ kind: 'granted', grantRef: grant.grantRef, booking: 'booked', expiresAt: grant.expiresAt })
+    const state = await rows(f.backend)
+    expect(state.grants).toHaveLength(1)
+    expect(state.offers.find(offer => offer.recipient.kind === 'code')?.codeCampaign).toEqual({ kind: 'approval', claimedCount: 1 })
+    expect(clerk.createInvitation).not.toHaveBeenCalled()
+    expect(await f.backend.run(ctx => accountHasTrialAccess(ctx, { environment: 'sandbox', accountRef: f.account.accountRef,
+      ownerPrincipalRef: f.ownership.ownerPrincipalRef, now: Date.now() }))).toBe(true)
+  })
+
+  it('admits at most ten Accounts when twelve different owners redeem concurrently', async () => {
+    const f = await setup()
+    await f.approve(codeRecipient)
+    clerk.getUser.mockImplementation(async (id: string) => ({ id, primaryEmailAddress: { emailAddress: `${id}@example.com`, verification: { status: 'verified' } } }))
+    const buyers = await Promise.all(Array.from({ length: 12 }, (_, i) => nonAdmin(f.backend, `user_code_buyer_${i}`)))
+    const results = await Promise.all(buyers.map(buyer => buyer.action(api.trialAccessActions.claim, { code: 'COLOSSEUM' })))
+    expect(results.filter(result => result.kind === 'granted')).toHaveLength(10)
+    expect(results.filter(result => result.kind === 'refused')).toEqual([
+      { kind: 'refused', code: 'trial_code_exhausted' }, { kind: 'refused', code: 'trial_code_exhausted' },
+    ])
+    const state = await rows(f.backend)
+    expect(state.grants).toHaveLength(10)
+    expect(state.grants.reduce((total, grant) => total + BigInt(grant.amountUnits), 0n)).toBe(100_000_000n)
+    expect(state.offers.find(offer => offer.recipient.kind === 'code')?.codeCampaign).toEqual({ kind: 'approval', claimedCount: 10 })
+    expect(new Set(state.offers.flatMap(offer => offer.codeCampaign?.kind === 'claim' ? [offer.codeCampaign.position] : [])).size).toBe(10)
+  })
+
+  it('refuses redemption at the campaign expiry without consuming a slot', async () => {
+    const f = await setup()
+    await f.approve(codeRecipient)
+    vi.useFakeTimers()
+    vi.setSystemTime(COLOSSEUM_TRIAL_CLAIM_BY)
+    const buyer = await nonAdmin(f.backend, 'user_trial_buyer')
+    expect(await buyer.action(api.trialAccessActions.claim, { code: 'COLOSSEUM' })).toEqual({ kind: 'refused', code: 'trial_expired' })
+    const state = await rows(f.backend)
+    expect(state.grants).toEqual([])
+    expect(state.offers[0]?.codeCampaign).toEqual({ kind: 'approval', claimedCount: 0 })
+  })
+
+  it('keeps an unverified email and a changed owner from consuming the campaign budget', async () => {
+    const f = await setup()
+    await f.approve(codeRecipient)
+    clerk.getUser.mockResolvedValueOnce({ id: 'user_trial_buyer', primaryEmailAddress: { emailAddress: 'buyer@example.com', verification: { status: 'unverified' } } })
+    expect(await f.buyer.action(api.trialAccessActions.claim, { code: 'COLOSSEUM' })).toEqual({ kind: 'refused', code: 'verified_email_required' })
+    const prepared = await f.buyer.mutation(internal.trialAccess.prepareClaim, { code: 'COLOSSEUM' })
+    if (prepared.kind !== 'verify_email') throw new Error('claim_context_missing')
+    await f.backend.run(ctx => ctx.db.patch(f.ownership._id, { lifecycle: 'ended' }))
+    expect(await f.buyer.mutation(internal.trialAccess.finishClaim, { tokenIdentifier: prepared.tokenIdentifier,
+      accountRef: prepared.accountRef, ownerPrincipalRef: prepared.ownerPrincipalRef, verifiedEmail: 'buyer@example.com', code: 'COLOSSEUM' }))
+      .toEqual({ kind: 'refused', code: 'personal_account_required' })
+    const state = await rows(f.backend)
+    expect(state.grants).toEqual([])
+    expect(state.offers[0]?.codeCampaign).toEqual({ kind: 'approval', claimedCount: 0 })
+  })
+
+  it('refuses credit booking when the campaign approval evidence is removed', async () => {
+    const f = await setup()
+    await f.approve(codeRecipient)
+    await f.buyer.action(api.trialAccessActions.claim, { code: 'COLOSSEUM' })
+    const grant = (await rows(f.backend)).grants[0]
+    if (grant === undefined) throw new Error('grant_missing')
+    await f.backend.run(async ctx => {
+      const audit = await ctx.db.query('auditEvents').withIndex('by_eventId', q => q.eq('eventId', grant.auditEventRef ?? '')).unique()
+      if (audit !== null) await ctx.db.delete(audit._id)
+    })
+    expect(await f.backend.mutation(internal.moneyPromotionalCredit.claimWork, { grantRef: grant.grantRef }))
+      .toEqual({ kind: 'refused', code: 'promotional_credit_authority_invalid' })
+    expect((await rows(f.backend)).grants[0]?.availableUnits).toBe('0')
+  })
+})
 
 describe('approved Account trials', () => {
   it('refuses signed-out claims before contacting Clerk', async () => {

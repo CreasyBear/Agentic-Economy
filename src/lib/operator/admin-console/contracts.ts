@@ -151,6 +151,7 @@ export type AdminActionInput = {
   issue_trial: {
     environment: 'sandbox' | 'production'
     recipient: { kind: 'email'; email: string } | { kind: 'account'; accountRef: string }
+      | { kind: 'code'; code: 'COLOSSEUM'; maxClaims: 10; claimBy: number }
   }
   grant_promotional_credit: {
     accountRef: string

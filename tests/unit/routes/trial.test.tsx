@@ -18,6 +18,27 @@ beforeEach(() => { mocks.signedIn = true; mocks.current = undefined; mocks.claim
 afterEach(cleanup)
 
 describe('trial activation page', () => {
+  it('redeems the entered code without accepting client identity or money fields', async () => {
+    mocks.claim.mockResolvedValue({ kind: 'granted', grantRef: 'grant:code', accountRef: 'acc_1', expiresAt: 1_900_000_000_000, booking: 'pending' })
+    render(<AeTrialPage />)
+    fireEvent.change(screen.getByLabelText('Trial code'), { target: { value: 'COLOSSEUM' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Redeem code' }))
+    expect(await screen.findByText('Confirming your trial credit')).toBeTruthy()
+    expect(mocks.claim).toHaveBeenCalledExactlyOnceWith({ data: { code: 'COLOSSEUM' } })
+    expect(screen.queryByLabelText('Trial code')).toBeNull()
+  })
+
+  it('keeps a rejected code editable and recovers a lost response by retrying the same code', async () => {
+    mocks.claim.mockRejectedValueOnce(new Error('response lost')).mockResolvedValueOnce({ kind: 'refused', code: 'trial_code_invalid' })
+    render(<AeTrialPage />)
+    fireEvent.change(screen.getByLabelText('Trial code'), { target: { value: 'COLOSSEUM' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Redeem code' }))
+    expect(await screen.findByText('Activation could not be confirmed')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Redeem code' }))
+    expect(await screen.findByText(/trial code is not recognized/)).toBeTruthy()
+    expect(mocks.claim.mock.calls.map(call => call[0])).toEqual([{ data: { code: 'COLOSSEUM' } }, { data: { code: 'COLOSSEUM' } }])
+    expect(screen.getByLabelText('Trial code')).toBeTruthy()
+  })
   it('keeps the activation destination across signup/signin and never claims while signed out', () => {
     mocks.signedIn = false
     render(<AeTrialPage />)
