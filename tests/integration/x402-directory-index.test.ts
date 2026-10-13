@@ -40,6 +40,54 @@ async function seedRefresh(backend: ConvexFixtureBackend, generation: string) {
 }
 
 describe('complete external directory index', () => {
+  it('preserves paginated adoption, popular and price order across category and Provider filters', async () => {
+    const { backend, workload } = await setup()
+    const generation = 'coinbase-retained-indexes'
+    await seedRefresh(backend, generation)
+    const item = (index: number, category: string, provider: string, payers30d: number, calls30d: number, price: string) => source(index, {
+      category, provider, activity: { payers30d, calls30d },
+      prices: [{ network: 'base', scheme: 'exact', amount: '1', decimalAmount: price, symbol: 'USDC' }],
+    })
+    const items = [
+      item(1, 'research', 'alpha.test', 10, 20, '2'), item(2, 'research', 'alpha.test', 3, 100, '0.5'),
+      item(3, 'engineering', 'beta.test', 8, 50, '1'), item(4, 'research', 'beta.test', 1, 1000, '0.1'),
+      item(5, 'research', 'beta.test', 5, 40, '3'),
+    ]
+    const pageArgs = { generation, offset: 0, reportedTotal: 5, observedAt: 2, runStartedAt: 1, workload, items }
+    expect(await Promise.all([
+      backend.mutation(internal.x402DirectoryIndexStore.applyPage, pageArgs),
+      backend.mutation(internal.x402DirectoryIndexStore.applyPage, pageArgs),
+    ])).toEqual([
+      { kind: 'advanced', generation, nextOffset: 100, indexedTotal: 5 },
+      { kind: 'advanced', generation, nextOffset: 100, indexedTotal: 5 },
+    ])
+    await backend.mutation(internal.x402DirectoryIndexStore.applyPage, { generation, offset: 100, reportedTotal: 5, observedAt: 3, runStartedAt: 1, workload, items: [] })
+    const cases = [
+      { filters: { sort: 'adoption' }, expected: [1, 3, 5, 2] },
+      { filters: { sort: 'popular' }, expected: [2, 3, 5, 1] },
+      { filters: { sort: 'price_asc' }, expected: [2, 3, 1, 5] },
+      { filters: { sort: 'adoption', category: 'research' }, expected: [1, 5, 2] },
+      { filters: { sort: 'popular', category: 'research' }, expected: [2, 5, 1] },
+      { filters: { sort: 'price_asc', category: 'research' }, expected: [2, 1, 5] },
+      { filters: { sort: 'adoption', provider: 'beta.test' }, expected: [3, 5, 4] },
+      { filters: { sort: 'popular', provider: 'beta.test' }, expected: [4, 3, 5] },
+      { filters: { sort: 'price_asc', provider: 'beta.test' }, expected: [4, 3, 5] },
+    ] as const
+    for (const { filters, expected } of cases) {
+      const resources: string[] = []
+      let cursor: string | null = null
+      let done = false
+      for (let pageNumber = 0; pageNumber <= items.length; pageNumber += 1) {
+        const page: Infer<typeof pageValue> = await backend.query(api.x402DirectoryIndex.browse, { ...filters, paginationOpts: { cursor, numItems: 1 } })
+        if (page.kind !== 'ok') throw new Error(`browse unavailable: ${JSON.stringify(filters)}`)
+        resources.push(...page.page.map(row => row.entry.resource))
+        if (page.isDone) { done = true; break }
+        cursor = page.continueCursor
+      }
+      expect({ done, resources }, JSON.stringify(filters)).toEqual({ done: true, resources: expected.map(index => source(index).resource) })
+    }
+  })
+
   it('finds hostname prefixes beyond the overview sample and paginates matching hosts with scoped cursors', async () => {
     const { backend, workload } = await setup()
     const generation = 'coinbase-host-prefix'

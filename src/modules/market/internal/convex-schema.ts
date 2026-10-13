@@ -110,21 +110,7 @@ export const marketTables = {
     lastSeenRunAt: v.optional(v.number()),
   })
     .index('by_generation_and_documentId', ['generation', 'documentId'])
-    .index('by_generation_source_and_documentId', [
-      'generation',
-      'source',
-      'documentId',
-    ])
-    .index('by_generation_access_and_documentId', [
-      'generation',
-      'access',
-      'documentId',
-    ])
-    .index('by_generation_and_lastSeenRunAt', ['generation', 'lastSeenRunAt'])
-    .searchIndex('search_searchText_by_generation_source', {
-      searchField: 'searchText',
-      filterFields: ['generation', 'source', 'access'],
-    }),
+    .index('by_generation_and_lastSeenRunAt', ['generation', 'lastSeenRunAt']),
   // Compact native search projections: one all-network row and one row per
   // supported network for each observed resource. No publication or admission.
   marketDirectorySearchEntries: defineTable({
@@ -200,17 +186,12 @@ export const marketTables = {
     admission: v.optional(v.union(v.object({ kind: v.literal('quotable') }), v.object({ kind: v.literal('unavailable'), reason: v.string() }))),
   })
     .index('by_generation_and_resource', ['generation', 'resource'])
-    .index('by_generation_and_network_and_payersOrder', ['generation', 'network', 'payersOrder'])
     .index('by_generation_and_network_and_momentumOrder', ['generation', 'network', 'momentumOrder'])
     .index('by_generation_and_network_and_category_and_payersOrder', ['generation', 'network', 'category', 'payersOrder'])
     .index('by_generation_and_network_and_provider_and_payersOrder', ['generation', 'network', 'provider', 'payersOrder'])
-    .index('by_generation_and_network_and_priceOrder', ['generation', 'network', 'priceOrder'])
-    .index('by_generation_and_network_and_category_and_priceOrder', ['generation', 'network', 'category', 'priceOrder'])
     .index('by_generation_and_network_and_provider_and_priceOrder', ['generation', 'network', 'provider', 'priceOrder'])
     .index('by_generation_and_network_and_curated_and_payersOrder', ['generation', 'network', 'curated', 'payersOrder'])
     .index('by_generation_and_network_and_resource', ['generation', 'network', 'resource'])
-    .index('by_generation_and_network_and_popularOrder', ['generation', 'network', 'popularOrder'])
-    .index('by_generation_and_network_and_category_and_popularOrder', ['generation', 'network', 'category', 'popularOrder'])
     .index('by_generation_and_network_and_provider_and_popularOrder', ['generation', 'network', 'provider', 'popularOrder'])
     .index('by_generation_and_network_and_provider_and_lastActivatedAt', ['generation', 'network', 'provider', 'lastActivatedAt'])
     .index('by_generation_and_network_and_provider_and_payerDepth', ['generation', 'network', 'provider', 'payerDepth'])

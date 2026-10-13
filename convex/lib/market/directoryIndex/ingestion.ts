@@ -1,5 +1,5 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { directoryNetwork, directoryProviderKey, isDirectoryEntryEligible, type DirectoryRecencyBand } from '@/modules/market/x402-directory-index'
+import { directoryNetwork, directoryProviderKey, isDirectoryEntryEligible } from '@/modules/market/x402-directory-index'
 import type { Id } from '../../../_generated/dataModel'
 import type { MutationCtx } from '../../../_generated/server'
 import { searchAnalytics, writeAnalytics } from './analytics'
@@ -22,11 +22,6 @@ function sameAdmission(stored: ListingAdmission | undefined, next: ListingAdmiss
   return stored?.kind === next.kind && (stored.kind === 'quotable' || stored.reason === (next as { reason: string }).reason)
 }
 export type WriteOutcome = 'inserted' | 'unchanged' | 'activity_patched' | 'rewritten'
-
-function storedRecencyBand(value: string | undefined): DirectoryRecencyBand | undefined {
-  if (value === 'unknown' || value === 'fresh' || value === 'recent' || value === 'stale') return value
-  return undefined
-}
 
 /**
  * Well 8 Lane B, three-tier diff against the retained observation:
@@ -91,7 +86,7 @@ export async function writeSource(ctx: MutationCtx, generation: string, item: In
     })
     const searchRows = await ctx.db.query('marketDirectorySearchEntries')
       .withIndex('by_generation_and_resource', q => q.eq('generation', generation).eq('resource', item.resource)).take(130)
-    await writeAnalytics(ctx, generation, item.resource, entry, storedDirectoryEntry(previous), observedAt, storedRecencyBand(searchRows.find(row => row.network === '*')?.lastCalledBand))
+    await writeAnalytics(ctx, generation, item.resource, entry, storedDirectoryEntry(previous), observedAt)
     const universalAnalytics = searchAnalytics(entry, '*', observedAt)
     const eligible = isDirectoryEntryEligible({
       hasOutputSchema: universalAnalytics.hasOutputSchema,
@@ -195,7 +190,7 @@ export async function writeSource(ctx: MutationCtx, generation: string, item: In
     })
   }
   await writeFacetMembership(ctx, generation, item.resource, item, category, networks, eligible, previous, previousEligible)
-  await writeAnalytics(ctx, generation, item.resource, entry, previous === null ? undefined : storedDirectoryEntry(previous), observedAt, storedRecencyBand(oldSearch.find(row => row.network === '*')?.lastCalledBand))
+  await writeAnalytics(ctx, generation, item.resource, entry, previous === null ? undefined : storedDirectoryEntry(previous), observedAt)
   await refreshProviderLead(ctx, generation, entry.provider)
   return previous === null ? 'inserted' : 'rewritten'
 }

@@ -232,10 +232,17 @@ recipient-capability events emitted by the Connect setup. The endpoint verifies
 Stripe's signature over the raw body and applies events idempotently. Do not put
 secret or webhook keys in browser configuration.
 
-Useful checks:
+The docs application keeps a separate lockfile. Install its locked dependencies
+before running the full release gate from a fresh checkout:
 
 ```sh
-npm run gate
+npm ci --prefix packages/docs --ignore-scripts
+AE_DEPLOYMENT_ENVIRONMENT=development AE_FORMANCE_ENVIRONMENT=sandbox npm run gate
+```
+
+Other useful checks:
+
+```sh
 npm run test:chat:conformance
 npm run test:cli-package
 ```
