@@ -541,6 +541,7 @@ describe('issued agent binding', () => {
     await expect(resolve('membership-ended')).resolves.toBeNull()
   })
 
+  // This end-to-end recovery fixture lazily loads Node actions on a cold worker.
   it('recovers prior Calls through a promoted credential while preserving original evidence and Account isolation', async () => {
     const backend = convexTest(schema, modules)
     const owner = backend.withIdentity(identity('user_owner'))
@@ -670,7 +671,7 @@ describe('issued agent binding', () => {
     await expect(backend.action(internal.capabilityCallWorker.recover, ownerWorkerArgs))
       .resolves.toMatchObject({ kind: 'refused', code: 'invocation_not_found' })
     await expect(backend.run(async (ctx) => await ctx.db.get(originalId))).resolves.toMatchObject(original)
-  })
+  }, 30_000)
 
   it('stages, promotes, replays, and cancels credential replacements without replacing the agent', async () => {
     const backend = convexTest(schema, modules)
