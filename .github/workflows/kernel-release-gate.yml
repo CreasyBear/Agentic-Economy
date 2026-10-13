@@ -145,6 +145,9 @@ jobs:
       - name: Frozen dependency install
         run: npm ci
 
+      - name: Frozen documentation dependency install
+        run: npm ci --prefix packages/docs --ignore-scripts
+
       - name: Cache the release Chromium browser
         id: playwright-cache
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
@@ -170,6 +173,7 @@ jobs:
       - name: Run the full local release gate
         env:
           AE_DEPLOYMENT_ENVIRONMENT: development
+          AE_FORMANCE_ENVIRONMENT: sandbox
           CLERK_JWT_ISSUER_DOMAIN: https://relative-phoenix-8958.clerk.accounts.dev
           CLERK_PUBLISHABLE_KEY: ${{ secrets.AE_AUTHENTICATED_E2E_CLERK_PUBLISHABLE_KEY }}
           VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.AE_AUTHENTICATED_E2E_CLERK_PUBLISHABLE_KEY }}

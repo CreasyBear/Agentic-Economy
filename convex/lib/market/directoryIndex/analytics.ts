@@ -57,8 +57,8 @@ function directoryPayerDepth(calls: number | undefined, payers: number | undefin
   if (calls === undefined || payers === undefined || !Number.isSafeInteger(calls) || !Number.isSafeInteger(payers) || payers <= 0) return undefined
   return Math.round((calls / payers) * 100) / 100
 }
-export function memberships(entry: X402DirectoryEntry, now: number, recencyBand = directoryRecencyBand(entry.activity?.lastCalledAt, now)): [string, string | number][] {
-  const keys: [string, string | number][] = [['adoption', directoryAdoptionBand(entry.activity?.payers30d)], ['depth', directoryDepthBand(entry.activity?.calls30d, entry.activity?.payers30d)], ['recency', recencyBand]]
+export function memberships(entry: X402DirectoryEntry, now: number): [string, string | number][] {
+  const keys: [string, string | number][] = [['adoption', directoryAdoptionBand(entry.activity?.payers30d)], ['depth', directoryDepthBand(entry.activity?.calls30d, entry.activity?.payers30d)], ['recency', directoryRecencyBand(entry.activity?.lastCalledAt, now)]]
   for (const tag of new Set(entry.tags ?? [])) keys.push(['tag', tag])
   for (const bundle of new Set(entry.bundleSlugs ?? [])) keys.push(['bundle', bundle])
   for (const [flag, present] of Object.entries(directoryMetadataFlags(entry))) if (present) keys.push(['metadata', flag])
@@ -80,15 +80,29 @@ export async function deleteAnalyticsMembership(ctx: MutationCtx, generation: st
   for (const band of DIRECTORY_RECENCY_BANDS) await directoryFacets.deleteIfExists(ctx, { namespace, key: ['recency', band], id: resource })
 }
 
-export async function writeAnalytics(ctx: MutationCtx, generation: string, resource: string, entry: X402DirectoryEntry, previous?: X402DirectoryEntry, now = Date.now(), previousRecencyBand?: DirectoryRecencyBand) {
+export async function writeAnalytics(ctx: MutationCtx, generation: string, resource: string, entry: X402DirectoryEntry, previous?: X402DirectoryEntry, now = Date.now()): Promise<void> {
   const namespace = analyticsNamespace(generation)
+  const desired = new Map(memberships(entry, now).map(key => [JSON.stringify(key), key] as const))
+  const candidates = new Map(desired)
   if (previous !== undefined) {
-    for (const key of memberships(previous, now, previousRecencyBand)) await directoryFacets.deleteIfExists(ctx, { namespace, key, id: resource })
-    // A previous activity-only patch may have left this target key behind in older indexes.
-    await directoryFacets.deleteIfExists(ctx, { namespace, key: ['recency', directoryRecencyBand(entry.activity?.lastCalledAt, now)], id: resource })
+    for (const key of memberships(previous, now)) candidates.set(JSON.stringify(key), key)
   }
-  for (const key of memberships(entry, now)) {
-    await directoryFacets.insert(ctx, { namespace, key, id: resource })
+  for (const band of DIRECTORY_RECENCY_BANDS) candidates.set(JSON.stringify(['recency', band]), ['recency', band])
+  const keys = [...candidates]
+  const counts = await directoryFacets.countBatch(ctx, keys.map(([, key]) => {
+    const bound = { key, id: resource, inclusive: true }
+    return { namespace, bounds: { lower: bound, upper: bound } }
+  }))
+  for (const [index, [identity, key]] of keys.entries()) {
+    const count = counts[index]
+    if (count !== 0 && count !== 1) throw new Error('directory_analytics_membership_invalid')
+    if (desired.has(identity)) {
+      if (count === 0) await directoryFacets.insert(ctx, { namespace, key, id: resource })
+    } else if (count === 1) {
+      await directoryFacets.delete(ctx, { namespace, key, id: resource })
+    }
+  }
+  for (const key of desired.values()) {
     if ((key[0] === 'tag' || key[0] === 'bundle') && typeof key[1] === 'string') {
       const kind = key[0], label = key[1]
       const existing = await ctx.db.query('marketDirectoryFacets').withIndex('by_generation_and_kind_and_key', q => q.eq('generation', generation).eq('kind', kind).eq('key', label)).unique()
