@@ -3,6 +3,7 @@ import { degradeBackend } from '@/lib/observability/degrade-backend'
 import { recordSearchResult } from '@/lib/observability/journey'
 import { defineAction } from '@/modules/common/action'
 import { sourceFreshnessState } from '@/modules/common/freshness'
+import { isPublicToolRef } from '@/modules/common/tool-ref'
 import { jevDiscoveryRecipient } from '@/modules/decision-engine/public'
 import type { ReferenceRate } from '@/modules/money/public'
 import { readPersistedReferenceRate } from '@/modules/money/reference-rate.server'
@@ -22,6 +23,7 @@ import { InvalidOpaqueCursorError } from './opaque-cursor'
 import {
   filterToolSearchCandidates,
   filterExternalSearchRows,
+  externalToolDescriptionSchema,
   projectToolCompareChoices,
   projectToolDescription,
   projectToolListChoices,
@@ -29,7 +31,7 @@ import {
   type SearchResult,
   type SupplyProjectionFreshness,
 } from './tool-choice-contracts'
-import { compactDirectoryStatus, readCompactDirectoryPage } from './internal/compact-directory-search'
+import { compactDirectoryStatus, readCompactDirectoryDetail, readCompactDirectoryPage } from './internal/compact-directory-search'
 import { compactDirectoryRows } from './internal/compact-directory-projection'
 import { resolveToolCompare } from './internal/tool-compare-resolution'
 import { readSearchEvidence, readToolLatencyEvidence } from './internal/tool-latency-source'
@@ -326,8 +328,38 @@ export const registryToolsSearchAction = defineAction({
 
 export const registryToolsDescribeAction = defineAction({
   ...registryToolsDescribeContract,
-  run: async ({ data }) => {
-    const result = projectToolDescription(await readCapabilityToolDetail({ toolRef: data.toolRef }))
+  run: async ({ data, context }) => {
+    let toolRef = data.toolRef
+    const options = context.request === undefined ? undefined : { signal: context.request.signal }
+    if (toolRef.startsWith('registry:')) {
+      const detail = await readCompactDirectoryDetail(toolRef, options)
+      if (detail.kind !== 'found') return {
+        ...detail, schemaVersion: PublicToolRegistrySchemaVersion, toolRef,
+      }
+      if (detail.item.toolRef === undefined) {
+        const { entry, choice } = detail.item
+        return externalToolDescriptionSchema.parse({
+          kind: 'external', schemaVersion: PublicToolRegistrySchemaVersion,
+          tool: {
+            id: toolRef, toolRef, source: 'coinbase',
+            access: choice?.access ?? 'unavailable',
+            ...(choice?.reason === undefined ? {} : { reason: choice.reason }),
+            readiness: 'unverified', verification: 'not_verified', claimSource: 'provider',
+            title: entry.title, description: entry.description, provider: entry.provider, resource: entry.resource,
+            ...(entry.method === undefined ? {} : { method: entry.method }),
+            ...(entry.input === undefined ? {} : { input: entry.input }),
+            ...(entry.output === undefined ? {} : { output: entry.output }),
+            prices: entry.prices,
+          },
+        })
+      }
+      if (!isPublicToolRef(detail.item.toolRef)) return {
+        kind: 'unavailable' as const, schemaVersion: PublicToolRegistrySchemaVersion,
+        toolRef, reason: 'source_unavailable',
+      }
+      toolRef = detail.item.toolRef
+    }
+    const result = projectToolDescription(await readCapabilityToolDetail({ toolRef }, options))
     if (result.kind !== 'found' || data.includeLatency !== true) return result
     const evidence = await readToolLatencyEvidence([result.tool.toolRef])
     const latency = evidence.get(result.tool.toolRef)

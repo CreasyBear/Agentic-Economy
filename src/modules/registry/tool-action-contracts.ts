@@ -65,7 +65,7 @@ const searchParameters = [
   parameter(toolCatalogSearchInputSchema, 'filters', 'Allowlisted Tool filters; Operational supply and admitted Tools checked when quoting are shown by default.'),
 ] as const
 const describeParameters = [
-  parameter(toolDescribeInputSchema, 'toolRef', 'Opaque current Tool reference.'),
+  parameter(toolDescribeInputSchema, 'toolRef', 'Exact operation:v1: Tool reference or registry: directory reference returned by discovery.'),
   parameter(toolDescribeInputSchema, 'includeLatency', 'Include observed time to result and its sample count/window; optional, default false.'),
 ] as const
 const compareParameters = [
@@ -100,10 +100,10 @@ export const registryToolsSearchContract = {
 
 export const registryToolsDescribeContract = {
   id: 'registry.tools.describe', schema: toolDescribeInputSchema, surfaces: toolMarketActionSurfaces(),
-  name: 'Describe Tool', summary: 'Read one exact current Tool contract and its public health.',
+  name: 'Describe Tool', summary: 'Inspect one published Tool contract or Provider-declared directory entry without purchasing.',
   boundaries, outputSchema: toolChoiceDescribeOutputSchema, parameters: describeParameters, readOnly: true, effect: readOnlyEffect,
   invocationContract: {
-    version: 'registry.tools.describe:v1', consequenceClass: 'read_only', materialInputPaths: ['toolRef'],
+    version: 'registry.tools.describe:v2', consequenceClass: 'read_only', materialInputPaths: ['toolRef'],
     authorityRequirement: 'none', retryClass: 'replayable', expectedEvidence: ['public_tool_description_result'],
     safeContinuations: ['tool.quote'],
     invalidationConditions: ['action_contract_version_changed', 'tool_ref_changed'],

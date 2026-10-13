@@ -377,6 +377,24 @@ describe('external-agent Market Tool cold loop', () => {
     expectAnonymousPost(fetchMock, options.baseUrl, '/api/v1/market-tools/describe', { toolRef, includeLatency: true })
   })
 
+  it('inspects a directory reference without presenting its metadata as a published contract', async () => {
+    const toolRef = `registry:${'a'.repeat(64)}`
+    const detail = { kind: 'external', schemaVersion: 'registry-tools:v3', tool: {
+      id: toolRef, toolRef, source: 'coinbase', access: 'ae_callable', readiness: 'unverified',
+      verification: 'not_verified', claimSource: 'provider', title: 'Web search', description: 'Search public pages',
+      provider: 'search.test', resource: 'https://search.test/search', prices: [],
+      input: { fields: [], schemaJson: '{"type":"object"}' },
+    } }
+    const fetchMock = stubFetchJsonResponse(detail)
+    const human = await withStdout(() => runDescribeCommand([toolRef], { ...options, json: false }))
+    expect(human).toContain('unverified · Provider-declared metadata')
+    expect(human).toContain('price: confirmed by Quote')
+    expect(human).toContain('ae_tool_quote with this directory reference and input')
+    expectAnonymousPost(fetchMock, options.baseUrl, '/api/v1/market-tools/describe', { toolRef, includeLatency: true })
+    stubFetchJsonResponse(detail)
+    expect(parseJson(await withStdout(() => runDescribeCommand([toolRef], options)))).toEqual(detail)
+  })
+
   it('keeps describe output canonical and free of duplicated source navigation', async () => {
     const toolRef = operationRef('9')
     const repeatedInputSchema = {

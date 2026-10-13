@@ -1,13 +1,12 @@
 import type { z } from 'zod'
 
-import type { PublicToolRef } from '@/modules/capability-supply/public'
 import type { toolCatalogSearchInputSchema } from './tool-search-input'
 
 export type RegistrySearchArgs = Omit<z.input<typeof toolCatalogSearchInputSchema>, 'cursor'>
 export type RegistryRetryArgs = RegistrySearchArgs & Pick<z.input<typeof toolCatalogSearchInputSchema>, 'cursor'>
 
 export type RegistryNextAction =
-  | Readonly<{ action: 'registry.tools.describe'; args: { toolRef: PublicToolRef }; authority: 'public' }>
+  | Readonly<{ action: 'registry.tools.describe'; args: { toolRef: string }; authority: 'public' }>
   | Readonly<{ action: 'registry.tools.search'; args: RegistryRetryArgs; authority: 'public' }>
 
 export type RegistryPageNext = Extract<RegistryNextAction, { action: 'registry.tools.search' }> &

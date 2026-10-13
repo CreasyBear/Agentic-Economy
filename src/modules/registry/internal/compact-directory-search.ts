@@ -1,5 +1,27 @@
 import { callPublicSourceQuery, sourceQuery, type CreatePublicConvexClientOptions } from '@/lib/server/convex-source'
 import type { CompactDirectoryPage, CompactDirectoryStatus } from './compact-directory-projection'
+import type { z } from 'zod'
+import type { externalToolDescriptionSchema } from '../tool-choice-contracts'
+
+type DirectoryDescription = z.output<typeof externalToolDescriptionSchema>['tool']
+type DirectoryDetailResult =
+  | Readonly<{ kind: 'not_found' }>
+  | Readonly<{ kind: 'unavailable'; reason: string }>
+  | Readonly<{ kind: 'found'; item: Readonly<{
+    toolRef?: string
+    choice?: Readonly<{ access: DirectoryDescription['access']; reason?: string }>
+    entry: Pick<DirectoryDescription, 'title' | 'description' | 'provider' | 'resource' | 'method' | 'input' | 'output' | 'prices'>
+  }> }>
+
+const detailQuery = sourceQuery<{ id: string }, DirectoryDetailResult>('x402DirectoryIndex:detailById')
+
+/** Exact active-generation read only: no URL fetch, admission, Quote or payment. */
+export async function readCompactDirectoryDetail(id: string, options?: CreatePublicConvexClientOptions): Promise<DirectoryDetailResult> {
+  options?.signal?.throwIfAborted()
+  const result = options === undefined ? await callPublicSourceQuery(detailQuery, { id }) : await callPublicSourceQuery(detailQuery, { id }, options)
+  options?.signal?.throwIfAborted()
+  return result
+}
 
 const compactQuery = sourceQuery<{
   query: string
