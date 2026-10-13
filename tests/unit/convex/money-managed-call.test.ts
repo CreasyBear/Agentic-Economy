@@ -1098,6 +1098,8 @@ describe('promotional Call allocation recovery', () => {
     const { backend, allocation } = await fixture()
     let complete: ((result: FormanceMoneyResult) => void) | undefined
     const firstPosting = new Promise<FormanceMoneyResult>(resolve => { complete = resolve })
+    let signalPostingStarted!: () => void
+    const postingStarted = new Promise<void>(resolve => { signalPostingStarted = resolve })
     const post = vi.fn().mockReturnValueOnce(firstPosting)
       .mockResolvedValueOnce({ kind: 'unavailable', code: 'formance_write_unavailable' })
     const ctx = {
@@ -1105,6 +1107,7 @@ describe('promotional Call allocation recovery', () => {
       runMutation: (reference: Parameters<typeof backend.mutation>[0], args: never) => backend.mutation(reference, args),
       runAction: (reference: Parameters<ActionCtx['runAction']>[0], args: unknown) => {
         expect(getFunctionName(reference)).toBe('moneyFormance:reserveManagedCall')
+        signalPostingStarted()
         return post(args)
       },
     } as unknown as ActionCtx
@@ -1117,7 +1120,12 @@ describe('promotional Call allocation recovery', () => {
     }
     const principal = { ownerId: accountRef } as AgentAccessPrincipal
     const first = reserveFormanceBackedInvocation(ctx, principal, reservation, row.toolJson, {})
-    await vi.waitFor(() => expect(post).toHaveBeenCalledTimes(1))
+    // Wait for the actual boundary; cold Convex imports can exceed a polling deadline.
+    await Promise.race([
+      postingStarted,
+      first.then(result => { throw new Error(`reservation_finished_before_posting:${result.kind}`) }),
+    ])
+    expect(post).toHaveBeenCalledTimes(1)
     expect(await reserveFormanceBackedInvocation(ctx, principal, reservation, row.toolJson, {}))
       .toMatchObject({ kind: 'refused', retryable: true })
     expect(await backend.run(ctx => ctx.db.query('moneyPromotionalGrants').first()))
