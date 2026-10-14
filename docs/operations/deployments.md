@@ -34,7 +34,7 @@ and source binding `9a80df0d48db0768bae411a458a24227bc1eb157` on
 Official Vercel inspection resolves `app.aecon.ai` to production deployment
 `dpl_FNzHh9BtpNxfQ399kcfgfWXzvNub` in project `agentic-economy`.
 
-The 15:52 AWST public sample returned health/readiness 200 and payments ready.
+The 07:52 AWST public sample returned health/readiness 200 and payments ready.
 The latest native treasury snapshot had matched cash, settlements, funding and
 reservations, 28 audited payments and no in-flight Calls. Recent resolved
 reconciliation-unavailable/stale episodes establish recurring interruption, not
