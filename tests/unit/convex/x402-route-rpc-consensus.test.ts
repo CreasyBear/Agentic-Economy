@@ -267,7 +267,28 @@ describe('classified required-provider failures', () => {
     mocks.readGuardedX402EvmReceipt.mockResolvedValueOnce({ kind: 'failed', code: 'rpc_timeout', method: 'eth_getTransactionReceipt' })
       .mockResolvedValueOnce({ kind: 'failed', code: 'rpc_rate_limited', method: 'eth_getTransactionReceipt', retryAfterMs: 30_000 })
     expect(await readX402EvmReceiptDetailed(NETWORK, ASSET, TRANSACTION_HASH, DISPATCHER, 'production', PAYER, NONCE,
-      undefined, { retryCount: 0 })).toMatchObject({ kind: 'failed', retryAfterMs: 30_000 })
+      undefined, { retryCount: 0 })).toMatchObject({ kind: 'failed', code: 'rpc_rate_limited', retryAfterMs: 30_000 })
+  })
+  it.each(['missing_first', 'rate_limit_first'] as const)('preserves required-peer overload with completion order %s', async order => {
+    vi.useFakeTimers()
+    mocks.readGuardedX402EvmReceipt.mockImplementationOnce(async () => {
+      await new Promise<void>(resolve => setTimeout(resolve, order === 'missing_first' ? 0 : 1))
+      return { kind: 'failed', code: 'receipt_missing', method: 'eth_getTransactionReceipt', provider: 'rpc_1', retryAfterMs: 30_000 }
+    }).mockImplementationOnce(async () => {
+      await new Promise<void>(resolve => setTimeout(resolve, order === 'rate_limit_first' ? 0 : 1))
+      return { kind: 'failed', code: 'rpc_rate_limited', method: 'eth_getTransactionReceipt', provider: 'rpc_2', retryAfterMs: 1_000 }
+    })
+    const pending = readX402EvmReceiptDetailed(NETWORK, ASSET, TRANSACTION_HASH, DISPATCHER, 'production', PAYER, NONCE,
+      undefined, { retryCount: 0 })
+    await vi.advanceTimersByTimeAsync(1)
+    expect(await pending).toMatchObject({ kind: 'failed', code: 'rpc_rate_limited', provider: 'rpc_2', retryAfterMs: 30_000 })
+    expect(mocks.readGuardedX402EvmReceipt).toHaveBeenCalledTimes(2)
+  })
+  it.each(['receipt_conflict', 'rpc_authentication_failed'] as const)('keeps %s ahead of required-peer overload', async code => {
+    mocks.readGuardedX402EvmReceipt.mockResolvedValueOnce({ kind: 'failed', code: 'rpc_rate_limited', method: 'eth_getTransactionReceipt', retryAfterMs: 30_000 })
+      .mockResolvedValueOnce({ kind: 'failed', code, method: 'agreement' })
+    expect(await readX402EvmReceiptDetailed(NETWORK, ASSET, TRANSACTION_HASH, DISPATCHER, 'production', PAYER, NONCE,
+      undefined, { retryCount: 0 })).toMatchObject({ kind: 'failed', code, retryAfterMs: 30_000 })
   })
   it('preserves a known conflict when its peer never responds', async () => {
     vi.useFakeTimers()

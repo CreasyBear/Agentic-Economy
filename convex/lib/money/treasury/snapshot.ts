@@ -46,7 +46,10 @@ type SnapshotDependencies = Readonly<{
  * checks, or refuse if even the current custody identity is unavailable.
  * Cost: complete history is bounded to 400 pages per source and 10k native rows;
  * saturating a bound raises unavailable. No partial history can pass as complete.
- * A single full retry costs another audit when booking catches up with the probe.
+ * A single full retry repairs only a checkpoint conflict or paired booking-cutoff
+ * race with the remaining reads usable and completed funding matched or attention.
+ * Receipt, ledger, source and funding outages or known funding/reservation
+ * contradictions publish at the original cutoff for the next scheduled audit.
  * Keep that retry local: it restores fresh evidence without extending freshness,
  * rewriting historical clocks, or adding a cache or persistent retry state.
  */
@@ -126,8 +129,17 @@ async function reconcileSnapshotAttempt(ctx: Context, dependencies: SnapshotDepe
   // A newly finalized range can finish booking after this cutoff. Retry at most
   // once, only after the exact probed checkpoint is now booked. The new attempt
   // obtains its own real RPC start clock and rereads every financial source;
-  // changed eligible sources never take this path.
+  // Changed sources, unavailable funding and known funding/reservation
+  // contradictions never take this path; a cutoff race can leave cash checks unrun.
   if (canRefreshCheckpoint && dependencies.now === undefined && stable && cashCheck.kind === 'unavailable'
+    && (cashCheck.code === 'treasury_chain_readback_conflict'
+      || (cashCheck.code === 'treasury_source_history_unavailable'
+        && base.progress.kind === 'unavailable' && base.progress.code === 'treasury_source_cutoff_changed'
+        && sources.batches.kind === 'unavailable' && sources.batches.code === 'treasury_source_cutoff_changed'))
+    && audit.kind === 'available' && ledger.kind === 'available'
+    && sources.attempts.kind === 'available' && sources.calls.kind === 'available'
+    && sources.funding.kind === 'available' && sources.reservations.kind === 'available' && sources.exposure.kind === 'available'
+    && (funding.kind === 'matched' || funding.kind === 'attention') && reservations.kind !== 'mismatch'
     && advancedReadback(bootstrap, chainReadback)) {
     const current = await ctx.runQuery(internal.moneyTreasuryReconciliation.readSnapshotContext, { cutoffAt: Date.now() })
     if (current.kind === 'available' && current.progress.kind === 'ready' && chainReadback.kind === 'observed'

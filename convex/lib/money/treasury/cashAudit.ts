@@ -56,6 +56,8 @@ function attention(code: string, refs: readonly string[], units: bigint | null =
  * proves a Provider payment; every configured RPC must agree and at least twelve
  * confirmations remain required. Payment histories are read sequentially so one
  * audit does not multiply each receipt's RPC requests into a provider burst.
+ * Unresolved rate limiting stops later receipt reads, while native attribution
+ * and contradiction checks continue for every candidate in this pass.
  * On violation: mismatch for attributed financial conflicts, attention for a known
  * pending transition; RPC disagreement is unavailable with a critical integrity
  * alert, while incomplete or immature evidence stays unavailable. RPC outages are
@@ -300,7 +302,6 @@ async function auditPayments(input: CashAuditInput, transfers: readonly Treasury
     if (!receiptBudgetExceeded && !stopReads && source.joinIssues.length === 0 && source.native.kind === 'available'
       && hash !== undefined && hashes.length === 1 && source.material.paymentNonce !== undefined && source.material.paymentPayer !== undefined) {
       // One read outage need not close payments until the next scheduled audit.
-      // Retry only missing evidence, sequentially, within the same total budget.
       // A returned receipt still undergoes all attribution/finality checks below.
       for (let read = 0; read < 2; read += 1) {
         if (Date.now() >= receiptDeadline || receiptReads >= 250) {
@@ -319,13 +320,14 @@ async function auditPayments(input: CashAuditInput, transfers: readonly Treasury
         if (result.kind === 'receipt') { receipt = result.receipt; break }
         if (read === 1 || !retryableReceiptFailure(result)) {
           terminalFailure = terminalFailure !== undefined && !retryableReceiptFailure(terminalFailure) ? terminalFailure : result
-          stopReads ||= !retryableReceiptFailure(result)
+          stopReads ||= result.code === 'rpc_rate_limited' || !retryableReceiptFailure(result)
           reportX402ReceiptFailure(result)
           break
         }
         const delay = Math.max(250, result.retryAfterMs ?? 0)
         if (receiptReads >= 250 || Date.now() + delay >= receiptDeadline) {
           terminalFailure = result
+          stopReads ||= result.code === 'rpc_rate_limited'
           receiptBudgetExceeded ||= receiptReads >= 250 || Date.now() >= receiptDeadline
           break
         }

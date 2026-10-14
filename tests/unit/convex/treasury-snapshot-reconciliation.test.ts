@@ -1,22 +1,32 @@
 import { getFunctionName, type FunctionReference } from 'convex/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { eip3009ABI } from '@x402/evm'
+import { encodeAbiParameters, encodeEventTopics, encodeFunctionData, erc20Abi, type Hex } from 'viem'
 import { internal } from '../../../convex/_generated/api'
+import * as treasuryCashAudit from '../../../convex/lib/money/treasury/cashAudit'
 import { reconcileTreasurySnapshot } from '../../../convex/lib/money/treasury/snapshot'
 import { readTreasuryChainObservation, type TreasuryRpc } from '../../../convex/lib/money/treasury/chainObservation'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { createFormanceContext } from '@/modules/money/formance'
 import { prepareFormanceTreasuryBatch, treasuryBufferAccount } from '@/modules/money/formance-treasury'
-import { capacityAccount } from '@/modules/money/formance-workflows'
+import { capacityAccount, prepareFormanceFundingSettlement, prepareFormanceManagedCallReservation, prepareFormanceManagedCallSettlement } from '@/modules/money/formance-workflows'
+import { quoteManagedX402BuyerAud } from '@/modules/money/public'
+import { buildDevelopmentPublishedToolEvidence } from '../capability-supply/fixtures/development-published-tool-evidence'
 import type { FormanceTreasuryAuditTransaction } from '@/modules/money/formance-treasury-audit'
 import type { TreasuryChainCheckpoint, TreasuryChainObservation, TreasuryTransfer } from '@/modules/money/treasury'
 import { convexTestWithMarketComponents } from '../../helpers/convex-fixtures'
 
-// Only the native ledger and RPC read boundaries are synthetic. The controller, complete
+// Only the native ledger, RPC and funding HTTP read boundaries are synthetic. The controller, complete
 // Convex source reads, command builders, exact audit, seals and publisher execute.
-const io = vi.hoisted(() => ({ metrics: vi.fn(), audit: vi.fn() }))
+const io = vi.hoisted(() => ({ metrics: vi.fn(), audit: vi.fn(), receipt: vi.fn() }))
+vi.mock('@/modules/capability-execution/call-runtime', () => ({ readX402EvmReceiptDetailed: io.receipt }))
 vi.mock('../../../convex/lib/money/formance/gateway', async original => ({
   ...await original<typeof import('../../../convex/lib/money/formance/gateway')>(),
   readFormanceTreasurySnapshot: io.metrics, readFormanceTreasuryAudit: io.audit,
+}))
+const fundingIo = vi.hoisted(() => ({ fetch: vi.fn() }))
+vi.mock('undici', async original => ({
+  ...await original<typeof import('undici')>(), fetch: fundingIo.fetch,
 }))
 
 const NOW = Date.UTC(2026, 9, 1, 12)
@@ -37,6 +47,7 @@ const sourceEnvironment = {
 }
 beforeEach(() => {
   vi.spyOn(Date, 'now').mockReturnValue(NOW)
+  vi.spyOn(treasuryCashAudit, 'auditTreasuryCash')
   vi.spyOn(console, 'error').mockImplementation(() => undefined)
   for (const [name, value] of Object.entries(sourceEnvironment)) vi.stubEnv(name, value)
 })
@@ -139,10 +150,179 @@ async function fixture(initialAt = NOW - 20) {
   const report = () => backend.run(ctx => ctx.db.query('moneyTreasurySnapshots')
     .withIndex('by_environment_and_snapshotAt', q => q.eq('environment', 'sandbox')).order('desc').first())
   const alerts = () => backend.run(ctx => ctx.db.query('moneyTreasuryAlerts').take(12))
-  return { backend, native, opening, range, controller, reconcile, reconcileLive, chainRead, report, alerts }
+  async function payment() {
+    const digest = canonicalDigest('snapshot-refresh-payment')
+    const callRef = 'call:snapshot-refresh'; const quoteRef = 'quote:snapshot-refresh'
+    const attemptRef = 'attempt:snapshot-refresh'; const createdAt = NOW - 10
+    const tool = buildDevelopmentPublishedToolEvidence().tool
+    const toolRef = `operation:v1:${'d'.repeat(64)}`
+    const rate = quoteManagedX402BuyerAud({ environment: 'sandbox', requiredUsdcAtomicUnits: '5000000', observedAt: createdAt,
+      referenceRate: { source: 'coinbase', base: 'USDC', quote: 'AUD', rate: '1.2', fetchedAt: createdAt } })
+    if (rate.kind !== 'quoted') throw new Error('fixture_rate_missing')
+    await backend.run(async ctx => {
+      await ctx.db.insert('capabilityQuotes', {
+        quoteRef, principalId: 'principal:refresh', accountRef: 'account:refresh', credentialId: 'credential:refresh',
+        applicationRef: 'application:refresh', environment: 'sandbox', grantRef: 'grant:refresh', grantGeneration: 1,
+        grantPolicyDigest: digest, grantExpiresAt: NOW + 60_000, toolRef, toolVersion: tool.identity.publicationRevision,
+        toolMaterialDigest: digest, currentToolDigest: digest, toolJson: JSON.stringify(tool), normalizedInputJson: '{}', inputDigest: digest,
+        pricingJson: '{}', pricingDigest: digest, decisionAudUnits: '6000000', sourceUsdcUnits: '5000000',
+        x402RequirementDigest: digest, x402RequirementJson: '{}', x402RequirementObservedAt: createdAt,
+        rateEvidenceJson: JSON.stringify(rate.evidence), rateEvidenceDigest: rate.evidence.evidenceDigest,
+        budgetPolicyRef: 'budget:refresh', budgetGeneration: 1, maximumSpendPerCallUnits: '6000000', formanceSchemaVersion: 'v1.3.0',
+        policyGeneration: 1, legalCustomerRef: 'legal:refresh', legalCustomerGeneration: 1, buyerRevenueUnits: '5454545', buyerTaxUnits: '545455',
+        accountAvailableUnits: '10000000', budgetAvailableUnits: '10000000', legalExposureAvailableUnits: '10000000', balanceUnits: '10000000',
+        treasuryCustodyRef: identity.custodyRef, treasuryCustodyGeneration: 1, treasuryVersion: 1,
+        treasuryEvidenceRef: 'treasury:refresh', treasuryEvidenceDigest: digest, treasurySpendableUnits: '10000000',
+        commercialPolicyRefs: ['policy:refresh'], commercialPolicyDigest: digest, evidenceDigest: digest,
+        state: 'consumed', consumedCallRef: callRef, expiresAt: NOW + 30_000, createdAt, updatedAt: createdAt,
+      })
+      await ctx.db.insert('capabilityCalls', {
+        callRef, quoteRef, principalId: 'principal:refresh', ownerId: 'account:refresh', credentialId: 'credential:refresh', applicationRef: 'application:refresh',
+        toolRef, idempotencyKey: callRef, environment: 'sandbox', grantRef: 'grant:refresh', grantGeneration: 1, policyDigest: digest,
+        grantExpiresAt: NOW + 60_000, toolJson: JSON.stringify(tool), inputJson: '{}', inputDigest: digest, requestDigest: digest,
+        state: 'pending', dispatchState: 'enqueued', formanceFinancialState: 'reservation_pending', attemptRef, createdAt, updatedAt: createdAt,
+      })
+    })
+    const booking = await backend.query(internal.moneyManagedCall.readBooking, { callRef })
+    if (booking.kind !== 'available') throw new Error('fixture_payment_booking_missing')
+    const reserve = prepareFormanceManagedCallReservation(booking.booking)
+    const paid = prepareFormanceManagedCallSettlement({ booking: booking.booking, externalEvidenceDigest: digest })
+    if (reserve.kind !== 'prepared' || paid.kind !== 'prepared') throw new Error('fixture_payment_commands_missing')
+    const reserveCommand = reserve.bulk.commands.find(row => row.template === 'CALL_RESERVED_USDC')!
+    const paidCommand = paid.bulk.commands.find(row => row.template === 'PROVIDER_SETTLED')!
+    const segment = (kind: string, reference: string) => canonicalDigest({ format: 'ae.formance-account-segment:v1', value: { kind, reference } }).slice(7)
+    const committed = available.replace(/:available$/u, ':committed')
+    const callSegment = segment('call', callRef)
+    for (const [command, postings] of [
+      [reserveCommand, [{ source: available, destination: committed, asset: 'USDC/6', amountUnits: '5000000' }]],
+      [paidCommand, [{ source: committed, destination: `providers:${segment('provider', booking.booking.providerRef)}:settlement`, asset: 'USDC/6', amountUnits: '5000000' },
+        { source: `provider_obligations:${callSegment}:accrued`, destination: `provider_obligations:${callSegment}:settled`, asset: 'USDC/6', amountUnits: '5000000' }]],
+    ] as const) native.push({ id: String(native.length + 1), commandRef: command.commandRef, template: command.template,
+      metadata: { ...command.metadata }, effectiveAt: createdAt, insertedAt: createdAt, reverted: false, revertedAt: null, postings })
+    expect(await backend.mutation(internal.moneyManagedCall.attachReservation, { callRef,
+      transactionRefs: reserve.bulk.commands.map(row => row.commandRef) })).toMatchObject({ kind: 'attached' })
+    await backend.run(async ctx => {
+      const call = await ctx.db.query('capabilityCalls').withIndex('by_callRef', q => q.eq('callRef', callRef)).unique()
+      const obligation = await ctx.db.query('moneyProviderObligations').withIndex('by_callRef', q => q.eq('callRef', callRef)).unique()
+      if (call === null || obligation === null) throw new Error('fixture_payment_call_missing')
+      await ctx.db.patch(call._id, { state: 'completed', formanceFinancialState: 'settled', formanceSettlementRefs: [paidCommand.commandRef], evidenceHash: digest })
+      await ctx.db.patch(obligation._id, { state: 'settled', settlementTransactionRef: paidCommand.commandRef, settledAt: NOW })
+      await ctx.db.insert('moneyX402PaymentAttempts', {
+        dispatchRef: callRef, attemptRef, effectGeneration: 1, toolRef, inputDigest: digest,
+        paymentIdentifier: 'payment:refresh', operationKeyDigest: digest, challengeDigest: digest,
+        challengeJson: '{}', selectedRequirementJson: '{}', providerEndpoint: 'https://provider.example/tool', credentialRef: 'credential:cdp',
+        scheme: 'exact', network: NETWORK, asset: ASSET, payTo: OTHER, amountUnits: '5000000', currency: 'USDC', exponent: 6,
+        custodyRef: 'authorization-custody:refresh', custodyBudgetRef: identity.custodyRef, custodyGeneration: 1, custodyDailyMaximumUnits: '50000000',
+        authorizationDigest: digest, paymentIdentityDigest: digest, paymentUnsignedMaterialDigest: digest,
+        paymentSigningIdempotencyKey: '11111111-1111-4111-8111-111111111111', paymentPayer: PAYER, paymentNonce: hash(7),
+        state: 'observed', preparedAt: createdAt, observedAt: createdAt, settlementStatus: 'settled', paymentResponseDigest: digest,
+        evidenceRefs: [`chain:${NETWORK}:${hash(1)}`],
+      })
+    })
+    expect(await backend.query(internal.moneyTreasuryReconciliation.readAttemptSources, { cutoffAt: NOW }))
+      .toMatchObject({ kind: 'available', rows: [{ native: { kind: 'available' }, joinIssues: [] }] })
+  }
+  async function invalidFunding(updatedAt = NOW - 1, principalUnits = '100') {
+    await backend.run(ctx => ctx.db.insert('moneyFundingCommands', {
+      commandRef: 'funding:refresh', accountRef: 'account:refresh', legalCustomerRef: 'legal:refresh', actorPrincipalRef: 'principal:refresh',
+      environment: 'sandbox', currency: 'AUD', exponent: 6, principalUnits, serviceFeeUnits: '10', taxUnits: '1', totalUnits: '111',
+      commercialPolicyDigest: canonicalDigest('funding-refresh'), commercialPolicyRefs: [], idempotencyKey: 'funding:refresh', inputDigest: canonicalDigest('funding-refresh'),
+      successReturnRef: 'https://ae.example/complete', providerRecoveryDeadlineAt: NOW + 1_000,
+      state: 'pending', createdAt: NOW - 10, updatedAt,
+    }))
+  }
+  return { backend, native, opening, range, controller, reconcile, reconcileLive, chainRead, report, alerts, payment, invalidFunding }
 }
 
 describe('treasury snapshot cutoff reconciliation', () => {
+  it.each(['rpc_rate_limited', 'receipt_conflict', 'ledger_audit', 'ledger_metrics', 'source_identity'] as const)(
+    'does not refresh a newly booked checkpoint for %s', async fault => {
+      const f = await fixture()
+      if (fault === 'rpc_rate_limited' || fault === 'receipt_conflict') {
+        await f.payment()
+        io.receipt.mockResolvedValue({ kind: 'failed', code: fault, method: 'eth_getTransactionReceipt' })
+      } else if (fault === 'ledger_audit') io.audit.mockResolvedValue({ kind: 'unavailable', code: 'treasury_ledger_unavailable' })
+      else if (fault === 'ledger_metrics') io.metrics.mockResolvedValue({ kind: 'unavailable', code: 'treasury_ledger_unavailable' })
+      else await f.invalidFunding(NOW - 1, '101')
+      const read = f.chainRead.getMockImplementation()!
+      f.chainRead.mockImplementationOnce(async () => {
+        const next = await f.range(f.opening.checkpoint, NOW + 10, NOW + 12, '1')
+        return { ...next.observation, observedAt: NOW }
+      }).mockImplementation(read)
+      const result = await f.reconcileLive()
+      const report = await f.report()
+      if (process.env.AE_TREASURY_REFRESH_MEASUREMENT === '1') console.info('TREASURY_REFRESH_MEASUREMENT', JSON.stringify({
+        fault, wholeAudits: io.metrics.mock.calls.length, cashAudits: vi.mocked(treasuryCashAudit.auditTreasuryCash).mock.calls.length,
+        nativeAuditReads: io.audit.mock.calls.length, chainReads: f.chainRead.mock.calls.length, receiptReads: io.receipt.mock.calls.length,
+        result, snapshotAt: report?.snapshotAt, checks: report?.checks,
+        published: (await f.backend.run(ctx => ctx.db.query('moneyTreasurySnapshots').collect())).length,
+      }))
+      expect(result).toMatchObject({ kind: 'published' })
+      expect(f.chainRead).toHaveBeenCalledTimes(1)
+      expect(io.metrics).toHaveBeenCalledTimes(1)
+      expect(io.audit).toHaveBeenCalledTimes(2)
+      expect(report).toMatchObject({ snapshotAt: NOW, checks: { cash: { kind: 'unavailable' } } })
+      if (fault === 'rpc_rate_limited' || fault === 'receipt_conflict') expect(report).toMatchObject({ checks: {
+        cash: { kind: 'unavailable', code: 'treasury_payment_attribution_required' },
+        settlements: { kind: 'unavailable', code: fault === 'rpc_rate_limited' ? 'treasury_payment_rpc_rate_limited' : 'treasury_payment_receipt_conflict' },
+      } })
+      expect(await f.backend.run(ctx => ctx.db.query('moneyTreasurySnapshots').collect())).toHaveLength(1)
+      expect(await f.backend.run(ctx => ctx.db.query('moneyPaymentReadinessWork').collect())).toHaveLength(0)
+    })
+
+  it.each([NOW - 1, NOW + 10])('repairs the exact checkpoint booking race created at %s', async createdAt => {
+    const f = await fixture()
+    const read = f.chainRead.getMockImplementation()!
+    f.chainRead.mockImplementationOnce(async () => {
+      const next = await f.range(f.opening.checkpoint, createdAt, NOW + 12, '1')
+      if (createdAt < NOW) {
+        expect(await f.backend.query(internal.moneyTreasuryReconciliation.readBatchSources, { cutoffAt: NOW }))
+          .toEqual({ kind: 'unavailable', code: 'treasury_source_cutoff_changed' })
+        expect(await f.backend.query(internal.moneyTreasuryReconciliation.readSnapshotContext, { cutoffAt: NOW }))
+          .toMatchObject({ progress: { kind: 'unavailable', code: 'treasury_source_cutoff_changed' } })
+      }
+      return { ...next.observation, observedAt: NOW }
+    }).mockImplementation(read)
+    const result = await f.reconcileLive()
+    const report = await f.report()
+    if (process.env.AE_TREASURY_REFRESH_MEASUREMENT === '1') console.info('TREASURY_REFRESH_MEASUREMENT', JSON.stringify({
+      fault: createdAt < NOW ? 'precutoff_booking_race' : 'healthy_checkpoint_race',
+      wholeAudits: io.metrics.mock.calls.length, cashAudits: vi.mocked(treasuryCashAudit.auditTreasuryCash).mock.calls.length,
+      nativeAuditReads: io.audit.mock.calls.length, chainReads: f.chainRead.mock.calls.length, receiptReads: io.receipt.mock.calls.length,
+      result, snapshotAt: report?.snapshotAt, checks: report?.checks,
+      published: (await f.backend.run(ctx => ctx.db.query('moneyTreasurySnapshots').collect())).length,
+    }))
+    expect(result).toMatchObject({ kind: 'published' })
+    expect(f.chainRead).toHaveBeenCalledTimes(2)
+    expect(io.metrics).toHaveBeenCalledTimes(2)
+    expect(io.audit).toHaveBeenCalledTimes(4)
+    expect(report).toMatchObject({ snapshotAt: NOW + 12, checks: { cash: { kind: 'matched' },
+      funding: { kind: 'matched' }, settlements: { kind: 'matched' }, reservations: { kind: 'matched' } } })
+    expect(await f.backend.run(ctx => ctx.db.query('moneyTreasurySnapshots').collect())).toHaveLength(1)
+    expect(await f.backend.run(ctx => ctx.db.query('moneyTreasuryBatches').collect())).toHaveLength(2)
+  })
+
+  it.each(['ledger_audit', 'source_cutoff'] as const)('keeps a pre-cutoff booking race unavailable with %s', async fault => {
+    const f = await fixture()
+    if (fault === 'ledger_audit') io.audit.mockResolvedValue({ kind: 'unavailable', code: 'treasury_ledger_unavailable' })
+    else await f.invalidFunding(NOW + 11)
+    f.chainRead.mockImplementationOnce(async () => {
+      const next = await f.range(f.opening.checkpoint, NOW - 1, NOW + 12, '1')
+      return { ...next.observation, observedAt: NOW }
+    })
+    const result = await f.reconcileLive()
+    const report = await f.report()
+    if (process.env.AE_TREASURY_REFRESH_MEASUREMENT === '1') console.info('TREASURY_REFRESH_MEASUREMENT', JSON.stringify({
+      fault: `precutoff_${fault}`, wholeAudits: io.metrics.mock.calls.length, cashAudits: vi.mocked(treasuryCashAudit.auditTreasuryCash).mock.calls.length,
+      nativeAuditReads: io.audit.mock.calls.length, chainReads: f.chainRead.mock.calls.length, receiptReads: io.receipt.mock.calls.length,
+      result, snapshotAt: report?.snapshotAt, checks: report?.checks,
+      published: (await f.backend.run(ctx => ctx.db.query('moneyTreasurySnapshots').collect())).length,
+    }))
+    expect(result).toMatchObject({ kind: 'published' })
+    expect(f.chainRead).toHaveBeenCalledTimes(1)
+    expect(report!.checks.cash.kind).toBe('unavailable')
+  })
+
   it('requests readiness recovery immediately after a matched publication and coalesces its replay', async () => {
     const f = await fixture()
     expect(await f.reconcile()).toMatchObject({ kind: 'published' })
@@ -543,5 +723,155 @@ describe('treasury snapshot cutoff reconciliation', () => {
     expect(await f.backend.run(ctx => ctx.db.query('moneyTreasurySnapshots').collect())).toHaveLength(1)
     expect(await f.report()).toMatchObject({ snapshotAt: NOW + 12,
       checks: { cash: { kind: 'unavailable', code: 'treasury_chain_readback_conflict' } } })
+  })
+})
+
+describe('treasury checkpoint refresh funding result guard', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    vi.stubEnv('STRIPE_READBACK_KEY', '')
+    vi.stubEnv('STRIPE_SECRET_KEY', '')
+    vi.stubEnv('STRIPE_AU_INCLUSIVE_GST_TAX_RATE_ID', '')
+    vi.stubEnv('STRIPE_CHECKOUT_HOST', '')
+    fundingIo.fetch.mockRejectedValue(new Error('fixture_funding_provider_unavailable'))
+  })
+
+  it.each([
+    ['processor_configuration', NOW - 1], ['processor_configuration', NOW + 10],
+    ['processor_read', NOW - 1], ['processor_read', NOW + 10],
+    ['native_mismatch', NOW - 1], ['native_mismatch', NOW + 10],
+  ] as const)('retains completed funding %s at the original cutoff for a range created at %s', async (fault, createdAt) => {
+    const f = await fixture()
+    await f.invalidFunding()
+    if (fault === 'processor_read') {
+      vi.stubEnv('STRIPE_READBACK_KEY', 'rk_test_funding_review_fixture')
+      await f.backend.run(async ctx => {
+        const row = await ctx.db.query('moneyFundingCommands').unique()
+        if (row === null) throw new Error('fixture_funding_missing')
+        await ctx.db.patch(row._id, { principalUnits: '1000000', serviceFeeUnits: '100000', taxUnits: '10000',
+          totalUnits: '1110000', externalRef: 'cs_test_funding_review' })
+      })
+    } else if (fault === 'native_mismatch') {
+      const evidenceDigest = canonicalDigest('funding-review-native-evidence')
+      const prepared = prepareFormanceFundingSettlement({ commandRef: 'funding:refresh', idempotencyKey: 'funding:refresh',
+        accountRef: 'account:refresh', processorRef: 'cs_test_funding_review', principalUnits: '100', serviceFeeUnits: '10',
+        taxUnits: '1', totalUnits: '111', policyDigest: canonicalDigest('funding-refresh'), externalEvidenceDigest: evidenceDigest })
+      if (prepared.kind !== 'prepared') throw new Error('fixture_funding_command_missing')
+      const segment = (kind: string, reference: string) => canonicalDigest({ format: 'ae.formance-account-segment:v1', value: { kind, reference } }).slice(7)
+      const processor = `processor:${segment('processor', 'cs_test_funding_review')}:settlement`
+      f.native.push({ id: 'funding-review-native', commandRef: prepared.command.commandRef, template: prepared.command.template,
+        metadata: { ...prepared.command.metadata, command_digest: 'f'.repeat(64) },
+        effectiveAt: NOW - 1, insertedAt: NOW - 1, reverted: false, revertedAt: null, postings: [
+          { source: 'world', destination: processor, asset: 'AUD/6', amountUnits: '111' },
+          { source: processor, destination: `accounts:${segment('account', 'account:refresh')}:available`, asset: 'AUD/6', amountUnits: '100' },
+          { source: processor, destination: 'platform:revenue:sales', asset: 'AUD/6', amountUnits: '10' },
+          { source: processor, destination: 'platform:tax:gst', asset: 'AUD/6', amountUnits: '1' },
+        ] })
+      await f.backend.run(async ctx => {
+        const row = await ctx.db.query('moneyFundingCommands').unique()
+        if (row === null) throw new Error('fixture_funding_missing')
+        await ctx.db.patch(row._id, { state: 'succeeded', externalRef: 'cs_test_funding_review', evidenceDigest,
+          appliedTransactionRef: prepared.command.commandRef })
+      })
+    }
+    const fundingSources = await f.backend.query(internal.moneyTreasuryReconciliation.readFundingSources, { cutoffAt: NOW })
+    expect(fundingSources).toMatchObject({ kind: 'available', rows: [{ commandRef: 'funding:refresh' }] })
+    const read = f.chainRead.getMockImplementation()!
+    f.chainRead.mockImplementationOnce(async () => {
+      const next = await f.range(f.opening.checkpoint, createdAt, NOW + 12, '1')
+      return { ...next.observation, observedAt: NOW }
+    }).mockImplementation(read)
+    const controller = f.controller()
+    const mutations = vi.spyOn(controller, 'runMutation')
+    expect(await f.reconcileLive(controller)).toMatchObject({ kind: 'published' })
+    const report = await f.report()
+    expect(report?.checks.funding).toMatchObject(fault === 'native_mismatch'
+      ? { kind: 'mismatch', code: 'treasury_funding_native_binding_invalid' }
+      : { kind: 'unavailable', code: fault === 'processor_read'
+        ? 'treasury_funding_processor_read_unavailable' : 'treasury_funding_processor_unavailable' })
+    if (process.env.AE_TREASURY_FUNDING_REVIEW_EVIDENCE === '1') console.info('FUNDING_REVIEW_FIX_EVIDENCE', JSON.stringify({
+      fault, createdAt, fundingSource: fundingSources.kind, funding: report?.checks.funding, snapshotAt: report?.snapshotAt,
+      chainReads: f.chainRead.mock.calls.length, wholeAudits: io.metrics.mock.calls.length, nativeAuditReads: io.audit.mock.calls.length,
+      blockedProviderReads: fundingIo.fetch.mock.calls.length, mutations: mutations.mock.calls.map(([ref]) => getFunctionName(ref)),
+    }))
+    expect(f.chainRead).toHaveBeenCalledTimes(1)
+    expect(io.metrics).toHaveBeenCalledTimes(1)
+    expect(io.audit).toHaveBeenCalledTimes(2)
+    expect(report).toMatchObject({ snapshotAt: NOW, checks: { cash: { kind: 'unavailable' } } })
+    expect(mutations.mock.calls.map(([ref]) => getFunctionName(ref))).toEqual(['moneyTreasuryReconciliation:publishSnapshot'])
+    expect(await f.backend.run(ctx => ctx.db.query('moneyTreasurySnapshots').collect())).toHaveLength(1)
+    expect(await f.backend.run(ctx => ctx.db.query('moneyPaymentReadinessWork').collect())).toHaveLength(0)
+    expect(await f.backend.query(internal.moneyTreasuryReconciliation.readFundingSources, { cutoffAt: NOW })).toEqual(fundingSources)
+    expect(fundingIo.fetch).toHaveBeenCalledTimes(fault === 'processor_read' ? 1 : 0)
+    if (fault === 'processor_read') expect(fundingIo.fetch.mock.calls[0]?.[1]).toMatchObject({ method: 'GET' })
+  })
+
+  it.each([NOW - 1, NOW + 10])('allows attention funding to repair the booked range created at %s', async createdAt => {
+    const f = await fixture()
+    await f.invalidFunding()
+    vi.stubEnv('STRIPE_READBACK_KEY', 'rk_test_funding_review_fixture')
+    const read = f.chainRead.getMockImplementation()!
+    f.chainRead.mockImplementationOnce(async () => {
+      const next = await f.range(f.opening.checkpoint, createdAt, NOW + 12, '1')
+      return { ...next.observation, observedAt: NOW }
+    }).mockImplementation(read)
+    expect(await f.reconcileLive()).toMatchObject({ kind: 'published' })
+    expect(f.chainRead).toHaveBeenCalledTimes(2)
+    expect(io.metrics).toHaveBeenCalledTimes(2)
+    expect(io.audit).toHaveBeenCalledTimes(4)
+    expect(await f.report()).toMatchObject({ snapshotAt: NOW + 12, checks: { cash: { kind: 'matched' },
+      funding: { kind: 'attention', code: 'treasury_funding_source_incomplete' } } })
+    expect(await f.backend.run(ctx => ctx.db.query('moneyTreasurySnapshots').collect())).toHaveLength(1)
+    expect(await f.backend.run(ctx => ctx.db.query('moneyPaymentReadinessWork').collect())).toHaveLength(0)
+    expect(fundingIo.fetch).not.toHaveBeenCalled()
+  })
+
+  it('retains a completed signing reservation contradiction alongside a repairable checkpoint conflict', async () => {
+    const f = await fixture()
+    await f.payment()
+    await f.backend.run(async ctx => {
+      const attempt = await ctx.db.query('moneyX402PaymentAttempts').unique()
+      if (attempt === null) throw new Error('fixture_attempt_missing')
+      await ctx.db.patch(attempt._id, { paymentSigningClaimedAt: NOW - 1 })
+    })
+    expect(await f.backend.query(internal.moneyTreasuryReconciliation.readAttemptSources, { cutoffAt: NOW }))
+      .toMatchObject({ kind: 'available', rows: [{ material: { paymentSigningClaimedAt: NOW - 1 }, joinIssues: [] }] })
+    expect(await f.backend.query(internal.moneyTreasuryReconciliation.readSpendReservationSources, { cutoffAt: NOW }))
+      .toMatchObject({ kind: 'available', rows: [] })
+    io.receipt.mockResolvedValue({ kind: 'receipt', receipt: {
+      transactionHash: hash(1), status: 'success', confirmations: 12n, blockHash: hash(115), blockNumber: 115n,
+      observedBlockTimestamp: BigInt(Math.floor((NOW - 1_000) / 1_000)), authorizationState: true,
+      transactionTo: ASSET, transactionInput: encodeFunctionData({ abi: eip3009ABI, functionName: 'transferWithAuthorization',
+        args: [PAYER as Hex, OTHER as Hex, 5_000_000n, 0n, 9_999_999_999n, hash(7) as Hex, 27, hash(3) as Hex, hash(4) as Hex] }),
+      logs: [{ address: ASSET, data: encodeAbiParameters([{ type: 'uint256' }], [5_000_000n]),
+        topics: encodeEventTopics({ abi: erc20Abi, eventName: 'Transfer', args: { from: PAYER as Hex, to: OTHER as Hex } }) }],
+    } })
+    const read = f.chainRead.getMockImplementation()!
+    f.chainRead.mockImplementationOnce(async () => {
+      const next = await f.range(f.opening.checkpoint, NOW + 10, NOW + 12, '1')
+      return { ...next.observation, observedAt: NOW }
+    }).mockImplementation(read)
+    const controller = f.controller()
+    const mutations = vi.spyOn(controller, 'runMutation')
+    expect(await f.reconcileLive(controller)).toMatchObject({ kind: 'published' })
+    const report = await f.report()
+    expect(report?.checks.reservations).toMatchObject({ kind: 'mismatch', code: 'treasury_signing_liability_conflict' })
+    if (process.env.AE_TREASURY_FUNDING_REVIEW_EVIDENCE === '1') console.info('FUNDING_REVIEW_FIX_EVIDENCE', JSON.stringify({
+      fault: 'reservation_mismatch', reservations: report?.checks.reservations, cash: report?.checks.cash,
+      snapshotAt: report?.snapshotAt, chainReads: f.chainRead.mock.calls.length, wholeAudits: io.metrics.mock.calls.length,
+      nativeAuditReads: io.audit.mock.calls.length, receiptReads: io.receipt.mock.calls.length,
+      mutations: mutations.mock.calls.map(([ref]) => getFunctionName(ref)),
+    }))
+    expect(f.chainRead).toHaveBeenCalledTimes(1)
+    expect(io.metrics).toHaveBeenCalledTimes(1)
+    expect(io.audit).toHaveBeenCalledTimes(2)
+    expect(io.receipt).toHaveBeenCalledTimes(1)
+    expect(report).toMatchObject({ snapshotAt: NOW, checks: {
+      cash: { kind: 'unavailable', code: 'treasury_chain_readback_conflict' }, funding: { kind: 'matched' }, settlements: { kind: 'matched' },
+    } })
+    expect(mutations.mock.calls.map(([ref]) => getFunctionName(ref))).toEqual(['moneyTreasuryReconciliation:publishSnapshot'])
+    expect(await f.backend.run(ctx => ctx.db.query('moneyTreasurySnapshots').collect())).toHaveLength(1)
+    expect(await f.backend.run(ctx => ctx.db.query('moneyPaymentReadinessWork').collect())).toHaveLength(0)
+    expect(fundingIo.fetch).not.toHaveBeenCalled()
   })
 })

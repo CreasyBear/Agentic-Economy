@@ -178,6 +178,67 @@ function fixture(mode: Mode = 'settled', options: { nativePaid?: boolean; chainP
   return { input, call, attempt, reservation, opening, range, transactions, reader }
 }
 
+function historicalReceiptFixture(count: number) {
+  const payments = Array.from({ length: count }, (_, index) => {
+    const value = fixture('settled', { suffix: `historical-${index}` })
+    value.attempt.material.evidenceRefs = [`chain:${NETWORK}:${hash(1_000 + index)}`]
+    value.attempt.material.paymentNonce = hash(2_000 + index)
+    return value
+  })
+  const balance = 1_000_000_000n - BigInt(count) * BigInt(PAYMENT)
+  const opening = batch(undefined, '1000000000')
+  const range = batch(opening, balance.toString(), payments.map((_, index) => transfer(hash(1_000 + index))))
+  const input: Input = { identity, snapshotAt: NOW,
+    progress: { kind: 'ready', identity, checkpoint: range.observation.checkpoint,
+      blockTimestamp: range.observation.blockTimestamp, bufferUnits: '1000000' },
+    batches: [opening, range], calls: payments.map(value => value.call), attempts: payments.map(value => value.attempt),
+    reservations: payments.map(value => value.reservation), ledger: ledger((balance - 1_000_000n).toString(), '0'),
+    transactions: [...openingNative(opening), ...payments.flatMap(value => value.transactions.slice(2))]
+      .map((row, index) => ({ ...row, id: String(index + 1) })),
+  }
+  return { input, payments, range }
+}
+
+describe('historical receipt overload measurement', () => {
+  it.each([1, 28])('contains persistent overload across %s eligible receipts', async count => {
+    vi.useFakeTimers()
+    vi.setSystemTime(NOW)
+    try {
+      const f = historicalReceiptFixture(count)
+      const reader = vi.fn<NonNullable<Parameters<typeof auditTreasuryCash>[1]>>(async () => ({
+        kind: 'failed', code: 'rpc_rate_limited', method: 'eth_getTransactionReceipt', retryAfterMs: 1_000,
+      }))
+      const pending = auditTreasuryCash(f.input, reader)
+      await vi.runAllTimersAsync()
+      const result = await pending
+      expect(result).toMatchObject({ settlements: { kind: 'unavailable', code: 'treasury_payment_rpc_rate_limited' },
+        cash: { kind: 'unavailable' }, reservations: { kind: 'matched' } })
+      expect(reader.mock.calls.every(([, , deadlineAt]) => deadlineAt === NOW + 120_000)).toBe(true)
+      expect({ logicalReads: reader.mock.calls.length, failedReads: reader.mock.calls.length, completedReceipts: 0,
+        laterCandidateReads: reader.mock.calls.filter(([, tx]) => tx !== hash(1_000)).length,
+      }).toEqual({ logicalReads: 2, failedReads: 2, completedReceipts: 0, laterCandidateReads: 0 })
+    } finally { vi.useRealTimers() }
+  })
+
+  it.each([1, 28])('completes healthy readback across %s eligible receipts', async count => {
+    vi.useFakeTimers()
+    vi.setSystemTime(NOW)
+    try {
+      const f = historicalReceiptFixture(count)
+      const reader = vi.fn(async (material: AttemptSource['material'], tx: string) => receipt(material, tx))
+      const pending = auditTreasuryCash(f.input, reader)
+      await vi.runAllTimersAsync()
+      const result = await pending
+      expect(result).toMatchObject({ cash: { kind: 'matched', differenceUnits: '0' },
+        settlements: { kind: 'matched', checkedCount: count, expectedUnits: (BigInt(count) * BigInt(PAYMENT)).toString() },
+        reservations: { kind: 'matched' } })
+      expect({ logicalReads: reader.mock.calls.length, failedReads: 0, completedReceipts: reader.mock.calls.length,
+        laterCandidateReads: reader.mock.calls.filter(([, tx]) => tx !== hash(1_000)).length,
+      }).toEqual({ logicalReads: count, failedReads: 0, completedReceipts: count, laterCandidateReads: count - 1 })
+    } finally { vi.useRealTimers() }
+  })
+})
+
 describe('independent treasury cash reconciliation behavior', () => {
   it('matches a booked empty opening without inventing deposits, commitments or payment receipts', async () => {
     const opening = batch(undefined, '0')
@@ -531,6 +592,88 @@ describe('classified treasury receipt failures', () => {
       expect((await pending).settlements.kind).toBe('matched')
       expect(reader).toHaveBeenCalledTimes(2)
       expect(reader.mock.calls[0]?.[2]).toBe(reader.mock.calls[1]?.[2])
+    } finally { vi.useRealTimers() }
+  })
+
+  it('stops later receipts when the required Retry-After cannot fit the remaining budget', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(NOW)
+    try {
+      const f = historicalReceiptFixture(2)
+      const reader = vi.fn<NonNullable<Parameters<typeof auditTreasuryCash>[1]>>(async () => ({
+        kind: 'failed', code: 'rpc_rate_limited', method: 'eth_getTransactionReceipt', retryAfterMs: 120_001,
+      }))
+      const pending = auditTreasuryCash(f.input, reader)
+      await vi.runAllTimersAsync()
+      const result = await pending
+      expect(result.settlements).toEqual({ kind: 'unavailable', code: 'treasury_payment_rpc_rate_limited' })
+      expect(result.cash.kind).toBe('unavailable')
+      expect(reader).toHaveBeenCalledOnce()
+      expect(reader).toHaveBeenCalledWith(f.payments[0]!.attempt.material, hash(1_000), NOW + 120_000)
+    } finally { vi.useRealTimers() }
+  })
+
+  it('continues later receipts after the allowed retry resolves transient overload', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(NOW)
+    try {
+      const f = historicalReceiptFixture(2)
+      const reader = vi.fn<NonNullable<Parameters<typeof auditTreasuryCash>[1]>>()
+        .mockResolvedValueOnce({ kind: 'failed', code: 'rpc_rate_limited', method: 'eth_getTransactionReceipt', retryAfterMs: 1_000 })
+        .mockImplementation(async (material, tx) => receipt(material, tx))
+      const pending = auditTreasuryCash(f.input, reader)
+      await vi.advanceTimersByTimeAsync(999)
+      expect(reader).toHaveBeenCalledOnce()
+      await vi.advanceTimersByTimeAsync(1)
+      const result = await pending
+      expect(result).toMatchObject({ cash: { kind: 'matched' }, settlements: { kind: 'matched', checkedCount: 2 } })
+      expect(reader.mock.calls.map(([, tx]) => tx)).toEqual([hash(1_000), hash(1_000), hash(1_001)])
+      expect(reader.mock.calls.every(([, , deadlineAt]) => deadlineAt === NOW + 120_000)).toBe(true)
+    } finally { vi.useRealTimers() }
+  })
+
+  it('continues later receipts after ordinary missing evidence exhausts its local retry', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(NOW)
+    try {
+      const f = historicalReceiptFixture(2)
+      const reader = vi.fn<NonNullable<Parameters<typeof auditTreasuryCash>[1]>>(async (material, tx) =>
+        tx === hash(1_000) ? { kind: 'failed', code: 'receipt_missing', method: 'eth_getTransactionReceipt' } : receipt(material, tx))
+      const pending = auditTreasuryCash(f.input, reader)
+      await vi.runAllTimersAsync()
+      const result = await pending
+      expect(result.settlements).toEqual({ kind: 'unavailable', code: 'treasury_payment_receipt_unavailable' })
+      expect(result.cash.kind).toBe('unavailable')
+      expect(reader.mock.calls.map(([, tx]) => tx)).toEqual([hash(1_000), hash(1_000), hash(1_001)])
+      expect(reader.mock.calls.every(([, , deadlineAt]) => deadlineAt === NOW + 120_000)).toBe(true)
+    } finally { vi.useRealTimers() }
+  })
+
+  it.each(['native', 'orphan'] as const)('retains a later %s contradiction after receipt overload stops I/O', async fault => {
+    vi.useFakeTimers()
+    vi.setSystemTime(NOW)
+    try {
+      const f = historicalReceiptFixture(2)
+      const paidIndex = f.input.transactions.findIndex(row => row.commandRef === f.payments[1]!.call.call.settlementRefs[0])
+      const paid = f.input.transactions[paidIndex]!
+      const evidenceRef = fault === 'native' ? paid.commandRef! : `chain:${NETWORK}:${hash(9_000)}`
+      const input = fault === 'native' ? { ...f.input, transactions: f.input.transactions.map((row, index) =>
+        index === paidIndex ? { ...row, postings: [{ ...row.postings[0]!, amountUnits: '5000001' }, row.postings[1]!] } : row) } : f.input
+      if (fault === 'orphan') {
+        f.range.observation.transfers.push(transfer(hash(9_000), '106', '1000000'))
+        f.range.observation.checkpoint.balanceUnits = (BigInt(f.range.observation.checkpoint.balanceUnits) - 1_000_000n).toString()
+      }
+      const reader = vi.fn<NonNullable<Parameters<typeof auditTreasuryCash>[1]>>(async () => ({
+        kind: 'failed', code: 'rpc_rate_limited', method: 'eth_getTransactionReceipt',
+      }))
+      const pending = auditTreasuryCash(input, reader)
+      await vi.runAllTimersAsync()
+      const result = await pending
+      expect(result.settlements).toMatchObject({ kind: 'mismatch', code: 'treasury_settlement_evidence_conflict',
+        evidenceRefs: expect.arrayContaining([evidenceRef]) })
+      expect(result.cash.kind).not.toBe('matched')
+      expect(reader).toHaveBeenCalledTimes(2)
+      expect(reader.mock.calls.every(([material]) => material.dispatchRef === f.payments[0]!.call.call.callRef)).toBe(true)
     } finally { vi.useRealTimers() }
   })
 
