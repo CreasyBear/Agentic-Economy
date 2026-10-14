@@ -16,6 +16,18 @@ describe('isJsonContentType', () => {
 })
 
 describe('readBoundedRequestText', () => {
+  it.each(['already_aborted', 'during_read'] as const)('cancels the body and releases its reader when %s', async timing => {
+    let cancelled = 0
+    const response = new Response(new ReadableStream<Uint8Array>({ cancel() { cancelled += 1 } }))
+    const controller = new AbortController()
+    if (timing === 'already_aborted') controller.abort()
+    const pending = readBoundedRequestText(response, 64, controller.signal)
+    if (timing === 'during_read') controller.abort()
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+    expect(cancelled).toBe(1)
+    expect(response.body?.locked).toBe(false)
+  })
+
   it('bounds response bodies through the same streaming contract', async () => {
     const response = new Response(JSON.stringify({ kind: 'quoted' }), {
       headers: { 'Content-Type': 'application/json' },

@@ -608,6 +608,7 @@ import type * as lib_money_providerObligations_state from "../lib/money/provider
 import type * as lib_money_readiness_refresh from "../lib/money/readiness/refresh.js";
 import type * as lib_money_readiness_sourceChecks from "../lib/money/readiness/sourceChecks.js";
 import type * as lib_money_readiness_store from "../lib/money/readiness/store.js";
+import type * as lib_money_readiness_work from "../lib/money/readiness/work.js";
 import type * as lib_money_referenceRate_store from "../lib/money/referenceRate/store.js";
 import type * as lib_money_spendingPeriods_periods from "../lib/money/spendingPeriods/periods.js";
 import type * as lib_money_treasury_auditSources from "../lib/money/treasury/auditSources.js";
@@ -775,6 +776,7 @@ import type * as moneyPromotionalCredit from "../moneyPromotionalCredit.js";
 import type * as moneyProviderObligations from "../moneyProviderObligations.js";
 import type * as moneyReadiness from "../moneyReadiness.js";
 import type * as moneyReadinessRefresh from "../moneyReadinessRefresh.js";
+import type * as moneyReadinessWork from "../moneyReadinessWork.js";
 import type * as moneyReconciliationCases from "../moneyReconciliationCases.js";
 import type * as moneyStripeEvents from "../moneyStripeEvents.js";
 import type * as moneyStripeWebhookInbox from "../moneyStripeWebhookInbox.js";
@@ -1436,6 +1438,7 @@ declare const fullApi: ApiFromModules<{
   "lib/money/readiness/refresh": typeof lib_money_readiness_refresh;
   "lib/money/readiness/sourceChecks": typeof lib_money_readiness_sourceChecks;
   "lib/money/readiness/store": typeof lib_money_readiness_store;
+  "lib/money/readiness/work": typeof lib_money_readiness_work;
   "lib/money/referenceRate/store": typeof lib_money_referenceRate_store;
   "lib/money/spendingPeriods/periods": typeof lib_money_spendingPeriods_periods;
   "lib/money/treasury/auditSources": typeof lib_money_treasury_auditSources;
@@ -1603,6 +1606,7 @@ declare const fullApi: ApiFromModules<{
   moneyProviderObligations: typeof moneyProviderObligations;
   moneyReadiness: typeof moneyReadiness;
   moneyReadinessRefresh: typeof moneyReadinessRefresh;
+  moneyReadinessWork: typeof moneyReadinessWork;
   moneyReconciliationCases: typeof moneyReconciliationCases;
   moneyStripeEvents: typeof moneyStripeEvents;
   moneyStripeWebhookInbox: typeof moneyStripeWebhookInbox;

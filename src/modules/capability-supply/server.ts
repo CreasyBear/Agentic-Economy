@@ -90,7 +90,9 @@ export {
 } from './internal/x402-settlement-verifier'
 export { verifyX402SignedOffer, verifyX402SignedReceipt } from './internal/x402-offer-receipt'
 export type { X402EvmReceipt } from './internal/x402-settlement-verifier'
-export { readGuardedX402EvmReceipt, readGuardedX402UnusedAuthorization } from './internal/x402-evm-receipt-reader'
+export { readGuardedX402EvmReceipt, readGuardedX402EvmReceiptDetailed, readGuardedX402UnusedAuthorization } from './internal/x402-evm-receipt-reader'
+export { createX402ReadBudget, receiptFailureFromCause, receiptReadFailure, retryableReceiptFailure, reportX402ReceiptFailure } from './internal/x402-rpc-read'
+export type { X402ReceiptReadResult, X402ReceiptFailure, X402ReadBudget } from './internal/x402-rpc-read'
 export { assessSupplySource, type SupplySourceAssessment } from './source-assessment'
 export {
   chargeSettlementOutcome,

@@ -143,6 +143,18 @@ async function fixture(initialAt = NOW - 20) {
 }
 
 describe('treasury snapshot cutoff reconciliation', () => {
+  it('requests readiness recovery immediately after a matched publication and coalesces its replay', async () => {
+    const f = await fixture()
+    expect(await f.reconcile()).toMatchObject({ kind: 'published' })
+    const before = await f.backend.run(async ctx => ({ work: await ctx.db.query('moneyPaymentReadinessWork').unique(),
+      scheduled: await ctx.db.system.query('_scheduled_functions').collect() }))
+    expect(before.work).toMatchObject({ environment: 'sandbox', requestedVersion: NOW, attemptsInWindow: 1, job: { kind: 'queued' } })
+    expect(before.scheduled).toHaveLength(1)
+    expect(await f.reconcile()).toMatchObject({ kind: 'published', replayed: true })
+    expect(await f.backend.run(async ctx => ({ work: await ctx.db.query('moneyPaymentReadinessWork').unique(),
+      scheduled: await ctx.db.system.query('_scheduled_functions').collect() }))).toEqual(before)
+  })
+
   it.each([0, 19])('keeps a pre-cutoff balance audit stable when an older observation is created %s ms later', async delay => {
     const f = await fixture()
     await f.backend.run(async ctx => {

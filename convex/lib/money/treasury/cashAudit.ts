@@ -4,8 +4,10 @@ import { Agent } from 'undici'
 import { boundaryCauseKind, degradeBackend } from '@/lib/observability/degrade-backend'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { createGuardedLookup, defaultDnsResolver } from '@/modules/network-guard/public'
-import { readX402EvmReceipt } from '@/modules/capability-execution/call-runtime'
-import { verifyExactEvmX402Settlement, type X402EvmReceipt } from '@/modules/capability-supply/server'
+import { readX402EvmReceiptDetailed } from '@/modules/capability-execution/call-runtime'
+import { verifyExactEvmX402Settlement, createX402ReadBudget, receiptReadFailure, retryableReceiptFailure,
+  reportX402ReceiptFailure, type X402EvmReceipt, type X402ReadBudget, type X402ReceiptReadResult,
+  type X402ReceiptFailure } from '@/modules/capability-supply/server'
 import { TREASURY_DRIFT_TOLERANCE_UNITS, TREASURY_RESERVATION_AGE_LIMIT_MS, TREASURY_FINALIZED_BLOCK_MAX_AGE_MS,
   type TreasuryBatch, type TreasuryChainObservation, type TreasuryIdentity, type TreasuryProgress, type TreasuryTransfer } from '@/modules/money/treasury'
 import type { TreasuryCheck, TreasurySnapshot } from '@/modules/money/treasury-report'
@@ -25,7 +27,13 @@ export type TreasuryCashAudit = Pick<TreasurySnapshot, 'chain' | 'inFlight' | 'r
   | 'cashTimingAdjustmentUnits' | 'historyStartedAt' | 'deposits' | 'depositsComplete'> & {
   cash: TreasuryCheck; settlements: TreasuryCheck; reservations: TreasuryCheck
 }
-type ReceiptReader = (attempt: TreasuryAttemptSource['material'], hash: string) => Promise<X402EvmReceipt | undefined>
+// Existing injected receipt fixtures remain supported; production always returns classified results.
+type ReceiptReader = (attempt: TreasuryAttemptSource['material'], hash: string, deadlineAt?: number) =>
+  Promise<X402EvmReceipt | undefined | X402ReceiptReadResult>
+function receiptResult(value: Awaited<ReturnType<ReceiptReader>>): X402ReceiptReadResult {
+  return value === undefined ? receiptReadFailure('receipt_missing', 'eth_getTransactionReceipt')
+    : 'kind' in value ? value : { kind: 'receipt', receipt: value }
+}
 const unavailable = (code: string): Extract<TreasuryCheck, { kind: 'unavailable' }> => ({ kind: 'unavailable', code })
 function matched(count: number, units: bigint): TreasuryCheck {
   return { kind: 'matched', checkedCount: count, expectedUnits: units.toString(), observedUnits: units.toString(), differenceUnits: '0' }
@@ -48,8 +56,9 @@ function attention(code: string, refs: readonly string[], units: bigint | null =
  * proves a Provider payment; every configured RPC must agree and at least twelve
  * confirmations remain required. Payment histories are read sequentially so one
  * audit does not multiply each receipt's RPC requests into a provider burst.
- * On violation: mismatch for contradictory evidence, attention for a known pending
- * transition, unavailable for incomplete or immature evidence. RPC outages are
+ * On violation: mismatch for attributed financial conflicts, attention for a known
+ * pending transition; RPC disagreement is unavailable with a critical integrity
+ * alert, while incomplete or immature evidence stays unavailable. RPC outages are
  * recoverable at the next scheduled audit; no money changes and no signing occurs.
  * Complexity: one bounded history join owns cross-source meaning. It reuses native
  * command builders, guarded RPCs and exact payment verification; no second journal.
@@ -98,17 +107,26 @@ export async function auditTreasuryCash(input: CashAuditInput, readReceipt?: Rec
     // An in-progress reserve can have no native effect yet; it is a known task.
     if (!attached && reserve.length === 0 && !completed) pending.push(source.call.callRef)
   }
-  const dispatcher = readReceipt === undefined ? new Agent({ connect: { lookup: createGuardedLookup(defaultDnsResolver) } }) : undefined
-  const reader: ReceiptReader = readReceipt ?? (async (attempt, hash) => {
-    if (dispatcher === undefined || attempt.paymentPayer === undefined || attempt.paymentNonce === undefined) return undefined
-    // auditPayments owns the bounded retry. Do not multiply it inside viem.
-    const receipt = await readX402EvmReceipt(attempt.network, attempt.asset, hash, dispatcher, input.identity.environment,
-      attempt.paymentPayer, attempt.paymentNonce, undefined, { retryCount: 0 })
-    return receipt !== undefined && receipt.confirmations >= 12n ? receipt : undefined
+  const budget = createX402ReadBudget(Date.now() + 120_000)
+  const dispatcher = readReceipt === undefined ? new Agent({ connect: { lookup: createGuardedLookup({
+    lookup: hostname => budget.run(() => defaultDnsResolver.lookup(hostname), 'dns'),
+  }) } }) : undefined
+  const reader: ReceiptReader = readReceipt ?? (async (attempt, hash, deadlineAt) => {
+    if (dispatcher === undefined || attempt.paymentPayer === undefined || attempt.paymentNonce === undefined) {
+      return receiptReadFailure('rpc_configuration_invalid', 'agreement')
+    }
+    const result = await readX402EvmReceiptDetailed(attempt.network, attempt.asset, hash, dispatcher, input.identity.environment,
+      attempt.paymentPayer, attempt.paymentNonce, undefined, { retryCount: 0, ...(deadlineAt === undefined ? {} : { deadlineAt }) })
+    return result.kind === 'receipt' && result.receipt.confirmations < 12n
+      ? receiptReadFailure('receipt_immature', 'confirmation') : result
   })
   let settlement: Awaited<ReturnType<typeof auditPayments>>
-  try { settlement = await auditPayments(input, history.transfers, history.openingBlock, reader, callsByDigest) }
-  finally { await dispatcher?.close() }
+  try { settlement = await auditPayments(input, history.transfers, history.openingBlock, reader, callsByDigest, budget) }
+  finally {
+    budget.dispose()
+    // Destroy owns cancellation of sockets; a failed DNS/HTTP read must not hang graceful close.
+    await dispatcher?.destroy()
+  }
   for (const ref of settlement.nativeRefs) matchedRefs.add(ref)
   const unexplained = cashRows.filter(row => row.commandRef === null || !matchedRefs.has(row.commandRef))
   const observedCommitted = input.ledger.kind === 'available' ? BigInt(input.ledger.committedUnits) : 0n
@@ -247,7 +265,7 @@ function validateHistory(input: CashAuditInput): Extract<TreasuryCheck, { kind: 
 }
 
 async function auditPayments(input: CashAuditInput, transfers: readonly TreasuryTransfer[], openingBlock: bigint,
-  readReceipt: ReceiptReader, callsByDigest: ReadonlyMap<string, TreasuryCallSource>): Promise<{
+  readReceipt: ReceiptReader, callsByDigest: ReadonlyMap<string, TreasuryCallSource>, budget: X402ReadBudget): Promise<{
     check: TreasuryCheck; timingAdjustment: bigint; nativeRefs: string[]
   }> {
   const mismatches: string[] = []; const pending: string[] = []; const missing: string[] = []
@@ -267,7 +285,9 @@ async function auditPayments(input: CashAuditInput, transfers: readonly Treasury
   }
   // Leave time for processor checks/publication within the Node action deadline.
   // Above the alpha readback bound, retain native attribution but never claim a full audit.
-  const receiptDeadline = Date.now() + 120_000
+  const receiptDeadline = budget.deadlineAt
+  let terminalFailure: X402ReceiptFailure | undefined
+  let stopReads = false
   let receiptBudgetExceeded = candidateAttempts.length > 250
   let receiptReads = 0
   // Each payment already fans out to both RPC providers. Keep historical reads
@@ -277,7 +297,7 @@ async function auditPayments(input: CashAuditInput, transfers: readonly Treasury
     const hashes = transactionHashes(source)
     const hash = hashes[0]
     let receipt: X402EvmReceipt | undefined
-    if (!receiptBudgetExceeded && source.joinIssues.length === 0 && source.native.kind === 'available'
+    if (!receiptBudgetExceeded && !stopReads && source.joinIssues.length === 0 && source.native.kind === 'available'
       && hash !== undefined && hashes.length === 1 && source.material.paymentNonce !== undefined && source.material.paymentPayer !== undefined) {
       // One read outage need not close payments until the next scheduled audit.
       // Retry only missing evidence, sequentially, within the same total budget.
@@ -287,15 +307,34 @@ async function auditPayments(input: CashAuditInput, transfers: readonly Treasury
           receiptBudgetExceeded = true
           break
         }
-        try { receiptReads += 1; receipt = await readReceipt(source.material, hash) }
-        catch (cause) { receipt = degradeBackend(boundaryCauseKind(cause), undefined,
-          { site: 'treasuryPaymentReceipt', reason: 'source_unavailable' }) }
-        if (receipt !== undefined || read === 1) break
-        if (receiptReads >= 250 || Date.now() + 250 >= receiptDeadline) {
-          receiptBudgetExceeded = true
+        let result: X402ReceiptReadResult
+        try {
+          receiptReads += 1
+          result = receiptResult(await budget.run(() => readReceipt(source.material, hash, receiptDeadline), 'eth_getTransactionReceipt'))
+        } catch (cause) {
+          result = receiptReadFailure(budget.signal.aborted || Date.now() >= receiptDeadline
+            ? 'rpc_deadline_exceeded' : 'rpc_transport_unavailable', 'eth_getTransactionReceipt')
+          degradeBackend(boundaryCauseKind(cause), undefined, { site: 'treasuryPaymentReceipt', reason: 'source_unavailable' })
+        }
+        if (result.kind === 'receipt') { receipt = result.receipt; break }
+        if (read === 1 || !retryableReceiptFailure(result)) {
+          terminalFailure = terminalFailure !== undefined && !retryableReceiptFailure(terminalFailure) ? terminalFailure : result
+          stopReads ||= !retryableReceiptFailure(result)
+          reportX402ReceiptFailure(result)
           break
         }
-        await new Promise<void>(resolve => setTimeout(resolve, 250))
+        const delay = Math.max(250, result.retryAfterMs ?? 0)
+        if (receiptReads >= 250 || Date.now() + delay >= receiptDeadline) {
+          terminalFailure = result
+          receiptBudgetExceeded ||= receiptReads >= 250 || Date.now() >= receiptDeadline
+          break
+        }
+        try { await budget.wait(delay) }
+        catch {
+          receiptBudgetExceeded = true
+          terminalFailure = receiptReadFailure('rpc_deadline_exceeded', 'confirmation')
+          break
+        }
       }
     }
     const attempt = source.material
@@ -344,8 +383,10 @@ async function auditPayments(input: CashAuditInput, transfers: readonly Treasury
   mismatches.push(...native.filter(row => row.commandRef === null || !nativeRefs.includes(row.commandRef))
     .map(row => row.commandRef ?? `native-transaction:${row.id}`))
   const check = mismatches.length > 0 ? mismatch('treasury_settlement_evidence_conflict', candidateAttempts.length, verifiedUnits, nativeUnits, mismatches)
-    : receiptBudgetExceeded ? unavailable('treasury_payment_readback_incomplete')
-      : missing.length > 0 ? unavailable('treasury_payment_receipt_unavailable')
+    : terminalFailure?.code === 'receipt_conflict' ? unavailable('treasury_payment_receipt_conflict')
+      : receiptBudgetExceeded ? unavailable('treasury_payment_readback_incomplete')
+      : missing.length > 0 ? unavailable(terminalFailure === undefined || terminalFailure.code === 'receipt_missing'
+        ? 'treasury_payment_receipt_unavailable' : `treasury_payment_${terminalFailure.code}`)
       : pending.length > 0 ? attention('treasury_settlement_booking_pending', pending)
         : matched(candidateAttempts.length, verifiedUnits)
   return { check, timingAdjustment, nativeRefs }

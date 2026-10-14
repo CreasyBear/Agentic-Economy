@@ -25,6 +25,7 @@ export async function cancelResponseBody(
 export async function readBoundedRequestText(
   request: BoundedRequestBody,
   maxBytes: number,
+  signal?: AbortSignal,
 ): Promise<BoundedRequestTextResult> {
   const declaredContentLength = Number(request.headers.get('content-length'))
   if (Number.isFinite(declaredContentLength) && declaredContentLength > maxBytes) {
@@ -37,12 +38,17 @@ export async function readBoundedRequestText(
   }
 
   const reader = request.body.getReader()
+  const abort = () => { void reader.cancel().catch(() => undefined) }
+  signal?.addEventListener('abort', abort, { once: true })
+  if (signal?.aborted) abort()
   const chunks: Uint8Array[] = []
   let totalBytes = 0
 
   try {
     for (;;) {
+      if (signal?.aborted) throw new DOMException('Body read aborted.', 'AbortError')
       const { done, value } = await reader.read()
+      if (signal?.aborted) throw new DOMException('Body read aborted.', 'AbortError')
       if (done) {
         break
       }
@@ -58,6 +64,7 @@ export async function readBoundedRequestText(
       chunks.push(value)
     }
   } finally {
+    signal?.removeEventListener('abort', abort)
     reader.releaseLock()
   }
 

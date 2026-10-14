@@ -1,6 +1,6 @@
 # Deployment map
 
-**Last verified:** 13 October 2026, for the bounded Convex directory release below.
+**Last verified:** 14 October 2026, for the scoped production treasury/app readbacks below.
 The payment audience change was verified on 12 October. This is a dated inventory;
 resolve current provider identities and source revisions before mutations.
 [TODOS.md](../../TODOS.md) owns work; [readiness](../production-readiness-plan.md)
@@ -23,6 +23,45 @@ is one private host and Multi-AZ RDS with independent backups; no second permane
 stack is approved. Resolve provider identities afresh before mutations.
 
 ## Current production release
+
+### Treasury recovery candidate and live baseline, 14 October
+
+The treasury archive was restored into `codex/treasury-recovery-20261014` and
+its implementation ported onto current main. Production has not changed for
+this resumption. Native Convex readback confirms the `production` declaration
+and source binding `9a80df0d48db0768bae411a458a24227bc1eb157` on
+`upbeat-cricket-954`; the public web release reports the same revision.
+Official Vercel inspection resolves `app.aecon.ai` to production deployment
+`dpl_FNzHh9BtpNxfQ399kcfgfWXzvNub` in project `agentic-economy`.
+
+The 07:52 AWST public sample returned health/readiness 200 and payments ready.
+The latest native treasury snapshot had matched cash, settlements, funding and
+reservations, 28 audited payments and no in-flight Calls. Recent resolved
+reconciliation-unavailable/stale episodes establish recurring interruption, not
+its precise provider cause. `sellable` remains false and the catalogue was stale;
+these bounded treasury checks do not qualify full commercial availability.
+
+The [candidate design](../designs/treasury-readiness-reliability.md) records typed
+receipt failures, shared absolute deadlines, retained contradiction priority and
+safe readiness recovery. It adds one per-environment coordination table/index,
+three internal coordination mutations and one internal recovery action, with
+90-second leases and at most two claimed attempts per five-minute window.
+Evidence publication, completion and follow-up scheduling share a transaction.
+Existing financial tables require no migration/backfill. Twelve confirmations,
+two required providers, current authority/custody/configuration and original
+observation clocks remain mandatory.
+
+Fresh checks, full gate and independent review belong to the exact candidate
+and its release review. Deployment, release-binding changes, merge and web
+promotion await Joel's concrete approval. No AWS change, credential rotation,
+financial replay, authority expansion, provider quota upgrade or historical
+settlement-proof reuse is proposed. The 250-read historical audit limit remains.
+
+Current web recovery reference is `dpl_FNzHh9BtpNxfQ399kcfgfWXzvNub`, and current
+backend source is `9a80df0d48db0768bae411a458a24227bc1eb157`. New coordination rows
+and queued callbacks must survive a compatible code recovery; code rollback is
+not permission to restore or clear a database or ledger. Prefer a reviewed
+fix-forward if preserving those runtime contracts requires it.
 
 ### Directory indexes and aggregate reconciliation, 13 October
 
