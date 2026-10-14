@@ -164,10 +164,10 @@ export async function readX402EvmReceiptDetailed(
   } finally { budget.dispose() }
 }
 
-/** Required peers share the longest retry delay; known contradictions survive peer timeouts. */
 function aggregateReceiptFailure(failures: readonly X402ReceiptFailure[]): X402ReceiptFailure {
   const selected = failures.find(failure => failure.code === 'receipt_conflict')
-    ?? failures.find(failure => !retryableReceiptFailure(failure)) ?? failures[0]
+    ?? failures.find(failure => !retryableReceiptFailure(failure))
+    ?? failures.find(failure => failure.code === 'rpc_rate_limited') ?? failures[0]
   if (selected === undefined) throw new Error('receipt_failures_required')
   const retryAfterMs = Math.max(0, ...failures.map(failure => failure.retryAfterMs ?? 0))
   return retryAfterMs === 0 ? selected : { ...selected, retryAfterMs }
