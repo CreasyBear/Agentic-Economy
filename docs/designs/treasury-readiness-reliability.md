@@ -1,10 +1,43 @@
 # Treasury readiness reliability
 
-**Status:** stages 1 and 2 implemented in `codex/treasury-readiness-recovery`,
-13 October 2026; `npm run check` passed and independent implementation review
-accepted the change after independently running 162 passing tests. Retained proofs
-remain a deferred proposal. Production is unchanged. The full release gate is
-required before merge; production readback remains a separate acceptance step.
+**Status:** stages 1 and 2 restored on 14 October 2026 into
+`codex/treasury-recovery-20261014`, integrated onto current main `9a80df0d4`.
+The original implementation was `53d198418`; native recovery snapshot `661f39cbb`
+also preserves its historical deployment-document edit. The release candidate
+excludes that historical document overlay. Retained proofs remain deferred.
+Fresh check/gate results belong to the exact release candidate and its review;
+production changes require Joel's approval. Source checks do not establish
+production recovery or sustained availability.
+
+## 14 October resumption and remaining correction
+
+Native read-only production inspection confirms both web and backend source
+`9a80df0d48db0768bae411a458a24227bc1eb157`, Sydney backend
+`upbeat-cricket-954`, and current web deployment `dpl_FNzHh9BtpNxfQ399kcfgfWXzvNub`.
+The initial sample returned readiness 200, matched cash/funding/reservation/
+settlement checks, 28 audited settlements and no in-flight Calls. Recent resolved
+reconciliation-unavailable/stale alert episodes establish recurring interruption;
+they do not identify a provider or prove that the current green sample is stable.
+
+The new independent review found a classification gap in the archived code:
+receipt read-cap or deadline exhaustion after a known provider contradiction
+could replace `treasury_payment_receipt_conflict` with generic incomplete evidence.
+The corrected priority retains attributed mismatches first, then an observed
+receipt contradiction, then budget exhaustion. This preserves the existing
+critical integrity alert without fabricating a monetary difference. Independent
+raw cash facts remain distinct from unavailable attribution.
+
+The existing 127-candidate fixture now covers its unchanged missing-receipt
+control, a contradiction on read 250, and deadline exhaustion after an earlier
+observed contradiction. Exact failure classification and bounded reads are
+asserted. The cash-audit and alert-store suites passed 66 tests; the second
+opinion accepted the correction. The full candidate still requires its own
+release gate before merge/deployment.
+
+No historical settlement proof reuse, 250-read scaling change, provider quota
+upgrade, confirmation/quorum change, financial replay or authority expansion is
+included. The new schema contains only one bounded coordination table and its
+environment index; existing financial records need no migration or backfill.
 
 ## Implemented scope and contracts
 
@@ -67,7 +100,7 @@ bootstrap, duplicate coalescing, newer red, configuration/custody rotation,
 authority revocation, atomic scheduler failure and critical-alert resolution.
 
 
-## Purpose and evidence
+## Purpose and historical evidence (13 October 2026)
 
 Keep new purchases safe without making previously verified payment history an
 ever-growing dependency on live receipt RPCs. Failures must identify their cause,

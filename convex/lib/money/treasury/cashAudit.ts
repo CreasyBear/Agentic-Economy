@@ -383,7 +383,8 @@ async function auditPayments(input: CashAuditInput, transfers: readonly Treasury
   mismatches.push(...native.filter(row => row.commandRef === null || !nativeRefs.includes(row.commandRef))
     .map(row => row.commandRef ?? `native-transaction:${row.id}`))
   const check = mismatches.length > 0 ? mismatch('treasury_settlement_evidence_conflict', candidateAttempts.length, verifiedUnits, nativeUnits, mismatches)
-    : receiptBudgetExceeded ? unavailable('treasury_payment_readback_incomplete')
+    : terminalFailure?.code === 'receipt_conflict' ? unavailable('treasury_payment_receipt_conflict')
+      : receiptBudgetExceeded ? unavailable('treasury_payment_readback_incomplete')
       : missing.length > 0 ? unavailable(terminalFailure === undefined || terminalFailure.code === 'receipt_missing'
         ? 'treasury_payment_receipt_unavailable' : `treasury_payment_${terminalFailure.code}`)
       : pending.length > 0 ? attention('treasury_settlement_booking_pending', pending)

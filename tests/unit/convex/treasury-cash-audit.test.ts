@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { eip3009ABI } from '@x402/evm'
 import { encodeAbiParameters, encodeEventTopics, encodeFunctionData, erc20Abi, type Hex } from 'viem'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import * as backendDiagnostics from '@/lib/observability/degrade-backend'
 import {
   capacityAccount, prepareFormanceManagedCallReservation, prepareFormanceManagedCallRelease,
   prepareFormanceManagedCallSettlement, prepareFormancePaidCallRemedy, type FormanceManagedCallBooking,
@@ -291,8 +292,14 @@ describe('independent treasury cash reconciliation behavior', () => {
     } finally { clock.mockRestore(); vi.useRealTimers() }
   })
 
-  it('charges retries against the same 250-read audit cap', async () => {
+  it.each(['missing', 'read_cap_conflict', 'deadline_conflict'] as const)(
+    'preserves the receipt outcome at the audit budget boundary: %s', async outcome => {
     vi.useFakeTimers()
+    vi.setSystemTime(NOW)
+    const diagnostic = vi.spyOn(backendDiagnostics, 'captureBackendException').mockImplementation(cause => {
+      // A slow diagnostic boundary consumes the remaining budget after the conflict was observed.
+      if (outcome === 'deadline_conflict' && cause === 'receipt_conflict') vi.setSystemTime(NOW + 120_000)
+    })
     try {
       const fixtures = Array.from({ length: 127 }, (_, index) => {
         const value = fixture('settled', { suffix: `retry-cap-${index}` })
@@ -303,7 +310,12 @@ describe('independent treasury cash reconciliation behavior', () => {
       const opening = batch(undefined, '1000000000')
       const range = batch(opening, '365000000', fixtures.map((_, index) => transfer(hash(1_000 + index))))
       const seen = new Set<string>()
+      let reads = 0
       const reader = vi.fn(async (material: AttemptSource['material'], tx: string) => {
+        reads += 1
+        if ((outcome === 'read_cap_conflict' && reads === 250) || (outcome === 'deadline_conflict' && reads === 3)) {
+          return { kind: 'failed', code: 'receipt_conflict', method: 'agreement' } as const
+        }
         if (!seen.has(tx)) { seen.add(tx); return undefined }
         return receipt(material, tx)
       })
@@ -316,10 +328,11 @@ describe('independent treasury cash reconciliation behavior', () => {
       }, reader)
       await vi.runAllTimersAsync()
       const result = await pending
-      expect(reader).toHaveBeenCalledTimes(250)
-      expect(result.settlements).toMatchObject({ kind: 'unavailable', code: 'treasury_payment_readback_incomplete' })
+      expect(reader).toHaveBeenCalledTimes(outcome === 'deadline_conflict' ? 3 : 250)
+      expect(result.settlements).toEqual({ kind: 'unavailable', code: outcome === 'missing'
+        ? 'treasury_payment_readback_incomplete' : 'treasury_payment_receipt_conflict' })
       expect(result.cash.kind).toBe('unavailable')
-    } finally { vi.useRealTimers() }
+    } finally { diagnostic.mockRestore(); vi.useRealTimers() }
   })
 
   it.each([false, true])('respects RPC concurrency and total readback budget with elapsed deadline=%s', async deadlineExpires => {
