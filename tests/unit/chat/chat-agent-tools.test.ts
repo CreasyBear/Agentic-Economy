@@ -283,6 +283,25 @@ describe('Tool chat Agent tools', () => {
     expect(runAction).not.toHaveBeenCalled()
   })
 
+  it('preserves a Run selection during read-only inspection without granting purchase authority', async () => {
+    const selected = `registry:${'a'.repeat(64)}`
+    const messages = [{ role: 'user' as const, content: `Run Tool ${selected} with this exact JSON input: {"keyword":"bitcoin"}.` }]
+    const runQuery = vi.fn(async () => externalDetailFixture())
+    const runAction = vi.fn(async () => notFound)
+    const agent = createChatAgent(mockModel())
+    expect(await invokeTool(agent, 'registry.tools.describe', toolCtx({ runQuery, runAction }),
+      { toolRef: `operation:v1:${'a'.repeat(64)}` }, messages)).toMatchObject({
+      kind: 'chat_tool_refused', reason: 'selected_tool_mismatch',
+    })
+    expect(runQuery).not.toHaveBeenCalled()
+    expect(runAction).not.toHaveBeenCalled()
+    expect(await invokeTool(agent, 'registry.tools.describe', toolCtx({ runQuery, runAction }),
+      { toolRef: selected }, messages)).toMatchObject({ kind: 'external', tool: { toolRef: selected } })
+    expect(runQuery).toHaveBeenCalledOnce()
+    expect(runAction).not.toHaveBeenCalled()
+    expect(agent.options.tools).not.toHaveProperty(CHAT_TOOL_NAME_MAP.canonicalToProvider['tool.call'])
+  })
+
   it('keeps exact detail enforcement for an escaped title longer than the search text bound', async () => {
     const selected = `operation:v1:${'c'.repeat(64)}`
     const prompt = formatDetailRequest(selected, '\\'.repeat(200))

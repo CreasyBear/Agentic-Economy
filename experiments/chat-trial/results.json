@@ -1,0 +1,387 @@
+{
+  "date": "2026-10-15",
+  "base": "d9a9fd96f92a8c04b217629a453b3986a79b5c90",
+  "syntheticMarket": true,
+  "productionToolPayments": false,
+  "liveInference": true,
+  "dify-results": {
+    "runtime": "1.17.1",
+    "model": "scripted",
+    "cases": [
+      {
+        "id": "research-answer",
+        "ok": true,
+        "outcome": "completed",
+        "dispatches": 1
+      },
+      {
+        "id": "discover-only",
+        "ok": true,
+        "outcome": "discovery",
+        "dispatches": 0
+      },
+      {
+        "id": "audit-result",
+        "ok": true,
+        "outcome": "completed",
+        "dispatches": 1
+      },
+      {
+        "id": "clarification",
+        "ok": true,
+        "outcome": "completed",
+        "dispatches": 1
+      },
+      {
+        "id": "guest-sign-in",
+        "ok": true,
+        "outcome": "completed",
+        "dispatches": 1
+      },
+      {
+        "id": "expired-authority",
+        "ok": true,
+        "outcome": "completed",
+        "dispatches": 1
+      },
+      {
+        "id": "funding-return",
+        "ok": true,
+        "outcome": "completed",
+        "dispatches": 1
+      },
+      {
+        "id": "explicit-approval",
+        "ok": true,
+        "outcome": "completed",
+        "dispatches": 1
+      },
+      {
+        "id": "pending-observation",
+        "ok": true,
+        "outcome": "completed",
+        "dispatches": 1
+      },
+      {
+        "id": "uncertain-observation",
+        "ok": true,
+        "outcome": "completed",
+        "dispatches": 1
+      },
+      {
+        "id": "no-supply",
+        "ok": true,
+        "outcome": "discovery",
+        "dispatches": 0
+      },
+      {
+        "id": "changed-quote",
+        "ok": true,
+        "outcome": "blocked",
+        "dispatches": 0
+      },
+      {
+        "id": "held-pending",
+        "ok": true,
+        "outcome": "completed",
+        "dispatches": 1
+      },
+      {
+        "id": "held-uncertain",
+        "ok": true,
+        "outcome": "completed",
+        "dispatches": 1
+      },
+      {
+        "id": "denied-approval",
+        "ok": true,
+        "outcome": "blocked",
+        "dispatches": 0
+      },
+      {
+        "id": "research-then-audit",
+        "ok": true,
+        "outcome": "completed",
+        "dispatches": 2
+      },
+      {
+        "id": "model-error-before-action",
+        "ok": true,
+        "outcome": "completed",
+        "dispatches": 1
+      },
+      {
+        "id": "denial-then-funded-request",
+        "ok": true,
+        "outcome": "completed",
+        "dispatches": 1
+      }
+    ]
+  },
+  "langgraph-results": {
+    "runtime": "1.5.0",
+    "model": "scripted",
+    "cases": [
+      {
+        "id": "research-answer",
+        "ok": true,
+        "outcome": "completed",
+        "dispatches": 1
+      },
+      {
+        "id": "discover-only",
+        "ok": true,
+        "outcome": "discovery",
+        "dispatches": 0
+      },
+      {
+        "id": "audit-result",
+        "ok": true,
+        "outcome": "completed",
+        "dispatches": 1
+      },
+      {
+        "id": "clarification",
+        "ok": true,
+        "outcome": "completed",
+        "dispatches": 1
+      },
+      {
+        "id": "guest-sign-in",
+        "ok": true,
+        "outcome": "completed",
+        "dispatches": 1
+      },
+      {
+        "id": "expired-authority",
+        "ok": true,
+        "outcome": "completed",
+        "dispatches": 1
+      },
+      {
+        "id": "funding-return",
+        "ok": true,
+        "outcome": "completed",
+        "dispatches": 1
+      },
+      {
+        "id": "explicit-approval",
+        "ok": true,
+        "outcome": "completed",
+        "dispatches": 1
+      },
+      {
+        "id": "pending-observation",
+        "ok": true,
+        "outcome": "completed",
+        "dispatches": 1
+      },
+      {
+        "id": "uncertain-observation",
+        "ok": true,
+        "outcome": "completed",
+        "dispatches": 1
+      },
+      {
+        "id": "no-supply",
+        "ok": true,
+        "outcome": "discovery",
+        "dispatches": 0
+      },
+      {
+        "id": "changed-quote",
+        "ok": true,
+        "outcome": "blocked",
+        "dispatches": 0
+      },
+      {
+        "id": "held-pending",
+        "ok": true,
+        "outcome": "completed",
+        "dispatches": 1
+      },
+      {
+        "id": "held-uncertain",
+        "ok": true,
+        "outcome": "completed",
+        "dispatches": 1
+      },
+      {
+        "id": "denied-approval",
+        "ok": true,
+        "outcome": "blocked",
+        "dispatches": 0
+      },
+      {
+        "id": "research-then-audit",
+        "ok": true,
+        "outcome": "completed",
+        "dispatches": 2
+      },
+      {
+        "id": "model-error-before-action",
+        "ok": true,
+        "outcome": "completed",
+        "dispatches": 1
+      },
+      {
+        "id": "denial-then-funded-request",
+        "ok": true,
+        "outcome": "completed",
+        "dispatches": 1
+      }
+    ]
+  },
+  "current-results": {
+    "runtime": "actual streamDurableChatResponse and Convex Agent storage",
+    "model": "mockModel scripted tool decisions",
+    "cases": [
+      {
+        "id": "research",
+        "dispatches": 1,
+        "sourceTable": true,
+        "modelRequests": 6
+      },
+      {
+        "id": "audit",
+        "dispatches": 1,
+        "sourceTable": false,
+        "modelRequests": 0
+      },
+      {
+        "id": "authority",
+        "dispatches": 0,
+        "sourceTable": false,
+        "modelRequests": 0
+      },
+      {
+        "id": "uncertain",
+        "dispatches": 1,
+        "sourceTable": false,
+        "modelRequests": 0
+      }
+    ]
+  },
+  "dify-live-intent-results": {
+    "runtime": "1.17.1",
+    "model": "live intent only; fixture selection and synthesis",
+    "cases": [
+      {
+        "id": "research-answer",
+        "ok": true,
+        "outcome": "completed",
+        "dispatches": 1
+      },
+      {
+        "id": "discover-only",
+        "ok": true,
+        "outcome": "discovery",
+        "dispatches": 0
+      },
+      {
+        "id": "audit-result",
+        "ok": true,
+        "outcome": "completed",
+        "dispatches": 1
+      },
+      {
+        "id": "clarification",
+        "ok": true,
+        "outcome": "completed",
+        "dispatches": 1
+      }
+    ]
+  },
+  "langgraph-live-intent-results": {
+    "runtime": "1.5.0",
+    "model": "live intent only; fixture selection and synthesis",
+    "cases": [
+      {
+        "id": "research-answer",
+        "ok": true,
+        "outcome": "completed",
+        "dispatches": 1
+      },
+      {
+        "id": "discover-only",
+        "ok": true,
+        "outcome": "discovery",
+        "dispatches": 0
+      },
+      {
+        "id": "audit-result",
+        "ok": true,
+        "outcome": "completed",
+        "dispatches": 1
+      },
+      {
+        "id": "clarification",
+        "ok": true,
+        "outcome": "completed",
+        "dispatches": 1
+      }
+    ]
+  },
+  "current-live-model-results": {
+    "runtime": "actual streamDurableChatResponse and Convex Agent storage",
+    "model": "deepseek/deepseek-v4-flash",
+    "cases": [
+      {
+        "id": "research",
+        "dispatches": 0,
+        "sourceTable": false,
+        "modelRequests": 2,
+        "modelCost": {
+          "knownCostUsd": "0.001149652",
+          "unknownRequestCount": 0,
+          "status": "incomplete"
+        }
+      }
+    ],
+    "answer": "**Battery Storage Research** provides researched, dated evidence with source links — exactly the sourced table you asked for.\n\nNext: Choose **Review inputs** on its card."
+  },
+  "persistence": {
+    "synthetic": true,
+    "dify": {
+      "apiRestart": "survived",
+      "conversation": "db11cf1a-baf0-46dc-9f88-039d68ba7fce",
+      "callRef": "operation-invocation:v1:a6b9f1e276ad02b6b1edc0f1782c4804c199d4991011f1f481024c49b84cf9e0",
+      "dispatches": 1,
+      "resumedAction": "call.status",
+      "answer": "\n\n**Completed synthetic audit**\n\n- Fixture page has no descriptive title."
+    },
+    "langgraph": {
+      "sameProcessReconnect": "survived",
+      "replacementRuntime": "state missing with MemorySaver",
+      "productionCheckpointerImplemented": false
+    },
+    "boundary": "Dify API restart only; fixture/provider and database restart were not tested"
+  },
+  "mcp-transport": {
+    "synthetic": true,
+    "tools": [
+      "ae_registry_tools_search",
+      "ae_tool_quote",
+      "ae_tool_call",
+      "ae_call_status"
+    ],
+    "methods": [
+      "initialize",
+      "notifications/initialized",
+      "tools/list",
+      "tools/call",
+      "tools/call",
+      "tools/call",
+      "initialize",
+      "notifications/initialized",
+      "tools/list",
+      "tools/call"
+    ],
+    "callRef": "operation-invocation:v1:e3d9d919a3bf604174505f290a587cab41ba58f4e2bacee9decfd34885bdcace",
+    "reconnectedCallRef": "operation-invocation:v1:e3d9d919a3bf604174505f290a587cab41ba58f4e2bacee9decfd34885bdcace",
+    "dispatches": 1,
+    "crossAccountResume": "refused before I/O",
+    "productionAuthAndPayments": false
+  },
+  "liveClassifierObservedCostUsd": 0.0014310394000000002
+}

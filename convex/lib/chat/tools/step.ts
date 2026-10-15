@@ -1,6 +1,6 @@
 import type { ModelMessage } from 'ai'
 import { projectChatChoiceActions } from '@/modules/chat/tool-card-actions'
-import { parseDetailRequest, isDetailToolRef } from '@/modules/chat/run-request'
+import { parseDetailRequest, parseRunRequest, isDetailToolRef } from '@/modules/chat/run-request'
 import { CHAT_TOOL_NAME_MAP, projectToolCard, type ToolCardProjection } from '@/modules/chat/tool-card'
 import { sanitizeText } from '@/modules/common/sanitize-text'
 
@@ -125,7 +125,9 @@ export function selectedChatDetailRequest(messages: readonly ModelMessage[]) {
   if (request === undefined) return null
   const text = typeof request.content === 'string' ? request.content
     : request.content.flatMap(part => part.type === 'text' ? [part.text] : []).join('\n')
-  return parseDetailRequest(text)
+  // Exact Run selections remain lookup hints when purchase authority is absent.
+  // Neither the model nor this read-only guard may substitute another reference.
+  return parseDetailRequest(text) ?? parseRunRequest(text)
 }
 
 export function prepareChatToolStep({ stepNumber, steps, messages = [] }: {

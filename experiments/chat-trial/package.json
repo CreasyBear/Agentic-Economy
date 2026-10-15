@@ -1,0 +1,10 @@
+{
+  "name": "ae-chat-runtime-trial",
+  "private": true,
+  "type": "module",
+  "engines": { "node": "22.x" },
+  "dependencies": {
+    "@langchain/langgraph": "1.5.0",
+    "yaml": "2.8.1"
+  }
+}
