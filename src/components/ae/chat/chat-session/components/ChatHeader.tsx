@@ -93,7 +93,7 @@ export function ChatHeader({
                 <div className="arc-chat-history-sheet-actions">
                   {onEnableSpending !== undefined && !ownerChatEnabled ? (
                     <AeActionLink type="button" variant="ghost" labelLayout="wrap" className="arc-chat-history-sheet-action" disabled={busy}
-                      onAction={onEnableSpending}>Enable approval-only chat spending</AeActionLink>
+                      onAction={onEnableSpending}>Enable chat spending within limits</AeActionLink>
                   ) : null}
                   {threadId !== null ? (
                     <>
