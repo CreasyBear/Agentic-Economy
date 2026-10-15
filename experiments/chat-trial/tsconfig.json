@@ -1,0 +1,5 @@
+{
+  "extends": "../../tsconfig.json",
+  "include": ["fixture-market.ts", "service.ts", "live-planner.ts"],
+  "exclude": ["node_modules"]
+}
